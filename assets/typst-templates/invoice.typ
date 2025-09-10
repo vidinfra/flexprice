@@ -2,6 +2,11 @@
 
 #let invoice-data = json(sys.inputs.path)
 
+// Use pre-calculated totals from the service layer
+#let subtotal = invoice-data.subtotal
+#let total-discount = invoice-data.total_discount
+#let total-tax = invoice-data.total_tax
+
 #show: template.default-invoice.with(
   currency: if "currency" in invoice-data {
     invoice-data.currency
@@ -15,9 +20,10 @@
   due-date: invoice-data.due_date,
   amount-due: invoice-data.amount_due,
   notes: invoice-data.notes,
-  vat: invoice-data.vat,
+  subtotal: subtotal,
+  discount: total-discount,
+  tax: total-tax,
   biller: (
-    // website: invoice-data.biller.website,
     name: invoice-data.biller.name,
     email: if "email" in invoice-data.biller {
       invoice-data.biller.email
@@ -58,6 +64,11 @@
     )
   ),
   items: invoice-data.line_items,
+  applied-taxes: if "applied_taxes" in invoice-data {
+    invoice-data.applied_taxes
+  } else {
+    ()
+  },
   styling: (
     font: if "styling" in invoice-data and "font" in invoice-data.styling {
       invoice-data.styling.font

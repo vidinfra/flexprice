@@ -13,6 +13,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/invoice"
 	pdf "github.com/flexprice/flexprice/internal/domain/pdf"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
+	taxrate "github.com/flexprice/flexprice/internal/domain/tax"
 	"github.com/flexprice/flexprice/internal/domain/tenant"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/idempotency"
@@ -1424,7 +1425,7 @@ func (s *invoiceService) GetInvoicePDF(ctx context.Context, id string) ([]byte, 
 }
 
 func (s *invoiceService) getInvoiceDataForPDFGen(
-	_ context.Context,
+	ctx context.Context,
 	inv *invoice.Invoice,
 	customer *customer.Customer,
 	tenant *tenant.Tenant,
@@ -1434,14 +1435,21 @@ func (s *invoiceService) getInvoiceDataForPDFGen(
 		invoiceNum = *inv.InvoiceNumber
 	}
 
-	amountDue, _ := inv.AmountDue.Float64()
+	subtotal, _ := inv.Subtotal.Float64()
+	totalDiscount, _ := inv.TotalDiscount.Float64()
+	totalTax, _ := inv.TotalTax.Float64()
+	total, _ := inv.Total.Float64()
+
 	// Convert to InvoiceData
 	data := &pdf.InvoiceData{
 		ID:            inv.ID,
 		InvoiceNumber: invoiceNum,
 		InvoiceStatus: string(inv.InvoiceStatus),
 		Currency:      types.GetCurrencySymbol(inv.Currency),
-		AmountDue:     amountDue,
+		AmountDue:     total,
+		Subtotal:      subtotal,
+		TotalDiscount: totalDiscount,
+		TotalTax:      totalTax,
 		BillingReason: inv.BillingReason,
 		Notes:         "",  // resolved from invoice metadata
 		VAT:           0.0, // resolved from invoice metadata
@@ -1475,9 +1483,11 @@ func (s *invoiceService) getInvoiceDataForPDFGen(
 		}
 	}
 
-	data.LineItems = make([]pdf.LineItemData, len(inv.LineItems))
+	// Prepare line items
+	var lineItems []pdf.LineItemData
 
-	for i, item := range inv.LineItems {
+	// Process line items
+	for _, item := range inv.LineItems {
 		planDisplayName := ""
 		if item.PlanDisplayName != nil {
 			planDisplayName = *item.PlanDisplayName
@@ -1497,13 +1507,35 @@ func (s *invoiceService) getInvoiceDataForPDFGen(
 			}
 		}
 
+		// Determine item type based on EntityType (source of truth)
+		itemType := "subscription" // default fallback
+
+		if item.EntityType != nil {
+			switch *item.EntityType {
+			case "addon":
+				itemType = "addon"
+			case "plan":
+				itemType = "subscription"
+			default:
+				itemType = *item.EntityType
+			}
+		}
+
+		// Check metadata for explicit type (this is how discounts/taxes are identified)
+		if item.Metadata != nil {
+			if t, ok := item.Metadata["type"]; ok {
+				itemType = t
+			}
+		}
+
 		lineItem := pdf.LineItemData{
 			PlanDisplayName: planDisplayName,
 			DisplayName:     displayName,
 			Description:     description,
-			Amount:          amount,
+			Amount:          amount, // Keep original sign
 			Quantity:        quantity,
 			Currency:        types.GetCurrencySymbol(item.Currency),
+			Type:            itemType,
 		}
 
 		if lineItem.PlanDisplayName == "" {
@@ -1517,10 +1549,100 @@ func (s *invoiceService) getInvoiceDataForPDFGen(
 			lineItem.PeriodEnd = pdf.CustomTime{Time: *item.PeriodEnd}
 		}
 
-		data.LineItems[i] = lineItem
+		lineItems = append(lineItems, lineItem)
 	}
 
+	// Line items contain only actual billable items (subscriptions, addons)
+	// Taxes and discounts are shown in the summary section, not as line items
+
+	data.LineItems = lineItems
+
+	// Get applied taxes for detailed breakdown
+	appliedTaxes, err := s.getAppliedTaxesForPDF(ctx, inv.ID)
+	if err != nil {
+		s.Logger.Warnw("failed to get applied taxes for PDF", "error", err, "invoice_id", inv.ID)
+		// Don't fail PDF generation, just skip applied taxes section
+		appliedTaxes = []pdf.AppliedTaxData{}
+	}
+	data.AppliedTaxes = appliedTaxes
+
 	return data, nil
+}
+
+// getAppliedTaxesForPDF retrieves and formats applied tax data for PDF generation
+func (s *invoiceService) getAppliedTaxesForPDF(ctx context.Context, invoiceID string) ([]pdf.AppliedTaxData, error) {
+	// Get applied taxes for this invoice
+	taxService := NewTaxService(s.ServiceParams)
+	filter := types.NewNoLimitTaxAppliedFilter()
+	filter.EntityType = types.TaxRateEntityTypeInvoice
+	filter.EntityID = invoiceID
+
+	appliedTaxesResponse, err := taxService.ListTaxApplied(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(appliedTaxesResponse.Items) == 0 {
+		return []pdf.AppliedTaxData{}, nil
+	}
+
+	// Get unique tax rate IDs to fetch tax rate details
+	taxRateIDs := make([]string, 0, len(appliedTaxesResponse.Items))
+	for _, appliedTax := range appliedTaxesResponse.Items {
+		taxRateIDs = append(taxRateIDs, appliedTax.TaxRateID)
+	}
+
+	// Fetch tax rate details
+	taxRateFilter := &types.TaxRateFilter{
+		TaxRateIDs: taxRateIDs,
+	}
+	taxRates, err := s.TaxRateRepo.List(ctx, taxRateFilter)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create a map for quick lookup
+	taxRateMap := make(map[string]*taxrate.TaxRate)
+	for _, tr := range taxRates {
+		taxRateMap[tr.ID] = tr
+	}
+
+	// Convert to PDF format
+	appliedTaxes := make([]pdf.AppliedTaxData, 0, len(appliedTaxesResponse.Items))
+	for _, appliedTax := range appliedTaxesResponse.Items {
+		taxRate, exists := taxRateMap[appliedTax.TaxRateID]
+		if !exists {
+			continue // Skip if tax rate not found
+		}
+
+		taxableAmount, _ := appliedTax.TaxableAmount.Float64()
+		taxAmount, _ := appliedTax.TaxAmount.Float64()
+
+		var taxRateValue float64
+		var taxType string
+
+		if taxRate.TaxRateType == types.TaxRateTypePercentage && taxRate.PercentageValue != nil {
+			taxRateValue, _ = taxRate.PercentageValue.Float64()
+			taxType = "Percentage"
+		} else if taxRate.TaxRateType == types.TaxRateTypeFixed && taxRate.FixedValue != nil {
+			taxRateValue, _ = taxRate.FixedValue.Float64()
+			taxType = "Fixed"
+		}
+
+		appliedTaxData := pdf.AppliedTaxData{
+			TaxName:       taxRate.Name,
+			TaxCode:       taxRate.Code,
+			TaxType:       taxType,
+			TaxRate:       taxRateValue,
+			TaxableAmount: taxableAmount,
+			TaxAmount:     taxAmount,
+			AppliedAt:     appliedTax.AppliedAt.Format("Jan 02, 2006"),
+		}
+
+		appliedTaxes = append(appliedTaxes, appliedTaxData)
+	}
+
+	return appliedTaxes, nil
 }
 
 func (s *invoiceService) getRecipientInfo(c *customer.Customer) *pdf.RecipientInfo {
