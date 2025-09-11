@@ -456,9 +456,10 @@ func (r *subscriptionRepository) Count(ctx context.Context, filter *types.Subscr
 
 	client := r.client.Querier(ctx)
 	query := client.Subscription.Query()
+	query = ApplyBaseFilters(ctx, query, filter, r.queryOpts)
 
-	// Apply entity-specific filters
-	query, err := r.queryOpts.applyEntityQueryOptions(ctx, filter, query)
+	var err error
+	query, err = r.queryOpts.applyEntityQueryOptions(ctx, filter, query)
 	if err != nil {
 		SetSpanError(span, err)
 		return 0, ierr.WithError(err).
@@ -466,8 +467,6 @@ func (r *subscriptionRepository) Count(ctx context.Context, filter *types.Subscr
 			Mark(ierr.ErrDatabase)
 	}
 
-	// Apply common query options (tenant, environment, status filters)
-	query = ApplyQueryOptions(ctx, query, filter, r.queryOpts)
 	count, err := query.Count(ctx)
 	if err != nil {
 		SetSpanError(span, err)
