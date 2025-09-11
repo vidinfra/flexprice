@@ -68,6 +68,7 @@
   styling: (:),                 // font, font-size, margin (sets defaults below)
   items: (),                    // Line items
   applied-taxes: (),            // Applied taxes breakdown
+  applied-discounts: (),        // Applied discounts breakdown
   subtotal: 0,                  // Subtotal before discounts and tax
   discount: 0,                  // Total discounts
   tax: 0,                       // Total tax
@@ -235,11 +236,11 @@
       // Always show subtotal
       [Subtotal], [#currency#format-number(subtotal)],
       
-      // Always show discount row (empty if no discount)
-      [Discount], if discount > 0 { [−#currency#format-number(discount)] } else { [-] },
+      // Show discount row only if there's a discount
+      ..if discount > 0 { ([Discount], [−#currency#format-number(discount)]) } else { () },
       
-      // Always show tax row (empty if no tax)
-      [Tax], if tax > 0 { [#currency#format-number(tax)] } else { [-] },
+      // Show tax row only if there's tax
+      ..if tax > 0 { ([Tax], [#currency#format-number(tax)]) } else { () },
       
       table.hline(stroke: 1pt + styling.line-color),
       [*Net Payable*], [*#currency#format-number(subtotal - discount + tax)*],
@@ -248,15 +249,55 @@
 
   v(2em)
 
+  // Applied Discounts section (if any discounts were applied)
+  if applied-discounts.len() > 0 {
+    [== Applied Discounts]
+    v(0.5em)
+
+    table(
+      columns: (1fr, 1fr, 1fr, 1fr, 1fr),
+      inset: 8pt,
+      align: (left, left, right, right, left),
+      fill: white,
+      stroke: (x, y) => (
+        bottom: if y == 0 { 1pt + styling.line-color } else { 1pt + styling.line-color },
+      ),
+      table.header(
+        [*Discount Name*],
+        [*Type*],
+        [*Value*],
+        [*Discount Amount*],
+        [*Line Item Ref.*],
+      ),
+      ..applied-discounts.map((discount) => {
+        let value-display = if discount.type == "percentage" {
+          [#format-number(discount.value)%]
+        } else {
+          [#currency#format-number(discount.value)]
+        }
+        
+        (
+          discount.discount_name,
+          discount.type,
+          value-display,
+          [#currency#format-number(discount.discount_amount)],
+          discount.line_item_ref,
+        )
+      }).flatten(),
+    )
+
+    v(1em)
+  }
+
   // Applied Taxes section (if any taxes were applied)
   if applied-taxes.len() > 0 {
     [== Applied Taxes]
-    v(1em)
+    v(0.5em)
 
     table(
-      columns: (1fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr),
+      columns: (1fr, 1fr, 1fr, 1fr, 1fr, 1fr),
       inset: 8pt,
-      align: (left, left, left, right, right, right, left),
+      align: (left, left, left, right, right, right),
       fill: white,
       stroke: (x, y) => (
         bottom: if y == 0 { 1pt + styling.line-color } else { 1pt + styling.line-color },
@@ -268,7 +309,7 @@
         [*Rate*],
         [*Taxable Amount*],
         [*Tax Amount*],
-        [*Applied At*],
+        // [*Applied At*],
       ),
       ..applied-taxes.map((tax) => {
         let rate-display = if tax.tax_type == "Percentage" {
@@ -284,12 +325,12 @@
           rate-display,
           [#currency#format-number(tax.taxable_amount)],
           [#currency#format-number(tax.tax_amount)],
-          tax.applied_at,
+          // tax.applied_at,
         )
       }).flatten(),
     )
 
-    v(2em)
+    v(1em)
   }
 
   // Payment information

@@ -13,7 +13,6 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/invoice"
 	pdf "github.com/flexprice/flexprice/internal/domain/pdf"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
-	taxrate "github.com/flexprice/flexprice/internal/domain/tax"
 	"github.com/flexprice/flexprice/internal/domain/tenant"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/idempotency"
@@ -1521,13 +1520,6 @@ func (s *invoiceService) getInvoiceDataForPDFGen(
 			}
 		}
 
-		// Check metadata for explicit type (this is how discounts/taxes are identified)
-		if item.Metadata != nil {
-			if t, ok := item.Metadata["type"]; ok {
-				itemType = t
-			}
-		}
-
 		lineItem := pdf.LineItemData{
 			PlanDisplayName: planDisplayName,
 			DisplayName:     displayName,
@@ -1566,83 +1558,15 @@ func (s *invoiceService) getInvoiceDataForPDFGen(
 	}
 	data.AppliedTaxes = appliedTaxes
 
+	appliedDiscounts, err := s.getAppliedDiscountsForPDF(ctx, inv)
+	if err != nil {
+		s.Logger.Warnw("failed to get applied discounts for PDF", "error", err, "invoice_id", inv.ID)
+		// Don't fail PDF generation, just skip applied discounts section
+		appliedDiscounts = []pdf.AppliedDiscountData{}
+	}
+	data.AppliedDiscounts = appliedDiscounts
+
 	return data, nil
-}
-
-// getAppliedTaxesForPDF retrieves and formats applied tax data for PDF generation
-func (s *invoiceService) getAppliedTaxesForPDF(ctx context.Context, invoiceID string) ([]pdf.AppliedTaxData, error) {
-	// Get applied taxes for this invoice
-	taxService := NewTaxService(s.ServiceParams)
-	filter := types.NewNoLimitTaxAppliedFilter()
-	filter.EntityType = types.TaxRateEntityTypeInvoice
-	filter.EntityID = invoiceID
-
-	appliedTaxesResponse, err := taxService.ListTaxApplied(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(appliedTaxesResponse.Items) == 0 {
-		return []pdf.AppliedTaxData{}, nil
-	}
-
-	// Get unique tax rate IDs to fetch tax rate details
-	taxRateIDs := make([]string, 0, len(appliedTaxesResponse.Items))
-	for _, appliedTax := range appliedTaxesResponse.Items {
-		taxRateIDs = append(taxRateIDs, appliedTax.TaxRateID)
-	}
-
-	// Fetch tax rate details
-	taxRateFilter := &types.TaxRateFilter{
-		TaxRateIDs: taxRateIDs,
-	}
-	taxRates, err := s.TaxRateRepo.List(ctx, taxRateFilter)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a map for quick lookup
-	taxRateMap := make(map[string]*taxrate.TaxRate)
-	for _, tr := range taxRates {
-		taxRateMap[tr.ID] = tr
-	}
-
-	// Convert to PDF format
-	appliedTaxes := make([]pdf.AppliedTaxData, 0, len(appliedTaxesResponse.Items))
-	for _, appliedTax := range appliedTaxesResponse.Items {
-		taxRate, exists := taxRateMap[appliedTax.TaxRateID]
-		if !exists {
-			continue // Skip if tax rate not found
-		}
-
-		taxableAmount, _ := appliedTax.TaxableAmount.Float64()
-		taxAmount, _ := appliedTax.TaxAmount.Float64()
-
-		var taxRateValue float64
-		var taxType string
-
-		if taxRate.TaxRateType == types.TaxRateTypePercentage && taxRate.PercentageValue != nil {
-			taxRateValue, _ = taxRate.PercentageValue.Float64()
-			taxType = "Percentage"
-		} else if taxRate.TaxRateType == types.TaxRateTypeFixed && taxRate.FixedValue != nil {
-			taxRateValue, _ = taxRate.FixedValue.Float64()
-			taxType = "Fixed"
-		}
-
-		appliedTaxData := pdf.AppliedTaxData{
-			TaxName:       taxRate.Name,
-			TaxCode:       taxRate.Code,
-			TaxType:       taxType,
-			TaxRate:       taxRateValue,
-			TaxableAmount: taxableAmount,
-			TaxAmount:     taxAmount,
-			AppliedAt:     appliedTax.AppliedAt.Format("Jan 02, 2006"),
-		}
-
-		appliedTaxes = append(appliedTaxes, appliedTaxData)
-	}
-
-	return appliedTaxes, nil
 }
 
 func (s *invoiceService) getRecipientInfo(c *customer.Customer) *pdf.RecipientInfo {
@@ -2658,4 +2582,145 @@ func (s *invoiceService) mapFlexibleAnalyticsToLineItems(ctx context.Context, an
 	}
 
 	return usageBreakdownResponse, nil
+}
+
+// getAppliedTaxesForPDF retrieves and formats applied tax data for PDF generation
+func (s *invoiceService) getAppliedTaxesForPDF(ctx context.Context, invoiceID string) ([]pdf.AppliedTaxData, error) {
+	// Get applied taxes for this invoice with tax rate details expanded - SINGLE DB CALL!
+	taxService := NewTaxService(s.ServiceParams)
+	filter := types.NewNoLimitTaxAppliedFilter()
+	filter.EntityType = types.TaxRateEntityTypeInvoice
+	filter.EntityID = invoiceID
+	filter.QueryFilter.Expand = lo.ToPtr(types.NewExpand("tax_rate").String())
+
+	appliedTaxesResponse, err := taxService.ListTaxApplied(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	s.Logger.Infow("DEBUG: Applied taxes response", "count", len(appliedTaxesResponse.Items))
+	for i, item := range appliedTaxesResponse.Items {
+		s.Logger.Infow("DEBUG: Applied tax item", "index", i, "tax_rate_id", item.TaxRateID, "has_tax_rate", item.TaxRate != nil)
+		if item.TaxRate != nil {
+			s.Logger.Infow("DEBUG: Tax rate details", "name", item.TaxRate.Name, "code", item.TaxRate.Code)
+		}
+	}
+
+	if len(appliedTaxesResponse.Items) == 0 {
+		return []pdf.AppliedTaxData{}, nil
+	}
+
+	// Convert to PDF format using expanded tax rate data
+	appliedTaxes := make([]pdf.AppliedTaxData, 0, len(appliedTaxesResponse.Items))
+	for _, appliedTax := range appliedTaxesResponse.Items {
+		taxableAmount, _ := appliedTax.TaxableAmount.Float64()
+		taxAmount, _ := appliedTax.TaxAmount.Float64()
+
+		// Use expanded tax rate data if available
+		var taxName, taxCode, taxType string
+		var taxRateValue float64
+
+		if appliedTax.TaxRate != nil {
+			// Use expanded tax rate data
+			taxName = appliedTax.TaxRate.Name
+			taxCode = appliedTax.TaxRate.Code
+			taxType = string(appliedTax.TaxRate.TaxRateType)
+			if appliedTax.TaxRate.TaxRateType == types.TaxRateTypePercentage && appliedTax.TaxRate.PercentageValue != nil {
+				taxRateValue, _ = appliedTax.TaxRate.PercentageValue.Float64()
+			} else if appliedTax.TaxRate.TaxRateType == types.TaxRateTypeFixed && appliedTax.TaxRate.FixedValue != nil {
+				taxRateValue, _ = appliedTax.TaxRate.FixedValue.Float64()
+			}
+		} else {
+			// Fallback if tax rate not expanded - this should not happen if expand works
+			s.Logger.Errorw("Tax rate expand failed - falling back to basic info", "tax_rate_id", appliedTax.TaxRateID)
+			taxName = "Tax Rate " + appliedTax.TaxRateID[len(appliedTax.TaxRateID)-6:] // Show last 6 chars
+			taxCode = appliedTax.TaxRateID
+			taxType = "Unknown"
+			taxRateValue = 0
+		}
+
+		appliedTaxData := pdf.AppliedTaxData{
+			TaxName:       taxName,
+			TaxCode:       taxCode,
+			TaxType:       taxType,
+			TaxRate:       taxRateValue,
+			TaxableAmount: taxableAmount,
+			TaxAmount:     taxAmount,
+			// AppliedAt:     appliedTax.AppliedAt.Format("Jan 02, 2006"),
+		}
+
+		appliedTaxes = append(appliedTaxes, appliedTaxData)
+	}
+
+	return appliedTaxes, nil
+}
+
+// getAppliedDiscountsForPDF retrieves and formats applied discount data for PDF generation
+func (s *invoiceService) getAppliedDiscountsForPDF(ctx context.Context, inv *invoice.Invoice) ([]pdf.AppliedDiscountData, error) {
+	// Get coupon applications for this invoice
+	couponApplicationService := NewCouponApplicationService(s.ServiceParams)
+	couponApplications, err := couponApplicationService.GetCouponApplicationsByInvoice(ctx, inv.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(couponApplications) == 0 {
+		return []pdf.AppliedDiscountData{}, nil
+	}
+
+	// Get coupon service to fetch coupon details
+	couponService := NewCouponService(s.ServiceParams)
+
+	// Convert to PDF format using coupon application data
+	appliedDiscounts := make([]pdf.AppliedDiscountData, 0, len(couponApplications))
+	for _, couponApp := range couponApplications {
+		discountAmount, _ := couponApp.DiscountedAmount.Float64()
+
+		discountName := "Discount"
+		// Get coupon name from coupon service
+		if coupon, err := couponService.GetCoupon(ctx, couponApp.CouponID); err == nil && coupon != nil {
+			discountName = coupon.Name
+		}
+
+		// Determine discount type and value
+		var discountValue float64
+		discountType := string(couponApp.DiscountType)
+		if couponApp.DiscountType == types.CouponTypePercentage && couponApp.DiscountPercentage != nil {
+			discountValue, _ = couponApp.DiscountPercentage.Float64()
+		} else if couponApp.DiscountType == types.CouponTypeFixed {
+			// For fixed discounts, use the actual discount amount as the value
+			discountValue = discountAmount
+		} else {
+			// Fallback
+			discountValue = discountAmount
+		}
+
+		// Determine line item reference
+		lineItemRef := "--"
+		if couponApp.InvoiceLineItemID != nil {
+			// Find the line item display name for this line item ID
+			for _, lineItem := range inv.LineItems {
+				if lineItem.ID == *couponApp.InvoiceLineItemID {
+					if lineItem.DisplayName != nil && *lineItem.DisplayName != "" {
+						lineItemRef = *lineItem.DisplayName
+					} else if lineItem.PlanDisplayName != nil && *lineItem.PlanDisplayName != "" {
+						lineItemRef = *lineItem.PlanDisplayName
+					}
+					break
+				}
+			}
+		}
+
+		appliedDiscount := pdf.AppliedDiscountData{
+			DiscountName:   discountName,
+			Type:           discountType,
+			Value:          discountValue,
+			DiscountAmount: discountAmount,
+			LineItemRef:    lineItemRef,
+		}
+
+		appliedDiscounts = append(appliedDiscounts, appliedDiscount)
+	}
+
+	return appliedDiscounts, nil
 }

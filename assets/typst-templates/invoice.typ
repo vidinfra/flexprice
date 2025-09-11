@@ -42,6 +42,7 @@
   ),
   items: invoice-data.at("line_items", default: ()),
   applied-taxes: invoice-data.at("applied_taxes", default: ()),
+  applied-discounts: invoice-data.at("applied_discounts", default: ()),
   styling: (
     font: if "styling" in invoice-data and "font" in invoice-data.styling {
       invoice-data.styling.font

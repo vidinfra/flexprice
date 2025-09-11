@@ -31,6 +31,9 @@ type InvoiceData struct {
 
 	// Applied taxes (detailed breakdown)
 	AppliedTaxes []AppliedTaxData `json:"applied_taxes"`
+
+	// Applied discounts (detailed breakdown)
+	AppliedDiscounts []AppliedDiscountData `json:"applied_discounts"`
 }
 
 // BillerInfo contains company information for the invoice issuer
@@ -80,7 +83,16 @@ type AppliedTaxData struct {
 	TaxRate       float64 `json:"tax_rate"`       // Rate value (e.g., 1.00 for fixed, 10.0 for 10%)
 	TaxableAmount float64 `json:"taxable_amount"` // Amount tax was calculated on
 	TaxAmount     float64 `json:"tax_amount"`     // Actual tax amount
-	AppliedAt     string  `json:"applied_at"`     // Date when tax was applied
+	// AppliedAt     string  `json:"applied_at"`     // Date when tax was applied
+}
+
+// AppliedDiscountData represents a discount applied to the invoice
+type AppliedDiscountData struct {
+	DiscountName   string  `json:"discount_name"`   // Human-readable discount name
+	Type           string  `json:"type"`            // "Fixed" or "Percentage"
+	Value          float64 `json:"value"`           // Discount value (e.g., 5.00 for $5 off, 10.0 for 10% off)
+	DiscountAmount float64 `json:"discount_amount"` // Actual discount amount applied
+	LineItemRef    string  `json:"line_item_ref"`   // Line item reference if discount applied to specific line item, empty if invoice-level
 }
 
 type CustomTime struct {
