@@ -628,11 +628,6 @@ func (s *subscriptionService) handleCreditGrants(
 				Mark(ierr.ErrDatabase)
 		}
 
-		s.Logger.Infow("successfully processed credit grant for subscription",
-			"subscription_id", subscription.ID,
-			"grant_id", createdGrant.ID,
-			"grant_name", createdGrant.Name,
-			"amount", createdGrant.Credits)
 	}
 
 	return nil
@@ -875,17 +870,11 @@ func (s *subscriptionService) ListSubscriptions(ctx context.Context, filter *typ
 		return nil, err
 	}
 
-	s.Logger.Debugw("successfully retrieved subscriptions from repository",
-		"subscription_count", len(subscriptions),
-		"subscription_ids", lo.Map(subscriptions, func(sub *subscription.Subscription, _ int) string { return sub.ID }))
-
 	count, err := s.SubRepo.Count(ctx, filter)
 	if err != nil {
 		s.Logger.Errorw("failed to count subscriptions from repository", "error", err, "filter", filter)
 		return nil, err
 	}
-
-	s.Logger.Debugw("successfully retrieved subscription count", "total_count", count)
 
 	response := &dto.ListSubscriptionsResponse{
 		Items: make([]*dto.SubscriptionResponse, len(subscriptions)),
@@ -918,7 +907,6 @@ func (s *subscriptionService) ListSubscriptions(ctx context.Context, filter *typ
 		planFilter.Expand = filter.Expand // pass on the filters to next layer
 	}
 
-	s.Logger.Debugw("calling planService.GetPlans", "plan_filter", planFilter)
 	planResponse, err := planService.GetPlans(ctx, planFilter)
 	if err != nil {
 		s.Logger.Errorw("failed to get plans from plan service",
@@ -928,10 +916,6 @@ func (s *subscriptionService) ListSubscriptions(ctx context.Context, filter *typ
 		return nil, err
 	}
 
-	s.Logger.Debugw("successfully retrieved plans",
-		"plans_returned", len(planResponse.Items),
-		"plan_ids_returned", lo.Map(planResponse.Items, func(plan *dto.PlanResponse, _ int) string { return plan.Plan.ID }))
-
 	// Build plan map for quick lookup
 	for _, plan := range planResponse.Items {
 		if plan.Plan == nil {
@@ -940,8 +924,6 @@ func (s *subscriptionService) ListSubscriptions(ctx context.Context, filter *typ
 		}
 		planIDMap[plan.Plan.ID] = plan
 	}
-
-	s.Logger.Debugw("built plan map", "plan_map_size", len(planIDMap))
 
 	// Get customers in bulk if customer expansion is requested
 	var customerIDMap map[string]*dto.CustomerResponse
@@ -968,7 +950,6 @@ func (s *subscriptionService) ListSubscriptions(ctx context.Context, filter *typ
 			customerFilter.Expand = filter.Expand // pass on the filters to next layer
 		}
 
-		s.Logger.Debugw("calling customerService.GetCustomers", "customer_filter", customerFilter)
 		customerResponse, err := customerService.GetCustomers(ctx, customerFilter)
 		if err != nil {
 			s.Logger.Errorw("failed to get customers from customer service",
@@ -977,10 +958,6 @@ func (s *subscriptionService) ListSubscriptions(ctx context.Context, filter *typ
 				"customer_ids", uniqueCustomerIDs)
 			return nil, err
 		}
-
-		s.Logger.Debugw("successfully retrieved customers",
-			"customers_returned", len(customerResponse.Items),
-			"customer_ids_returned", lo.Map(customerResponse.Items, func(customer *dto.CustomerResponse, _ int) string { return customer.Customer.ID }))
 
 		// Build customer map for quick lookup
 		for _, customer := range customerResponse.Items {
