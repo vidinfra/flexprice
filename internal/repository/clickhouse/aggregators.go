@@ -1,3 +1,38 @@
+// Package clickhouse provides ClickHouse-specific aggregators for usage data.
+//
+// Custom Monthly Billing Periods
+// ==============================
+//
+// This package supports custom monthly billing periods through the BillingAnchor parameter.
+// This allows usage data to be aggregated by custom monthly periods (e.g., 5th to 5th of each month)
+// instead of standard calendar months (1st to 1st of each month).
+//
+// How it works:
+// 1. When WindowSize = "MONTH" and BillingAnchor is provided, events are grouped by custom monthly periods
+// 2. The BillingAnchor timestamp defines the reference point for monthly periods
+// 3. Full timestamp precision is preserved (day, hour, minute, second, nanosecond)
+// 4. All other window sizes (DAY, HOUR, WEEK, etc.) ignore BillingAnchor and use standard windows
+//
+// Example:
+//   BillingAnchor = 2024-03-05 14:30:45.123456789 UTC
+//   - March period: 2024-03-05 14:30:45 to 2024-04-05 14:30:45
+//   - April period: 2024-04-05 14:30:45 to 2024-05-05 14:30:45
+//
+// Use cases:
+// - Subscription billing that doesn't align with calendar months
+// - Customer-specific billing cycles (e.g., signed up on 15th)
+// - Multi-tenant systems with different billing anchor dates
+// - Custom business cycles (fiscal months, quarterly periods)
+//
+// Implementation:
+// The custom monthly logic generates ClickHouse expressions that:
+// 1. Shift timestamps by the billing anchor offset
+// 2. Apply toStartOfMonth() to get calendar month boundaries
+// 3. Shift back by the same offset to create custom monthly periods
+//
+// This ensures that events are correctly grouped into the appropriate billing periods
+// regardless of when they occurred within the month.
+
 package clickhouse
 
 import (
@@ -66,6 +101,71 @@ func formatWindowSize(windowSize types.WindowSize) string {
 	}
 }
 
+// formatWindowSizeWithBillingAnchor formats window size with custom billing anchor for monthly periods.
+//
+// This function handles custom billing periods for monthly aggregations, allowing events to be grouped
+// by custom monthly periods (e.g., 5th to 5th of each month) instead of calendar months (1st to 1st).
+//
+// Parameters:
+//   - windowSize: The aggregation window size (MONTH, DAY, HOUR, etc.)
+//   - billingAnchor: The reference timestamp for custom monthly periods (only used for MONTH window size)
+//
+// Behavior by window size:
+//   - MONTH + billingAnchor: Creates custom monthly periods with full timestamp precision
+//   - MONTH + nil: Falls back to standard calendar months (toStartOfMonth)
+//   - DAY/HOUR/WEEK/etc: Ignores billing anchor, uses standard window functions
+//
+// Example: billingAnchor = 2024-03-05 14:30:45.123456789 UTC
+//   - Events from March 5 14:30:45 to April 5 14:30:45 → March billing period
+//   - Events from April 5 14:30:45 to May 5 14:30:45 → April billing period
+//
+// The generated ClickHouse expression shifts timestamps by the billing anchor offset,
+// applies toStartOfMonth(), then shifts back to create the correct billing periods.
+func formatWindowSizeWithBillingAnchor(windowSize types.WindowSize, billingAnchor *time.Time) string {
+	if windowSize == types.WindowSizeMonth && billingAnchor != nil {
+		// Extract all time components from billing anchor
+		anchorDay := billingAnchor.Day()
+		anchorHour := billingAnchor.Hour()
+		anchorMinute := billingAnchor.Minute()
+		anchorSecond := billingAnchor.Second()
+		anchorNanosecond := billingAnchor.Nanosecond()
+
+		// Calculate the total offset in seconds from the start of the day
+		totalSecondsOffset := anchorHour*3600 + anchorMinute*60 + anchorSecond
+
+		// Generate the custom monthly window expression
+		// This shifts the timestamp by the full offset, then uses toStartOfMonth,
+		// then shifts back by the same offset to get the correct billing period
+		if anchorNanosecond > 0 {
+			// Include nanoseconds for complete precision
+			return fmt.Sprintf(`
+				addNanoseconds(
+					addSeconds(
+						addDays(
+							toStartOfMonth(addDays(addSeconds(addNanoseconds(timestamp, -%d), -%d), -%d)),
+							%d
+						),
+						%d
+					),
+					%d
+				)`, anchorNanosecond, totalSecondsOffset, anchorDay-1, anchorDay-1, totalSecondsOffset, anchorNanosecond)
+		} else {
+			// No nanoseconds, just use seconds
+			return fmt.Sprintf(`
+				addSeconds(
+					addDays(
+						toStartOfMonth(addDays(addSeconds(timestamp, -%d), -%d)),
+						%d
+					),
+					%d
+				)`, totalSecondsOffset, anchorDay-1, anchorDay-1, totalSecondsOffset)
+		}
+	}
+
+	// Fall back to standard window size formatting
+	return formatWindowSize(windowSize)
+}
+
 func buildFilterConditions(filters map[string][]string) string {
 	if len(filters) == 0 {
 		return ""
@@ -128,7 +228,7 @@ func parseTimeConditions(params *events.UsageParams) []string {
 type SumAggregator struct{}
 
 func (a *SumAggregator) GetQuery(ctx context.Context, params *events.UsageParams) string {
-	windowSize := formatWindowSize(params.WindowSize)
+	windowSize := formatWindowSizeWithBillingAnchor(params.WindowSize, params.BillingAnchor)
 	selectClause := ""
 	windowClause := ""
 	groupByClause := ""
@@ -195,7 +295,7 @@ func (a *SumAggregator) GetType() types.AggregationType {
 type CountAggregator struct{}
 
 func (a *CountAggregator) GetQuery(ctx context.Context, params *events.UsageParams) string {
-	windowSize := formatWindowSize(params.WindowSize)
+	windowSize := formatWindowSizeWithBillingAnchor(params.WindowSize, params.BillingAnchor)
 	selectClause := ""
 	groupByClause := ""
 
@@ -250,7 +350,7 @@ func (a *CountAggregator) GetType() types.AggregationType {
 type CountUniqueAggregator struct{}
 
 func (a *CountUniqueAggregator) GetQuery(ctx context.Context, params *events.UsageParams) string {
-	windowSize := formatWindowSize(params.WindowSize)
+	windowSize := formatWindowSizeWithBillingAnchor(params.WindowSize, params.BillingAnchor)
 	selectClause := ""
 	windowClause := ""
 	groupByClause := ""
@@ -317,7 +417,7 @@ func (a *CountUniqueAggregator) GetType() types.AggregationType {
 type AvgAggregator struct{}
 
 func (a *AvgAggregator) GetQuery(ctx context.Context, params *events.UsageParams) string {
-	windowSize := formatWindowSize(params.WindowSize)
+	windowSize := formatWindowSizeWithBillingAnchor(params.WindowSize, params.BillingAnchor)
 	selectClause := ""
 	windowClause := ""
 	groupByClause := ""
@@ -384,7 +484,7 @@ func (a *AvgAggregator) GetType() types.AggregationType {
 type LatestAggregator struct{}
 
 func (a *LatestAggregator) GetQuery(ctx context.Context, params *events.UsageParams) string {
-	windowSize := formatWindowSize(params.WindowSize)
+	windowSize := formatWindowSizeWithBillingAnchor(params.WindowSize, params.BillingAnchor)
 	windowClause := ""
 	groupByClause := ""
 
@@ -439,7 +539,7 @@ func (a *LatestAggregator) GetType() types.AggregationType {
 type SumWithMultiAggregator struct{}
 
 func (a *SumWithMultiAggregator) GetQuery(ctx context.Context, params *events.UsageParams) string {
-	windowSize := formatWindowSize(params.WindowSize)
+	windowSize := formatWindowSizeWithBillingAnchor(params.WindowSize, params.BillingAnchor)
 	selectClause := ""
 	windowClause := ""
 	groupByClause := ""
@@ -521,7 +621,7 @@ func (a *MaxAggregator) GetQuery(ctx context.Context, params *events.UsageParams
 }
 
 func (a *MaxAggregator) getNonWindowedQuery(ctx context.Context, params *events.UsageParams) string {
-	windowSize := formatWindowSize(params.WindowSize)
+	windowSize := formatWindowSizeWithBillingAnchor(params.WindowSize, params.BillingAnchor)
 	selectClause := ""
 	windowClause := ""
 	groupByClause := ""
@@ -581,7 +681,7 @@ func (a *MaxAggregator) getNonWindowedQuery(ctx context.Context, params *events.
 }
 
 func (a *MaxAggregator) getWindowedQuery(ctx context.Context, params *events.UsageParams) string {
-	bucketWindow := formatWindowSize(params.BucketSize)
+	bucketWindow := formatWindowSizeWithBillingAnchor(params.BucketSize, params.BillingAnchor)
 
 	externalCustomerFilter := ""
 	if params.ExternalCustomerID != "" {

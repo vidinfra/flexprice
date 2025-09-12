@@ -344,6 +344,7 @@ func (s *billingService) CalculateUsageCharges(
 							ExternalCustomerID: customer.ExternalID,
 							StartTime:          item.GetPeriodStart(periodStart),
 							EndTime:            item.GetPeriodEnd(periodEnd),
+							BillingAnchor:      &sub.BillingAnchor,
 							WindowSize:         types.WindowSizeMonth, // Use monthly window size
 						}
 
@@ -422,6 +423,8 @@ func (s *billingService) CalculateUsageCharges(
 								ExternalCustomerID: customer.ExternalID,
 								StartTime:          item.GetPeriodStart(periodStart),
 								EndTime:            item.GetPeriodEnd(periodEnd),
+								WindowSize:         types.WindowSizeMonth, // Set monthly window size for custom billing periods
+								BillingAnchor:      &sub.BillingAnchor,
 							}
 
 							// Get usage data with buckets
@@ -1838,6 +1841,7 @@ func (s *billingService) calculateNeverResetUsage(
 		ExternalCustomerID: customer.ExternalID,
 		StartTime:          sub.StartDate,
 		EndTime:            lineItemPeriodEnd,
+		BillingAnchor:      &sub.BillingAnchor,
 	}
 
 	totalUsageResult, err := eventService.GetUsageByMeter(ctx, totalUsageRequest)
