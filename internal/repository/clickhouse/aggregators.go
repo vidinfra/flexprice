@@ -9,14 +9,14 @@
 //
 // How it works:
 // 1. When WindowSize = "MONTH" and BillingAnchor is provided, events are grouped by custom monthly periods
-// 2. The BillingAnchor timestamp defines the reference point for monthly periods
-// 3. Full timestamp precision is preserved (day, hour, minute, second, nanosecond)
+// 2. The BillingAnchor timestamp defines the reference day for monthly periods (time is ignored)
+// 3. Day-level granularity is used for simplicity and predictability
 // 4. All other window sizes (DAY, HOUR, WEEK, etc.) ignore BillingAnchor and use standard windows
 //
 // Example:
-//   BillingAnchor = 2024-03-05 14:30:45.123456789 UTC
-//   - March period: 2024-03-05 14:30:45 to 2024-04-05 14:30:45
-//   - April period: 2024-04-05 14:30:45 to 2024-05-05 14:30:45
+//   BillingAnchor = 2024-03-05 (any time on March 5th)
+//   - March period: 2024-03-05 to 2024-04-05
+//   - April period: 2024-04-05 to 2024-05-05
 //
 // Use cases:
 // - Subscription billing that doesn't align with calendar months
@@ -26,12 +26,12 @@
 //
 // Implementation:
 // The custom monthly logic generates ClickHouse expressions that:
-// 1. Shift timestamps by the billing anchor offset
+// 1. Shift timestamps by the day offset from the billing anchor
 // 2. Apply toStartOfMonth() to get calendar month boundaries
-// 3. Shift back by the same offset to create custom monthly periods
+// 3. Shift back by the same day offset to create custom monthly periods
 //
 // This ensures that events are correctly grouped into the appropriate billing periods
-// regardless of when they occurred within the month.
+// using day-level granularity for better predictability and user understanding.
 
 package clickhouse
 
@@ -111,55 +111,30 @@ func formatWindowSize(windowSize types.WindowSize) string {
 //   - billingAnchor: The reference timestamp for custom monthly periods (only used for MONTH window size)
 //
 // Behavior by window size:
-//   - MONTH + billingAnchor: Creates custom monthly periods with full timestamp precision
+//   - MONTH + billingAnchor: Creates custom monthly periods using day-level granularity
 //   - MONTH + nil: Falls back to standard calendar months (toStartOfMonth)
 //   - DAY/HOUR/WEEK/etc: Ignores billing anchor, uses standard window functions
 //
-// Example: billingAnchor = 2024-03-05 14:30:45.123456789 UTC
-//   - Events from March 5 14:30:45 to April 5 14:30:45 → March billing period
-//   - Events from April 5 14:30:45 to May 5 14:30:45 → April billing period
+// Example: billingAnchor = 2024-03-05 (any time on March 5th)
+//   - Events from March 5 to April 5 → March billing period
+//   - Events from April 5 to May 5 → April billing period
 //
-// The generated ClickHouse expression shifts timestamps by the billing anchor offset,
+// The generated ClickHouse expression shifts timestamps by the day offset,
 // applies toStartOfMonth(), then shifts back to create the correct billing periods.
+// This uses day-level granularity for simplicity and predictability.
 func formatWindowSizeWithBillingAnchor(windowSize types.WindowSize, billingAnchor *time.Time) string {
 	if windowSize == types.WindowSizeMonth && billingAnchor != nil {
-		// Extract all time components from billing anchor
+		// Extract only the day component from billing anchor for simplicity
 		anchorDay := billingAnchor.Day()
-		anchorHour := billingAnchor.Hour()
-		anchorMinute := billingAnchor.Minute()
-		anchorSecond := billingAnchor.Second()
-		anchorNanosecond := billingAnchor.Nanosecond()
 
-		// Calculate the total offset in seconds from the start of the day
-		totalSecondsOffset := anchorHour*3600 + anchorMinute*60 + anchorSecond
-
-		// Generate the custom monthly window expression
-		// This shifts the timestamp by the full offset, then uses toStartOfMonth,
-		// then shifts back by the same offset to get the correct billing period
-		if anchorNanosecond > 0 {
-			// Include nanoseconds for complete precision
-			return fmt.Sprintf(`
-				addNanoseconds(
-					addSeconds(
-						addDays(
-							toStartOfMonth(addDays(addSeconds(addNanoseconds(timestamp, -%d), -%d), -%d)),
-							%d
-						),
-						%d
-					),
-					%d
-				)`, anchorNanosecond, totalSecondsOffset, anchorDay-1, anchorDay-1, totalSecondsOffset, anchorNanosecond)
-		} else {
-			// No nanoseconds, just use seconds
-			return fmt.Sprintf(`
-				addSeconds(
-					addDays(
-						toStartOfMonth(addDays(addSeconds(timestamp, -%d), -%d)),
-						%d
-					),
-					%d
-				)`, totalSecondsOffset, anchorDay-1, anchorDay-1, totalSecondsOffset)
-		}
+		// Generate the custom monthly window expression using day-level granularity
+		// This shifts the timestamp by the day offset, then uses toStartOfMonth,
+		// then shifts back by the same day offset to get the correct billing period
+		return fmt.Sprintf(`
+			addDays(
+				toStartOfMonth(addDays(timestamp, -%d)),
+				%d
+			)`, anchorDay-1, anchorDay-1)
 	}
 
 	// Fall back to standard window size formatting
