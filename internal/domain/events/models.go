@@ -25,10 +25,10 @@ type UsageAnalyticsParams struct {
 	//
 	// When WindowSize = MONTH and BillingAnchor is provided:
 	// - Events are grouped by custom monthly periods (e.g., 5th to 5th of each month)
-	// - BillingAnchor precision (day, hour, minute, second, nanosecond) is preserved
-	// - Example: BillingAnchor = 2024-03-05 14:30:45.123456789 UTC
-	//   - Events from March 5 14:30:45 to April 5 14:30:45 → March billing period
-	//   - Events from April 5 14:30:45 to May 5 14:30:45 → April billing period
+	// - Only the day component is used for simplicity and predictability (time is ignored)
+	// - Example: BillingAnchor = 2024-03-05 (any time on March 5th)
+	//   - Events from March 5 to April 5 → March billing period
+	//   - Events from April 5 to May 5 → April billing period
 	//
 	// When WindowSize != MONTH or BillingAnchor is nil:
 	// - Falls back to standard calendar-based windows (1st to 1st for months)

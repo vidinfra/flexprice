@@ -794,41 +794,15 @@ func (r *ProcessedEventRepository) getAnalyticsPoints(
 	case types.WindowSizeMonth:
 		// Use custom monthly billing period if billing anchor is provided
 		if params.BillingAnchor != nil {
-			// Extract all time components from billing anchor
+			// Extract only the day component from billing anchor for simplicity
 			anchorDay := params.BillingAnchor.Day()
-			anchorHour := params.BillingAnchor.Hour()
-			anchorMinute := params.BillingAnchor.Minute()
-			anchorSecond := params.BillingAnchor.Second()
-			anchorNanosecond := params.BillingAnchor.Nanosecond()
 
-			// Calculate the total offset in seconds from the start of the day
-			totalSecondsOffset := anchorHour*3600 + anchorMinute*60 + anchorSecond
-
-			// Generate the custom monthly window expression
-			if anchorNanosecond > 0 {
-				// Include nanoseconds for complete precision
-				timeWindowExpr = fmt.Sprintf(`
-					addNanoseconds(
-						addSeconds(
-							addDays(
-								toStartOfMonth(addDays(addSeconds(addNanoseconds(timestamp, -%d), -%d), -%d)),
-								%d
-							),
-							%d
-						),
-						%d
-					)`, anchorNanosecond, totalSecondsOffset, anchorDay-1, anchorDay-1, totalSecondsOffset, anchorNanosecond)
-			} else {
-				// No nanoseconds, just use seconds
-				timeWindowExpr = fmt.Sprintf(`
-					addSeconds(
-						addDays(
-							toStartOfMonth(addDays(addSeconds(timestamp, -%d), -%d)),
-							%d
-						),
-						%d
-					)`, totalSecondsOffset, anchorDay-1, anchorDay-1, totalSecondsOffset)
-			}
+			// Generate the custom monthly window expression using day-level granularity
+			timeWindowExpr = fmt.Sprintf(`
+				addDays(
+					toStartOfMonth(addDays(timestamp, -%d)),
+					%d
+				)`, anchorDay-1, anchorDay-1)
 		} else {
 			timeWindowExpr = "toStartOfMonth(timestamp)"
 		}

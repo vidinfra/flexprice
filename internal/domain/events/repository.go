@@ -85,9 +85,9 @@ type UsageParams struct {
 	// - MONTH + nil: Standard calendar months (1st to 1st of each month)
 	// - DAY/HOUR/WEEK/etc: BillingAnchor is ignored, uses standard windows
 	//
-	// Precision: Full timestamp precision is preserved (day, hour, minute, second, nanosecond)
-	// Example: BillingAnchor = 2024-03-05 14:30:45.123456789 UTC
-	//   - Creates monthly buckets starting at 14:30:45.123456789 on the 5th of each month
+	// Precision: Day-level granularity is used for simplicity and predictability (time is ignored)
+	// Example: BillingAnchor = 2024-03-05 (any time on March 5th)
+	//   - Creates monthly buckets starting on the 5th of each month
 	//
 	// Use cases:
 	// - Subscription billing periods that don't align with calendar months
