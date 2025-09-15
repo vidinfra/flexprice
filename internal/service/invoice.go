@@ -637,6 +637,24 @@ func (s *invoiceService) performFinalizeInvoiceActions(ctx context.Context, inv 
 	return nil
 }
 
+func (s *invoiceService) updateMetadata(inv *invoice.Invoice, req dto.InvoiceVoidRequest) error {
+
+	// Start with existing metadata
+	metadata := inv.Metadata
+	if metadata == nil {
+		metadata = make(types.Metadata)
+	}
+
+	// Merge request metadata into existing metadata
+	// Request values will override existing values
+	for key, value := range req.Metadata {
+		metadata[key] = value
+	}
+
+	inv.Metadata = metadata
+	return nil
+}
+
 func (s *invoiceService) VoidInvoice(ctx context.Context, id string, req dto.InvoiceVoidRequest) error {
 
 	if err := req.Validate(); err != nil {
@@ -677,7 +695,11 @@ func (s *invoiceService) VoidInvoice(ctx context.Context, id string, req dto.Inv
 	now := time.Now().UTC()
 	inv.InvoiceStatus = types.InvoiceStatusVoided
 	inv.VoidedAt = &now
-	inv.Metadata = req.Metadata
+	if req.Metadata != nil {
+		if err := s.updateMetadata(inv, req); err != nil {
+			return err
+		}
+	}
 
 	if err := s.InvoiceRepo.Update(ctx, inv); err != nil {
 		return err
