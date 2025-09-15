@@ -312,7 +312,7 @@
         // [*Applied At*],
       ),
       ..applied-taxes.map((tax) => {
-        let rate-display = if tax.tax_type == "Percentage" {
+        let rate-display = if tax.tax_type == "percentage" {
           [#format-number(tax.tax_rate)%]
         } else {
           [#currency#format-number(tax.tax_rate)]
