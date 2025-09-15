@@ -637,6 +637,12 @@ func (s *invoiceService) performFinalizeInvoiceActions(ctx context.Context, inv 
 	return nil
 }
 
+// updateMetadata merges the request metadata with the existing invoice metadata.
+// This function performs a selective update where:
+// - Existing metadata keys not mentioned in the request are preserved
+// - Keys present in both existing and request metadata are updated with request values
+// - New keys from the request are added to the metadata
+// - If the invoice has no existing metadata, a new metadata map is created
 func (s *invoiceService) updateMetadata(inv *invoice.Invoice, req dto.InvoiceVoidRequest) error {
 
 	// Start with existing metadata
