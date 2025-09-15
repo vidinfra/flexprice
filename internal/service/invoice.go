@@ -28,7 +28,7 @@ type InvoiceService interface {
 	GetInvoice(ctx context.Context, id string) (*dto.InvoiceResponse, error)
 	ListInvoices(ctx context.Context, filter *types.InvoiceFilter) (*dto.ListInvoicesResponse, error)
 	FinalizeInvoice(ctx context.Context, id string) error
-	VoidInvoice(ctx context.Context, id string) error
+	VoidInvoice(ctx context.Context, id string, req dto.InvoiceVoidRequest) error
 	ProcessDraftInvoice(ctx context.Context, id string, paymentParams *dto.PaymentParameters, sub *subscription.Subscription, flowType types.InvoiceFlowType) error
 	UpdatePaymentStatus(ctx context.Context, id string, status types.PaymentStatus, amount *decimal.Decimal) error
 	ReconcilePaymentStatus(ctx context.Context, id string, status types.PaymentStatus, amount *decimal.Decimal) error
@@ -637,7 +637,12 @@ func (s *invoiceService) performFinalizeInvoiceActions(ctx context.Context, inv 
 	return nil
 }
 
-func (s *invoiceService) VoidInvoice(ctx context.Context, id string) error {
+func (s *invoiceService) VoidInvoice(ctx context.Context, id string, req dto.InvoiceVoidRequest) error {
+
+	if err := req.Validate(); err != nil {
+		return err
+	}
+
 	inv, err := s.InvoiceRepo.Get(ctx, id)
 	if err != nil {
 		return err
@@ -672,6 +677,7 @@ func (s *invoiceService) VoidInvoice(ctx context.Context, id string) error {
 	now := time.Now().UTC()
 	inv.InvoiceStatus = types.InvoiceStatusVoided
 	inv.VoidedAt = &now
+	inv.Metadata = req.Metadata
 
 	if err := s.InvoiceRepo.Update(ctx, inv); err != nil {
 		return err

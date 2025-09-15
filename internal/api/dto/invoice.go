@@ -1273,3 +1273,14 @@ func (p *PaymentParameters) NormalizePaymentParameters() *PaymentParameters {
 	}
 	return p
 }
+
+type InvoiceVoidRequest struct {
+	Metadata types.Metadata `json:"metadata,omitempty"`
+}
+
+func (r *InvoiceVoidRequest) Validate() error {
+	if err := validator.ValidateRequest(r); err != nil {
+		return err
+	}
+	return nil
+}
