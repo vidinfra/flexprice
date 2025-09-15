@@ -194,12 +194,19 @@ func (h *InvoiceHandler) FinalizeInvoice(c *gin.Context) {
 // @Router /invoices/{id}/void [post]
 func (h *InvoiceHandler) VoidInvoice(c *gin.Context) {
 	id := c.Param("id")
+	var req dto.InvoiceVoidRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind request body", "error", err)
+		c.Error(ierr.WithError(err).WithHint("failed to bind request body").Mark(ierr.ErrValidation))
+		return
+	}
+
 	if id == "" {
 		c.Error(ierr.NewError("invalid invoice id").Mark(ierr.ErrValidation))
 		return
 	}
 
-	if err := h.invoiceService.VoidInvoice(c.Request.Context(), id); err != nil {
+	if err := h.invoiceService.VoidInvoice(c.Request.Context(), id, req); err != nil {
 		h.logger.Errorw("failed to void invoice", "error", err, "invoice_id", id)
 		c.Error(err)
 		return

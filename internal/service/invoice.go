@@ -28,7 +28,7 @@ type InvoiceService interface {
 	GetInvoice(ctx context.Context, id string) (*dto.InvoiceResponse, error)
 	ListInvoices(ctx context.Context, filter *types.InvoiceFilter) (*dto.ListInvoicesResponse, error)
 	FinalizeInvoice(ctx context.Context, id string) error
-	VoidInvoice(ctx context.Context, id string) error
+	VoidInvoice(ctx context.Context, id string, req dto.InvoiceVoidRequest) error
 	ProcessDraftInvoice(ctx context.Context, id string, paymentParams *dto.PaymentParameters, sub *subscription.Subscription, flowType types.InvoiceFlowType) error
 	UpdatePaymentStatus(ctx context.Context, id string, status types.PaymentStatus, amount *decimal.Decimal) error
 	ReconcilePaymentStatus(ctx context.Context, id string, status types.PaymentStatus, amount *decimal.Decimal) error
@@ -637,7 +637,36 @@ func (s *invoiceService) performFinalizeInvoiceActions(ctx context.Context, inv 
 	return nil
 }
 
-func (s *invoiceService) VoidInvoice(ctx context.Context, id string) error {
+// updateMetadata merges the request metadata with the existing invoice metadata.
+// This function performs a selective update where:
+// - Existing metadata keys not mentioned in the request are preserved
+// - Keys present in both existing and request metadata are updated with request values
+// - New keys from the request are added to the metadata
+// - If the invoice has no existing metadata, a new metadata map is created
+func (s *invoiceService) updateMetadata(inv *invoice.Invoice, req dto.InvoiceVoidRequest) error {
+
+	// Start with existing metadata
+	metadata := inv.Metadata
+	if metadata == nil {
+		metadata = make(types.Metadata)
+	}
+
+	// Merge request metadata into existing metadata
+	// Request values will override existing values
+	for key, value := range req.Metadata {
+		metadata[key] = value
+	}
+
+	inv.Metadata = metadata
+	return nil
+}
+
+func (s *invoiceService) VoidInvoice(ctx context.Context, id string, req dto.InvoiceVoidRequest) error {
+
+	if err := req.Validate(); err != nil {
+		return err
+	}
+
 	inv, err := s.InvoiceRepo.Get(ctx, id)
 	if err != nil {
 		return err
@@ -672,6 +701,11 @@ func (s *invoiceService) VoidInvoice(ctx context.Context, id string) error {
 	now := time.Now().UTC()
 	inv.InvoiceStatus = types.InvoiceStatusVoided
 	inv.VoidedAt = &now
+	if req.Metadata != nil {
+		if err := s.updateMetadata(inv, req); err != nil {
+			return err
+		}
+	}
 
 	if err := s.InvoiceRepo.Update(ctx, inv); err != nil {
 		return err
