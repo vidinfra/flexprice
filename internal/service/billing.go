@@ -1685,8 +1685,16 @@ func (s *billingService) GetCustomerUsageSummary(ctx context.Context, customerID
 					if len(usageResult.Results) > 0 {
 						// Find the current month's bucket
 						for _, result := range usageResult.Results {
-							if result.WindowSize.Equal(currentTime) ||
-								(result.WindowSize.After(currentTime) && result.WindowSize.Before(currentTime.AddDate(0, 1, 0))) {
+							windowStart := result.WindowSize
+							// Calculate window end (next month's start)
+							windowEnd := windowStart.AddDate(0, 1, 0)
+							// TODO : critical think of cliff cases here ex 28th feb of a leap year adding 1 month
+							// will miss factoring in the 29th feb from this bucket
+							// TODO : move this all to flexprice calculated buckets logics upfront
+							// rather than relying on clickhouse calculated window sizes
+
+							// Check if current time falls within this window
+							if (currentTime.Equal(windowStart) || currentTime.After(windowStart)) && currentTime.Before(windowEnd) {
 								monthlyUsage = result.Value
 								break
 							}
