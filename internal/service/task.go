@@ -163,19 +163,22 @@ func isValidStatusTransition(from, to types.TaskStatus) bool {
 
 // ProcessTaskWithStreaming processes a task using streaming for large files
 func (s *taskService) ProcessTaskWithStreaming(ctx context.Context, id string) error {
-	// Update status to processing
-	if err := s.UpdateTaskStatus(ctx, id, types.TaskStatusProcessing); err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to update task status").
-			Mark(ierr.ErrValidation)
-	}
-
-	// Get task
+	// Get task first to check current status
 	t, err := s.TaskRepo.Get(ctx, id)
 	if err != nil {
 		return ierr.WithError(err).
 			WithHint("Failed to get task").
 			Mark(ierr.ErrValidation)
+	}
+
+	// Only update status to processing if not already processing
+	// This makes the method idempotent for Temporal retries
+	if t.TaskStatus != types.TaskStatusProcessing {
+		if err := s.UpdateTaskStatus(ctx, id, types.TaskStatusProcessing); err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to update task status").
+				Mark(ierr.ErrValidation)
+		}
 	}
 
 	// Create a context with extended timeout for streaming file processing
@@ -513,7 +516,7 @@ func (p *CustomersChunkProcessor) ProcessChunk(ctx context.Context, chunk [][]st
 func (p *CustomersChunkProcessor) processCustomer(ctx context.Context, customerReq *dto.CreateCustomerRequest) error {
 	// Check if customer with this external ID already exists
 	if customerReq.ExternalID != "" {
-		customer, err := p.customerService.GetCustomer(ctx, customerReq.ExternalID)
+		customer, err := p.customerService.GetCustomerByLookupKey(ctx, customerReq.ExternalID)
 		if err != nil {
 			p.logger.Error("failed to search for existing customer", "external_id", customerReq.ExternalID, "error", err)
 			return fmt.Errorf("failed to search for existing customer: %w", err)

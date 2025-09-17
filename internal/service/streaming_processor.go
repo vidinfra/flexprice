@@ -42,7 +42,7 @@ func NewStreamingProcessor(client httpclient.Client, logger *logger.Logger) *Str
 	retryClient.RetryMax = 3
 	retryClient.RetryWaitMin = 1 * time.Second
 	retryClient.RetryWaitMax = 30 * time.Second
-	retryClient.Logger = logger
+	retryClient.Logger = logger.GetRetryableHTTPLogger()
 
 	// Configure worker pool
 	workerPool := workerpool.New(10) // 10 concurrent workers

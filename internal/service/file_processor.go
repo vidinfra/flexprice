@@ -47,7 +47,7 @@ func NewFileProcessor(client httpclient.Client, logger *logger.Logger) *FileProc
 	retryClient.RetryMax = 3
 	retryClient.RetryWaitMin = 1 * time.Second
 	retryClient.RetryWaitMax = 30 * time.Second
-	retryClient.Logger = logger
+	retryClient.Logger = logger.GetRetryableHTTPLogger()
 
 	return &FileProcessor{
 		StreamingProcessor: NewStreamingProcessor(client, logger),
