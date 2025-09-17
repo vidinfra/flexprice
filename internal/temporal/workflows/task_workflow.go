@@ -27,10 +27,7 @@ func TaskProcessingWorkflow(ctx workflow.Context, input models.TaskProcessingWor
 
 	// Define activity options with extended timeouts for large file processing
 	ao := workflow.ActivityOptions{
-		StartToCloseTimeout:    time.Hour * 4,   // Extended to 4 hours for very large files
-		ScheduleToCloseTimeout: time.Hour * 4,   // Total time from scheduling to completion
-		ScheduleToStartTimeout: time.Minute * 5, // Time to wait for activity to start
-		HeartbeatTimeout:       time.Minute * 2, // Heartbeat timeout for long-running activities
+		StartToCloseTimeout: time.Hour * 4, // Extended to 4 hours for very large files
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second * 10,
 			BackoffCoefficient: 2.0,
@@ -42,11 +39,7 @@ func TaskProcessingWorkflow(ctx workflow.Context, input models.TaskProcessingWor
 
 	// Execute the main task processing activity
 	var result models.ProcessTaskActivityResult
-	activityInput := models.ProcessTaskActivityInput{
-		TaskID:        input.TaskID,
-		TenantID:      input.TenantID,
-		EnvironmentID: input.EnvironmentID,
-	}
+	activityInput := models.ProcessTaskActivityInput(input)
 	err := workflow.ExecuteActivity(ctx, ActivityProcessTask, activityInput).Get(ctx, &result)
 
 	if err != nil {

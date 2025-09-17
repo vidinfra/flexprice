@@ -6,33 +6,52 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/flexprice/flexprice/internal/domain/task"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/httpclient"
 	"github.com/flexprice/flexprice/internal/logger"
+	"github.com/flexprice/flexprice/internal/types"
 )
 
 // FileProcessor handles both streaming and regular file processing
+// It provides intelligent file processing by automatically choosing between:
+// - Memory-based processing for small files (< 10MB)
+// - Streaming processing for large files (>= 10MB)
+// This prevents OOM errors while maintaining performance for small files
 type FileProcessor struct {
 	*StreamingProcessor
 	ProviderRegistry *FileProviderRegistry
 	CSVProcessor     *CSVProcessor
 	JSONProcessor    *JSONProcessor
+
+	// Configuration for file size thresholds
+	MaxMemoryFileSize int64 // Maximum file size to process in memory (default: 10MB)
+	MaxFileSize       int64 // Maximum file size allowed (default: 1GB)
 }
 
-// NewFileProcessor creates a new file processor
+// NewFileProcessor creates a new file processor with default configuration
+// Default settings:
+// - MaxMemoryFileSize: 10MB (files smaller than this are processed in memory)
+// - MaxFileSize: 1GB (maximum file size allowed)
 func NewFileProcessor(client httpclient.Client, logger *logger.Logger) *FileProcessor {
 	return &FileProcessor{
 		StreamingProcessor: NewStreamingProcessor(client, logger),
 		ProviderRegistry:   NewFileProviderRegistry(),
 		CSVProcessor:       NewCSVProcessor(logger),
 		JSONProcessor:      NewJSONProcessor(logger),
+		MaxMemoryFileSize:  10 * 1024 * 1024,   // 10MB
+		MaxFileSize:        1024 * 1024 * 1024, // 1GB
 	}
 }
 
 // DownloadFile downloads a file and returns the full content (for regular processing)
+// WARNING: This method loads the entire file into memory. Use DownloadFileStream for large files.
+// This method is suitable for small files (< 10MB) to avoid OOM errors.
 func (fp *FileProcessor) DownloadFile(ctx context.Context, t *task.Task) ([]byte, error) {
 	// Get the appropriate provider for the file URL
 	provider := fp.ProviderRegistry.GetProvider(t.FileURL)
@@ -97,6 +116,228 @@ func (fp *FileProcessor) DownloadFile(ctx context.Context, t *task.Task) ([]byte
 		"provider", provider.GetProviderName())
 
 	return resp.Body, nil
+}
+
+// DownloadFileStream downloads a file and returns a stream for large file processing
+// This method is memory-efficient and suitable for large files (>= 10MB)
+// The returned io.ReadCloser must be closed by the caller to prevent resource leaks
+func (fp *FileProcessor) DownloadFileStream(ctx context.Context, t *task.Task) (io.ReadCloser, error) {
+	// Get the appropriate provider for the file URL
+	provider := fp.ProviderRegistry.GetProvider(t.FileURL)
+
+	// Get the actual download URL from the provider
+	downloadURL, err := provider.GetDownloadURL(ctx, t.FileURL)
+	if err != nil {
+		fp.Logger.Error("failed to get download URL for streaming", "error", err, "url", t.FileURL, "provider", provider.GetProviderName())
+		errorSummary := fmt.Sprintf("Failed to get download URL: %v", err)
+		t.ErrorSummary = &errorSummary
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get download URL for streaming").
+			WithReportableDetails(map[string]interface{}{
+				"provider": provider.GetProviderName(),
+			}).
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	fp.Logger.Debugw("using file provider for streaming", "original_url", t.FileURL, "download_url", downloadURL, "provider", provider.GetProviderName())
+
+	// Create HTTP request directly for streaming
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+	if err != nil {
+		fp.Logger.Error("failed to create HTTP request for streaming", "error", err, "url", downloadURL)
+		errorSummary := fmt.Sprintf("Failed to create HTTP request: %v", err)
+		t.ErrorSummary = &errorSummary
+		return nil, ierr.WithError(err).
+			WithHint("Failed to create HTTP request for streaming").
+			WithReportableDetails(map[string]interface{}{
+				"provider": provider.GetProviderName(),
+			}).
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	// Make the request with extended timeout for large file downloads
+	httpClient := &http.Client{
+		Timeout: 10 * time.Minute, // Extended timeout for large file downloads
+	}
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		fp.Logger.Error("failed to download file stream", "error", err, "url", downloadURL, "provider", provider.GetProviderName())
+		errorSummary := fmt.Sprintf("Failed to download file: %v", err)
+		t.ErrorSummary = &errorSummary
+		return nil, ierr.WithError(err).
+			WithHint("Failed to download file stream").
+			WithReportableDetails(map[string]interface{}{
+				"provider": provider.GetProviderName(),
+			}).
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close() // Close the response body on error
+		fp.Logger.Error("failed to download file stream", "status_code", resp.StatusCode, "url", downloadURL, "provider", provider.GetProviderName())
+		errorSummary := fmt.Sprintf("Failed to download file: HTTP %d", resp.StatusCode)
+		t.ErrorSummary = &errorSummary
+		return nil, ierr.NewErrorf("failed to download file: HTTP %d", resp.StatusCode).
+			WithHint("Failed to download file stream").
+			WithReportableDetails(map[string]interface{}{
+				"provider":    provider.GetProviderName(),
+				"status_code": resp.StatusCode,
+			}).
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	fp.Logger.Debugw("successfully opened file stream",
+		"content_type", resp.Header.Get("Content-Type"),
+		"content_length", resp.Header.Get("Content-Length"),
+		"provider", provider.GetProviderName())
+
+	return resp.Body, nil
+}
+
+// GetFileSize retrieves the file size without downloading the entire file
+// This is useful for determining whether to use memory-based or streaming processing
+func (fp *FileProcessor) GetFileSize(ctx context.Context, t *task.Task) (int64, error) {
+	// Get the appropriate provider for the file URL
+	provider := fp.ProviderRegistry.GetProvider(t.FileURL)
+
+	// Get the actual download URL from the provider
+	downloadURL, err := provider.GetDownloadURL(ctx, t.FileURL)
+	if err != nil {
+		fp.Logger.Error("failed to get download URL for size check", "error", err, "url", t.FileURL, "provider", provider.GetProviderName())
+		return 0, ierr.WithError(err).
+			WithHint("Failed to get download URL for size check").
+			WithReportableDetails(map[string]interface{}{
+				"provider": provider.GetProviderName(),
+			}).
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	// Create HEAD request to get file size without downloading
+	httpReq, err := http.NewRequestWithContext(ctx, "HEAD", downloadURL, nil)
+	if err != nil {
+		fp.Logger.Error("failed to create HEAD request", "error", err, "url", downloadURL)
+		return 0, ierr.WithError(err).
+			WithHint("Failed to create HEAD request").
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second, // Shorter timeout for HEAD requests
+	}
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		fp.Logger.Error("failed to get file size", "error", err, "url", downloadURL, "provider", provider.GetProviderName())
+		return 0, ierr.WithError(err).
+			WithHint("Failed to get file size").
+			WithReportableDetails(map[string]interface{}{
+				"provider": provider.GetProviderName(),
+			}).
+			Mark(ierr.ErrHTTPClient)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		fp.Logger.Error("failed to get file size", "status_code", resp.StatusCode, "url", downloadURL, "provider", provider.GetProviderName())
+		return 0, ierr.NewErrorf("failed to get file size: HTTP %d", resp.StatusCode).
+			WithHint("Failed to get file size").
+			WithReportableDetails(map[string]interface{}{
+				"provider":    provider.GetProviderName(),
+				"status_code": resp.StatusCode,
+			}).
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	// Parse Content-Length header
+	contentLength := resp.Header.Get("Content-Length")
+	if contentLength == "" {
+		fp.Logger.Warn("Content-Length header not available", "url", downloadURL, "provider", provider.GetProviderName())
+		return 0, ierr.NewError("Content-Length header not available").
+			WithHint("File size cannot be determined").
+			WithReportableDetails(map[string]interface{}{
+				"provider": provider.GetProviderName(),
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	fileSize, err := strconv.ParseInt(contentLength, 10, 64)
+	if err != nil {
+		fp.Logger.Error("failed to parse Content-Length", "error", err, "content_length", contentLength, "url", downloadURL)
+		return 0, ierr.WithError(err).
+			WithHint("Failed to parse file size").
+			WithReportableDetails(map[string]interface{}{
+				"content_length": contentLength,
+				"provider":       provider.GetProviderName(),
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	fp.Logger.Debugw("retrieved file size", "size", fileSize, "url", downloadURL, "provider", provider.GetProviderName())
+	return fileSize, nil
+}
+
+// ShouldUseStreaming determines if a file should be processed using streaming
+// based on its size and configuration thresholds
+func (fp *FileProcessor) ShouldUseStreaming(fileSize int64) bool {
+	return fileSize >= fp.MaxMemoryFileSize
+}
+
+// ValidateFileSize checks if the file size is within acceptable limits
+func (fp *FileProcessor) ValidateFileSize(fileSize int64) error {
+	if fileSize <= 0 {
+		return ierr.NewError("invalid file size").
+			WithHint("File size must be greater than 0").
+			Mark(ierr.ErrValidation)
+	}
+
+	if fileSize > fp.MaxFileSize {
+		return ierr.NewErrorf("file too large: %d bytes (max: %d bytes)", fileSize, fp.MaxFileSize).
+			WithHint("File exceeds maximum allowed size").
+			WithReportableDetails(map[string]interface{}{
+				"file_size":     fileSize,
+				"max_file_size": fp.MaxFileSize,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	return nil
+}
+
+// DownloadFileIntelligent automatically chooses the best download method based on file size
+// This is the recommended method for most use cases as it handles both small and large files efficiently
+func (fp *FileProcessor) DownloadFileIntelligent(ctx context.Context, t *task.Task) (types.FileWrapper, error) {
+	// First, try to get the file size
+	fileSize, err := fp.GetFileSize(ctx, t)
+	if err != nil {
+		fp.Logger.Warn("could not determine file size, falling back to streaming", "error", err, "url", t.FileURL)
+		// If we can't determine size, use streaming to be safe
+		stream, err := fp.DownloadFileStream(ctx, t)
+		if err != nil {
+			return nil, err
+		}
+		return &types.StreamingFile{Reader: stream, Size: -1}, nil
+	}
+
+	// Validate file size
+	if err := fp.ValidateFileSize(fileSize); err != nil {
+		return nil, err
+	}
+
+	// Choose processing method based on file size
+	if fp.ShouldUseStreaming(fileSize) {
+		fp.Logger.Info("using streaming processing for large file", "size", fileSize, "url", t.FileURL)
+		stream, err := fp.DownloadFileStream(ctx, t)
+		if err != nil {
+			return nil, err
+		}
+		return &types.StreamingFile{Reader: stream, Size: fileSize}, nil
+	} else {
+		fp.Logger.Info("using memory processing for small file", "size", fileSize, "url", t.FileURL)
+		content, err := fp.DownloadFile(ctx, t)
+		if err != nil {
+			return nil, err
+		}
+		return &types.MemoryFile{Content: content, Size: fileSize}, nil
+	}
 }
 
 // FileType represents the type of file being processed

@@ -13,11 +13,8 @@ type TemporalTaskQueue string
 
 const (
 	// Task Queues - logical groupings to limit worker count
-	TemporalTaskQueueBilling      TemporalTaskQueue = "billing"
-	TemporalTaskQueueSubscription TemporalTaskQueue = "subscription"
-	TemporalTaskQueueTask         TemporalTaskQueue = "task"
-	TemporalTaskQueuePrice        TemporalTaskQueue = "price"
-	TemporalTaskQueueNotification TemporalTaskQueue = "notification"
+	TemporalTaskQueueTask  TemporalTaskQueue = "task"
+	TemporalTaskQueuePrice TemporalTaskQueue = "price"
 )
 
 // String returns the string representation of the task queue
@@ -28,11 +25,8 @@ func (tq TemporalTaskQueue) String() string {
 // Validate validates the task queue
 func (tq TemporalTaskQueue) Validate() error {
 	allowedQueues := []TemporalTaskQueue{
-		TemporalTaskQueueBilling,
-		TemporalTaskQueueSubscription,
 		TemporalTaskQueueTask,
 		TemporalTaskQueuePrice,
-		TemporalTaskQueueNotification,
 	}
 	if lo.Contains(allowedQueues, tq) {
 		return nil
@@ -108,18 +102,6 @@ func GetWorkflowsForTaskQueue(taskQueue TemporalTaskQueue) []TemporalWorkflowTyp
 		return []TemporalWorkflowType{
 			TemporalPriceSyncWorkflow,
 		}
-	case TemporalTaskQueueBilling:
-		return []TemporalWorkflowType{
-			// Add billing workflows here when available
-		}
-	case TemporalTaskQueueSubscription:
-		return []TemporalWorkflowType{
-			// Add subscription workflows here when available
-		}
-	case TemporalTaskQueueNotification:
-		return []TemporalWorkflowType{
-			// Add notification workflows here when available
-		}
 	default:
 		return []TemporalWorkflowType{}
 	}
@@ -130,6 +112,5 @@ func GetAllTaskQueues() []TemporalTaskQueue {
 	return []TemporalTaskQueue{
 		TemporalTaskQueueTask,
 		TemporalTaskQueuePrice,
-		// Add other task queues when workflows are implemented
 	}
 }
