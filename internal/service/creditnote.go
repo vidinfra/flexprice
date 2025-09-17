@@ -121,7 +121,6 @@ func (s *creditNoteService) CreateCreditNote(ctx context.Context, req *dto.Creat
 		if err := s.CreditNoteRepo.CreateWithLineItems(tx, cn); err != nil {
 			return err
 		}
-		s.publishInternalWebhookEvent(ctx, tx, types.WebhookEventCreditNoteCreated, cn.ID)
 
 		s.Logger.Infow(
 			"credit note created successfully",
@@ -145,6 +144,9 @@ func (s *creditNoteService) CreateCreditNote(ctx context.Context, req *dto.Creat
 		)
 		return nil, err
 	}
+
+	// Publish webhook event after successful transaction
+	s.publishInternalWebhookEvent(ctx, types.WebhookEventCreditNoteCreated, creditNote.ID)
 
 	// Finalize the credit note if the flag is set
 	if req.ProcessCreditNote {
@@ -414,9 +416,6 @@ func (s *creditNoteService) VoidCreditNote(ctx context.Context, id string) error
 		return err
 	}
 
-	// Publish webhook event for credit note update
-	s.publishInternalWebhookEvent(ctx, ctx, types.WebhookEventCreditNoteUpdated, cn.ID)
-
 	// Recalculate invoice amounts after credit note void
 	// This is needed to update the adjustment and refunded amounts
 	if originalStatus == types.CreditNoteStatusFinalized {
@@ -428,6 +427,9 @@ func (s *creditNoteService) VoidCreditNote(ctx context.Context, id string) error
 				"invoice_id", cn.InvoiceID)
 		}
 	}
+
+	// Publish webhook event after successful update
+	s.publishInternalWebhookEvent(ctx, types.WebhookEventCreditNoteUpdated, cn.ID)
 
 	s.Logger.Infow("credit note voided successfully",
 		"credit_note_id", id,
@@ -477,9 +479,6 @@ func (s *creditNoteService) FinalizeCreditNote(ctx context.Context, id string) e
 		if err := s.CreditNoteRepo.Update(tx, cn); err != nil {
 			return err
 		}
-
-		// Publish webhook event for credit note update
-		s.publishInternalWebhookEvent(ctx, tx, types.WebhookEventCreditNoteUpdated, cn.ID)
 
 		// Handle refund credit notes (wallet top-up logic)
 		if cn.CreditNoteType == types.CreditNoteTypeRefund {
@@ -553,6 +552,9 @@ func (s *creditNoteService) FinalizeCreditNote(ctx context.Context, id string) e
 	if err != nil {
 		return err
 	}
+
+	// Publish webhook event after successful transaction
+	s.publishInternalWebhookEvent(ctx, types.WebhookEventCreditNoteUpdated, cn.ID)
 
 	s.Logger.Infow("credit note processed successfully",
 		"credit_note_id", id,
@@ -795,7 +797,7 @@ func (c *creditNoteService) RecalculateInvoiceAmountsForCreditNote(ctx context.C
 	return nil
 }
 
-func (c *creditNoteService) publishInternalWebhookEvent(ctx context.Context, tx context.Context, eventType string, creditNoteID string) {
+func (c *creditNoteService) publishInternalWebhookEvent(ctx context.Context, eventType string, creditNoteID string) {
 	webhookPayload, err := json.Marshal(webhookDto.InternalCreditNoteEvent{
 		CreditNoteID: creditNoteID,
 		TenantID:     types.GetTenantID(ctx),
