@@ -2150,7 +2150,11 @@ func (s *invoiceService) UpdateInvoice(ctx context.Context, id string, req dto.U
 	// Update due date if provided
 	if req.DueDate != nil {
 		inv.DueDate = req.DueDate
-		inv.UpdatedAt = time.Now().UTC()
+	}
+
+	// Update metadata if provided
+	if req.Metadata != nil {
+		inv.Metadata = *req.Metadata
 	}
 
 	// Update the invoice in the repository
