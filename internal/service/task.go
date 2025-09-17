@@ -315,16 +315,10 @@ func (p *EventsChunkProcessor) ProcessChunk(ctx context.Context, chunk [][]strin
 	if len(eventRequests) > 0 {
 		successCount, err := p.batchCreateEvents(ctx, eventRequests)
 		if err != nil {
-			// If batch creation fails, try individual creation
-			p.logger.Warn("batch event creation failed, falling back to individual creation", "error", err)
-			for _, eventReq := range eventRequests {
-				if err := p.eventService.CreateEvent(ctx, eventReq); err != nil {
-					errors = append(errors, fmt.Sprintf("Event creation failed: %v", err))
-					failedRecords++
-				} else {
-					successfulRecords++
-				}
-			}
+			// If batch creation fails, mark all as failed
+			p.logger.Error("batch event creation failed", "error", err)
+			failedRecords += len(eventRequests)
+			errors = append(errors, fmt.Sprintf("Batch event creation failed: %v", err))
 		} else {
 			successfulRecords += successCount
 			failedRecords += len(eventRequests) - successCount
@@ -360,17 +354,66 @@ func (p *EventsChunkProcessor) parseTimestamp(eventReq *dto.IngestEventRequest) 
 	return nil
 }
 
-// batchCreateEvents creates multiple events in a batch
+// batchCreateEvents creates multiple events in a batch using the bulk API
+// It processes events in batches of BATCH_SIZE to optimize performance
 func (p *EventsChunkProcessor) batchCreateEvents(ctx context.Context, events []*dto.IngestEventRequest) (int, error) {
-	successCount := 0
-	for _, eventReq := range events {
-		if err := p.eventService.CreateEvent(ctx, eventReq); err != nil {
-			p.logger.Error("failed to create event in batch", "error", err)
-			continue
-		}
-		successCount++
+	const BATCH_SIZE = 100 // Process 100 events per batch for optimal performance
+
+	if len(events) == 0 {
+		return 0, nil
 	}
-	return successCount, nil
+
+	totalSuccessCount := 0
+	totalFailedCount := 0
+
+	// Process events in batches
+	for i := 0; i < len(events); i += BATCH_SIZE {
+		end := i + BATCH_SIZE
+		if end > len(events) {
+			end = len(events)
+		}
+
+		batch := events[i:end]
+		successCount, failedCount := p.processBatch(ctx, batch)
+		totalSuccessCount += successCount
+		totalFailedCount += failedCount
+
+		// Log batch progress
+		p.logger.Debugw("processed event batch",
+			"batch_start", i,
+			"batch_end", end,
+			"batch_size", len(batch),
+			"success_count", successCount,
+			"failed_count", failedCount,
+			"total_processed", end,
+			"total_remaining", len(events)-end)
+	}
+
+	p.logger.Infow("completed batch event creation",
+		"total_events", len(events),
+		"successful_events", totalSuccessCount,
+		"failed_events", totalFailedCount)
+
+	return totalSuccessCount, nil
+}
+
+// processBatch processes a single batch of events using the bulk API
+func (p *EventsChunkProcessor) processBatch(ctx context.Context, batch []*dto.IngestEventRequest) (int, int) {
+	// Create bulk request
+	bulkRequest := &dto.BulkIngestEventRequest{
+		Events: batch,
+	}
+
+	// Use bulk API for better performance
+	if err := p.eventService.BulkCreateEvents(ctx, bulkRequest); err != nil {
+		p.logger.Errorw("bulk event creation failed",
+			"batch_size", len(batch),
+			"error", err)
+		return 0, len(batch) // All events in batch failed
+	}
+
+	// All events in batch were successful
+	return len(batch), 0
 }
 
 // CustomersChunkProcessor processes chunks of customer data
