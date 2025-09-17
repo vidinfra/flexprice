@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
+	"github.com/flexprice/flexprice/internal/domain/task"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
@@ -232,11 +233,49 @@ func (s *taskService) ProcessTaskWithStreaming(ctx context.Context, id string) e
 		return err
 	}
 
+	// Update task with final processing results before marking as completed
+	if err := s.updateTaskWithResults(ctx, id, t); err != nil {
+		s.Logger.Error("failed to update task with results", "error", err)
+		return err
+	}
+
 	// Update task status to completed
 	if err := s.UpdateTaskStatus(ctx, id, types.TaskStatusCompleted); err != nil {
 		s.Logger.Error("failed to update task status", "error", err)
 		return err
 	}
+
+	return nil
+}
+
+// updateTaskWithResults updates the task with processing results
+func (s *taskService) updateTaskWithResults(ctx context.Context, id string, t *task.Task) error {
+	// Get the current task to preserve other fields
+	currentTask, err := s.TaskRepo.Get(ctx, id)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get task for results update").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Update only the processing result fields
+	currentTask.ProcessedRecords = t.ProcessedRecords
+	currentTask.SuccessfulRecords = t.SuccessfulRecords
+	currentTask.FailedRecords = t.FailedRecords
+	currentTask.ErrorSummary = t.ErrorSummary
+
+	// Update the task in the database
+	if err := s.TaskRepo.Update(ctx, currentTask); err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to update task with results").
+			Mark(ierr.ErrValidation)
+	}
+
+	s.Logger.Infow("updated task with processing results",
+		"task_id", id,
+		"processed_records", currentTask.ProcessedRecords,
+		"successful_records", currentTask.SuccessfulRecords,
+		"failed_records", currentTask.FailedRecords)
 
 	return nil
 }
@@ -432,9 +471,19 @@ func (p *CustomersChunkProcessor) ProcessChunk(ctx context.Context, chunk [][]st
 	failedRecords := 0
 	var errors []string
 
+	p.logger.Debugw("processing customer chunk",
+		"chunk_index", chunkIndex,
+		"chunk_size", len(chunk),
+		"headers", headers)
+
 	// Process each record in the chunk
 	for i, record := range chunk {
 		processedRecords++
+
+		p.logger.Debugw("processing customer record",
+			"record_index", i,
+			"record", record,
+			"chunk_index", chunkIndex)
 
 		// Create customer request
 		customerReq := &dto.CreateCustomerRequest{
@@ -516,10 +565,41 @@ func (p *CustomersChunkProcessor) ProcessChunk(ctx context.Context, chunk [][]st
 func (p *CustomersChunkProcessor) processCustomer(ctx context.Context, customerReq *dto.CreateCustomerRequest) error {
 	// Check if customer with this external ID already exists
 	if customerReq.ExternalID != "" {
+		// Log context information for debugging
+		tenantID := types.GetTenantID(ctx)
+		environmentID := types.GetEnvironmentID(ctx)
+		p.logger.Debugw("looking up existing customer",
+			"external_id", customerReq.ExternalID,
+			"tenant_id", tenantID,
+			"environment_id", environmentID)
+
 		customer, err := p.customerService.GetCustomerByLookupKey(ctx, customerReq.ExternalID)
 		if err != nil {
-			p.logger.Error("failed to search for existing customer", "external_id", customerReq.ExternalID, "error", err)
-			return fmt.Errorf("failed to search for existing customer: %w", err)
+			// Only treat non-"not found" errors as fatal
+			if !ierr.IsNotFound(err) {
+				p.logger.Error("failed to search for existing customer", "external_id", customerReq.ExternalID, "error", err)
+				return fmt.Errorf("failed to search for existing customer: %w", err)
+			}
+			// Customer not found - this is expected for new customers
+			p.logger.Debugw("customer not found in current environment, will create new",
+				"external_id", customerReq.ExternalID,
+				"tenant_id", tenantID,
+				"environment_id", environmentID)
+			customer = nil
+		} else {
+			p.logger.Debugw("found existing customer",
+				"external_id", customerReq.ExternalID,
+				"customer_id", customer.ID,
+				"tenant_id", tenantID,
+				"environment_id", environmentID)
+		}
+
+		// Additional debugging: Check if customer exists in other environments
+		if customer == nil {
+			p.logger.Debugw("checking if customer exists in other environments",
+				"external_id", customerReq.ExternalID,
+				"current_tenant_id", tenantID,
+				"current_environment_id", environmentID)
 		}
 
 		// If customer exists, update it

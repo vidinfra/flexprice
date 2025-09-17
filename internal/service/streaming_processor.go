@@ -15,7 +15,6 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/gammazero/workerpool"
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/jszwec/csvutil"
 
 	"github.com/flexprice/flexprice/internal/domain/task"
 	ierr "github.com/flexprice/flexprice/internal/errors"
@@ -157,27 +156,24 @@ func (sp *StreamingProcessor) processCSVStream(
 	config *StreamingConfig,
 	reader io.Reader,
 ) error {
-	// Create CSV reader with buffering using csvutil for better performance
+	// Create CSV reader with buffering
 	csvReader := csv.NewReader(bufio.NewReaderSize(reader, config.BufferSize))
 	csvReader.LazyQuotes = true
 	csvReader.FieldsPerRecord = -1
-	csvReader.ReuseRecord = true
+	csvReader.ReuseRecord = false // Disable record reuse to avoid slice reference issues
 	csvReader.TrimLeadingSpace = true
 
-	// Use csvutil for better CSV processing
-	decoder, err := csvutil.NewDecoder(csvReader)
+	// Read headers first
+	headers, err := csvReader.Read()
 	if err != nil {
-		sp.Logger.Error("failed to create CSV decoder", "error", err)
-		return ierr.NewError("failed to create CSV decoder").
-			WithHint("Failed to create CSV decoder").
+		sp.Logger.Error("failed to read CSV headers", "error", err)
+		return ierr.NewError("failed to read CSV headers").
+			WithHint("Failed to read CSV headers").
 			WithReportableDetails(map[string]interface{}{
 				"error": err,
 			}).
 			Mark(ierr.ErrValidation)
 	}
-
-	// Get headers from decoder
-	headers := decoder.Header()
 	sp.Logger.Debugw("parsed CSV headers", "headers", headers)
 
 	// Process file in chunks
@@ -206,10 +202,21 @@ func (sp *StreamingProcessor) processCSVStream(
 			continue
 		}
 
+		// Log each record being processed for debugging
+		sp.Logger.Debugw("processing CSV record",
+			"record", record,
+			"chunk_size", len(chunk),
+			"chunk_index", chunkIndex)
+
 		chunk = append(chunk, record)
 
 		// Process chunk when it reaches the configured size
 		if len(chunk) >= config.ChunkSize {
+			sp.Logger.Debugw("processing chunk",
+				"chunk_index", chunkIndex,
+				"chunk_size", len(chunk),
+				"records", chunk)
+
 			result, err := sp.processChunkWithRetry(ctx, processor, chunk, headers, chunkIndex, config)
 			if err != nil {
 				sp.Logger.Error("failed to process chunk", "chunk_index", chunkIndex, "error", err)
@@ -475,8 +482,11 @@ func (sp *StreamingProcessor) downloadFileStream(ctx context.Context, t *task.Ta
 
 // updateTaskProgress updates the task progress in the database
 func (sp *StreamingProcessor) updateTaskProgress(ctx context.Context, t *task.Task, processed, successful, failed, chunkIndex int) {
-	// This would typically update the task in the database
-	// For now, we'll just log the progress
+	// Update task fields in memory
+	t.ProcessedRecords = processed
+	t.SuccessfulRecords = successful
+	t.FailedRecords = failed
+
 	sp.Logger.Infow("updating task progress",
 		"task_id", t.ID,
 		"processed", processed,
@@ -484,13 +494,8 @@ func (sp *StreamingProcessor) updateTaskProgress(ctx context.Context, t *task.Ta
 		"failed", failed,
 		"chunk_index", chunkIndex)
 
-	// Update task fields
-	t.ProcessedRecords = processed
-	t.SuccessfulRecords = successful
-	t.FailedRecords = failed
-
-	// TODO: Implement actual database update here
-	// This should be done through the task repository
+	// Note: The actual database update will be done by the task service
+	// after the streaming processing is complete to avoid frequent DB writes
 }
 
 // Close cleans up resources
