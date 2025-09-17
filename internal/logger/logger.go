@@ -94,7 +94,7 @@ type retryableHTTPLogger struct {
 }
 
 // GetRetryableHTTPLogger returns a retryable HTTP client-compatible logger
-func (l *Logger) GetRetryableHTTPLogger() interface{} {
+func (l *Logger) GetRetryableHTTPLogger() *retryableHTTPLogger {
 	return &retryableHTTPLogger{logger: l}
 }
 
