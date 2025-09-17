@@ -315,7 +315,6 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			tasks.GET("", handlers.Task.ListTasks)
 			tasks.GET("/:id", handlers.Task.GetTask)
 			tasks.PUT("/:id/status", handlers.Task.UpdateTaskStatus)
-			tasks.POST("/:id/process", handlers.Task.ProcessTask)
 		}
 
 		// Tax rate routes

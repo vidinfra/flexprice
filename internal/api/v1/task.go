@@ -176,36 +176,6 @@ func (h *TaskHandler) UpdateTaskStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "task status updated successfully"})
 }
 
-// @Summary Process task with streaming
-// @Description Process a task using streaming for large files
-// @Tags Tasks
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param id path string true "Task ID"
-// @Success 200 {object} gin.H
-// @Failure 400 {object} ierr.ErrorResponse
-// @Failure 404 {object} ierr.ErrorResponse
-// @Failure 500 {object} ierr.ErrorResponse
-// @Router /tasks/{id}/process [post]
-func (h *TaskHandler) ProcessTask(c *gin.Context) {
-	id := c.Param("id")
-	if id == "" {
-		c.Error(ierr.NewError("task ID is required").
-			WithHint("Task ID is required").
-			Mark(ierr.ErrValidation))
-		return
-	}
-
-	err := h.service.ProcessTaskWithStreaming(c.Request.Context(), id)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "task processing started with streaming"})
-}
-
 // @Summary Get task processing result
 // @Description Get the result of a task processing workflow
 // @Tags Tasks
@@ -213,7 +183,7 @@ func (h *TaskHandler) ProcessTask(c *gin.Context) {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param workflow_id query string true "Workflow ID"
-// @Success 200 {object} temporal.models.TaskProcessingWorkflowResult
+// @Success 200 {object} models.TemporalWorkflowResult
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 404 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse

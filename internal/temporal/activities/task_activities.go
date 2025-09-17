@@ -45,8 +45,8 @@ func (a *TaskActivities) ProcessTask(ctx context.Context, input models.ProcessTa
 
 	// Call the service method to process the task
 	// This contains all the business logic
-	// For now, use regular processing - streaming can be added later if needed
-	err := a.taskService.ProcessTask(ctx, input.TaskID)
+	// Use streaming processing for better performance with large files
+	err := a.taskService.ProcessTaskWithStreaming(ctx, input.TaskID)
 	if err != nil {
 		// Check if it's a timeout error and provide better context
 		if isTimeoutError(err) {

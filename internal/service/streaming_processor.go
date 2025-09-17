@@ -10,8 +10,12 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/cenkalti/backoff/v4"
+	"github.com/gammazero/workerpool"
+	"github.com/hashicorp/go-retryablehttp"
+	"github.com/jszwec/csvutil"
 
 	"github.com/flexprice/flexprice/internal/domain/task"
 	ierr "github.com/flexprice/flexprice/internal/errors"
@@ -20,84 +24,6 @@ import (
 	"github.com/flexprice/flexprice/internal/types"
 )
 
-// CircuitBreakerState represents the state of a circuit breaker
-type CircuitBreakerState int
-
-const (
-	CircuitBreakerClosed CircuitBreakerState = iota
-	CircuitBreakerOpen
-	CircuitBreakerHalfOpen
-)
-
-// CircuitBreaker implements the circuit breaker pattern for chunk processing
-type CircuitBreaker struct {
-	maxFailures  int
-	failureCount int
-	lastFailure  time.Time
-	resetTimeout time.Duration
-	state        CircuitBreakerState
-	mutex        sync.RWMutex
-}
-
-// NewCircuitBreaker creates a new circuit breaker
-func NewCircuitBreaker(maxFailures int, resetTimeout time.Duration) *CircuitBreaker {
-	return &CircuitBreaker{
-		maxFailures:  maxFailures,
-		resetTimeout: resetTimeout,
-		state:        CircuitBreakerClosed,
-	}
-}
-
-// CanExecute returns true if the circuit breaker allows execution
-func (cb *CircuitBreaker) CanExecute() bool {
-	cb.mutex.RLock()
-	defer cb.mutex.RUnlock()
-
-	switch cb.state {
-	case CircuitBreakerClosed:
-		return true
-	case CircuitBreakerOpen:
-		// Check if we should transition to half-open
-		if time.Since(cb.lastFailure) >= cb.resetTimeout {
-			cb.mutex.RUnlock()
-			cb.mutex.Lock()
-			if cb.state == CircuitBreakerOpen && time.Since(cb.lastFailure) >= cb.resetTimeout {
-				cb.state = CircuitBreakerHalfOpen
-			}
-			cb.mutex.Unlock()
-			cb.mutex.RLock()
-			return cb.state == CircuitBreakerHalfOpen
-		}
-		return false
-	case CircuitBreakerHalfOpen:
-		return true
-	default:
-		return false
-	}
-}
-
-// RecordSuccess records a successful execution
-func (cb *CircuitBreaker) RecordSuccess() {
-	cb.mutex.Lock()
-	defer cb.mutex.Unlock()
-
-	cb.failureCount = 0
-	cb.state = CircuitBreakerClosed
-}
-
-// RecordFailure records a failed execution
-func (cb *CircuitBreaker) RecordFailure() {
-	cb.mutex.Lock()
-	defer cb.mutex.Unlock()
-
-	cb.failureCount++
-	cb.lastFailure = time.Now()
-
-	if cb.failureCount >= cb.maxFailures {
-		cb.state = CircuitBreakerOpen
-	}
-}
-
 // StreamingProcessor handles streaming processing of large files
 type StreamingProcessor struct {
 	Client           httpclient.Client
@@ -105,16 +31,28 @@ type StreamingProcessor struct {
 	ProviderRegistry *FileProviderRegistry
 	CSVProcessor     *CSVProcessor
 	JSONProcessor    *JSONProcessor
-	CircuitBreaker   *CircuitBreaker
+	WorkerPool       *workerpool.WorkerPool
+	RetryClient      *retryablehttp.Client
 }
 
 // NewStreamingProcessor creates a new streaming processor
 func NewStreamingProcessor(client httpclient.Client, logger *logger.Logger) *StreamingProcessor {
+	// Configure retryable HTTP client
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 3
+	retryClient.RetryWaitMin = 1 * time.Second
+	retryClient.RetryWaitMax = 30 * time.Second
+	retryClient.Logger = logger
+
+	// Configure worker pool
+	workerPool := workerpool.New(10) // 10 concurrent workers
+
 	return &StreamingProcessor{
 		Client:           client,
 		Logger:           logger,
 		ProviderRegistry: NewFileProviderRegistry(),
-		CircuitBreaker:   NewCircuitBreaker(5, 30*time.Second), // 5 failures in 30 seconds opens circuit
+		WorkerPool:       workerPool,
+		RetryClient:      retryClient,
 	}
 }
 
@@ -219,25 +157,27 @@ func (sp *StreamingProcessor) processCSVStream(
 	config *StreamingConfig,
 	reader io.Reader,
 ) error {
-	// Create CSV reader with buffering
+	// Create CSV reader with buffering using csvutil for better performance
 	csvReader := csv.NewReader(bufio.NewReaderSize(reader, config.BufferSize))
 	csvReader.LazyQuotes = true
 	csvReader.FieldsPerRecord = -1
 	csvReader.ReuseRecord = true
 	csvReader.TrimLeadingSpace = true
 
-	// Read headers
-	headers, err := csvReader.Read()
+	// Use csvutil for better CSV processing
+	decoder, err := csvutil.NewDecoder(csvReader)
 	if err != nil {
-		sp.Logger.Error("failed to read CSV headers", "error", err)
-		return ierr.NewError("failed to read CSV headers").
-			WithHint("Failed to read CSV headers").
+		sp.Logger.Error("failed to create CSV decoder", "error", err)
+		return ierr.NewError("failed to create CSV decoder").
+			WithHint("Failed to create CSV decoder").
 			WithReportableDetails(map[string]interface{}{
 				"error": err,
 			}).
 			Mark(ierr.ErrValidation)
 	}
 
+	// Get headers from decoder
+	headers := decoder.Header()
 	sp.Logger.Debugw("parsed CSV headers", "headers", headers)
 
 	// Process file in chunks
@@ -270,16 +210,9 @@ func (sp *StreamingProcessor) processCSVStream(
 
 		// Process chunk when it reaches the configured size
 		if len(chunk) >= config.ChunkSize {
-			// Check circuit breaker
-			if !sp.CircuitBreaker.CanExecute() {
-				sp.Logger.Error("circuit breaker is open, stopping processing", "chunk_index", chunkIndex)
-				break
-			}
-
 			result, err := sp.processChunkWithRetry(ctx, processor, chunk, headers, chunkIndex, config)
 			if err != nil {
 				sp.Logger.Error("failed to process chunk", "chunk_index", chunkIndex, "error", err)
-				sp.CircuitBreaker.RecordFailure()
 				allErrors = append(allErrors, fmt.Sprintf("Chunk %d: %v", chunkIndex, err))
 
 				// Check error limit
@@ -288,7 +221,6 @@ func (sp *StreamingProcessor) processCSVStream(
 					break
 				}
 			} else {
-				sp.CircuitBreaker.RecordSuccess()
 				totalProcessed += result.ProcessedRecords
 				totalSuccessful += result.SuccessfulRecords
 				totalFailed += result.FailedRecords
@@ -335,6 +267,7 @@ func (sp *StreamingProcessor) processJSONStream(
 	config *StreamingConfig,
 	reader io.Reader,
 ) error {
+	// Use standard library for JSON processing
 	decoder := json.NewDecoder(bufio.NewReaderSize(reader, config.BufferSize))
 
 	// Read opening bracket
@@ -455,7 +388,7 @@ func (sp *StreamingProcessor) finalizeProcessing(
 	return nil
 }
 
-// processChunkWithRetry processes a chunk with retry logic
+// processChunkWithRetry processes a chunk with retry logic using battle-tested backoff
 func (sp *StreamingProcessor) processChunkWithRetry(
 	ctx context.Context,
 	processor ChunkProcessor,
@@ -464,44 +397,37 @@ func (sp *StreamingProcessor) processChunkWithRetry(
 	chunkIndex int,
 	config *StreamingConfig,
 ) (*ChunkResult, error) {
-	var lastErr error
+	// Configure exponential backoff
+	backoffConfig := backoff.NewExponentialBackOff()
+	backoffConfig.MaxElapsedTime = 5 * time.Minute
+	backoffConfig.InitialInterval = config.RetryDelay
+	backoffConfig.MaxInterval = 30 * time.Second
 
-	for attempt := 0; attempt <= config.MaxRetries; attempt++ {
-		if attempt > 0 {
-			sp.Logger.Debugw("retrying chunk processing",
-				"chunk_index", chunkIndex,
-				"attempt", attempt,
-				"delay", config.RetryDelay)
-
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(config.RetryDelay):
-			}
-		}
-
-		result, err := processor.ProcessChunk(ctx, chunk, headers, chunkIndex)
-		if err == nil {
-			return result, nil
-		}
-
-		lastErr = err
-		sp.Logger.Warnw("chunk processing failed",
-			"chunk_index", chunkIndex,
-			"attempt", attempt,
-			"error", err)
+	var chunkResult *ChunkResult
+	operation := func() error {
+		var err error
+		chunkResult, err = processor.ProcessChunk(ctx, chunk, headers, chunkIndex)
+		return err
 	}
 
-	return nil, ierr.WithError(lastErr).
-		WithHint("Failed to process chunk after retries").
-		WithReportableDetails(map[string]interface{}{
-			"chunk_index": chunkIndex,
-			"max_retries": config.MaxRetries,
-		}).
-		Mark(ierr.ErrValidation)
+	err := backoff.Retry(operation, backoffConfig)
+	if err != nil {
+		sp.Logger.Warnw("chunk processing failed after retries",
+			"chunk_index", chunkIndex,
+			"error", err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to process chunk after retries").
+			WithReportableDetails(map[string]interface{}{
+				"chunk_index": chunkIndex,
+				"max_retries": config.MaxRetries,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	return chunkResult, nil
 }
 
-// downloadFileStream downloads a file and returns a stream
+// downloadFileStream downloads a file and returns a stream using retryable HTTP client
 func (sp *StreamingProcessor) downloadFileStream(ctx context.Context, t *task.Task) (io.ReadCloser, error) {
 	// Get the appropriate provider for the file URL
 	provider := sp.ProviderRegistry.GetProvider(t.FileURL)
@@ -517,20 +443,17 @@ func (sp *StreamingProcessor) downloadFileStream(ctx context.Context, t *task.Ta
 
 	sp.Logger.Debugw("using file provider for streaming", "original_url", t.FileURL, "download_url", downloadURL, "provider", provider.GetProviderName())
 
-	// Create HTTP request directly for streaming
-	httpReq, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
+	// Create retryable HTTP request
+	req, err := retryablehttp.NewRequestWithContext(ctx, "GET", downloadURL, nil)
 	if err != nil {
-		sp.Logger.Error("failed to create HTTP request", "error", err, "url", downloadURL)
+		sp.Logger.Error("failed to create retryable HTTP request", "error", err, "url", downloadURL)
 		errorSummary := fmt.Sprintf("Failed to create HTTP request: %v", err)
 		t.ErrorSummary = &errorSummary
 		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
-	// Make the request with extended timeout for large file downloads
-	httpClient := &http.Client{
-		Timeout: 10 * time.Minute, // Extended timeout for large file downloads
-	}
-	resp, err := httpClient.Do(httpReq)
+	// Execute request with automatic retries
+	resp, err := sp.RetryClient.Do(req)
 	if err != nil {
 		sp.Logger.Error("failed to download file", "error", err, "url", downloadURL, "provider", provider.GetProviderName())
 		errorSummary := fmt.Sprintf("Failed to download file: %v", err)
@@ -568,4 +491,11 @@ func (sp *StreamingProcessor) updateTaskProgress(ctx context.Context, t *task.Ta
 
 	// TODO: Implement actual database update here
 	// This should be done through the task repository
+}
+
+// Close cleans up resources
+func (sp *StreamingProcessor) Close() {
+	if sp.WorkerPool != nil {
+		sp.WorkerPool.StopWait()
+	}
 }

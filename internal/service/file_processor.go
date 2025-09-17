@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/h2non/filetype"
+	"github.com/hashicorp/go-retryablehttp"
+	jsoniter "github.com/json-iterator/go"
 
 	"github.com/flexprice/flexprice/internal/domain/task"
 	ierr "github.com/flexprice/flexprice/internal/errors"
@@ -27,6 +30,7 @@ type FileProcessor struct {
 	ProviderRegistry *FileProviderRegistry
 	CSVProcessor     *CSVProcessor
 	JSONProcessor    *JSONProcessor
+	RetryClient      *retryablehttp.Client
 
 	// Configuration for file size thresholds
 	MaxMemoryFileSize int64 // Maximum file size to process in memory (default: 10MB)
@@ -38,11 +42,19 @@ type FileProcessor struct {
 // - MaxMemoryFileSize: 10MB (files smaller than this are processed in memory)
 // - MaxFileSize: 1GB (maximum file size allowed)
 func NewFileProcessor(client httpclient.Client, logger *logger.Logger) *FileProcessor {
+	// Configure retryable HTTP client
+	retryClient := retryablehttp.NewClient()
+	retryClient.RetryMax = 3
+	retryClient.RetryWaitMin = 1 * time.Second
+	retryClient.RetryWaitMax = 30 * time.Second
+	retryClient.Logger = logger
+
 	return &FileProcessor{
 		StreamingProcessor: NewStreamingProcessor(client, logger),
 		ProviderRegistry:   NewFileProviderRegistry(),
 		CSVProcessor:       NewCSVProcessor(logger),
 		JSONProcessor:      NewJSONProcessor(logger),
+		RetryClient:        retryClient,
 		MaxMemoryFileSize:  10 * 1024 * 1024,   // 10MB
 		MaxFileSize:        1024 * 1024 * 1024, // 1GB
 	}
@@ -309,8 +321,18 @@ const (
 	FileTypeJSON FileType = "json"
 )
 
-// DetectFileType attempts to determine if the file is CSV or JSON
+// DetectFileType attempts to determine if the file is CSV or JSON using battle-tested filetype package
 func (fp *FileProcessor) DetectFileType(fileContent []byte) FileType {
+	// Use filetype package for more accurate detection
+	if filetype.Is(fileContent, "csv") {
+		return FileTypeCSV
+	}
+
+	if filetype.Is(fileContent, "json") {
+		return FileTypeJSON
+	}
+
+	// Fallback to content-based detection
 	// Skip BOM if present
 	if len(fileContent) >= 3 && fileContent[0] == 0xEF && fileContent[1] == 0xBB && fileContent[2] == 0xBF {
 		fileContent = fileContent[3:]
@@ -336,7 +358,9 @@ func (fp *FileProcessor) PrepareCSVReader(fileContent []byte) (*csv.Reader, erro
 	return fp.CSVProcessor.PrepareCSVReader(fileContent)
 }
 
-// PrepareJSONReader creates a configured JSON decoder from the file content
-func (fp *FileProcessor) PrepareJSONReader(fileContent []byte) (*json.Decoder, error) {
-	return fp.JSONProcessor.PrepareJSONReader(fileContent)
+// PrepareJSONReader creates a configured JSON decoder from the file content using jsoniter
+func (fp *FileProcessor) PrepareJSONReader(fileContent []byte) (*jsoniter.Decoder, error) {
+	// Convert standard decoder to jsoniter decoder
+	reader := bytes.NewReader(fileContent)
+	return jsoniter.NewDecoder(reader), nil
 }
