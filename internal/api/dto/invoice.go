@@ -834,6 +834,8 @@ type UpdateInvoiceRequest struct {
 	// invoice_pdf_url is the URL where customers can download the PDF version of this invoice
 	InvoicePDFURL *string    `json:"invoice_pdf_url,omitempty"`
 	DueDate       *time.Time `json:"due_date,omitempty"`
+	// Invoice metadata will be overridden with the request metadata
+	Metadata *types.Metadata `json:"metadata,omitempty"`
 }
 
 func (r *UpdateInvoiceRequest) Validate() error {
