@@ -15,7 +15,6 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/httpclient"
 	"github.com/flexprice/flexprice/internal/logger"
-	"github.com/flexprice/flexprice/internal/types"
 )
 
 // FileProcessor handles both streaming and regular file processing
@@ -300,44 +299,6 @@ func (fp *FileProcessor) ValidateFileSize(fileSize int64) error {
 	}
 
 	return nil
-}
-
-// DownloadFileIntelligent automatically chooses the best download method based on file size
-// This is the recommended method for most use cases as it handles both small and large files efficiently
-func (fp *FileProcessor) DownloadFileIntelligent(ctx context.Context, t *task.Task) (types.FileWrapper, error) {
-	// First, try to get the file size
-	fileSize, err := fp.GetFileSize(ctx, t)
-	if err != nil {
-		fp.Logger.Warn("could not determine file size, falling back to streaming", "error", err, "url", t.FileURL)
-		// If we can't determine size, use streaming to be safe
-		stream, err := fp.DownloadFileStream(ctx, t)
-		if err != nil {
-			return nil, err
-		}
-		return &types.StreamingFile{Reader: stream, Size: -1}, nil
-	}
-
-	// Validate file size
-	if err := fp.ValidateFileSize(fileSize); err != nil {
-		return nil, err
-	}
-
-	// Choose processing method based on file size
-	if fp.ShouldUseStreaming(fileSize) {
-		fp.Logger.Info("using streaming processing for large file", "size", fileSize, "url", t.FileURL)
-		stream, err := fp.DownloadFileStream(ctx, t)
-		if err != nil {
-			return nil, err
-		}
-		return &types.StreamingFile{Reader: stream, Size: fileSize}, nil
-	} else {
-		fp.Logger.Info("using memory processing for small file", "size", fileSize, "url", t.FileURL)
-		content, err := fp.DownloadFile(ctx, t)
-		if err != nil {
-			return nil, err
-		}
-		return &types.MemoryFile{Content: content, Size: fileSize}, nil
-	}
 }
 
 // FileType represents the type of file being processed
