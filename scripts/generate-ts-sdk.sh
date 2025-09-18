@@ -3,7 +3,7 @@
 # TypeScript SDK Generation Script
 # This script generates a modern TypeScript SDK with proper configuration
 
-set -e
+set -e -o pipefail
 
 # Colors for output
 RED='\033[0;31m'
