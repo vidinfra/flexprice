@@ -33,9 +33,16 @@ if ! command -v openapi-generator-cli &> /dev/null; then
     npm install -g @openapitools/openapi-generator-cli
 fi
 
-# Clean and create API directory
-echo -e "${BLUE}🧹 Cleaning existing SDK directory...${NC}"
+# Clean and create API directory while preserving examples
+echo -e "${BLUE}🧹 Cleaning existing SDK directory while preserving examples...${NC}"
 if [ -d "$API_DIR" ]; then
+    # Backup examples directory if it exists
+    if [ -d "$API_DIR/examples" ]; then
+        echo -e "${BLUE}📁 Backing up examples directory...${NC}"
+        EXAMPLES_BACKUP="${API_DIR}_examples_backup_$(date +%Y%m%d_%H%M%S)"
+        cp -r "$API_DIR/examples" "$EXAMPLES_BACKUP"
+    fi
+    
     # Try to remove normally first
     if ! rm -rf "$API_DIR" 2>/dev/null; then
         echo -e "${YELLOW}⚠️  Could not remove directory normally, creating backup and using new directory...${NC}"
@@ -47,6 +54,12 @@ if [ -d "$API_DIR" ]; then
     fi
 fi
 mkdir -p "$API_DIR"
+
+# Restore examples directory if it was backed up
+if [ -d "$EXAMPLES_BACKUP" ]; then
+    echo -e "${BLUE}📁 Restoring examples directory...${NC}"
+    mv "$EXAMPLES_BACKUP" "$API_DIR/examples"
+fi
 
 # Generate TypeScript SDK
 echo -e "${BLUE}⚙️  Generating TypeScript SDK...${NC}"
