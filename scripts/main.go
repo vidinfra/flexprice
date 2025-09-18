@@ -98,6 +98,11 @@ var commands = []Command{
 		Description: "Migrate to addon",
 		Run:         internal.CopyPlanChargesToAddons,
 	},
+	{
+		Name:        "migrate-billing-cycle",
+		Description: "Migrate subscriptions from anniversary to calendar billing cycle",
+		Run:         internal.MigrateBillingCycle,
+	},
 }
 
 // runBulkReprocessEventsCommand wraps the bulk reprocess events with command line parameters
@@ -149,6 +154,7 @@ func main() {
 		startTime          string
 		endTime            string
 		batchSize          string
+		dryRun             string
 	)
 
 	flag.BoolVar(&listCommands, "list", false, "List all available commands")
@@ -169,6 +175,7 @@ func main() {
 	flag.StringVar(&startTime, "start-time", "", "Start time for reprocessing (ISO-8601 format)")
 	flag.StringVar(&endTime, "end-time", "", "End time for reprocessing (ISO-8601 format)")
 	flag.StringVar(&batchSize, "batch-size", "100", "Batch size for reprocessing")
+	flag.StringVar(&dryRun, "dry-run", "false", "Dry run mode (true/false)")
 	flag.Parse()
 
 	if listCommands {
@@ -231,6 +238,9 @@ func main() {
 	}
 	if batchSize != "" {
 		os.Setenv("BATCH_SIZE", batchSize)
+	}
+	if dryRun != "" {
+		os.Setenv("DRY_RUN", dryRun)
 	}
 
 	// Find and run the command
