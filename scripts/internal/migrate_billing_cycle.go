@@ -14,7 +14,6 @@ import (
 	"github.com/flexprice/flexprice/internal/postgres"
 	"github.com/flexprice/flexprice/internal/repository/ent"
 	"github.com/flexprice/flexprice/internal/sentry"
-	_ "github.com/flexprice/flexprice/internal/sentry"
 	"github.com/flexprice/flexprice/internal/types"
 )
 
@@ -152,13 +151,9 @@ func migrateBillingCycle(params MigrateBillingCycleParams) error {
 			fmt.Printf("    - Current period end: %s -> %s\n", sub.CurrentPeriodEnd.Format(time.RFC3339), newCurrentPeriodEnd.Format(time.RFC3339))
 			successCount++
 		} else {
-			// Update the subscription
-			sub.BillingCycle = types.BillingCycleCalendar
-			sub.BillingAnchor = newBillingAnchor
-			sub.CurrentPeriodEnd = newCurrentPeriodEnd
-
-			// Update in database
-			err = subscriptionRepo.Update(ctx, sub)
+			// Update the subscription using direct SQL since billing_cycle is immutable in ent
+			// We need to update billing_cycle, billing_anchor, and current_period_end
+			err = updateSubscriptionBillingCycle(ctx, dbClient, sub.ID, types.BillingCycleCalendar, newBillingAnchor, newCurrentPeriodEnd)
 			if err != nil {
 				fmt.Printf("  ERROR: Failed to update subscription: %v\n", err)
 				errorCount++
@@ -189,4 +184,38 @@ func migrateBillingCycle(params MigrateBillingCycleParams) error {
 
 	fmt.Println("Migration completed successfully!")
 	return nil
+}
+
+// updateSubscriptionBillingCycle updates the billing cycle using direct SQL
+// since the billing_cycle field is marked as immutable in the ent schema
+func updateSubscriptionBillingCycle(ctx context.Context, dbClient postgres.IClient, subscriptionID string, billingCycle types.BillingCycle, billingAnchor, currentPeriodEnd time.Time) error {
+	query := `
+		UPDATE subscriptions 
+		SET 
+			billing_cycle = $1,
+			billing_anchor = $2,
+			current_period_end = $3,
+			updated_at = $4
+		WHERE 
+			id = $5 
+			AND tenant_id = $6 
+			AND environment_id = $7
+			AND status = 'published'
+	`
+
+	tenantID := types.GetTenantID(ctx)
+	environmentID := types.GetEnvironmentID(ctx)
+	now := time.Now().UTC()
+
+	_, err := dbClient.Querier(ctx).ExecContext(ctx, query,
+		string(billingCycle),
+		billingAnchor,
+		currentPeriodEnd,
+		now,
+		subscriptionID,
+		tenantID,
+		environmentID,
+	)
+
+	return err
 }
