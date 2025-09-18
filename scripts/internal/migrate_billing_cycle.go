@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/flexprice/flexprice/internal/cache"
 	"github.com/flexprice/flexprice/internal/config"
 	domainSub "github.com/flexprice/flexprice/internal/domain/subscription"
 	"github.com/flexprice/flexprice/internal/logger"
@@ -74,8 +75,11 @@ func migrateBillingCycle(params MigrateBillingCycleParams) error {
 	// Create postgres client
 	dbClient := postgres.NewClient(entClient, log, sentry.NewSentryService(cfg, log))
 
+	// Create cache
+	cache := cache.NewInMemoryCache()
+
 	// Create repository
-	subscriptionRepo := ent.NewSubscriptionRepository(dbClient, log, nil)
+	subscriptionRepo := ent.NewSubscriptionRepository(dbClient, log, cache)
 
 	// Create context with tenant and environment
 	ctx := context.Background()
