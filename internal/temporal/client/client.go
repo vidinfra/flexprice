@@ -35,21 +35,9 @@ type temporalClient struct {
 	startMutex sync.Mutex
 }
 
-// temporalClientFactory implements the TemporalClientFactory interface
-type temporalClientFactory struct {
-	logger *logger.Logger
-}
-
-// NewTemporalClientFactory creates a new factory for temporal clients
-func NewTemporalClientFactory(logger *logger.Logger) TemporalClientFactory {
-	return &temporalClientFactory{
-		logger: logger,
-	}
-}
-
-// CreateClient implements TemporalClientFactory
-func (f *temporalClientFactory) CreateClient(options *models.ClientOptions) (TemporalClient, error) {
-	f.logger.Info("Creating new temporal client", "namespace", options.Namespace)
+// NewTemporalClient creates a new temporal client instance
+func NewTemporalClient(options *models.ClientOptions, logger *logger.Logger) (TemporalClient, error) {
+	logger.Info("Creating new temporal client", "namespace", options.Namespace)
 
 	// Convert our options to SDK options
 	sdkOptions := client.Options{
@@ -74,13 +62,13 @@ func (f *temporalClientFactory) CreateClient(options *models.ClientOptions) (Tem
 	// Create the temporal client
 	c, err := client.Dial(sdkOptions)
 	if err != nil {
-		f.logger.Error("Failed to create temporal client", "error", err)
+		logger.Error("Failed to create temporal client", "error", err)
 		return nil, err
 	}
 
 	return &temporalClient{
 		client: c,
-		logger: f.logger,
+		logger: logger,
 	}, nil
 }
 

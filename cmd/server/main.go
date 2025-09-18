@@ -344,9 +344,8 @@ func provideTemporalClient(cfg *config.TemporalConfig, log *logger.Logger) (clie
 	}
 	options.TLS = cfg.TLS
 
-	// Create client factory and client
-	factory := client.NewTemporalClientFactory(log)
-	temporalClient, err := factory.CreateClient(options)
+	// Create temporal client directly
+	temporalClient, err := client.NewTemporalClient(options, log)
 	if err != nil {
 		log.Error("Failed to create Temporal client", "error", err)
 		return nil, fmt.Errorf("failed to create temporal client: %w", err)

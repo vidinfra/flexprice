@@ -33,9 +33,3 @@ type TemporalClient interface {
 	// Raw client access (for advanced use cases)
 	GetRawClient() client.Client
 }
-
-// TemporalClientFactory creates new instances of TemporalClient
-type TemporalClientFactory interface {
-	// CreateClient creates a new TemporalClient instance
-	CreateClient(options *models.ClientOptions) (TemporalClient, error)
-}
