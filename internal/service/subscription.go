@@ -1788,7 +1788,6 @@ func (s *subscriptionService) processSubscriptionPeriod(ctx context.Context, sub
 
 			s.Logger.Infow("created invoice for period",
 				"subscription_id", sub.ID,
-				"invoice_id", inv.ID,
 				"period_start", period.start,
 				"period_end", period.end,
 				"period_index", i)
