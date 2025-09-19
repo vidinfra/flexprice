@@ -11,6 +11,7 @@ type TaskProcessingWorkflowInput struct {
 	TaskID        string `json:"task_id"`
 	TenantID      string `json:"tenant_id"`
 	EnvironmentID string `json:"environment_id"`
+	UserID        string `json:"user_id"`
 }
 
 // Validate validates the task processing workflow input

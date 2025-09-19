@@ -312,13 +312,13 @@ func (s *temporalService) buildWorkflowInput(ctx context.Context, workflowType t
 	// Extract context values
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
-
+	userID := types.GetUserID(ctx)
 	// Handle different workflow types
 	switch workflowType {
 	case types.TemporalPriceSyncWorkflow:
-		return s.buildPriceSyncInput(tenantID, environmentID, params)
+		return s.buildPriceSyncInput(ctx, tenantID, environmentID, userID, params)
 	case types.TemporalTaskProcessingWorkflow:
-		return s.buildTaskProcessingInput(tenantID, environmentID, params)
+		return s.buildTaskProcessingInput(ctx, tenantID, environmentID, userID, params)
 	default:
 		return nil, errors.NewError("unsupported workflow type").
 			WithHintf("Workflow type %s is not supported", workflowType.String()).
@@ -327,11 +327,12 @@ func (s *temporalService) buildWorkflowInput(ctx context.Context, workflowType t
 }
 
 // buildPriceSyncInput builds input for price sync workflow
-func (s *temporalService) buildPriceSyncInput(tenantID, environmentID string, params interface{}) (interface{}, error) {
+func (s *temporalService) buildPriceSyncInput(_ context.Context, tenantID, environmentID, userID string, params interface{}) (interface{}, error) {
 	// If already correct type, just ensure context is set
 	if input, ok := params.(models.PriceSyncWorkflowInput); ok {
 		input.TenantID = tenantID
 		input.EnvironmentID = environmentID
+		input.UserID = userID
 		return input, nil
 	}
 
@@ -347,15 +348,17 @@ func (s *temporalService) buildPriceSyncInput(tenantID, environmentID string, pa
 		PlanID:        planID,
 		TenantID:      tenantID,
 		EnvironmentID: environmentID,
+		UserID:        userID,
 	}, nil
 }
 
 // buildTaskProcessingInput builds input for task processing workflow
-func (s *temporalService) buildTaskProcessingInput(tenantID, environmentID string, params interface{}) (interface{}, error) {
+func (s *temporalService) buildTaskProcessingInput(ctx context.Context, tenantID, environmentID, userID string, params interface{}) (interface{}, error) {
 	// If already correct type, just ensure context is set
 	if input, ok := params.(models.TaskProcessingWorkflowInput); ok {
 		input.TenantID = tenantID
 		input.EnvironmentID = environmentID
+		input.UserID = userID
 		return input, nil
 	}
 
@@ -371,6 +374,7 @@ func (s *temporalService) buildTaskProcessingInput(tenantID, environmentID strin
 		TaskID:        taskID,
 		TenantID:      tenantID,
 		EnvironmentID: environmentID,
+		UserID:        userID,
 	}, nil
 }
 
