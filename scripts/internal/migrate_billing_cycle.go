@@ -130,7 +130,7 @@ func migrateBillingCycle(params MigrateBillingCycleParams) error {
 		// Calculate new current period end using the subscription start date and new billing anchor
 		// This ensures we get the correct period end for calendar billing
 		newCurrentPeriodEnd, err := types.NextBillingDate(
-			sub.StartDate,
+			sub.CurrentPeriodStart,
 			newBillingAnchor,
 			sub.BillingPeriodCount,
 			sub.BillingPeriod,
