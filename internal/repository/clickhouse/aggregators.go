@@ -62,6 +62,8 @@ func GetAggregator(aggregationType types.AggregationType) events.Aggregator {
 		return &SumWithMultiAggregator{}
 	case types.AggregationMax:
 		return &MaxAggregator{}
+	case types.AggregationWeightedSum:
+		return &WeightedSumAggregator{}
 	}
 	return nil
 }
@@ -708,6 +710,71 @@ func (a *MaxAggregator) getWindowedQuery(ctx context.Context, params *events.Usa
 
 func (a *MaxAggregator) GetType() types.AggregationType {
 	return types.AggregationMax
+}
+
+// WeightedSumAggregator implements weighted sum aggregation
+type WeightedSumAggregator struct{}
+
+func (a *WeightedSumAggregator) GetQuery(ctx context.Context, params *events.UsageParams) string {
+	windowSize := formatWindowSizeWithBillingAnchor(params.WindowSize, params.BillingAnchor)
+	selectClause := ""
+	groupByClause := ""
+
+	if windowSize != "" {
+		selectClause = "window_size,"
+		groupByClause = "GROUP BY window_size ORDER BY window_size"
+	}
+
+	externalCustomerFilter := ""
+	if params.ExternalCustomerID != "" {
+		externalCustomerFilter = fmt.Sprintf("AND external_customer_id = '%s'", params.ExternalCustomerID)
+	}
+
+	customerFilter := ""
+	if params.CustomerID != "" {
+		customerFilter = fmt.Sprintf("AND customer_id = '%s'", params.CustomerID)
+	}
+
+	filterConditions := buildFilterConditions(params.Filters)
+	timeConditions := buildTimeConditions(params)
+
+	return fmt.Sprintf(`
+        WITH
+            toDateTime('%s') AS period_start,
+            toDateTime('%s') AS period_end,
+            dateDiff('second', period_start, period_end) AS total_seconds
+        SELECT 
+            %s sum(
+                (JSONExtractFloat(assumeNotNull(properties), '%s') / nullIf(total_seconds, 0)) *
+                dateDiff('second', timestamp, period_end)
+            ) AS total
+        FROM events
+        PREWHERE tenant_id = '%s'
+			AND environment_id = '%s'
+			AND event_name = '%s'
+			%s
+			%s
+            %s
+            %s
+        %s
+    `,
+		params.StartTime.Format("2006-01-02 15:04:05"),
+		params.EndTime.Format("2006-01-02 15:04:05"),
+		selectClause,
+		params.PropertyName,
+		types.GetTenantID(ctx),
+		types.GetEnvironmentID(ctx),
+		params.EventName,
+		externalCustomerFilter,
+		customerFilter,
+		filterConditions,
+		timeConditions,
+		groupByClause,
+	)
+}
+
+func (a *WeightedSumAggregator) GetType() types.AggregationType {
+	return types.AggregationWeightedSum
 }
 
 // // buildFilterGroupsQuery builds a query that matches events to the most specific filter group
