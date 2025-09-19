@@ -306,6 +306,9 @@ func (p *EventsChunkProcessor) ProcessChunk(ctx context.Context, chunk [][]strin
 			Properties: make(map[string]interface{}),
 		}
 
+		// Flag to track if this record should be skipped due to errors
+		skipRecord := false
+
 		// Map standard fields
 		for j, header := range headers {
 			if j >= len(record) {
@@ -348,13 +351,19 @@ func (p *EventsChunkProcessor) ProcessChunk(ctx context.Context, chunk [][]strin
 				if err := json.Unmarshal([]byte(record[j]), &properties); err != nil {
 					errors = append(errors, fmt.Sprintf("Record %d: invalid JSON in properties column: %v", i, err))
 					failedRecords++
-					continue
+					skipRecord = true
+					break // Break out of the inner loop to skip this record
 				}
 				// Merge JSON properties into event properties
 				for key, value := range properties {
 					eventReq.Properties[key] = value
 				}
 			}
+		}
+
+		// Skip this record if JSON parsing failed
+		if skipRecord {
+			continue
 		}
 
 		// Validate the event request
