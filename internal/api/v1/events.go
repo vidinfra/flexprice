@@ -346,7 +346,6 @@ func (h *EventsHandler) GetUsageAnalytics(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// TODONEW: Revamp
 func (h *EventsHandler) GetUsageAnalyticsV2(c *gin.Context) {
 	ctx := c.Request.Context()
 	var err error

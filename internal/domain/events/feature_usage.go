@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/flexprice/flexprice/internal/types"
 	"github.com/shopspring/decimal"
 )
 
@@ -34,8 +35,17 @@ type FeatureUsageRepository interface {
 	GetUsageAnalytics(ctx context.Context, tenantID, environmentID, customerID string, lookbackHours int) ([]*UsageAnalytic, error)
 
 	// GetDetailedUsageAnalytics provides comprehensive usage analytics with filtering, grouping, and time-series data
-	GetDetailedUsageAnalytics(ctx context.Context, params *UsageAnalyticsParams) ([]*DetailedUsageAnalytic, error)
+	GetDetailedUsageAnalytics(ctx context.Context, params *UsageAnalyticsParams, maxBucketFeatures map[string]*MaxBucketFeatureInfo) ([]*DetailedUsageAnalytic, error)
 
 	// Get feature usage by subscription
 	GetFeatureUsageBySubscription(ctx context.Context, subscriptionID, externalCustomerID, environmentID, tenantID string, startTime, endTime time.Time) (map[string]*UsageByFeatureResult, error)
+}
+
+// MaxBucketFeatureInfo contains information about a feature that uses MAX with bucket aggregation
+type MaxBucketFeatureInfo struct {
+	FeatureID    string
+	MeterID      string
+	BucketSize   types.WindowSize
+	EventName    string
+	PropertyName string
 }

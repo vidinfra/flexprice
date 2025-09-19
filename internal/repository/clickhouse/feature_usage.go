@@ -491,7 +491,7 @@ func (r *FeatureUsageRepository) GetUsageAnalytics(ctx context.Context, tenantID
 }
 
 // GetDetailedUsageAnalytics provides comprehensive usage analytics with filtering, grouping, and time-series data
-func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, params *events.UsageAnalyticsParams) ([]*events.DetailedUsageAnalytic, error) {
+func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, params *events.UsageAnalyticsParams, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
 	span := StartRepositorySpan(ctx, "processed_event", "get_detailed_usage_analytics", map[string]interface{}{
 		"external_customer_id":   params.ExternalCustomerID,
 		"feature_ids_count":      len(params.FeatureIDs),
@@ -527,6 +527,72 @@ func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, 
 		}
 	}
 
+	// Use the maxBucketFeatures passed from the service layer
+
+	// Now we'll handle the two types of features separately:
+	// 1. MAX with bucket features - use bucket-based aggregation for totals, window-based for points
+	// 2. Other features - use standard SUM aggregation
+
+	var allResults []*events.DetailedUsageAnalytic
+
+	// Handle MAX with bucket features
+	if len(maxBucketFeatures) > 0 {
+		maxBucketResults, err := r.getMaxBucketAnalytics(ctx, params, maxBucketFeatures)
+		if err != nil {
+			SetSpanError(span, err)
+			return nil, err
+		}
+		allResults = append(allResults, maxBucketResults...)
+	}
+
+	// Handle other features (non-MAX with bucket)
+	otherFeatureIDs := r.getOtherFeatureIDs(params.FeatureIDs, maxBucketFeatures)
+
+	// Only process other features if we have some to process
+	if len(otherFeatureIDs) > 0 || len(params.FeatureIDs) == 0 {
+		otherParams := *params
+		if len(otherFeatureIDs) > 0 {
+			// We have specific other features to process
+			otherParams.FeatureIDs = otherFeatureIDs
+		} else if len(params.FeatureIDs) == 0 {
+			// No specific features requested, but we need to exclude MAX bucket features
+			// from the standard processing
+			// Set empty feature IDs to process all, but the standard analytics will handle
+			// the filtering internally
+			otherParams.FeatureIDs = []string{}
+		}
+
+		otherResults, err := r.getStandardAnalytics(ctx, &otherParams, maxBucketFeatures)
+		if err != nil {
+			SetSpanError(span, err)
+			return nil, err
+		}
+		allResults = append(allResults, otherResults...)
+	}
+
+	SetSpanSuccess(span)
+	return allResults, nil
+}
+
+// getOtherFeatureIDs returns feature IDs that are not MAX with bucket features
+func (r *FeatureUsageRepository) getOtherFeatureIDs(requestedFeatureIDs []string, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) []string {
+	// If no specific features requested, we need to handle all features
+	// We'll return empty slice to indicate "handle all features" in standard way
+	if len(requestedFeatureIDs) == 0 {
+		return []string{} // Empty slice means "handle all features in standard way"
+	}
+
+	otherFeatureIDs := make([]string, 0)
+	for _, featureID := range requestedFeatureIDs {
+		if _, isMaxBucket := maxBucketFeatures[featureID]; !isMaxBucket {
+			otherFeatureIDs = append(otherFeatureIDs, featureID)
+		}
+	}
+	return otherFeatureIDs
+}
+
+// getStandardAnalytics handles analytics for non-MAX with bucket features
+func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, params *events.UsageAnalyticsParams, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
 	// Initialize query parameters with the standard parameters that will be added later
 	// This ensures they're always in the right order
 	queryParams := []interface{}{
@@ -597,6 +663,19 @@ func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, 
 			filterParams = append(filterParams, params.FeatureIDs[i])
 		}
 		aggregateQuery += " AND feature_id IN (" + strings.Join(placeholders, ", ") + ")"
+	} else if len(maxBucketFeatures) > 0 {
+		// If no specific feature IDs but we have MAX bucket features,
+		// exclude them from standard processing
+		maxBucketFeatureIDs := make([]string, 0, len(maxBucketFeatures))
+		for featureID := range maxBucketFeatures {
+			maxBucketFeatureIDs = append(maxBucketFeatureIDs, featureID)
+		}
+		placeholders := make([]string, len(maxBucketFeatureIDs))
+		for i := range maxBucketFeatureIDs {
+			placeholders[i] = "?"
+			filterParams = append(filterParams, maxBucketFeatureIDs[i])
+		}
+		aggregateQuery += " AND feature_id NOT IN (" + strings.Join(placeholders, ", ") + ")"
 	}
 
 	// Add filters for sources
@@ -650,7 +729,6 @@ func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, 
 	// Execute the query
 	rows, err := r.store.GetConn().Query(ctx, aggregateQuery, queryParams...)
 	if err != nil {
-		SetSpanError(span, err)
 		return nil, ierr.WithError(err).
 			WithHint("Failed to execute usage analytics query").
 			WithReportableDetails(map[string]interface{}{
@@ -687,7 +765,6 @@ func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, 
 		scanArgs[len(params.GroupBy)+1] = &analytics.EventCount
 
 		if err := rows.Scan(scanArgs...); err != nil {
-			SetSpanError(span, err)
 			return nil, ierr.WithError(err).
 				WithHint("Failed to scan analytics row").
 				WithReportableDetails(map[string]interface{}{
@@ -717,7 +794,6 @@ func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, 
 		if params.WindowSize != "" {
 			points, err := r.getAnalyticsPoints(ctx, params, analytics)
 			if err != nil {
-				SetSpanError(span, err)
 				return nil, err
 			}
 			analytics.Points = points
@@ -727,7 +803,6 @@ func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, 
 	}
 
 	if err := rows.Err(); err != nil {
-		SetSpanError(span, err)
 		return nil, ierr.WithError(err).
 			WithHint("Error iterating analytics rows").
 			WithReportableDetails(map[string]interface{}{
@@ -736,8 +811,292 @@ func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, 
 			Mark(ierr.ErrDatabase)
 	}
 
-	SetSpanSuccess(span)
 	return results, nil
+}
+
+// getMaxBucketAnalytics handles analytics for MAX with bucket features
+func (r *FeatureUsageRepository) getMaxBucketAnalytics(ctx context.Context, params *events.UsageAnalyticsParams, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
+	// For MAX with bucket features, we need to:
+	// 1. Calculate totals using bucket-based aggregation (meter's bucket size)
+	// 2. Calculate time series points using request window size
+
+	var allResults []*events.DetailedUsageAnalytic
+
+	// Process each MAX with bucket feature separately since they may have different bucket sizes
+	for featureID, featureInfo := range maxBucketFeatures {
+		// Create a copy of params for this specific feature
+		featureParams := *params
+		featureParams.FeatureIDs = []string{featureID}
+
+		// Get bucket-based totals
+		totals, err := r.getMaxBucketTotals(ctx, &featureParams, featureInfo)
+		if err != nil {
+			return nil, err
+		}
+
+		// Get window-based time series points
+		if params.WindowSize != "" {
+			points, err := r.getMaxBucketPoints(ctx, &featureParams, featureInfo)
+			if err != nil {
+				return nil, err
+			}
+
+			// Combine totals with points
+			for _, total := range totals {
+				total.Points = points
+				allResults = append(allResults, total)
+			}
+		} else {
+			allResults = append(allResults, totals...)
+		}
+	}
+
+	return allResults, nil
+}
+
+// getMaxBucketTotals calculates totals using bucket-based aggregation for MAX features
+func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params *events.UsageAnalyticsParams, featureInfo *events.MaxBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
+	// Build bucket window expression based on meter's bucket size
+	bucketWindowExpr := r.formatWindowSize(featureInfo.BucketSize, nil)
+
+	// Build group by columns based on request parameters
+	groupByColumns := []string{"bucket_start", "feature_id"}
+	selectColumns := []string{"feature_id"}
+
+	// Add grouping columns
+	for _, groupBy := range params.GroupBy {
+		switch groupBy {
+		case "source":
+			groupByColumns = append(groupByColumns, "source")
+			selectColumns = append(selectColumns, "source")
+		case "feature_id":
+			// Already included
+		default:
+			if strings.HasPrefix(groupBy, "properties.") {
+				propertyName := strings.TrimPrefix(groupBy, "properties.")
+				groupByColumns = append(groupByColumns, fmt.Sprintf("JSONExtractString(properties, '%s')", propertyName))
+				selectColumns = append(selectColumns, fmt.Sprintf("JSONExtractString(properties, '%s') as %s", propertyName, propertyName))
+			}
+		}
+	}
+
+	// Build the query for bucket-based MAX aggregation
+	// For MAX with bucket, we need to:
+	// 1. Find the max value within each bucket (grouped by requested fields)
+	// 2. Sum all bucket maxes to get the total
+	query := fmt.Sprintf(`
+		WITH bucket_maxes AS (
+			SELECT
+				%s as bucket_start,
+				%s,
+				max(qty_total * sign) as bucket_max,
+				count(DISTINCT id) as event_count
+			FROM feature_usage
+			WHERE tenant_id = ?
+			AND environment_id = ?
+			AND customer_id = ?
+			AND feature_id = ?
+			AND timestamp >= ?
+			AND timestamp <= ?
+			AND sign != 0
+			GROUP BY %s
+		)
+		SELECT
+			%s,
+			sum(bucket_max) as total_usage,
+			sum(event_count) as event_count
+		FROM bucket_maxes
+		GROUP BY %s
+	`, bucketWindowExpr, strings.Join(selectColumns, ", "), strings.Join(groupByColumns, ", "), strings.Join(selectColumns, ", "), strings.Join(selectColumns, ", "))
+
+	queryParams := []interface{}{
+		params.TenantID,
+		params.EnvironmentID,
+		params.CustomerID,
+		featureInfo.FeatureID,
+		params.StartTime,
+		params.EndTime,
+	}
+
+	rows, err := r.store.GetConn().Query(ctx, query, queryParams...)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to execute MAX bucket totals query").
+			WithReportableDetails(map[string]interface{}{
+				"feature_id":  featureInfo.FeatureID,
+				"bucket_size": featureInfo.BucketSize,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	defer rows.Close()
+
+	var results []*events.DetailedUsageAnalytic
+	for rows.Next() {
+		analytics := &events.DetailedUsageAnalytic{
+			FeatureID:       featureInfo.FeatureID,
+			MeterID:         featureInfo.MeterID,
+			EventName:       featureInfo.EventName,
+			AggregationType: types.AggregationMax,
+			Points:          []events.UsageAnalyticPoint{},
+			Properties:      make(map[string]string),
+		}
+
+		// Build scan targets dynamically based on group by columns
+		scanTargets := []interface{}{&analytics.FeatureID}
+
+		// Add scan targets for grouping columns
+		for _, groupBy := range params.GroupBy {
+			switch groupBy {
+			case "source":
+				var source string
+				scanTargets = append(scanTargets, &source)
+				analytics.Source = source
+			case "feature_id":
+				// Already handled
+			default:
+				if strings.HasPrefix(groupBy, "properties.") {
+					propertyName := strings.TrimPrefix(groupBy, "properties.")
+					var propertyValue string
+					scanTargets = append(scanTargets, &propertyValue)
+					if propertyValue != "" {
+						analytics.Properties[propertyName] = propertyValue
+					}
+				}
+			}
+		}
+
+		// Add usage and event count
+		scanTargets = append(scanTargets, &analytics.TotalUsage, &analytics.EventCount)
+
+		err := rows.Scan(scanTargets...)
+		if err != nil {
+			return nil, ierr.WithError(err).
+				WithHint("Failed to scan MAX bucket totals row").
+				Mark(ierr.ErrDatabase)
+		}
+
+		results = append(results, analytics)
+	}
+
+	return results, nil
+}
+
+// getMaxBucketPoints calculates time series points using request window size for MAX features
+func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params *events.UsageAnalyticsParams, featureInfo *events.MaxBucketFeatureInfo) ([]events.UsageAnalyticPoint, error) {
+	// Build window expression based on request window size
+	windowExpr := r.formatWindowSize(params.WindowSize, params.BillingAnchor)
+
+	// For MAX with bucket features, we need to first get max within each bucket,
+	// then aggregate those maxes within the request window
+	// Note: For time series points, we aggregate across all groups within each time window
+	query := fmt.Sprintf(`
+		WITH bucket_maxes AS (
+			SELECT
+				%s as bucket_start,
+				%s as window_start,
+				max(qty_total * sign) as bucket_max,
+				count(DISTINCT id) as event_count
+			FROM feature_usage
+			WHERE tenant_id = ?
+			AND environment_id = ?
+			AND customer_id = ?
+			AND feature_id = ?
+			AND timestamp >= ?
+			AND timestamp <= ?
+			AND sign != 0
+			GROUP BY bucket_start, window_start
+		)
+		SELECT
+			window_start as timestamp,
+			sum(bucket_max) as usage,
+			sum(event_count) as event_count
+		FROM bucket_maxes
+		GROUP BY window_start
+		ORDER BY window_start
+	`, r.formatWindowSize(featureInfo.BucketSize, nil), windowExpr)
+
+	queryParams := []interface{}{
+		params.TenantID,
+		params.EnvironmentID,
+		params.CustomerID,
+		featureInfo.FeatureID,
+		params.StartTime,
+		params.EndTime,
+	}
+
+	rows, err := r.store.GetConn().Query(ctx, query, queryParams...)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to execute MAX bucket points query").
+			WithReportableDetails(map[string]interface{}{
+				"feature_id":  featureInfo.FeatureID,
+				"bucket_size": featureInfo.BucketSize,
+				"window_size": params.WindowSize,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	defer rows.Close()
+
+	var points []events.UsageAnalyticPoint
+	for rows.Next() {
+		var point events.UsageAnalyticPoint
+		var timestamp time.Time
+
+		err := rows.Scan(
+			&timestamp,
+			&point.Usage,
+			&point.EventCount,
+		)
+		if err != nil {
+			return nil, ierr.WithError(err).
+				WithHint("Failed to scan MAX bucket points row").
+				Mark(ierr.ErrDatabase)
+		}
+
+		point.Timestamp = timestamp
+		points = append(points, point)
+	}
+
+	return points, nil
+}
+
+// formatWindowSize formats window size for ClickHouse queries
+func (r *FeatureUsageRepository) formatWindowSize(windowSize types.WindowSize, billingAnchor *time.Time) string {
+	switch windowSize {
+	case types.WindowSizeMinute:
+		return "toStartOfMinute(timestamp)"
+	case types.WindowSizeHour:
+		return "toStartOfHour(timestamp)"
+	case types.WindowSizeDay:
+		return "toStartOfDay(timestamp)"
+	case types.WindowSizeWeek:
+		return "toStartOfWeek(timestamp)"
+	case types.WindowSize15Min:
+		return "toStartOfInterval(timestamp, INTERVAL 15 MINUTE)"
+	case types.WindowSize30Min:
+		return "toStartOfInterval(timestamp, INTERVAL 30 MINUTE)"
+	case types.WindowSize3Hour:
+		return "toStartOfInterval(timestamp, INTERVAL 3 HOUR)"
+	case types.WindowSize6Hour:
+		return "toStartOfInterval(timestamp, INTERVAL 6 HOUR)"
+	case types.WindowSize12Hour:
+		return "toStartOfInterval(timestamp, INTERVAL 12 HOUR)"
+	case types.WindowSizeMonth:
+		// Use custom monthly billing period if billing anchor is provided
+		if billingAnchor != nil {
+			// Extract only the day component from billing anchor for simplicity
+			anchorDay := billingAnchor.Day()
+			// Generate the custom monthly window expression using day-level granularity
+			return fmt.Sprintf(`
+				addDays(
+					toStartOfMonth(addDays(timestamp, -%d)),
+					%d
+				)`, anchorDay-1, anchorDay-1)
+		}
+		return "toStartOfMonth(timestamp)"
+	default:
+		return "toStartOfHour(timestamp)"
+	}
 }
 
 // getAnalyticsPoints fetches time-series data points for a specific analytics item

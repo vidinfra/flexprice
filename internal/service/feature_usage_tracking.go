@@ -1004,8 +1004,18 @@ func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Cont
 		PropertyFilters:    req.PropertyFilters,
 	}
 
-	// Step 5: Call the repository to get base analytics data
-	analytics, err := s.featureUsageRepo.GetDetailedUsageAnalytics(ctx, params)
+	// Step 5: First, identify which features use MAX with bucket aggregation
+	maxBucketFeatures, err := s.identifyMaxBucketFeatures(ctx, params)
+	if err != nil {
+		s.Logger.Errorw("failed to identify MAX bucket features",
+			"error", err,
+			"external_customer_id", req.ExternalCustomerID,
+		)
+		return nil, err
+	}
+
+	// Step 6: Call the repository to get analytics data with MAX bucket handling
+	analytics, err := s.featureUsageRepo.GetDetailedUsageAnalytics(ctx, params, maxBucketFeatures)
 	if err != nil {
 		s.Logger.Errorw("failed to get detailed usage analytics",
 			"error", err,
@@ -1014,12 +1024,12 @@ func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Cont
 		return nil, err
 	}
 
-	// Step 6: If no results, return early
+	// Step 7: If no results, return early
 	if len(analytics) == 0 {
 		return s.ToGetUsageAnalyticsResponseDTO(ctx, analytics)
 	}
 
-	// Step 7: Enrich with feature and meter data from their respective repositories
+	// Step 8: Enrich with feature and meter data from their respective repositories
 	err = s.enrichAnalyticsWithFeatureAndMeterData(ctx, analytics)
 	if err != nil {
 		s.Logger.Warnw("failed to fully enrich analytics with feature and meter data",
@@ -1029,7 +1039,7 @@ func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Cont
 		// Continue with partial data rather than failing completely
 	}
 
-	// Step 8: Set currency on all analytics items if we have subscription data
+	// Step 9: Set currency on all analytics items if we have subscription data
 	if len(subscriptions) > 0 && finalCurrency != "" {
 		for _, item := range analytics {
 			item.Currency = finalCurrency
@@ -1037,6 +1047,131 @@ func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Cont
 	}
 
 	return s.ToGetUsageAnalyticsResponseDTO(ctx, analytics)
+}
+
+// identifyMaxBucketFeatures identifies which features use MAX aggregation with bucket size
+func (s *featureUsageTrackingService) identifyMaxBucketFeatures(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, error) {
+	// If no feature IDs specified, we need to find all features for the customer
+	// by looking at their active subscriptions
+	if len(params.FeatureIDs) == 0 {
+		return s.identifyMaxBucketFeaturesFromSubscriptions(ctx, params)
+	}
+
+	// Use the helper method for specific feature IDs
+	return s.identifyMaxBucketFeaturesFromFeatureIDs(ctx, params)
+}
+
+// identifyMaxBucketFeaturesFromSubscriptions identifies MAX bucket features from customer's active subscriptions
+func (s *featureUsageTrackingService) identifyMaxBucketFeaturesFromSubscriptions(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, error) {
+	// Get active subscriptions for the customer
+	subscriptionService := NewSubscriptionService(s.ServiceParams)
+	filter := types.NewSubscriptionFilter()
+	filter.CustomerID = params.CustomerID
+	filter.WithLineItems = true // We need line items to get feature information
+	filter.SubscriptionStatus = []types.SubscriptionStatus{
+		types.SubscriptionStatusActive,
+		types.SubscriptionStatusTrialing,
+	}
+
+	subscriptionsList, err := subscriptionService.ListSubscriptions(ctx, filter)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get subscriptions for MAX bucket feature identification").
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Extract all meter IDs from subscription line items
+	meterIDSet := make(map[string]bool)
+	for _, sub := range subscriptionsList.Items {
+		for _, lineItem := range sub.LineItems {
+			if lineItem.IsUsage() && lineItem.MeterID != "" {
+				meterIDSet[lineItem.MeterID] = true
+			}
+		}
+	}
+
+	// Convert to slice
+	meterIDs := make([]string, 0, len(meterIDSet))
+	for meterID := range meterIDSet {
+		meterIDs = append(meterIDs, meterID)
+	}
+
+	if len(meterIDs) == 0 {
+		return make(map[string]*events.MaxBucketFeatureInfo), nil
+	}
+
+	// Get features by meter IDs with meter expansion for efficiency
+	featureService := NewFeatureService(s.ServiceParams)
+	featureFilter := types.NewNoLimitFeatureFilter()
+	featureFilter.MeterIDs = meterIDs
+	featureFilter.Expand = lo.ToPtr(string(types.ExpandMeters)) // Expand meters in single call
+
+	featuresResponse, err := featureService.GetFeatures(ctx, featureFilter)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to fetch features with meters for MAX bucket identification").
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Identify MAX with bucket features directly
+	maxBucketFeatures := make(map[string]*events.MaxBucketFeatureInfo)
+	for _, featureResponse := range featuresResponse.Items {
+		feature := featureResponse.Feature
+		// Check if feature has meter and meter is expanded
+		if feature.Type == types.FeatureTypeMetered && feature.MeterID != "" && featureResponse.Meter != nil {
+			meter := featureResponse.Meter.ToMeter()
+			// Check if this is a MAX aggregation with bucket size
+			if meter.Aggregation.Type == types.AggregationMax && meter.Aggregation.BucketSize != "" {
+				maxBucketFeatures[feature.ID] = &events.MaxBucketFeatureInfo{
+					FeatureID:    feature.ID,
+					MeterID:      meter.ID,
+					BucketSize:   meter.Aggregation.BucketSize,
+					EventName:    meter.EventName,
+					PropertyName: meter.Aggregation.Field,
+				}
+			}
+		}
+	}
+
+	return maxBucketFeatures, nil
+}
+
+// identifyMaxBucketFeaturesFromFeatureIDs identifies MAX bucket features from specific feature IDs
+func (s *featureUsageTrackingService) identifyMaxBucketFeaturesFromFeatureIDs(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, error) {
+	// Use service layer GetFeatures with meter expansion for efficiency
+	featureService := NewFeatureService(s.ServiceParams)
+	featureFilter := types.NewNoLimitFeatureFilter()
+	featureFilter.FeatureIDs = params.FeatureIDs
+	featureFilter.Expand = lo.ToPtr(string(types.ExpandMeters)) // Expand meters in single call
+
+	featuresResponse, err := featureService.GetFeatures(ctx, featureFilter)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to fetch features with meters for MAX bucket identification").
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Identify MAX with bucket features
+	maxBucketFeatures := make(map[string]*events.MaxBucketFeatureInfo)
+	for _, featureResponse := range featuresResponse.Items {
+		feature := featureResponse.Feature
+		// Check if feature has meter and meter is expanded
+		if feature.Type == types.FeatureTypeMetered && feature.MeterID != "" && featureResponse.Meter != nil {
+			meter := featureResponse.Meter.ToMeter()
+			// Check if this is a MAX aggregation with bucket size
+			if meter.Aggregation.Type == types.AggregationMax && meter.Aggregation.BucketSize != "" {
+				maxBucketFeatures[feature.ID] = &events.MaxBucketFeatureInfo{
+					FeatureID:    feature.ID,
+					MeterID:      meter.ID,
+					BucketSize:   meter.Aggregation.BucketSize,
+					EventName:    meter.EventName,
+					PropertyName: meter.Aggregation.Field,
+				}
+			}
+		}
+	}
+
+	return maxBucketFeatures, nil
 }
 
 // enrichAnalyticsWithFeatureAndMeterData fetches and adds feature and meter data to analytics results
