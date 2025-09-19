@@ -315,7 +315,6 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			tasks.GET("", handlers.Task.ListTasks)
 			tasks.GET("/:id", handlers.Task.GetTask)
 			tasks.PUT("/:id/status", handlers.Task.UpdateTaskStatus)
-			tasks.POST("/:id/process", handlers.Task.ProcessTask)
 		}
 
 		// Tax rate routes
@@ -454,7 +453,6 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 		subscriptionGroup := cron.Group("/subscriptions")
 		{
 			subscriptionGroup.POST("/update-periods", handlers.CronSubscription.UpdateBillingPeriods)
-			subscriptionGroup.POST("/generate-invoice", handlers.CronSubscription.GenerateInvoice)
 			subscriptionGroup.POST("/process-auto-cancellation", handlers.CronSubscription.ProcessAutoCancellationSubscriptions)
 			subscriptionGroup.POST("/renewal-due-alerts", handlers.CronSubscription.ProcessSubscriptionRenewalDueAlerts)
 		}
