@@ -39,7 +39,11 @@ func TaskProcessingWorkflow(ctx workflow.Context, input models.TaskProcessingWor
 
 	// Execute the main task processing activity
 	var result models.ProcessTaskActivityResult
-	activityInput := models.ProcessTaskActivityInput(input)
+	activityInput := models.ProcessTaskActivityInput{
+		TaskID:        input.TaskID,
+		TenantID:      input.TenantID,
+		EnvironmentID: input.EnvironmentID,
+	}
 	err := workflow.ExecuteActivity(ctx, ActivityProcessTask, activityInput).Get(ctx, &result)
 
 	if err != nil {
