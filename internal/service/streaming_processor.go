@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/gammazero/workerpool"
 	"github.com/hashicorp/go-retryablehttp"
 
 	"github.com/flexprice/flexprice/internal/domain/task"
@@ -30,7 +29,6 @@ type StreamingProcessor struct {
 	ProviderRegistry *FileProviderRegistry
 	CSVProcessor     *CSVProcessor
 	JSONProcessor    *JSONProcessor
-	WorkerPool       *workerpool.WorkerPool
 	RetryClient      *retryablehttp.Client
 }
 
@@ -43,14 +41,10 @@ func NewStreamingProcessor(client httpclient.Client, logger *logger.Logger) *Str
 	retryClient.RetryWaitMax = 30 * time.Second
 	retryClient.Logger = logger.GetRetryableHTTPLogger()
 
-	// Configure worker pool
-	workerPool := workerpool.New(10) // 10 concurrent workers
-
 	return &StreamingProcessor{
 		Client:           client,
 		Logger:           logger,
 		ProviderRegistry: NewFileProviderRegistry(),
-		WorkerPool:       workerPool,
 		RetryClient:      retryClient,
 	}
 }
@@ -500,7 +494,5 @@ func (sp *StreamingProcessor) updateTaskProgress(ctx context.Context, t *task.Ta
 
 // Close cleans up resources
 func (sp *StreamingProcessor) Close() {
-	if sp.WorkerPool != nil {
-		sp.WorkerPool.StopWait()
-	}
+	// No resources to clean up
 }
