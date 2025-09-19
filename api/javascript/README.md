@@ -20,7 +20,7 @@ Official TypeScript/JavaScript SDK for the FlexPrice API with modern ES7 module 
 ### Published Package
 
 ```bash
-npm install @flexprice/sdk@1.0.17 --save
+npm install @flexprice/sdk --save
 ```
 
 ### Unpublished (Development)
