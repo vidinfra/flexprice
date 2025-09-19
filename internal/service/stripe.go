@@ -276,6 +276,28 @@ func (s *StripeService) CreateCustomerInStripe(ctx context.Context, customerID s
 		return err
 	}
 
+	// Create entity mapping
+	entityMappingService := NewEntityIntegrationMappingService(s.ServiceParams)
+	_, err = entityMappingService.CreateEntityIntegrationMapping(ctx, dto.CreateEntityIntegrationMappingRequest{
+		EntityID:         ourCustomer.ID,
+		EntityType:       types.IntegrationEntityTypeCustomer,
+		ProviderType:     string(types.SecretProviderStripe),
+		ProviderEntityID: stripeCustomer.ID,
+		Metadata: map[string]interface{}{
+			"created_via":           "flexprice_to_provider",
+			"stripe_customer_email": ourCustomer.Email,
+			"stripe_customer_name":  ourCustomer.Name,
+			"synced_at":             time.Now().UTC().Format(time.RFC3339),
+		},
+	})
+	if err != nil {
+		s.Logger.Warnw("failed to create entity mapping for customer",
+			"error", err,
+			"customer_id", ourCustomer.ID,
+			"stripe_customer_id", stripeCustomer.ID)
+		// Don't fail the entire operation if entity mapping creation fails
+	}
+
 	return nil
 }
 
