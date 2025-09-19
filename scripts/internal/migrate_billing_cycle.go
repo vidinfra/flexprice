@@ -24,6 +24,7 @@ type MigrateBillingCycleParams struct {
 	DryRun        bool
 }
 
+// NOTE: It does not handle proration for subscriptions when changing the billing date.
 // MigrateBillingCycle migrates subscriptions from anniversary to calendar billing cycle
 func MigrateBillingCycle() error {
 	tenantID := os.Getenv("TENANT_ID")
