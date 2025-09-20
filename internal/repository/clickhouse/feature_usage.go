@@ -1001,6 +1001,8 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 				%s as bucket_start,
 				%s as window_start,
 				max(qty_total * sign) as bucket_max,
+				argMax(qty_total, timestamp) as bucket_latest,
+				count(DISTINCT unique_hash) as bucket_count_unique,
 				count(DISTINCT id) as event_count
 			FROM feature_usage
 			WHERE tenant_id = ?
@@ -1015,6 +1017,9 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 		SELECT
 			window_start as timestamp,
 			sum(bucket_max) as usage,
+			max(bucket_max) as max_usage,
+			argMax(bucket_latest, window_start) as latest_usage,
+			sum(bucket_count_unique) as count_unique_usage,
 			sum(event_count) as event_count
 		FROM bucket_maxes
 		GROUP BY window_start
@@ -1051,6 +1056,9 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 		err := rows.Scan(
 			&timestamp,
 			&point.Usage,
+			&point.MaxUsage,
+			&point.LatestUsage,
+			&point.CountUniqueUsage,
 			&point.EventCount,
 		)
 		if err != nil {
@@ -1060,6 +1068,7 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 		}
 
 		point.Timestamp = timestamp
+		point.Cost = decimal.Zero // Will be calculated in enrichment
 		points = append(points, point)
 	}
 

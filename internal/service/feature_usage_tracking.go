@@ -1247,7 +1247,6 @@ func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureMeterAndPriceDat
 				item.AggregationType = meter.Aggregation.Type
 
 				// Set the correct TotalUsage based on meter's aggregation type
-				item.TotalUsage = s.getCorrectUsageValue(item, meter.Aggregation.Type)
 
 				// Calculate cost using subscription-specific price
 				if price, hasPricing := meterToPriceMap[meter.ID]; hasPricing {
@@ -1272,6 +1271,8 @@ func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureMeterAndPriceDat
 						}
 					} else {
 						// For non-bucketed features, use regular CalculateCost
+						item.TotalUsage = s.getCorrectUsageValue(item, meter.Aggregation.Type)
+
 						cost := priceService.CalculateCost(ctx, price, item.TotalUsage)
 						item.TotalCost = cost
 						item.Currency = price.Currency
