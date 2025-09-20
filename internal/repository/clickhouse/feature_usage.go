@@ -666,7 +666,9 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 			filterParams = append(filterParams, params.FeatureIDs[i])
 		}
 		aggregateQuery += " AND feature_id IN (" + strings.Join(placeholders, ", ") + ")"
-	} else if len(maxBucketFeatures) > 0 {
+	}
+
+	if len(maxBucketFeatures) > 0 {
 		// If no specific feature IDs but we have MAX bucket features,
 		// exclude them from standard processing
 		maxBucketFeatureIDs := make([]string, 0, len(maxBucketFeatures))

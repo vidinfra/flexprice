@@ -1253,22 +1253,39 @@ func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureMeterAndPriceDat
 					// Check if this is a bucketed max meter
 					if meter.IsBucketedMaxMeter() {
 						// For bucketed features, extract values from points and use CalculateBucketedCost
-						bucketedValues := make([]decimal.Decimal, len(item.Points))
-						for i, point := range item.Points {
-							bucketedValues[i] = s.getCorrectUsageValueForPoint(point, meter.Aggregation.Type)
+						var cost decimal.Decimal
+
+						if len(item.Points) > 0 {
+							// When window size is provided, use points as buckets
+							bucketedValues := make([]decimal.Decimal, len(item.Points))
+							for i, point := range item.Points {
+								bucketedValues[i] = point.Usage
+							}
+
+							// Calculate total cost using bucketed values
+							cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+
+							// Calculate cost for each point individually (each point represents a bucket)
+							for i := range item.Points {
+								pointUsage := item.Points[i].Usage
+								pointCost := priceService.CalculateCost(ctx, price, pointUsage)
+								item.Points[i].Cost = pointCost
+							}
+						} else {
+							// When no window size is provided, treat TotalUsage as a single bucket
+							// This is a fallback for bucketedMax meters when no time windowing is requested
+							totalUsage := item.TotalUsage
+							if totalUsage.IsPositive() {
+								// Treat the total usage as a single bucket for cost calculation
+								bucketedValues := []decimal.Decimal{totalUsage}
+								cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+							} else {
+								cost = decimal.Zero
+							}
 						}
 
-						// Calculate total cost using bucketed values
-						cost := priceService.CalculateBucketedCost(ctx, price, bucketedValues)
 						item.TotalCost = cost
 						item.Currency = price.Currency
-
-						// Calculate cost for each point individually (each point represents a bucket)
-						for i := range item.Points {
-							pointUsage := s.getCorrectUsageValueForPoint(item.Points[i], meter.Aggregation.Type)
-							pointCost := priceService.CalculateCost(ctx, price, pointUsage)
-							item.Points[i].Cost = pointCost
-						}
 					} else {
 						// For non-bucketed features, use regular CalculateCost
 						item.TotalUsage = s.getCorrectUsageValue(item, meter.Aggregation.Type)
