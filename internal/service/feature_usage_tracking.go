@@ -1246,6 +1246,9 @@ func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureMeterAndPriceDat
 				item.EventName = meter.EventName
 				item.AggregationType = meter.Aggregation.Type
 
+				// Set the correct TotalUsage based on meter's aggregation type
+				item.TotalUsage = s.getCorrectUsageValue(item, meter.Aggregation.Type)
+
 				// Calculate cost using subscription-specific price
 				if price, hasPricing := meterToPriceMap[meter.ID]; hasPricing {
 					// Check if this is a bucketed max meter
@@ -1253,7 +1256,7 @@ func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureMeterAndPriceDat
 						// For bucketed features, extract values from points and use CalculateBucketedCost
 						bucketedValues := make([]decimal.Decimal, len(item.Points))
 						for i, point := range item.Points {
-							bucketedValues[i] = point.Usage
+							bucketedValues[i] = s.getCorrectUsageValueForPoint(point, meter.Aggregation.Type)
 						}
 
 						// Calculate total cost using bucketed values
@@ -1263,7 +1266,8 @@ func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureMeterAndPriceDat
 
 						// Calculate cost for each point individually (each point represents a bucket)
 						for i := range item.Points {
-							pointCost := priceService.CalculateCost(ctx, price, item.Points[i].Usage)
+							pointUsage := s.getCorrectUsageValueForPoint(item.Points[i], meter.Aggregation.Type)
+							pointCost := priceService.CalculateCost(ctx, price, pointUsage)
 							item.Points[i].Cost = pointCost
 						}
 					} else {
@@ -1274,7 +1278,8 @@ func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureMeterAndPriceDat
 
 						// Also calculate cost for each point in the time series if points exist
 						for i := range item.Points {
-							pointCost := priceService.CalculateCost(ctx, price, item.Points[i].Usage)
+							pointUsage := s.getCorrectUsageValueForPoint(item.Points[i], meter.Aggregation.Type)
+							pointCost := priceService.CalculateCost(ctx, price, pointUsage)
 							item.Points[i].Cost = pointCost
 						}
 					}
@@ -1284,6 +1289,40 @@ func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureMeterAndPriceDat
 	}
 
 	return nil
+}
+
+// getCorrectUsageValue returns the correct usage value based on the meter's aggregation type
+func (s *featureUsageTrackingService) getCorrectUsageValue(item *events.DetailedUsageAnalytic, aggregationType types.AggregationType) decimal.Decimal {
+	switch aggregationType {
+	case types.AggregationCountUnique:
+		return decimal.NewFromInt(int64(item.CountUniqueUsage))
+	case types.AggregationMax:
+		return item.MaxUsage
+	case types.AggregationLatest:
+		return item.LatestUsage
+	case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationAvg:
+		return item.TotalUsage
+	default:
+		// Default to SUM for unknown types
+		return item.TotalUsage
+	}
+}
+
+// getCorrectUsageValueForPoint returns the correct usage value for a time series point based on aggregation type
+func (s *featureUsageTrackingService) getCorrectUsageValueForPoint(point events.UsageAnalyticPoint, aggregationType types.AggregationType) decimal.Decimal {
+	switch aggregationType {
+	case types.AggregationCountUnique:
+		return decimal.NewFromInt(int64(point.CountUniqueUsage))
+	case types.AggregationMax:
+		return point.MaxUsage
+	case types.AggregationLatest:
+		return point.LatestUsage
+	case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationAvg:
+		return point.Usage
+	default:
+		// Default to SUM for unknown types
+		return point.Usage
+	}
 }
 
 // ReprocessEvents triggers reprocessing of events for a customer or with other filters
@@ -1457,7 +1496,7 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			Unit:            analytic.Unit,
 			UnitPlural:      analytic.UnitPlural,
 			AggregationType: analytic.AggregationType,
-			TotalUsage:      analytic.TotalUsage,
+			TotalUsage:      analytic.TotalUsage, // This is now set correctly in enrichment
 			TotalCost:       analytic.TotalCost,
 			Currency:        analytic.Currency,
 			EventCount:      analytic.EventCount,
@@ -1467,9 +1506,11 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 
 		// Map time-series points if available
 		for _, point := range analytic.Points {
+			// Use the correct usage value based on aggregation type
+			correctUsage := s.getCorrectUsageValueForPoint(point, analytic.AggregationType)
 			item.Points = append(item.Points, dto.UsageAnalyticPoint{
 				Timestamp:  point.Timestamp,
-				Usage:      point.Usage,
+				Usage:      correctUsage,
 				Cost:       point.Cost,
 				EventCount: point.EventCount,
 			})
