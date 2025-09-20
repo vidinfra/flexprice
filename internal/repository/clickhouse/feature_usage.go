@@ -632,13 +632,16 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 		}
 	}
 
-	// Base query for aggregates - always include event count
+	// Base query for aggregates - fetch all aggregation types for each feature
 	selectColumns := []string{}
 	if len(groupByColumnAliases) > 0 {
 		selectColumns = append(selectColumns, strings.Join(groupByColumnAliases, ", ")) // group by columns with aliases
 	}
 	selectColumns = append(selectColumns,
 		"SUM(qty_total * sign) AS total_usage",
+		"MAX(qty_total * sign) AS max_usage",
+		"argMax(qty_total, timestamp) AS latest_usage",
+		"COUNT(DISTINCT unique_hash) AS count_unique_usage",
 		"COUNT(DISTINCT id) AS event_count", // Count distinct event IDs, not rows
 	)
 
@@ -751,7 +754,7 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 		analytics.Properties = make(map[string]string)
 
 		// Scan the row based on group by columns
-		expectedColumns := len(params.GroupBy) + 2 // +2 for total_usage, event_count
+		expectedColumns := len(params.GroupBy) + 5 // +5 for sum_usage, max_usage, latest_usage, count_unique_usage, event_count
 		scanArgs := make([]interface{}, expectedColumns)
 
 		// Prepare scan targets for each group by field
@@ -762,7 +765,10 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 
 		// Scan the aggregate values
 		scanArgs[len(params.GroupBy)] = &analytics.TotalUsage
-		scanArgs[len(params.GroupBy)+1] = &analytics.EventCount
+		scanArgs[len(params.GroupBy)+1] = &analytics.MaxUsage
+		scanArgs[len(params.GroupBy)+2] = &analytics.LatestUsage
+		scanArgs[len(params.GroupBy)+3] = &analytics.CountUniqueUsage
+		scanArgs[len(params.GroupBy)+4] = &analytics.EventCount
 
 		if err := rows.Scan(scanArgs...); err != nil {
 			return nil, ierr.WithError(err).
@@ -995,6 +1001,8 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 				%s as bucket_start,
 				%s as window_start,
 				max(qty_total * sign) as bucket_max,
+				argMax(qty_total, timestamp) as bucket_latest,
+				count(DISTINCT unique_hash) as bucket_count_unique,
 				count(DISTINCT id) as event_count
 			FROM feature_usage
 			WHERE tenant_id = ?
@@ -1009,6 +1017,9 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 		SELECT
 			window_start as timestamp,
 			sum(bucket_max) as usage,
+			max(bucket_max) as max_usage,
+			argMax(bucket_latest, window_start) as latest_usage,
+			sum(bucket_count_unique) as count_unique_usage,
 			sum(event_count) as event_count
 		FROM bucket_maxes
 		GROUP BY window_start
@@ -1045,6 +1056,9 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 		err := rows.Scan(
 			&timestamp,
 			&point.Usage,
+			&point.MaxUsage,
+			&point.LatestUsage,
+			&point.CountUniqueUsage,
 			&point.EventCount,
 		)
 		if err != nil {
@@ -1054,6 +1068,7 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 		}
 
 		point.Timestamp = timestamp
+		point.Cost = decimal.Zero // Will be calculated in enrichment
 		points = append(points, point)
 	}
 
@@ -1147,10 +1162,13 @@ func (r *FeatureUsageRepository) getAnalyticsPoints(
 		timeWindowExpr = "toStartOfHour(timestamp)"
 	}
 
-	// Build the select columns for time-series query - always include event count
+	// Build the select columns for time-series query - fetch all aggregation types
 	selectColumns := []string{
 		fmt.Sprintf("%s AS window_time", timeWindowExpr),
-		"SUM(qty_total * sign) AS usage",
+		"SUM(qty_total * sign) AS total_usage",
+		"MAX(qty_total * sign) AS max_usage",
+		"argMax(qty_total, timestamp) AS latest_usage",
+		"COUNT(DISTINCT unique_hash) AS count_unique_usage",
 		"COUNT(DISTINCT id) AS event_count", // Count distinct event IDs, not rows
 	}
 
@@ -1254,7 +1272,14 @@ func (r *FeatureUsageRepository) getAnalyticsPoints(
 	for rows.Next() {
 		var point events.UsageAnalyticPoint
 
-		if err := rows.Scan(&point.Timestamp, &point.Usage, &point.EventCount); err != nil {
+		if err := rows.Scan(
+			&point.Timestamp,
+			&point.Usage,
+			&point.MaxUsage,
+			&point.LatestUsage,
+			&point.CountUniqueUsage,
+			&point.EventCount,
+		); err != nil {
 			return nil, ierr.WithError(err).
 				WithHint("Failed to scan time-series point").
 				Mark(ierr.ErrDatabase)
@@ -1262,6 +1287,7 @@ func (r *FeatureUsageRepository) getAnalyticsPoints(
 
 		// Set Cost to zero since it's not calculated in this query
 		point.Cost = decimal.Zero
+		// Usage is already set from the query (SUM(qty_total * sign))
 
 		points = append(points, point)
 	}
