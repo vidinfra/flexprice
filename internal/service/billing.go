@@ -1529,11 +1529,13 @@ func (s *billingService) GetCustomerEntitlements(ctx context.Context, customerID
 func (s *billingService) GetCustomerUsageSummary(ctx context.Context, customerID string, req *dto.GetCustomerUsageSummaryRequest) (*dto.CustomerUsageSummaryResponse, error) {
 	subscriptionService := NewSubscriptionService(s.ServiceParams)
 	eventService := NewEventService(s.EventRepo, s.MeterRepo, s.EventPublisher, s.Logger, s.Config)
+
 	// get customer
 	customer, err := s.CustomerRepo.Get(ctx, customerID)
 	if err != nil {
 		return nil, err
 	}
+
 	// 1. Get customer entitlements first
 	entitlementsReq := &dto.GetCustomerEntitlementsRequest{
 		SubscriptionIDs: req.SubscriptionIDs,
@@ -1545,61 +1547,78 @@ func (s *billingService) GetCustomerUsageSummary(ctx context.Context, customerID
 		return nil, err
 	}
 
-	subscriptionIDs := make([]string, 0)
-	for _, entitlement := range entitlements.Features {
-		for _, source := range entitlement.Sources {
-			subscriptionIDs = append(subscriptionIDs, source.SubscriptionID)
-		}
-	}
-	subscriptionIDs = lo.Uniq(subscriptionIDs)
-
-	// 2. Initialize response with customer ID
-	resp := &dto.CustomerUsageSummaryResponse{
-		CustomerID: customerID,
-		Features:   make([]*dto.FeatureUsageSummary, 0),
-	}
-
 	// If no features found, return empty response
 	if len(entitlements.Features) == 0 {
-		return resp, nil
+		return &dto.CustomerUsageSummaryResponse{
+			CustomerID: customerID,
+			Features:   make([]*dto.FeatureUsageSummary, 0),
+		}, nil
 	}
 
-	// 3. Create a map to track usage by feature ID
+	// 2. Build subscription and feature maps for efficient lookup
+	subscriptionMap := make(map[string]*subscription.Subscription)
+	featureSubscriptionMap := make(map[string]*subscription.Subscription) // feature ID -> subscription
 	usageByFeature := make(map[string]decimal.Decimal)
 	meterFeatureMap := make(map[string]string)
-	featureMeterMap := make(map[string]string)
+	featureMeterMap := make(map[string]string) // feature ID -> meter ID
 	featureUsageResetPeriodMap := make(map[string]types.EntitlementUsageResetPeriod)
-	featureNextUsageResetAtMap := make(map[string]*time.Time)
 
+	// Collect unique subscription IDs and build feature maps
+	subscriptionIDs := make([]string, 0)
 	for _, feature := range entitlements.Features {
 		usageByFeature[feature.Feature.ID] = decimal.Zero
 		meterFeatureMap[feature.Feature.MeterID] = feature.Feature.ID
 		featureMeterMap[feature.Feature.ID] = feature.Feature.MeterID
 		featureUsageResetPeriodMap[feature.Feature.ID] = feature.Entitlement.UsageResetPeriod
-		featureNextUsageResetAtMap[feature.Feature.ID] = nil
+
+		// Map feature to its subscription (use first source)
+		if len(feature.Sources) > 0 {
+			subscriptionID := feature.Sources[0].SubscriptionID
+			subscriptionIDs = append(subscriptionIDs, subscriptionID)
+		}
+	}
+	subscriptionIDs = lo.Uniq(subscriptionIDs)
+
+	// Load all subscriptions once
+	for _, subscriptionID := range subscriptionIDs {
+		sub, err := s.SubRepo.Get(ctx, subscriptionID)
+		if err != nil {
+			s.Logger.Warnw("failed to get subscription", "subscription_id", subscriptionID, "error", err)
+			continue
+		}
+		subscriptionMap[subscriptionID] = sub
 	}
 
-	// 4. Get usage for each subscription
+	// Map features to their subscriptions
+	for _, feature := range entitlements.Features {
+		if len(feature.Sources) > 0 {
+			subscriptionID := feature.Sources[0].SubscriptionID
+			if sub, exists := subscriptionMap[subscriptionID]; exists {
+				featureSubscriptionMap[feature.Feature.ID] = sub
+			}
+		}
+	}
+
+	// 3. Process usage data for each subscription
 	for _, subscriptionID := range subscriptionIDs {
+		sub := subscriptionMap[subscriptionID]
+		if sub == nil {
+			continue
+		}
+
 		usageReq := &dto.GetUsageBySubscriptionRequest{
 			SubscriptionID: subscriptionID,
 		}
 
 		usage, err := subscriptionService.GetUsageBySubscription(ctx, usageReq)
 		if err != nil {
-			return nil, err
+			s.Logger.Warnw("failed to get usage for subscription", "subscription_id", subscriptionID, "error", err)
+			continue
 		}
 
-		sub, err := s.SubRepo.Get(ctx, subscriptionID)
-		if err != nil {
-			return nil, err
-		}
-
-		// Add usage if found for this feature
+		// Process usage data for features that have charges
 		for _, charge := range usage.Charges {
 			if featureID, ok := meterFeatureMap[charge.MeterID]; ok {
-				// currentUsage := usageByFeature[featureID]
-				// usageByFeature[featureID] = currentUsage.Add(decimal.NewFromFloat(charge.Quantity))
 				resetPeriod := featureUsageResetPeriodMap[featureID]
 				if resetPeriod.String() == sub.BillingPeriod.String() {
 					currentUsage := usageByFeature[featureID]
@@ -1747,22 +1766,29 @@ func (s *billingService) GetCustomerUsageSummary(ctx context.Context, customerID
 						"current_period_end", sub.CurrentPeriodEnd,
 						"total_cumulative_usage", totalUsageResult.Value)
 				}
-
-				// calculate next usage reset at
-				nextUsageResetAt, err := types.GetNextUsageResetAt(time.Now().UTC(), sub.StartDate, sub.EndDate, sub.BillingAnchor, resetPeriod)
-				if err != nil {
-					s.Logger.Warnw("failed to get next usage reset at for feature",
-						featureID,
-						"error", err)
-					continue
-				}
-				featureNextUsageResetAtMap[featureID] = &nextUsageResetAt
 			}
 		}
 	}
 
-	// define priority for feature types
+	// 4. Calculate next usage reset at for ALL features uniformly
+	featureNextUsageResetAtMap := make(map[string]*time.Time)
+	for _, feature := range entitlements.Features {
+		featureID := feature.Feature.ID
+		if sub, exists := featureSubscriptionMap[featureID]; exists {
+			resetPeriod := featureUsageResetPeriodMap[featureID]
+			nextUsageResetAt, err := types.GetNextUsageResetAt(time.Now().UTC(), sub.StartDate, sub.EndDate, sub.BillingAnchor, resetPeriod)
+			if err != nil {
+				s.Logger.Warnw("failed to get next usage reset at for feature",
+					"feature_id", featureID,
+					"subscription_id", sub.ID,
+					"error", err)
+				continue
+			}
+			featureNextUsageResetAtMap[featureID] = &nextUsageResetAt
+		}
+	}
 
+	// 5. Sort features by type and name
 	features := entitlements.Features
 	featureOrder := map[types.FeatureType]int{
 		types.FeatureTypeMetered: 1,
@@ -1779,8 +1805,13 @@ func (s *billingService) GetCustomerUsageSummary(ctx context.Context, customerID
 		return features[i].Feature.Name < features[j].Feature.Name
 	})
 
-	// 5. Build final response combining entitlements and usage
-	for _, feature := range entitlements.Features {
+	// 6. Build final response combining entitlements and usage
+	resp := &dto.CustomerUsageSummaryResponse{
+		CustomerID: customerID,
+		Features:   make([]*dto.FeatureUsageSummary, 0, len(features)),
+	}
+
+	for _, feature := range features {
 		featureID := feature.Feature.ID
 		usage := usageByFeature[featureID]
 		nextUsageResetAt := featureNextUsageResetAtMap[featureID]
