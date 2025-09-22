@@ -84,32 +84,86 @@ func (s *alertLogsService) LogAlert(ctx context.Context, req *LogAlertRequest) e
 			Mark(ierr.ErrDatabase)
 	}
 
-	// Determine if we should create a new log entry based on the business logic:
-	// - Always create if no existing alert for this entity_id x alert_type combination
-	// - Create if status has changed from previous alert for this specific alert type
-	// - Skip if status is the same as the most recent alert for this alert type
-	shouldCreateLog := true
+	// Business logic based on your specifications:
+	shouldCreateLog := false
 	var webhookEventName string
 
-	if existingAlert != nil {
-		if existingAlert.AlertStatus == req.AlertStatus {
-			// Status is the same for this specific alert type, skip logging
-			s.Logger.Debugw("skipping alert log - status unchanged for alert type",
+	if req.AlertStatus == types.AlertStateInAlarm {
+		// For ALERT TRIGGERED condition:
+		// Publish if threshold breached AND:
+		// 1. No latest alert exists for entity.id x alert_type
+		// 2. Latest alert exists but status is "ok"
+		if existingAlert == nil {
+			// Case 1: No previous alert exists
+			shouldCreateLog = true
+			webhookEventName = s.getWebhookEventName(req.AlertType, req.AlertStatus)
+			s.Logger.Infow("creating new alert - no previous alert exists",
 				"entity_type", req.EntityType,
 				"entity_id", req.EntityID,
 				"alert_type", req.AlertType,
 				"alert_status", req.AlertStatus,
 			)
-			shouldCreateLog = false
+		} else if existingAlert.AlertStatus == types.AlertStateOk {
+			// Case 2: Previous alert exists but is in "ok" state
+			shouldCreateLog = true
+			webhookEventName = s.getWebhookEventName(req.AlertType, req.AlertStatus)
+			s.Logger.Infow("creating alert - transitioning from ok to in_alarm",
+				"entity_type", req.EntityType,
+				"entity_id", req.EntityID,
+				"alert_type", req.AlertType,
+				"previous_status", existingAlert.AlertStatus,
+				"new_status", req.AlertStatus,
+			)
+		} else {
+			// Latest alert exists and is already "in_alarm" - don't log/publish
+			s.Logger.Debugw("skipping alert - already in alarm state",
+				"entity_type", req.EntityType,
+				"entity_id", req.EntityID,
+				"alert_type", req.AlertType,
+				"current_status", existingAlert.AlertStatus,
+			)
+		}
+	} else if req.AlertStatus == types.AlertStateOk {
+		// For ALERT RECOVERED condition:
+		// Publish if threshold not breached AND:
+		// 1. Latest alert exists for entity.id x alert_type AND status is "in_alarm"
+		if existingAlert != nil && existingAlert.AlertStatus == types.AlertStateInAlarm {
+			// Only case: Previous alert exists and is in "in_alarm" state
+			shouldCreateLog = true
+			webhookEventName = s.getWebhookEventName(req.AlertType, req.AlertStatus)
+			s.Logger.Infow("creating recovery alert - transitioning from in_alarm to ok",
+				"entity_type", req.EntityType,
+				"entity_id", req.EntityID,
+				"alert_type", req.AlertType,
+				"previous_status", existingAlert.AlertStatus,
+				"new_status", req.AlertStatus,
+			)
+		} else {
+			// No previous alert OR previous alert is already "ok" - don't log/publish
+			var reason string
+			if existingAlert == nil {
+				reason = "no previous alert exists"
+			} else {
+				reason = "previous alert already in ok state"
+			}
+			s.Logger.Debugw("skipping recovery alert",
+				"entity_type", req.EntityType,
+				"entity_id", req.EntityID,
+				"alert_type", req.AlertType,
+				"reason", reason,
+				"existing_status", func() string {
+					if existingAlert != nil {
+						return string(existingAlert.AlertStatus)
+					}
+					return "none"
+				}(),
+			)
 		}
 	}
 
 	if !shouldCreateLog {
 		return nil
 	}
-
-	// Determine webhook event name based on alert type and status
-	webhookEventName = s.getWebhookEventName(req.AlertType, req.AlertStatus)
 
 	// Create new alert log entry
 	alertLog := &alertlogs.AlertLog{
