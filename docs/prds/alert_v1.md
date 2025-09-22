@@ -42,4 +42,20 @@ with it own means when it is detected that there is no breach
                 fire the relevant recovery webhook which is basically notification channel
         else 
             create a new entry in alert logs table with alert status ok
-            fire the relevant recovery webhook which is basically notification chan
+            fire the relevant recovery webhook which is basically notification channel
+
+When to log & publish alert:
+for publishing alert triggered cond.
+ if threshold breached &&
+1. if latest alert for the entity.id x alert_type not exists 
+2. if latest alert for the entity.id x alert_type exists && alert state is ok
+
+Note: if latest alert for the entity.id x alert_type exists && alert state is in_alarm then:
+no logging -> dont publish shit 
+
+for publishing alert recovered cond.
+if threshold not breached &&
+1. if latest alert for the entity.id x alert_type exists && alert state is in_alarm
+
+Note if if latest alert for the entity.id x alert_type not exists or latest alert for the entity.id x alert_type exists && alert state is ok then:
+no logging -> dont publish shit 
