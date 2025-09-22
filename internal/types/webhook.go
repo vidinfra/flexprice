@@ -83,6 +83,10 @@ const (
 	WebhookEventWalletCreditBalanceDropped  = "wallet.credit_balance.dropped"
 	WebhookEventWalletOngoingBalanceDropped = "wallet.ongoing_balance.dropped"
 
+	// generic alert event names
+	WebhookEventAlertTriggered = "alert.triggered"
+	WebhookEventAlertRecovered = "alert.recovered"
+
 	// cron driven webhook event names
 	WebhookEventSubscriptionRenewalDue = "subscription.renewal.due"
 )
