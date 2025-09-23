@@ -1559,7 +1559,7 @@ func (s *featureUsageTrackingService) getTotalUsageForWeightedSumAggregation(
 	periodID uint64,
 ) (decimal.Decimal, error) {
 	// Convert periodID (epoch milliseconds) back to time for the period start
-	periodStart := time.Unix(int64(periodID/1000), int64((periodID%1000)*1000000))
+	periodStart := time.UnixMilli(int64(periodID))
 
 	// Calculate the period end using the subscription's billing configuration
 	periodEnd, err := types.NextBillingDate(periodStart, subscription.BillingAnchor, subscription.BillingPeriodCount, subscription.BillingPeriod, nil)
