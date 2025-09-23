@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
@@ -1654,12 +1653,8 @@ func (s *invoiceService) getBillerInfo(t *tenant.Tenant) *pdf.BillerInfo {
 	}
 
 	billerInfo := pdf.BillerInfo{
-		Name: t.Name,
-		Address: pdf.AddressInfo{
-			Street:     "--",
-			City:       "--",
-			PostalCode: "--",
-		},
+		Name:    t.Name,
+		Address: pdf.AddressInfo{},
 	}
 
 	if t.BillingDetails != (tenant.TenantBillingDetails{}) {
@@ -1668,8 +1663,9 @@ func (s *invoiceService) getBillerInfo(t *tenant.Tenant) *pdf.BillerInfo {
 		// billerInfo.Website = billingDetails.Website //TODO: Add this
 		billerInfo.HelpEmail = billingDetails.HelpEmail
 		// billerInfo.PaymentInstructions = billingDetails.PaymentInstructions //TODO: Add this
+
 		billerInfo.Address = pdf.AddressInfo{
-			Street:     strings.Join([]string{billingDetails.Address.Line1, billingDetails.Address.Line2}, "\n"),
+			Street:     billingDetails.Address.FormatAddressLines(),
 			City:       billingDetails.Address.City,
 			PostalCode: billingDetails.Address.PostalCode,
 			Country:    billingDetails.Address.Country,
