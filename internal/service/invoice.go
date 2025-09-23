@@ -1613,12 +1613,8 @@ func (s *invoiceService) getRecipientInfo(c *customer.Customer) *pdf.RecipientIn
 	}
 
 	result := &pdf.RecipientInfo{
-		Name: name,
-		Address: pdf.AddressInfo{
-			Street:     "--",
-			City:       "--",
-			PostalCode: "--",
-		},
+		Name:    name,
+		Address: pdf.AddressInfo{},
 	}
 
 	if c.Email != "" {
