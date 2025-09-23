@@ -568,7 +568,7 @@ func (s *featureUsageTrackingService) prepareProcessedEvents(ctx context.Context
 			}
 
 			// Extract quantity based on meter aggregation
-			quantity, _ := s.extractQuantityFromEvent(event, match.Meter, sub.Subscription)
+			quantity, _ := s.extractQuantityFromEvent(event, match.Meter, sub.Subscription, periodID)
 
 			// Validate the quantity is positive and within reasonable bounds
 			if quantity.IsNegative() {
@@ -688,6 +688,7 @@ func (s *featureUsageTrackingService) extractQuantityFromEvent(
 	event *events.Event,
 	meter *meter.Meter,
 	subscription *subscription.Subscription,
+	periodID uint64,
 ) (decimal.Decimal, string) {
 	switch meter.Aggregation.Type {
 	case types.AggregationCount:
@@ -805,7 +806,7 @@ func (s *featureUsageTrackingService) extractQuantityFromEvent(
 		}
 
 		// Apply multiplier
-		result, err := s.getTotalUsageForWeightedSumAggregation(subscription, event, decimalValue)
+		result, err := s.getTotalUsageForWeightedSumAggregation(subscription, event, decimalValue, periodID)
 		if err != nil {
 			return decimal.Zero, stringValue
 		}
@@ -1338,7 +1339,7 @@ func (s *featureUsageTrackingService) getCorrectUsageValueForPoint(point events.
 		return point.MaxUsage
 	case types.AggregationLatest:
 		return point.LatestUsage
-	case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationAvg:
+	case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationAvg, types.AggregationWeightedSum:
 		return point.Usage
 	default:
 		// Default to SUM for unknown types
@@ -1554,18 +1555,20 @@ func (s *featureUsageTrackingService) getTotalUsageForWeightedSumAggregation(
 	subscription *subscription.Subscription,
 	event *events.Event,
 	propertyValue decimal.Decimal,
+	periodID uint64,
 ) (decimal.Decimal, error) {
-	// Calculate the billing period duration in seconds
-	periodStart := subscription.CurrentPeriodStart
-	periodEnd := subscription.CurrentPeriodEnd
+	// Convert periodID (epoch milliseconds) back to time for the period start
+	periodStart := time.Unix(int64(periodID/1000), int64((periodID%1000)*1000000))
 
-	if periodStart.IsZero() || periodEnd.IsZero() {
-		return decimal.Zero, ierr.NewError("invalid subscription period").
-			WithHint("Subscription period start and end dates must be set").
+	// Calculate the period end using the subscription's billing configuration
+	periodEnd, err := types.NextBillingDate(periodStart, subscription.BillingAnchor, subscription.BillingPeriodCount, subscription.BillingPeriod, nil)
+	if err != nil {
+		return decimal.Zero, ierr.WithError(err).
+			WithHint("Failed to calculate period end for weighted sum aggregation").
 			WithReportableDetails(map[string]interface{}{
 				"subscription_id": subscription.ID,
+				"period_id":       periodID,
 				"period_start":    periodStart,
-				"period_end":      periodEnd,
 			}).
 			Mark(ierr.ErrValidation)
 	}
@@ -1577,6 +1580,9 @@ func (s *featureUsageTrackingService) getTotalUsageForWeightedSumAggregation(
 			WithHint("Billing period duration must be positive").
 			WithReportableDetails(map[string]interface{}{
 				"subscription_id": subscription.ID,
+				"period_id":       periodID,
+				"period_start":    periodStart,
+				"period_end":      periodEnd,
 				"total_seconds":   totalPeriodSeconds,
 			}).
 			Mark(ierr.ErrValidation)
@@ -1584,9 +1590,6 @@ func (s *featureUsageTrackingService) getTotalUsageForWeightedSumAggregation(
 
 	// Calculate remaining seconds from event timestamp to period end
 	remainingSeconds := periodEnd.Sub(event.Timestamp).Seconds()
-	if remainingSeconds < 0 {
-		return propertyValue, nil
-	}
 
 	// Apply weighted sum formula: (value / billing_period_seconds) * remaining_seconds
 	// This gives us the proportion of the value that should be counted for the remaining period
