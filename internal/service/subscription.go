@@ -4351,7 +4351,7 @@ func (s *subscriptionService) GetFeatureUsageBySubscription(ctx context.Context,
 		// Calculate quantity based on meter aggregation type
 		var quantity decimal.Decimal
 		switch meter.Aggregation.Type {
-		case types.AggregationSum, types.AggregationSumWithMultiplier:
+		case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationWeightedSum:
 			quantity = usageResult.SumTotal
 		case types.AggregationMax:
 			quantity = usageResult.MaxTotal
@@ -4363,11 +4363,6 @@ func (s *subscriptionService) GetFeatureUsageBySubscription(ctx context.Context,
 			quantity = usageResult.LatestQty
 		default:
 			quantity = usageResult.SumTotal // Default to sum
-		}
-
-		// Apply multiplier if needed
-		if meter.Aggregation.Type == types.AggregationSumWithMultiplier && meter.Aggregation.Multiplier != nil {
-			quantity = quantity.Mul(*meter.Aggregation.Multiplier)
 		}
 
 		// Calculate cost using the price service

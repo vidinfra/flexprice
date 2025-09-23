@@ -476,7 +476,16 @@ func (s *walletService) GetWalletBalance(ctx context.Context, walletID string) (
 
 		// Get usage data for current period
 		subscriptionService := NewSubscriptionService(s.ServiceParams)
-		usage, err := subscriptionService.GetUsageBySubscription(ctx, &dto.GetUsageBySubscriptionRequest{
+
+		// DevNote: This was the old way of getting usage which makes multiple calls to clickhouse using go-routines hence we are deprecating it
+		// usage, err := subscriptionService.GetUsageBySubscription(ctx, &dto.GetUsageBySubscriptionRequest{
+		// 	SubscriptionID: sub.ID,
+		// 	StartTime:      periodStart,
+		// 	EndTime:        periodEnd,
+		// })
+
+		// DevNote: This is the new way of getting usage which makes a single call to clickhouse using a single query
+		usage, err := subscriptionService.GetFeatureUsageBySubscription(ctx, &dto.GetUsageBySubscriptionRequest{
 			SubscriptionID: sub.ID,
 			StartTime:      periodStart,
 			EndTime:        periodEnd,
