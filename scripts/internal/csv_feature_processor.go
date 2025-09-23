@@ -74,10 +74,14 @@ type CSVFeatureProcessor struct {
 	entClient     *ent.Client
 	pgClient      postgres.IClient
 	serviceParams service.ServiceParams
-	tenantID      string
-	environmentID string
-	userID        string
-	summary       ProcessingSummary
+	// Service instances for reuse
+	meterService   service.MeterService
+	featureService service.FeatureService
+	priceService   service.PriceService
+	tenantID       string
+	environmentID  string
+	userID         string
+	summary        ProcessingSummary
 }
 
 // ProcessingSummary contains statistics about the processing
@@ -140,20 +144,28 @@ func newCSVFeatureProcessor(tenantID, environmentID, userID string) (*CSVFeature
 		WebhookPublisher:   &mockWebhookPublisher{},
 	}
 
+	// Create service instances once for reuse
+	meterService := service.NewMeterService(meterRepo)
+	featureService := service.NewFeatureService(serviceParams)
+	priceService := service.NewPriceService(serviceParams)
+
 	return &CSVFeatureProcessor{
-		cfg:           cfg,
-		log:           log,
-		featureRepo:   featureRepo,
-		meterRepo:     meterRepo,
-		priceRepo:     priceRepo,
-		planRepo:      planRepo,
-		entClient:     entClient,
-		pgClient:      pgClient,
-		serviceParams: serviceParams,
-		tenantID:      tenantID,
-		environmentID: environmentID,
-		userID:        userID,
-		summary:       ProcessingSummary{},
+		cfg:            cfg,
+		log:            log,
+		featureRepo:    featureRepo,
+		meterRepo:      meterRepo,
+		priceRepo:      priceRepo,
+		planRepo:       planRepo,
+		entClient:      entClient,
+		pgClient:       pgClient,
+		serviceParams:  serviceParams,
+		meterService:   meterService,
+		featureService: featureService,
+		priceService:   priceService,
+		tenantID:       tenantID,
+		environmentID:  environmentID,
+		userID:         userID,
+		summary:        ProcessingSummary{},
 	}, nil
 }
 
@@ -259,8 +271,7 @@ func (p *CSVFeatureProcessor) createMeter(ctx context.Context, record CSVFeature
 	}
 
 	// Create meter using service
-	meterService := service.NewMeterService(p.meterRepo)
-	return meterService.CreateMeter(ctx, meterReq)
+	return p.meterService.CreateMeter(ctx, meterReq)
 }
 
 // createFeature creates a feature for the given record
@@ -278,8 +289,7 @@ func (p *CSVFeatureProcessor) createFeature(ctx context.Context, record CSVFeatu
 	}
 
 	// Create feature using service
-	featureService := service.NewFeatureService(p.serviceParams)
-	return featureService.CreateFeature(ctx, featureReq)
+	return p.featureService.CreateFeature(ctx, featureReq)
 }
 
 // createPrice creates a price for the given record
@@ -310,8 +320,7 @@ func (p *CSVFeatureProcessor) createPrice(ctx context.Context, record CSVFeature
 	}
 
 	// Create price using service
-	priceService := service.NewPriceService(p.serviceParams)
-	_, err = priceService.CreatePrice(ctx, priceReq)
+	_, err = p.priceService.CreatePrice(ctx, priceReq)
 	return err
 }
 
