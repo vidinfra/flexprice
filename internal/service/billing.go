@@ -1770,13 +1770,14 @@ func (s *billingService) GetCustomerUsageSummary(ctx context.Context, customerID
 		}
 	}
 
+	currentTime := time.Now().UTC()
 	// 4. Calculate next usage reset at for ALL features uniformly
 	featureNextUsageResetAtMap := make(map[string]*time.Time)
 	for _, feature := range entitlements.Features {
 		featureID := feature.Feature.ID
 		if sub, exists := featureSubscriptionMap[featureID]; exists {
 			resetPeriod := featureUsageResetPeriodMap[featureID]
-			nextUsageResetAt, err := types.GetNextUsageResetAt(time.Now().UTC(), sub.StartDate, sub.EndDate, sub.BillingAnchor, resetPeriod)
+			nextUsageResetAt, err := types.GetNextUsageResetAt(currentTime, sub.StartDate, sub.EndDate, sub.BillingAnchor, resetPeriod)
 			if err != nil {
 				s.Logger.Warnw("failed to get next usage reset at for feature",
 					"feature_id", featureID,
