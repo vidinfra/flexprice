@@ -28,9 +28,9 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// FeatureUsageTrackingService handles post-processing operations for metered events
+// FeatureUsageTrackingService handles feature usage tracking operations for metered events
 type FeatureUsageTrackingService interface {
-	// Publish an event for post-processing
+	// Publish an event for feature usage tracking
 	PublishEvent(ctx context.Context, event *events.Event, isBackfill bool) error
 
 	// Register message handler with the router
@@ -51,7 +51,7 @@ type featureUsageTrackingService struct {
 	featureUsageRepo events.FeatureUsageRepository
 }
 
-// NewFeatureUsageTrackingService creates a new event post-processing service
+// NewFeatureUsageTrackingService creates a new feature usage tracking service
 func NewFeatureUsageTrackingService(
 	params ServiceParams,
 	eventRepo events.Repository,
@@ -88,7 +88,7 @@ func NewFeatureUsageTrackingService(
 	return ev
 }
 
-// PublishEvent publishes an event to the post-processing topic
+// PublishEvent publishes an event to the feature usage tracking topic
 func (s *featureUsageTrackingService) PublishEvent(ctx context.Context, event *events.Event, isBackfill bool) error {
 	// Create message payload
 	payload, err := json.Marshal(event)
@@ -116,38 +116,34 @@ func (s *featureUsageTrackingService) PublishEvent(ctx context.Context, event *e
 	msg.Metadata.Set("environment_id", event.EnvironmentID)
 	msg.Metadata.Set("partition_key", partitionKey)
 
-	// TODO: use partition key in the producer
-
-	pubSub := s.pubSub
-	topic := s.Config.FeatureUsageTracking.Topic
 	if isBackfill {
-		pubSub = s.backfillPubSub
-		topic = s.Config.FeatureUsageTracking.TopicBackfill
-	}
+		pubSub := s.backfillPubSub
+		topic := s.Config.FeatureUsageTracking.TopicBackfill
 
-	if pubSub == nil {
-		return ierr.NewError("pubsub not initialized").
-			WithHint("Please check the config").
-			Mark(ierr.ErrSystem)
-	}
+		if pubSub == nil {
+			return ierr.NewError("pubsub not initialized").
+				WithHint("Please check the config").
+				Mark(ierr.ErrSystem)
+		}
 
-	s.Logger.Debugw("publishing event for feature usage tracking",
-		"event_id", event.ID,
-		"event_name", event.EventName,
-		"partition_key", partitionKey,
-		"topic", topic,
-	)
+		s.Logger.Debugw("publishing event for feature usage tracking",
+			"event_id", event.ID,
+			"event_name", event.EventName,
+			"partition_key", partitionKey,
+			"topic", topic,
+		)
 
-	// Publish to post-processing topic using the backfill PubSub (Kafka)
-	if err := pubSub.Publish(ctx, topic, msg); err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to publish event for feature usage tracking").
-			Mark(ierr.ErrSystem)
+		// Publish to feature usage tracking topic using the backfill PubSub (Kafka)
+		if err := pubSub.Publish(ctx, topic, msg); err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to publish event for feature usage tracking").
+				Mark(ierr.ErrSystem)
+		}
 	}
 	return nil
 }
 
-// RegisterHandler registers a handler for the post-processing topic with rate limiting
+// RegisterHandler registers a handler for the feature usage tracking topic with rate limiting
 func (s *featureUsageTrackingService) RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration) {
 	// Add throttle middleware to this specific handler
 	throttle := middleware.NewThrottle(cfg.FeatureUsageTracking.RateLimit, time.Second)
@@ -161,7 +157,7 @@ func (s *featureUsageTrackingService) RegisterHandler(router *pubsubRouter.Route
 		throttle.Middleware,
 	)
 
-	s.Logger.Infow("registered event post-processing handler",
+	s.Logger.Infow("registered event feature usage tracking handler",
 		"topic", cfg.FeatureUsageTracking.Topic,
 		"rate_limit", cfg.FeatureUsageTracking.RateLimit,
 	)
@@ -181,14 +177,14 @@ func (s *featureUsageTrackingService) RegisterHandler(router *pubsubRouter.Route
 		backfillThrottle.Middleware,
 	)
 
-	s.Logger.Infow("registered event post-processing backfill handler",
+	s.Logger.Infow("registered event feature usage tracking backfill handler",
 		"topic", cfg.FeatureUsageTracking.TopicBackfill,
 		"rate_limit", cfg.FeatureUsageTracking.RateLimitBackfill,
 		"pubsub_type", "kafka",
 	)
 }
 
-// Process a single event message
+// Process a single event message for feature usage tracking
 func (s *featureUsageTrackingService) processMessage(msg *message.Message) error {
 	// Extract tenant ID from message metadata
 	partitionKey := msg.Metadata.Get("partition_key")
@@ -215,7 +211,7 @@ func (s *featureUsageTrackingService) processMessage(msg *message.Message) error
 	// Unmarshal the event
 	var event events.Event
 	if err := json.Unmarshal(msg.Payload, &event); err != nil {
-		s.Logger.Errorw("failed to unmarshal event for post-processing",
+		s.Logger.Errorw("failed to unmarshal event for feature usage tracking",
 			"error", err,
 			"message_uuid", msg.UUID,
 		)
@@ -234,7 +230,7 @@ func (s *featureUsageTrackingService) processMessage(msg *message.Message) error
 
 	// Process the event
 	if err := s.processEvent(ctx, &event); err != nil {
-		s.Logger.Errorw("failed to process event",
+		s.Logger.Errorw("failed to process event for feature usage tracking",
 			"error", err,
 			"event_id", event.ID,
 			"event_name", event.EventName,
@@ -242,7 +238,7 @@ func (s *featureUsageTrackingService) processMessage(msg *message.Message) error
 		return err // Return error for retry
 	}
 
-	s.Logger.Infow("event processed successfully",
+	s.Logger.Infow("event for feature usage tracking processed successfully",
 		"event_id", event.ID,
 		"event_name", event.EventName,
 	)
@@ -250,7 +246,7 @@ func (s *featureUsageTrackingService) processMessage(msg *message.Message) error
 	return nil
 }
 
-// Process a single event
+// Process a single event for feature usage tracking
 func (s *featureUsageTrackingService) processEvent(ctx context.Context, event *events.Event) error {
 	s.Logger.Debugw("processing event",
 		"event_id", event.ID,
@@ -620,7 +616,7 @@ func (s *featureUsageTrackingService) findMatchingPricesForEvent(
 
 		meter, ok := meterMap[price.MeterID]
 		if !ok || meter == nil {
-			s.Logger.Warnw("post-processing: meter not found for price",
+			s.Logger.Warnw("feature usage tracking: meter not found for price",
 				"event_id", event.ID,
 				"price_id", price.ID,
 				"meter_id", price.MeterID,
@@ -1352,7 +1348,7 @@ func (s *featureUsageTrackingService) getCorrectUsageValueForPoint(point events.
 
 // ReprocessEvents triggers reprocessing of events for a customer or with other filters
 func (s *featureUsageTrackingService) ReprocessEvents(ctx context.Context, params *events.ReprocessEventsParams) error {
-	s.Logger.Infow("starting event reprocessing",
+	s.Logger.Infow("starting event reprocessing for feature usage tracking",
 		"external_customer_id", params.ExternalCustomerID,
 		"event_name", params.EventName,
 		"start_time", params.StartTime,
@@ -1415,12 +1411,12 @@ func (s *featureUsageTrackingService) ReprocessEvents(ctx context.Context, param
 			break
 		}
 
-		// Publish each event to the post-processing topic
+		// Publish each event to the feature usage tracking topic
 		for _, event := range unprocessedEvents {
 			// hardcoded delay to avoid rate limiting
 			// TODO: remove this to make it configurable
 			if err := s.PublishEvent(ctx, event, true); err != nil {
-				s.Logger.Errorw("failed to publish event for reprocessing",
+				s.Logger.Errorw("failed to publish event for reprocessing for feature usage tracking",
 					"event_id", event.ID,
 					"error", err,
 				)
@@ -1434,7 +1430,7 @@ func (s *featureUsageTrackingService) ReprocessEvents(ctx context.Context, param
 			lastTimestamp = event.Timestamp
 		}
 
-		s.Logger.Infow("published events for reprocessing",
+		s.Logger.Infow("published events for reprocessing for feature usage tracking",
 			"batch", processedBatches,
 			"count", eventsCount,
 			"total_published", totalEventsPublished,
@@ -1449,7 +1445,7 @@ func (s *featureUsageTrackingService) ReprocessEvents(ctx context.Context, param
 		}
 	}
 
-	s.Logger.Infow("completed event reprocessing",
+	s.Logger.Infow("completed event reprocessing for feature usage tracking",
 		"external_customer_id", params.ExternalCustomerID,
 		"event_name", params.EventName,
 		"batches_processed", processedBatches,

@@ -163,7 +163,7 @@ func BulkReprocessEvents(params BulkReprocessEventsParams) error {
 
 				// Call the service method directly instead of creating new connections
 				if err := script.eventPostProcessingService.ReprocessEvents(ctx, reprocessParams); err != nil {
-					script.log.Errorw("Failed to reprocess events",
+					script.log.Errorw("Failed to reprocess events for event post processing",
 						"customerID", customer.ID,
 						"externalCustomerID", customer.ExternalID,
 						"subscriptionID", subscription.ID,
@@ -172,7 +172,7 @@ func BulkReprocessEvents(params BulkReprocessEventsParams) error {
 				}
 
 				if err := script.featureUsageTrackingService.ReprocessEvents(ctx, reprocessParams); err != nil {
-					script.log.Errorw("Failed to reprocess events",
+					script.log.Errorw("Failed to reprocess events for feature usage tracking",
 						"customerID", customer.ID,
 						"externalCustomerID", customer.ExternalID,
 						"subscriptionID", subscription.ID,
