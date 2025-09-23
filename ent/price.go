@@ -57,7 +57,7 @@ type Price struct {
 	// BillingPeriod holds the value of the "billing_period" field.
 	BillingPeriod string `json:"billing_period,omitempty"`
 	// BillingPeriodCount holds the value of the "billing_period_count" field.
-	BillingPeriodCount int `json:"billing_period_count,omitempty" default:"1"`
+	BillingPeriodCount int `json:"billing_period_count,omitempty"`
 	// BillingModel holds the value of the "billing_model" field.
 	BillingModel string `json:"billing_model,omitempty"`
 	// BillingCadence holds the value of the "billing_cadence" field.
