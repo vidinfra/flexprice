@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"time"
@@ -1589,7 +1590,7 @@ func (s *featureUsageTrackingService) getTotalUsageForWeightedSumAggregation(
 	}
 
 	// Calculate remaining seconds from event timestamp to period end
-	remainingSeconds := periodEnd.Sub(event.Timestamp).Seconds()
+	remainingSeconds := math.Max(0, periodEnd.Sub(event.Timestamp).Seconds())
 
 	// Apply weighted sum formula: (value / billing_period_seconds) * remaining_seconds
 	// This gives us the proportion of the value that should be counted for the remaining period
