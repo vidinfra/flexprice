@@ -103,6 +103,11 @@ var commands = []Command{
 		Description: "Migrate subscriptions from anniversary to calendar billing cycle",
 		Run:         internal.MigrateBillingCycle,
 	},
+	{
+		Name:        "process-csv-features",
+		Description: "Process CSV file to create features and prices for serverless plan",
+		Run:         internal.ProcessCSVFeatures,
+	},
 }
 
 // runBulkReprocessEventsCommand wraps the bulk reprocess events with command line parameters
@@ -155,6 +160,7 @@ func main() {
 		endTime            string
 		batchSize          string
 		dryRun             string
+		planName           string
 	)
 
 	flag.BoolVar(&listCommands, "list", false, "List all available commands")
@@ -176,6 +182,7 @@ func main() {
 	flag.StringVar(&endTime, "end-time", "", "End time for reprocessing (ISO-8601 format)")
 	flag.StringVar(&batchSize, "batch-size", "100", "Batch size for reprocessing")
 	flag.StringVar(&dryRun, "dry-run", "false", "Dry run mode (true/false)")
+	flag.StringVar(&planName, "plan-name", "", "Plan name for CSV feature processing")
 	flag.Parse()
 
 	if listCommands {
