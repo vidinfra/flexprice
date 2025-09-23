@@ -8,13 +8,13 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/flexprice/flexprice/ent"
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/cache"
 	"github.com/flexprice/flexprice/internal/clickhouse"
 	"github.com/flexprice/flexprice/internal/config"
+	"github.com/flexprice/flexprice/internal/domain/addon"
 	"github.com/flexprice/flexprice/internal/domain/feature"
 	"github.com/flexprice/flexprice/internal/domain/meter"
 	"github.com/flexprice/flexprice/internal/domain/plan"
@@ -29,12 +29,13 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-//  go run scripts/main.go -cmd process-csv-features \
+// go run scripts/main.go -cmd process-csv-features \
 //   -file-path "file_path" \
-//   -tenant-id "" \
-//   -environment-id "environment_id" \
-//   -user-id "user_id" \
-//   -plan-name "plan_name"
+//   -tenant-id "tenant_id" \
+//   -environment-id "env_id" \
+//   -user-id "dde9a118-f186-45a6-969b-a9dab4590a75" \
+//   -plan-id "plan_id" \
+//   -addon-id "addon_id"
 
 // mockWebhookPublisher is a no-op webhook publisher for scripts
 type mockWebhookPublisher struct{}
@@ -59,6 +60,7 @@ type CSVFeatureRecord struct {
 	FeatureName string
 	EventName   string
 	Aggregation string
+	PlanName    string // serverless or dedicated
 	Amount      string
 	Currency    string
 }
@@ -71,6 +73,7 @@ type CSVFeatureProcessor struct {
 	meterRepo     meter.Repository
 	priceRepo     price.Repository
 	planRepo      plan.Repository
+	addonRepo     addon.Repository
 	entClient     *ent.Client
 	pgClient      postgres.IClient
 	serviceParams service.ServiceParams
@@ -78,6 +81,7 @@ type CSVFeatureProcessor struct {
 	meterService   service.MeterService
 	featureService service.FeatureService
 	priceService   service.PriceService
+	addonService   service.AddonService
 	tenantID       string
 	environmentID  string
 	userID         string
@@ -127,6 +131,7 @@ func newCSVFeatureProcessor(tenantID, environmentID, userID string) (*CSVFeature
 	meterRepo := entRepo.NewMeterRepository(pgClient, log, cacheClient)
 	priceRepo := entRepo.NewPriceRepository(pgClient, log, cacheClient)
 	planRepo := entRepo.NewPlanRepository(pgClient, log, cacheClient)
+	addonRepo := entRepo.NewAddonRepository(pgClient, log, cacheClient)
 	eventRepo := chRepo.NewEventRepository(chStore, log)
 	processedEventRepo := chRepo.NewProcessedEventRepository(chStore, log)
 
@@ -139,6 +144,7 @@ func newCSVFeatureProcessor(tenantID, environmentID, userID string) (*CSVFeature
 		MeterRepo:          meterRepo,
 		PriceRepo:          priceRepo,
 		PlanRepo:           planRepo,
+		AddonRepo:          addonRepo,
 		EventRepo:          eventRepo,
 		ProcessedEventRepo: processedEventRepo,
 		WebhookPublisher:   &mockWebhookPublisher{},
@@ -148,6 +154,7 @@ func newCSVFeatureProcessor(tenantID, environmentID, userID string) (*CSVFeature
 	meterService := service.NewMeterService(meterRepo)
 	featureService := service.NewFeatureService(serviceParams)
 	priceService := service.NewPriceService(serviceParams)
+	addonService := service.NewAddonService(serviceParams)
 
 	return &CSVFeatureProcessor{
 		cfg:            cfg,
@@ -156,12 +163,14 @@ func newCSVFeatureProcessor(tenantID, environmentID, userID string) (*CSVFeature
 		meterRepo:      meterRepo,
 		priceRepo:      priceRepo,
 		planRepo:       planRepo,
+		addonRepo:      addonRepo,
 		entClient:      entClient,
 		pgClient:       pgClient,
 		serviceParams:  serviceParams,
 		meterService:   meterService,
 		featureService: featureService,
 		priceService:   priceService,
+		addonService:   addonService,
 		tenantID:       tenantID,
 		environmentID:  environmentID,
 		userID:         userID,
@@ -178,10 +187,24 @@ func (p *CSVFeatureProcessor) parseCSV(filePath string) ([]CSVFeatureRecord, err
 	defer file.Close()
 
 	csvReader := csv.NewReader(file)
-	// Read header
-	_, err = csvReader.Read()
+	// Read header to get column indices
+	header, err := csvReader.Read()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read CSV header: %w", err)
+	}
+
+	// Create column index map
+	columnIndex := make(map[string]int)
+	for i, col := range header {
+		columnIndex[strings.ToLower(strings.TrimSpace(col))] = i
+	}
+
+	// Validate required columns
+	requiredColumns := []string{"feature_name", "event_name", "aggregation", "plan_name", "amount", "currency"}
+	for _, col := range requiredColumns {
+		if _, exists := columnIndex[col]; !exists {
+			return nil, fmt.Errorf("required column '%s' not found in CSV header", col)
+		}
 	}
 
 	var records []CSVFeatureRecord
@@ -196,61 +219,24 @@ func (p *CSVFeatureProcessor) parseCSV(filePath string) ([]CSVFeatureRecord, err
 			continue
 		}
 
-		if len(record) < 6 {
+		if len(record) < len(requiredColumns) {
 			p.log.Warnw("Skipping record with insufficient columns", "record", record)
 			continue
 		}
 
 		records = append(records, CSVFeatureRecord{
-			FeatureName: strings.TrimSpace(record[0]),
-			EventName:   strings.TrimSpace(record[1]),
-			Aggregation: strings.TrimSpace(record[2]),
-			Amount:      strings.TrimSpace(record[4]), // Skip column 3 (serverless/private)
-			Currency:    strings.TrimSpace(record[5]),
+			FeatureName: strings.TrimSpace(record[columnIndex["feature_name"]]),
+			EventName:   strings.TrimSpace(record[columnIndex["event_name"]]),
+			Aggregation: strings.TrimSpace(record[columnIndex["aggregation"]]),
+			PlanName:    strings.TrimSpace(record[columnIndex["plan_name"]]),
+			Amount:      strings.TrimSpace(record[columnIndex["amount"]]),
+			Currency:    strings.TrimSpace(record[columnIndex["currency"]]),
 		})
 	}
 
 	p.summary.TotalRows = len(records)
 	p.log.Infow("Parsed CSV file", "total_rows", len(records))
 	return records, nil
-}
-
-// findOrCreatePlan finds an existing plan by lookup_key or creates a new one
-func (p *CSVFeatureProcessor) findOrCreatePlan(ctx context.Context, planName string) (*plan.Plan, error) {
-	// First try to find existing plan by lookup_key
-	existingPlan, err := p.planRepo.GetByLookupKey(ctx, planName)
-	if err == nil {
-		p.log.Infow("Found existing plan", "plan_id", existingPlan.ID, "plan_name", existingPlan.Name, "lookup_key", planName)
-		return existingPlan, nil
-	}
-
-	// If plan doesn't exist, create a new one
-	p.log.Infow("Plan not found, creating new plan", "lookup_key", planName)
-
-	// Create new plan
-	newPlan := &plan.Plan{
-		ID:            types.GenerateUUIDWithPrefix(types.UUID_PREFIX_PLAN),
-		Name:          planName,
-		LookupKey:     planName,
-		Description:   fmt.Sprintf("Plan for %s features", planName),
-		EnvironmentID: p.environmentID,
-		BaseModel: types.BaseModel{
-			TenantID:  p.tenantID,
-			Status:    types.StatusPublished,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-			CreatedBy: p.userID,
-			UpdatedBy: p.userID,
-		},
-	}
-
-	// Create the plan using repository
-	if err := p.planRepo.Create(ctx, newPlan); err != nil {
-		return nil, fmt.Errorf("failed to create new plan: %w", err)
-	}
-
-	p.log.Infow("Created new plan", "plan_id", newPlan.ID, "plan_name", newPlan.Name, "lookup_key", planName)
-	return newPlan, nil
 }
 
 // createMeter creates a meter for the given record
@@ -293,20 +279,30 @@ func (p *CSVFeatureProcessor) createFeature(ctx context.Context, record CSVFeatu
 }
 
 // createPrice creates a price for the given record
-func (p *CSVFeatureProcessor) createPrice(ctx context.Context, record CSVFeatureRecord, meterID, planID string) error {
+func (p *CSVFeatureProcessor) createPrice(ctx context.Context, record CSVFeatureRecord, meterID, entityID string) error {
 	// Parse amount
 	amount, err := decimal.NewFromString(record.Amount)
 	if err != nil {
 		return fmt.Errorf("invalid amount format: %w", err)
 	}
 
+	// Determine entity type and ID based on plan_name
+	var entityType types.PriceEntityType
+
+	if record.PlanName == "serverless" {
+		entityType = types.PRICE_ENTITY_TYPE_PLAN
+	} else if record.PlanName == "dedicated" || record.PlanName == "private" {
+		entityType = types.PRICE_ENTITY_TYPE_ADDON
+	} else {
+		return fmt.Errorf("unsupported plan name: %s (expected 'serverless', 'dedicated', or 'private')", record.PlanName)
+	}
+
 	// Create price request
 	priceReq := dto.CreatePriceRequest{
 		Amount:             amount.String(),
 		Currency:           record.Currency,
-		PlanID:             planID,
-		EntityType:         types.PRICE_ENTITY_TYPE_PLAN,
-		EntityID:           planID,
+		EntityType:         entityType,
+		EntityID:           entityID,
 		Type:               types.PRICE_TYPE_USAGE,
 		PriceUnitType:      types.PRICE_UNIT_TYPE_FIAT,
 		BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
@@ -400,7 +396,7 @@ func (p *CSVFeatureProcessor) parseAggregationType(agg string) (types.Aggregatio
 }
 
 // processRecord processes a single CSV record
-func (p *CSVFeatureProcessor) processRecord(ctx context.Context, record CSVFeatureRecord, planID string) error {
+func (p *CSVFeatureProcessor) processRecord(ctx context.Context, record CSVFeatureRecord, planID, addonID string) error {
 	// Create meter first
 	meter, err := p.createMeter(ctx, record)
 	if err != nil {
@@ -415,16 +411,28 @@ func (p *CSVFeatureProcessor) processRecord(ctx context.Context, record CSVFeatu
 	}
 	p.summary.FeaturesCreated++
 
+	// Determine entity ID based on plan_name
+	var entityID string
+	if record.PlanName == "serverless" {
+		entityID = planID
+	} else if record.PlanName == "dedicated" || record.PlanName == "private" {
+		entityID = addonID
+	} else {
+		return fmt.Errorf("unsupported plan name: %s", record.PlanName)
+	}
+
 	// Create price for the feature
-	if err := p.createPrice(ctx, record, meter.ID, planID); err != nil {
+	if err := p.createPrice(ctx, record, meter.ID, entityID); err != nil {
 		return fmt.Errorf("failed to create price: %w", err)
 	}
 	p.summary.PricesCreated++
 
 	p.log.Infow("Successfully processed record",
 		"feature_name", record.FeatureName,
+		"plan_name", record.PlanName,
 		"meter_id", meter.ID,
-		"feature_id", feature.ID)
+		"feature_id", feature.ID,
+		"entity_id", entityID)
 
 	return nil
 }
@@ -446,12 +454,13 @@ func (p *CSVFeatureProcessor) printSummary() {
 
 // ProcessCSVFeatures is the main function to process CSV data and create features and prices
 func ProcessCSVFeatures() error {
-	var filePath, tenantID, environmentID, userID, planName string
+	var filePath, tenantID, environmentID, userID, planID, addonID string
 	filePath = os.Getenv("FILE_PATH")
 	tenantID = os.Getenv("TENANT_ID")
 	environmentID = os.Getenv("ENVIRONMENT_ID")
 	userID = os.Getenv("USER_ID")
-	planName = os.Getenv("PLAN_NAME")
+	planID = os.Getenv("PLAN_ID")
+	addonID = os.Getenv("ADDON_ID")
 
 	if filePath == "" {
 		return fmt.Errorf("file path is required")
@@ -465,12 +474,16 @@ func ProcessCSVFeatures() error {
 		return fmt.Errorf("environment ID is required")
 	}
 
-	if planName == "" {
-		planName = "serverless" // Default to serverless if not specified
+	if planID == "" {
+		return fmt.Errorf("plan ID is required")
+	}
+
+	if addonID == "" {
+		return fmt.Errorf("addon ID is required")
 	}
 
 	if userID == "" {
-		userID = "8176a17c-1921-492c-b118-003fda5d1fc1"
+		userID = "user_id"
 	}
 
 	processor, err := newCSVFeatureProcessor(tenantID, environmentID, userID)
@@ -490,26 +503,20 @@ func ProcessCSVFeatures() error {
 		return fmt.Errorf("failed to parse CSV file: %w", err)
 	}
 
-	// Find or create the plan
-	targetPlan, err := processor.findOrCreatePlan(ctx, planName)
-	if err != nil {
-		return fmt.Errorf("failed to find or create plan '%s': %w", planName, err)
-	}
-
 	processor.log.Infow("Starting CSV feature processing",
 		"file", filePath,
 		"row_count", len(records),
 		"tenant_id", tenantID,
 		"environment_id", environmentID,
-		"plan_name", planName,
-		"plan_id", targetPlan.ID)
+		"plan_id", planID,
+		"addon_id", addonID)
 
 	// Process each record
 	successCount := 0
 	for i, record := range records {
-		processor.log.Infow("Processing record", "index", i+1, "feature_name", record.FeatureName)
+		processor.log.Infow("Processing record", "index", i+1, "feature_name", record.FeatureName, "plan_name", record.PlanName)
 
-		err := processor.processRecord(ctx, record, targetPlan.ID)
+		err := processor.processRecord(ctx, record, planID, addonID)
 		if err != nil {
 			processor.log.Errorw("Failed to process record", "index", i+1, "feature_name", record.FeatureName, "error", err)
 			processor.summary.Errors = append(processor.summary.Errors, fmt.Sprintf("Record %d (%s): %v", i+1, record.FeatureName, err))
