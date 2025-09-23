@@ -267,7 +267,9 @@ func (p *CSVFeatureProcessor) createMeter(ctx context.Context, record CSVFeature
 func (p *CSVFeatureProcessor) createFeature(ctx context.Context, record CSVFeatureRecord, meterID string) (*dto.FeatureResponse, error) {
 	// Create feature request
 	featureReq := dto.CreateFeatureRequest{
-		Name:         record.FeatureName,
+		Name:         strings.ReplaceAll(record.FeatureName, " ", "-"),
+		Description:  fmt.Sprintf("Feature for %s", record.FeatureName),
+		LookupKey:    "", // Keep lookup key empty to avoid duplicates
 		Type:         types.FeatureTypeMetered,
 		MeterID:      meterID,
 		UnitSingular: "unit",
