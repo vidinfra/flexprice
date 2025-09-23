@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"time"
@@ -28,22 +29,13 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// FeatureUsageTrackingService handles post-processing operations for metered events
+// FeatureUsageTrackingService handles feature usage tracking operations for metered events
 type FeatureUsageTrackingService interface {
-	// Publish an event for post-processing
+	// Publish an event for feature usage tracking
 	PublishEvent(ctx context.Context, event *events.Event, isBackfill bool) error
 
 	// Register message handler with the router
 	RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration)
-
-	// Get usage cost for a specific period
-	GetPeriodCost(ctx context.Context, tenantID, environmentID, customerID, subscriptionID string, periodID uint64) (decimal.Decimal, error)
-
-	// Get usage totals per feature for a period
-	GetPeriodFeatureTotals(ctx context.Context, tenantID, environmentID, customerID, subscriptionID string, periodID uint64) ([]*events.PeriodFeatureTotal, error)
-
-	// Get usage analytics for a customer
-	GetUsageAnalytics(ctx context.Context, tenantID, environmentID, customerID string, lookbackHours int) ([]*events.UsageAnalytic, error)
 
 	// Get detailed usage analytics with filtering, grouping, and time-series data
 	GetDetailedUsageAnalytics(ctx context.Context, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error)
@@ -60,7 +52,7 @@ type featureUsageTrackingService struct {
 	featureUsageRepo events.FeatureUsageRepository
 }
 
-// NewFeatureUsageTrackingService creates a new event post-processing service
+// NewFeatureUsageTrackingService creates a new feature usage tracking service
 func NewFeatureUsageTrackingService(
 	params ServiceParams,
 	eventRepo events.Repository,
@@ -97,13 +89,13 @@ func NewFeatureUsageTrackingService(
 	return ev
 }
 
-// PublishEvent publishes an event to the post-processing topic
+// PublishEvent publishes an event to the feature usage tracking topic
 func (s *featureUsageTrackingService) PublishEvent(ctx context.Context, event *events.Event, isBackfill bool) error {
 	// Create message payload
 	payload, err := json.Marshal(event)
 	if err != nil {
 		return ierr.WithError(err).
-			WithHint("Failed to marshal event for post-processing").
+			WithHint("Failed to marshal event for feature usage tracking").
 			Mark(ierr.ErrValidation)
 	}
 
@@ -125,38 +117,34 @@ func (s *featureUsageTrackingService) PublishEvent(ctx context.Context, event *e
 	msg.Metadata.Set("environment_id", event.EnvironmentID)
 	msg.Metadata.Set("partition_key", partitionKey)
 
-	// TODO: use partition key in the producer
-
-	pubSub := s.pubSub
-	topic := s.Config.FeatureUsageTracking.Topic
 	if isBackfill {
-		pubSub = s.backfillPubSub
-		topic = s.Config.EventPostProcessing.TopicBackfill
-	}
+		pubSub := s.backfillPubSub
+		topic := s.Config.FeatureUsageTracking.TopicBackfill
 
-	if pubSub == nil {
-		return ierr.NewError("pubsub not initialized").
-			WithHint("Please check the config").
-			Mark(ierr.ErrSystem)
-	}
+		if pubSub == nil {
+			return ierr.NewError("pubsub not initialized").
+				WithHint("Please check the config").
+				Mark(ierr.ErrSystem)
+		}
 
-	s.Logger.Debugw("publishing event for post-processing",
-		"event_id", event.ID,
-		"event_name", event.EventName,
-		"partition_key", partitionKey,
-		"topic", topic,
-	)
+		s.Logger.Debugw("publishing event for feature usage tracking",
+			"event_id", event.ID,
+			"event_name", event.EventName,
+			"partition_key", partitionKey,
+			"topic", topic,
+		)
 
-	// Publish to post-processing topic using the backfill PubSub (Kafka)
-	if err := pubSub.Publish(ctx, topic, msg); err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to publish event for post-processing").
-			Mark(ierr.ErrSystem)
+		// Publish to feature usage tracking topic using the backfill PubSub (Kafka)
+		if err := pubSub.Publish(ctx, topic, msg); err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to publish event for feature usage tracking").
+				Mark(ierr.ErrSystem)
+		}
 	}
 	return nil
 }
 
-// RegisterHandler registers a handler for the post-processing topic with rate limiting
+// RegisterHandler registers a handler for the feature usage tracking topic with rate limiting
 func (s *featureUsageTrackingService) RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration) {
 	// Add throttle middleware to this specific handler
 	throttle := middleware.NewThrottle(cfg.FeatureUsageTracking.RateLimit, time.Second)
@@ -170,34 +158,34 @@ func (s *featureUsageTrackingService) RegisterHandler(router *pubsubRouter.Route
 		throttle.Middleware,
 	)
 
-	s.Logger.Infow("registered event post-processing handler",
-		"topic", cfg.EventPostProcessing.Topic,
-		"rate_limit", cfg.EventPostProcessing.RateLimit,
+	s.Logger.Infow("registered event feature usage tracking handler",
+		"topic", cfg.FeatureUsageTracking.Topic,
+		"rate_limit", cfg.FeatureUsageTracking.RateLimit,
 	)
 
 	// Add backfill handler
-	if cfg.EventPostProcessing.TopicBackfill == "" {
+	if cfg.FeatureUsageTracking.TopicBackfill == "" {
 		s.Logger.Warnw("backfill topic not set, skipping backfill handler")
 		return
 	}
 
-	backfillThrottle := middleware.NewThrottle(cfg.EventPostProcessing.RateLimitBackfill, time.Second)
+	backfillThrottle := middleware.NewThrottle(cfg.FeatureUsageTracking.RateLimitBackfill, time.Second)
 	router.AddNoPublishHandler(
 		"feature_usage_tracking_backfill_handler",
-		cfg.EventPostProcessing.TopicBackfill,
+		cfg.FeatureUsageTracking.TopicBackfill,
 		s.backfillPubSub, // Use the dedicated Kafka backfill PubSub
 		s.processMessage,
 		backfillThrottle.Middleware,
 	)
 
-	s.Logger.Infow("registered event post-processing backfill handler",
-		"topic", cfg.EventPostProcessing.TopicBackfill,
-		"rate_limit", cfg.EventPostProcessing.RateLimitBackfill,
+	s.Logger.Infow("registered event feature usage tracking backfill handler",
+		"topic", cfg.FeatureUsageTracking.TopicBackfill,
+		"rate_limit", cfg.FeatureUsageTracking.RateLimitBackfill,
 		"pubsub_type", "kafka",
 	)
 }
 
-// Process a single event message
+// Process a single event message for feature usage tracking
 func (s *featureUsageTrackingService) processMessage(msg *message.Message) error {
 	// Extract tenant ID from message metadata
 	partitionKey := msg.Metadata.Get("partition_key")
@@ -224,7 +212,7 @@ func (s *featureUsageTrackingService) processMessage(msg *message.Message) error
 	// Unmarshal the event
 	var event events.Event
 	if err := json.Unmarshal(msg.Payload, &event); err != nil {
-		s.Logger.Errorw("failed to unmarshal event for post-processing",
+		s.Logger.Errorw("failed to unmarshal event for feature usage tracking",
 			"error", err,
 			"message_uuid", msg.UUID,
 		)
@@ -243,7 +231,7 @@ func (s *featureUsageTrackingService) processMessage(msg *message.Message) error
 
 	// Process the event
 	if err := s.processEvent(ctx, &event); err != nil {
-		s.Logger.Errorw("failed to process event",
+		s.Logger.Errorw("failed to process event for feature usage tracking",
 			"error", err,
 			"event_id", event.ID,
 			"event_name", event.EventName,
@@ -251,7 +239,7 @@ func (s *featureUsageTrackingService) processMessage(msg *message.Message) error
 		return err // Return error for retry
 	}
 
-	s.Logger.Infow("event processed successfully",
+	s.Logger.Infow("event for feature usage tracking processed successfully",
 		"event_id", event.ID,
 		"event_name", event.EventName,
 	)
@@ -259,7 +247,7 @@ func (s *featureUsageTrackingService) processMessage(msg *message.Message) error
 	return nil
 }
 
-// Process a single event
+// Process a single event for feature usage tracking
 func (s *featureUsageTrackingService) processEvent(ctx context.Context, event *events.Event) error {
 	s.Logger.Debugw("processing event",
 		"event_id", event.ID,
@@ -581,7 +569,7 @@ func (s *featureUsageTrackingService) prepareProcessedEvents(ctx context.Context
 			}
 
 			// Extract quantity based on meter aggregation
-			quantity, _ := s.extractQuantityFromEvent(event, match.Meter)
+			quantity, _ := s.extractQuantityFromEvent(event, match.Meter, sub.Subscription, periodID)
 
 			// Validate the quantity is positive and within reasonable bounds
 			if quantity.IsNegative() {
@@ -629,7 +617,7 @@ func (s *featureUsageTrackingService) findMatchingPricesForEvent(
 
 		meter, ok := meterMap[price.MeterID]
 		if !ok || meter == nil {
-			s.Logger.Warnw("post-processing: meter not found for price",
+			s.Logger.Warnw("feature usage tracking: meter not found for price",
 				"event_id", event.ID,
 				"price_id", price.ID,
 				"meter_id", price.MeterID,
@@ -700,6 +688,8 @@ func (s *featureUsageTrackingService) checkMeterFilters(event *events.Event, fil
 func (s *featureUsageTrackingService) extractQuantityFromEvent(
 	event *events.Event,
 	meter *meter.Meter,
+	subscription *subscription.Subscription,
+	periodID uint64,
 ) (decimal.Decimal, string) {
 	switch meter.Aggregation.Type {
 	case types.AggregationCount:
@@ -791,7 +781,37 @@ func (s *featureUsageTrackingService) extractQuantityFromEvent(
 		// and convert the value to string for tracking
 		stringValue := s.convertValueToString(val)
 		return decimal.NewFromInt(1), stringValue
+	case types.AggregationWeightedSum:
+		if meter.Aggregation.Field == "" {
+			s.Logger.Warnw("weighted_sum aggregation with empty field name",
+				"event_id", event.ID,
+				"meter_id", meter.ID,
+			)
+			return decimal.Zero, ""
+		}
 
+		val, ok := event.Properties[meter.Aggregation.Field]
+		if !ok {
+			s.Logger.Warnw("property not found for weighted_sum aggregation",
+				"event_id", event.ID,
+				"meter_id", meter.ID,
+				"field", meter.Aggregation.Field,
+			)
+			return decimal.Zero, ""
+		}
+
+		// Convert value to decimal and apply multiplier
+		decimalValue, stringValue := s.convertValueToDecimal(val, event, meter)
+		if decimalValue.IsZero() {
+			return decimal.Zero, stringValue
+		}
+
+		// Apply multiplier
+		result, err := s.getTotalUsageForWeightedSumAggregation(subscription, event, decimalValue, periodID)
+		if err != nil {
+			return decimal.Zero, stringValue
+		}
+		return result, stringValue
 	default:
 		s.Logger.Warnw("unsupported aggregation type",
 			"event_id", event.ID,
@@ -906,21 +926,6 @@ func (s *featureUsageTrackingService) convertValueToString(val interface{}) stri
 	default:
 		return fmt.Sprintf("%v", v)
 	}
-}
-
-// GetPeriodCost returns the total cost for a subscription in a billing period
-func (s *featureUsageTrackingService) GetPeriodCost(ctx context.Context, tenantID, environmentID, customerID, subscriptionID string, periodID uint64) (decimal.Decimal, error) {
-	return s.featureUsageRepo.GetPeriodCost(ctx, tenantID, environmentID, customerID, subscriptionID, periodID)
-}
-
-// GetPeriodFeatureTotals returns usage totals by feature for a subscription in a period
-func (s *featureUsageTrackingService) GetPeriodFeatureTotals(ctx context.Context, tenantID, environmentID, customerID, subscriptionID string, periodID uint64) ([]*events.PeriodFeatureTotal, error) {
-	return s.featureUsageRepo.GetPeriodFeatureTotals(ctx, tenantID, environmentID, customerID, subscriptionID, periodID)
-}
-
-// GetUsageAnalytics returns recent usage analytics for a customer
-func (s *featureUsageTrackingService) GetUsageAnalytics(ctx context.Context, tenantID, environmentID, customerID string, lookbackHours int) ([]*events.UsageAnalytic, error) {
-	return s.featureUsageRepo.GetUsageAnalytics(ctx, tenantID, environmentID, customerID, lookbackHours)
 }
 
 // GetDetailedUsageAnalytics provides detailed usage analytics with filtering, grouping, and time-series data
@@ -1318,7 +1323,7 @@ func (s *featureUsageTrackingService) getCorrectUsageValue(item *events.Detailed
 		return item.MaxUsage
 	case types.AggregationLatest:
 		return item.LatestUsage
-	case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationAvg:
+	case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationAvg, types.AggregationWeightedSum:
 		return item.TotalUsage
 	default:
 		// Default to SUM for unknown types
@@ -1335,7 +1340,7 @@ func (s *featureUsageTrackingService) getCorrectUsageValueForPoint(point events.
 		return point.MaxUsage
 	case types.AggregationLatest:
 		return point.LatestUsage
-	case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationAvg:
+	case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationAvg, types.AggregationWeightedSum:
 		return point.Usage
 	default:
 		// Default to SUM for unknown types
@@ -1345,7 +1350,7 @@ func (s *featureUsageTrackingService) getCorrectUsageValueForPoint(point events.
 
 // ReprocessEvents triggers reprocessing of events for a customer or with other filters
 func (s *featureUsageTrackingService) ReprocessEvents(ctx context.Context, params *events.ReprocessEventsParams) error {
-	s.Logger.Infow("starting event reprocessing",
+	s.Logger.Infow("starting event reprocessing for feature usage tracking",
 		"external_customer_id", params.ExternalCustomerID,
 		"event_name", params.EventName,
 		"start_time", params.StartTime,
@@ -1408,12 +1413,12 @@ func (s *featureUsageTrackingService) ReprocessEvents(ctx context.Context, param
 			break
 		}
 
-		// Publish each event to the post-processing topic
+		// Publish each event to the feature usage tracking topic
 		for _, event := range unprocessedEvents {
 			// hardcoded delay to avoid rate limiting
 			// TODO: remove this to make it configurable
 			if err := s.PublishEvent(ctx, event, true); err != nil {
-				s.Logger.Errorw("failed to publish event for reprocessing",
+				s.Logger.Errorw("failed to publish event for reprocessing for feature usage tracking",
 					"event_id", event.ID,
 					"error", err,
 				)
@@ -1427,7 +1432,7 @@ func (s *featureUsageTrackingService) ReprocessEvents(ctx context.Context, param
 			lastTimestamp = event.Timestamp
 		}
 
-		s.Logger.Infow("published events for reprocessing",
+		s.Logger.Infow("published events for reprocessing for feature usage tracking",
 			"batch", processedBatches,
 			"count", eventsCount,
 			"total_published", totalEventsPublished,
@@ -1442,7 +1447,7 @@ func (s *featureUsageTrackingService) ReprocessEvents(ctx context.Context, param
 		}
 	}
 
-	s.Logger.Infow("completed event reprocessing",
+	s.Logger.Infow("completed event reprocessing for feature usage tracking",
 		"external_customer_id", params.ExternalCustomerID,
 		"event_name", params.EventName,
 		"batches_processed", processedBatches,
@@ -1545,4 +1550,51 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 	})
 
 	return response, nil
+}
+
+func (s *featureUsageTrackingService) getTotalUsageForWeightedSumAggregation(
+	subscription *subscription.Subscription,
+	event *events.Event,
+	propertyValue decimal.Decimal,
+	periodID uint64,
+) (decimal.Decimal, error) {
+	// Convert periodID (epoch milliseconds) back to time for the period start
+	periodStart := time.UnixMilli(int64(periodID))
+
+	// Calculate the period end using the subscription's billing configuration
+	periodEnd, err := types.NextBillingDate(periodStart, subscription.BillingAnchor, subscription.BillingPeriodCount, subscription.BillingPeriod, nil)
+	if err != nil {
+		return decimal.Zero, ierr.WithError(err).
+			WithHint("Failed to calculate period end for weighted sum aggregation").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_id": subscription.ID,
+				"period_id":       periodID,
+				"period_start":    periodStart,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Calculate total billing period duration in seconds
+	totalPeriodSeconds := periodEnd.Sub(periodStart).Seconds()
+	if totalPeriodSeconds <= 0 {
+		return decimal.Zero, ierr.NewError("invalid billing period duration").
+			WithHint("Billing period duration must be positive").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_id": subscription.ID,
+				"period_id":       periodID,
+				"period_start":    periodStart,
+				"period_end":      periodEnd,
+				"total_seconds":   totalPeriodSeconds,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Calculate remaining seconds from event timestamp to period end
+	remainingSeconds := math.Max(0, periodEnd.Sub(event.Timestamp).Seconds())
+
+	// Apply weighted sum formula: (value / billing_period_seconds) * remaining_seconds
+	// This gives us the proportion of the value that should be counted for the remaining period
+	weightedUsage := propertyValue.Div(decimal.NewFromFloat(totalPeriodSeconds)).Mul(decimal.NewFromFloat(remainingSeconds))
+
+	return weightedUsage, nil
 }
