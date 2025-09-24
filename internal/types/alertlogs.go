@@ -19,12 +19,52 @@ const (
 type AlertType string
 
 const (
-	AlertTypeLowWalletBalance AlertType = "low_wallet_balance"
+	AlertTypeLowOngoingBalance AlertType = "low_ongoing_balance"
+	AlertTypeLowCreditBalance  AlertType = "low_credit_balance"
 )
+
+// AlertEntityType represents the type of entity for alerts
+type AlertEntityType string
+
+const (
+	AlertEntityTypeWallet AlertEntityType = "wallet"
+)
+
+func (aet AlertEntityType) Validate() error {
+	allowedTypes := []AlertEntityType{
+		AlertEntityTypeWallet,
+	}
+	if !lo.Contains(allowedTypes, aet) {
+		return ierr.NewError("invalid alert entity type").
+			WithHint("Please provide a valid alert entity type").
+			Mark(ierr.ErrValidation)
+	}
+	return nil
+}
+
+// AlertThresholdType represents the type of threshold for alerts
+type AlertThresholdType string
+
+const (
+	AlertThresholdTypeAmount AlertThresholdType = "amount"
+)
+
+func (att AlertThresholdType) Validate() error {
+	allowedTypes := []AlertThresholdType{
+		AlertThresholdTypeAmount,
+	}
+	if !lo.Contains(allowedTypes, att) {
+		return ierr.NewError("invalid alert threshold type").
+			WithHint("Please provide a valid alert threshold type").
+			Mark(ierr.ErrValidation)
+	}
+	return nil
+}
 
 func (at AlertType) Validate() error {
 	allowedTypes := []AlertType{
-		AlertTypeLowWalletBalance,
+		AlertTypeLowOngoingBalance,
+		AlertTypeLowCreditBalance,
 	}
 	if !lo.Contains(allowedTypes, at) {
 		return ierr.NewError("invalid alert type").
@@ -47,8 +87,8 @@ type AlertConfig struct {
 
 // AlertThreshold represents the threshold configuration
 type AlertThreshold struct {
-	Type  string          `json:"type"` // amount
-	Value decimal.Decimal `json:"value"`
+	Type  AlertThresholdType `json:"type"` // amount
+	Value decimal.Decimal    `json:"value"`
 }
 
 // AlertLogFilter represents filters for alert log queries
@@ -59,7 +99,7 @@ type AlertLogFilter struct {
 	// filters allows complex filtering based on multiple fields
 	Filters     []*FilterCondition `json:"filters,omitempty" form:"filters" validate:"omitempty"`
 	Sort        []*SortCondition   `json:"sort,omitempty" form:"sort" validate:"omitempty"`
-	EntityType  string             `json:"entity_type,omitempty" form:"entity_type" validate:"omitempty"`
+	EntityType  AlertEntityType    `json:"entity_type,omitempty" form:"entity_type" validate:"omitempty"`
 	EntityID    string             `json:"entity_id,omitempty" form:"entity_id" validate:"omitempty"`
 	AlertType   AlertType          `json:"alert_type,omitempty" form:"alert_type" validate:"omitempty"`
 	AlertStatus AlertState         `json:"alert_status,omitempty" form:"alert_status" validate:"omitempty"`
@@ -95,6 +135,12 @@ func (f *AlertLogFilter) Validate() error {
 
 	if f.AlertType != "" {
 		if err := f.AlertType.Validate(); err != nil {
+			return err
+		}
+	}
+
+	if f.EntityType != "" {
+		if err := f.EntityType.Validate(); err != nil {
 			return err
 		}
 	}

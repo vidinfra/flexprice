@@ -194,7 +194,7 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 
 					if req.Threshold == nil {
 						wallet.AlertConfig.Threshold = &types.AlertThreshold{
-							Type:  "amount",
+							Type:  types.AlertThresholdTypeAmount,
 							Value: decimal.NewFromInt(1),
 						}
 					}
@@ -257,13 +257,13 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 
 				// Use AlertLogsService to handle alert logging and webhook publishing
 				err = h.alertLogsService.LogAlert(ctx, &service.LogAlertRequest{
-					EntityType:  "wallet",
+					EntityType:  types.AlertEntityTypeWallet,
 					EntityID:    wallet.ID,
-					AlertType:   types.AlertTypeLowWalletBalance,
+					AlertType:   types.AlertTypeLowOngoingBalance,
 					AlertStatus: alertStatus,
 					AlertInfo: types.AlertInfo{
 						Threshold: types.AlertThreshold{
-							Type:  "amount",
+							Type:  types.AlertThresholdTypeAmount,
 							Value: threshold,
 						},
 						ValueAtTime: *ongoingBalance, // Use ongoing balance as the main value

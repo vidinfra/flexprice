@@ -15,8 +15,8 @@ type Repository interface {
 	Count(ctx context.Context, filter *types.AlertLogFilter) (int, error)
 
 	// Entity-specific operations
-	GetLatestByEntity(ctx context.Context, entityType, entityID string) (*AlertLog, error)
-	GetLatestByEntityAndAlertType(ctx context.Context, entityType, entityID string, alertType types.AlertType) (*AlertLog, error)
-	ListByEntity(ctx context.Context, entityType, entityID string, limit int) ([]*AlertLog, error)
+	GetLatestByEntity(ctx context.Context, entityType types.AlertEntityType, entityID string) (*AlertLog, error)
+	GetLatestByEntityAndAlertType(ctx context.Context, entityType types.AlertEntityType, entityID string, alertType types.AlertType) (*AlertLog, error)
+	ListByEntity(ctx context.Context, entityType types.AlertEntityType, entityID string, limit int) ([]*AlertLog, error)
 	ListByAlertType(ctx context.Context, alertType types.AlertType, limit int) ([]*AlertLog, error)
 }

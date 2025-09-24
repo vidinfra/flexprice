@@ -18,22 +18,22 @@ type AlertLogsService interface {
 	LogAlert(ctx context.Context, req *LogAlertRequest) error
 
 	// GetLatestAlertForEntityAndType retrieves the latest alert log for a specific entity and alert type
-	GetLatestAlertForEntityAndType(ctx context.Context, entityType, entityID string, alertType types.AlertType) (*alertlogs.AlertLog, error)
+	GetLatestAlertForEntityAndType(ctx context.Context, entityType types.AlertEntityType, entityID string, alertType types.AlertType) (*alertlogs.AlertLog, error)
 
 	// GetLatestAlertForEntity retrieves the latest alert log for a specific entity (any alert type)
-	GetLatestAlertForEntity(ctx context.Context, entityType, entityID string) (*alertlogs.AlertLog, error)
+	GetLatestAlertForEntity(ctx context.Context, entityType types.AlertEntityType, entityID string) (*alertlogs.AlertLog, error)
 
 	// ListAlertsByEntity retrieves alert logs for a specific entity
-	ListAlertsByEntity(ctx context.Context, entityType, entityID string, limit int) ([]*alertlogs.AlertLog, error)
+	ListAlertsByEntity(ctx context.Context, entityType types.AlertEntityType, entityID string, limit int) ([]*alertlogs.AlertLog, error)
 }
 
 // LogAlertRequest represents the request to log an alert
 type LogAlertRequest struct {
-	EntityType  string           `json:"entity_type" validate:"required"`
-	EntityID    string           `json:"entity_id" validate:"required"`
-	AlertType   types.AlertType  `json:"alert_type" validate:"required"`
-	AlertStatus types.AlertState `json:"alert_status" validate:"required"`
-	AlertInfo   types.AlertInfo  `json:"alert_info" validate:"required"`
+	EntityType  types.AlertEntityType `json:"entity_type" validate:"required"`
+	EntityID    string                `json:"entity_id" validate:"required"`
+	AlertType   types.AlertType       `json:"alert_type" validate:"required"`
+	AlertStatus types.AlertState      `json:"alert_status" validate:"required"`
+	AlertInfo   types.AlertInfo       `json:"alert_info" validate:"required"`
 }
 
 // Validate validates the log alert request
@@ -42,6 +42,9 @@ func (r *LogAlertRequest) Validate() error {
 		return ierr.NewError("entity_type is required").
 			WithHint("Please provide an entity type").
 			Mark(ierr.ErrValidation)
+	}
+	if err := r.EntityType.Validate(); err != nil {
+		return err
 	}
 	if r.EntityID == "" {
 		return ierr.NewError("entity_id is required").
@@ -102,6 +105,7 @@ func (s *alertLogsService) LogAlert(ctx context.Context, req *LogAlertRequest) e
 				"entity_id", req.EntityID,
 				"alert_type", req.AlertType,
 				"alert_status", req.AlertStatus,
+				"webhook_event", webhookEventName,
 			)
 		} else if existingAlert.AlertStatus == types.AlertStateOk {
 			// Case 2: Previous alert exists but is in "ok" state
@@ -113,6 +117,7 @@ func (s *alertLogsService) LogAlert(ctx context.Context, req *LogAlertRequest) e
 				"alert_type", req.AlertType,
 				"previous_status", existingAlert.AlertStatus,
 				"new_status", req.AlertStatus,
+				"webhook_event", webhookEventName,
 			)
 		} else {
 			// Latest alert exists and is already "in_alarm" - don't log/publish
@@ -137,6 +142,7 @@ func (s *alertLogsService) LogAlert(ctx context.Context, req *LogAlertRequest) e
 				"alert_type", req.AlertType,
 				"previous_status", existingAlert.AlertStatus,
 				"new_status", req.AlertStatus,
+				"webhook_event", webhookEventName,
 			)
 		} else {
 			// No previous alert OR previous alert is already "ok" - don't log/publish
@@ -207,29 +213,59 @@ func (s *alertLogsService) LogAlert(ctx context.Context, req *LogAlertRequest) e
 	return nil
 }
 
-func (s *alertLogsService) GetLatestAlertForEntityAndType(ctx context.Context, entityType, entityID string, alertType types.AlertType) (*alertlogs.AlertLog, error) {
+func (s *alertLogsService) GetLatestAlertForEntityAndType(ctx context.Context, entityType types.AlertEntityType, entityID string, alertType types.AlertType) (*alertlogs.AlertLog, error) {
 	return s.AlertLogsRepo.GetLatestByEntityAndAlertType(ctx, entityType, entityID, alertType)
 }
 
-func (s *alertLogsService) GetLatestAlertForEntity(ctx context.Context, entityType, entityID string) (*alertlogs.AlertLog, error) {
+func (s *alertLogsService) GetLatestAlertForEntity(ctx context.Context, entityType types.AlertEntityType, entityID string) (*alertlogs.AlertLog, error) {
 	return s.AlertLogsRepo.GetLatestByEntity(ctx, entityType, entityID)
 }
 
-func (s *alertLogsService) ListAlertsByEntity(ctx context.Context, entityType, entityID string, limit int) ([]*alertlogs.AlertLog, error) {
+func (s *alertLogsService) ListAlertsByEntity(ctx context.Context, entityType types.AlertEntityType, entityID string, limit int) ([]*alertlogs.AlertLog, error) {
 	return s.AlertLogsRepo.ListByEntity(ctx, entityType, entityID, limit)
+}
+
+// WebhookEventMapping represents the mapping configuration for alert types and statuses to webhook events
+type WebhookEventMapping struct {
+	WebhookEvent string `json:"webhook_event"`
+}
+
+// alertWebhookMapping defines the mapping from alert types and statuses to specific webhook events
+// This mapping allows us to send specific webhook events that clients are already listening to,
+// rather than generic "alert.triggered" or "alert.recovered" events.
+//
+// Structure: map[AlertType][AlertState] = WebhookEventMapping
+// Example: map[low_wallet_balance][in_alarm] = "wallet.credit_balance.dropped"
+var alertWebhookMapping = map[types.AlertType]map[types.AlertState]WebhookEventMapping{
+	types.AlertTypeLowOngoingBalance: {
+		types.AlertStateInAlarm: {
+			WebhookEvent: types.WebhookEventWalletOngoingBalanceDropped, // "wallet.ongoing_balance.dropped"
+		},
+		types.AlertStateOk: {
+			WebhookEvent: types.WebhookEventWalletOngoingBalanceRecovered, // "wallet.ongoing_balance.recovered"
+		},
+	},
+	types.AlertTypeLowCreditBalance: {
+		types.AlertStateInAlarm: {
+			WebhookEvent: types.WebhookEventWalletCreditBalanceDropped, // "wallet.ongoing_balance.dropped"
+		},
+		types.AlertStateOk: {
+			WebhookEvent: types.WebhookEventWalletCreditBalanceRecovered, // "wallet.credit_balance.recovered"
+		},
+	},
 }
 
 // getWebhookEventName determines the appropriate webhook event name based on alert type and status
 func (s *alertLogsService) getWebhookEventName(alertType types.AlertType, alertStatus types.AlertState) string {
-	switch alertType {
-	case types.AlertTypeLowWalletBalance:
-		switch alertStatus {
-		case types.AlertStateInAlarm:
-			return types.WebhookEventAlertTriggered
-		case types.AlertStateOk:
-			return types.WebhookEventAlertRecovered
+	// Check if we have a mapping for this alert type
+	if alertTypeMapping, exists := alertWebhookMapping[alertType]; exists {
+		// Check if we have a mapping for this alert status
+		if statusMapping, exists := alertTypeMapping[alertStatus]; exists {
+			return statusMapping.WebhookEvent
 		}
 	}
+
+	// Return empty string if no mapping found
 	return ""
 }
 
@@ -243,7 +279,7 @@ func (s *alertLogsService) publishWebhookEvent(ctx context.Context, eventName st
 	// Create internal event
 	internalEvent := &webhookDto.InternalAlertEvent{
 		AlertLogID:    alertLog.ID,
-		EntityType:    alertLog.EntityType,
+		EntityType:    string(alertLog.EntityType),
 		EntityID:      alertLog.EntityID,
 		AlertType:     string(alertLog.AlertType),
 		AlertStatus:   string(alertLog.AlertStatus),

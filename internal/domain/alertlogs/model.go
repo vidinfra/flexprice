@@ -7,13 +7,13 @@ import (
 
 // AlertLog represents an alert log entry for monitoring entity states
 type AlertLog struct {
-	ID            string           `db:"id" json:"id"`
-	EntityType    string           `db:"entity_type" json:"entity_type"`
-	EntityID      string           `db:"entity_id" json:"entity_id"`
-	AlertType     types.AlertType  `db:"alert_type" json:"alert_type"`
-	AlertStatus   types.AlertState `db:"alert_status" json:"alert_status"`
-	AlertInfo     types.AlertInfo  `db:"alert_info" json:"alert_info"`
-	EnvironmentID string           `db:"environment_id" json:"environment_id"`
+	ID            string                `db:"id" json:"id"`
+	EntityType    types.AlertEntityType `db:"entity_type" json:"entity_type"`
+	EntityID      string                `db:"entity_id" json:"entity_id"`
+	AlertType     types.AlertType       `db:"alert_type" json:"alert_type"`
+	AlertStatus   types.AlertState      `db:"alert_status" json:"alert_status"`
+	AlertInfo     types.AlertInfo       `db:"alert_info" json:"alert_info"`
+	EnvironmentID string                `db:"environment_id" json:"environment_id"`
 	types.BaseModel
 }
 
@@ -24,7 +24,7 @@ func FromEnt(e *ent.AlertLogs) *AlertLog {
 	}
 	return &AlertLog{
 		ID:            e.ID,
-		EntityType:    e.EntityType,
+		EntityType:    types.AlertEntityType(e.EntityType),
 		EntityID:      e.EntityID,
 		AlertType:     types.AlertType(e.AlertType),
 		AlertStatus:   types.AlertState(e.AlertStatus),
