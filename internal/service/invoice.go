@@ -787,10 +787,6 @@ func (s *invoiceService) syncInvoiceToStripeIfEnabled(ctx context.Context, inv *
 		CollectionMethod: collectionMethod,
 	}
 
-	if paymentParams != nil {
-		syncRequest.PaymentBehavior = paymentParams.PaymentBehavior
-	}
-
 	// Perform the sync
 	syncResponse, err := stripeInvoiceSyncService.SyncInvoiceToStripe(ctx, syncRequest)
 	if err != nil {
@@ -1332,6 +1328,19 @@ func (s *invoiceService) attemptPaymentForSubscriptionInvoice(ctx context.Contex
 				"invoice_id", inv.ID)
 			return err
 		}
+	}
+
+	// Check if invoice is synced to Stripe - if so, only allow payments through record payment API
+	stripeService := NewStripeService(s.ServiceParams)
+	if stripeService.IsInvoiceSyncedToStripe(ctx, inv.ID) {
+		s.Logger.Infow("invoice is synced to Stripe, skipping automatic payment processing",
+			"invoice_id", inv.ID,
+			"subscription_id", lo.FromPtr(inv.SubscriptionID),
+			"flow_type", flowType)
+
+		// For invoices synced to Stripe, payments should only be processed through the record payment API
+		// which handles payment links and card payments. Automatic payment processing is disabled.
+		return nil
 	}
 
 	// Use parameters if provided, otherwise get from subscription

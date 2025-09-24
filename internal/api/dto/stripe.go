@@ -90,7 +90,6 @@ type PaymentStatusResponse struct {
 type StripeInvoiceSyncRequest struct {
 	InvoiceID        string                 `json:"invoice_id"`
 	CollectionMethod types.CollectionMethod `json:"collection_method"`
-	PaymentBehavior  *types.PaymentBehavior `json:"payment_behavior,omitempty"`
 }
 
 // StripeInvoiceSyncResponse represents the response from Stripe invoice sync

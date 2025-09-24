@@ -541,6 +541,8 @@ func (s *StripeService) CreatePaymentLink(ctx context.Context, req *dto.CreateSt
 		"invoice_id":     req.InvoiceID,
 		"customer_id":    req.CustomerID,
 		"environment_id": req.EnvironmentID,
+		"payment_source": "flexprice",
+		"payment_type":   "checkout_link",
 	}
 
 	// Try to get Stripe invoice ID for attachment tracking
@@ -580,12 +582,16 @@ func (s *StripeService) CreatePaymentLink(ctx context.Context, req *dto.CreateSt
 		CancelURL:           stripe.String(cancelURL),
 		Metadata:            metadata,
 		Customer:            stripe.String(stripeCustomerID),
+		PaymentIntentData: &stripe.CheckoutSessionCreatePaymentIntentDataParams{
+			Metadata: metadata,
+		},
 	}
 
 	// Only save payment method for future use if SaveCardAndMakeDefault is true
 	if req.SaveCardAndMakeDefault {
 		params.PaymentIntentData = &stripe.CheckoutSessionCreatePaymentIntentDataParams{
 			SetupFutureUsage: stripe.String("off_session"),
+			Metadata:         metadata,
 		}
 		s.Logger.Infow("payment link configured to save card and make default",
 			"invoice_id", req.InvoiceID,
@@ -2383,4 +2389,27 @@ func (s *StripeService) listStripeCustomerPaymentMethods(ctx context.Context, cu
 	)
 
 	return response, nil
+}
+
+// IsInvoiceSyncedToStripe checks if an invoice is synced to Stripe by looking up entity integration mapping
+func (s *StripeService) IsInvoiceSyncedToStripe(ctx context.Context, invoiceID string) bool {
+	filter := &types.EntityIntegrationMappingFilter{
+		EntityID:      invoiceID,
+		EntityType:    types.IntegrationEntityTypeInvoice,
+		ProviderTypes: []string{"stripe"},
+		QueryFilter:   types.NewDefaultQueryFilter(),
+	}
+
+	mappings, err := s.EntityIntegrationMappingRepo.List(ctx, filter)
+	if err != nil {
+		s.Logger.Errorw("failed to check invoice Stripe sync status",
+			"error", err,
+			"invoice_id", invoiceID,
+		)
+		// In case of error, assume not synced to be safe
+		return false
+	}
+
+	// If we have any mappings, the invoice is synced to Stripe
+	return len(mappings) > 0
 }

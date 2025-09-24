@@ -10,14 +10,12 @@ import (
 
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/config"
-	"github.com/flexprice/flexprice/internal/domain/payment"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/service"
 	"github.com/flexprice/flexprice/internal/svix"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
-	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v82"
 )
 
@@ -191,35 +189,6 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 		return
 	}
 
-	// Parse webhook event without signature verification (TEMPORARY)
-	// event := &stripe.Event{}
-	// err = json.Unmarshal(body, event)
-	// if err != nil {
-	// 	h.logger.Errorw("failed to parse webhook event JSON",
-	// 		"error", err,
-	// 		"body_length", len(body),
-	// 		"environment_id", environmentID)
-	// 	c.JSON(http.StatusBadRequest, gin.H{
-	// 		"error":   "Failed to parse webhook event JSON",
-	// 		"details": err.Error(),
-	// 	})
-	// 	return
-	// }
-
-	// h.logger.Infow("successfully parsed webhook event (without signature verification)",
-	// 	"event_type", event.Type,
-	// 	"event_id", event.ID,
-	// 	"environment_id", environmentID)
-
-	// Log the event type for debugging
-	// h.logger.Infow("processing webhook event",
-	// 	"event_type", event.Type,
-	// 	"event_id", event.ID,
-	// 	"environment_id", environmentID,
-	// 	"tenant_id", tenantID,
-	// 	"event_created", event.Created,
-	// 	"event_livemode", event.Livemode)
-
 	// Handle different event types
 	switch string(event.Type) {
 	case string(types.WebhookEventTypeCustomerCreated):
@@ -389,8 +358,8 @@ func (h *WebhookHandler) attachPaymentToStripeInvoice(ctx context.Context, sessi
 
 	filter := &types.EntityIntegrationMappingFilter{
 		EntityIDs:     []string{payment.DestinationID},
-		EntityType:    "invoice",
-		ProviderTypes: []string{"stripe"},
+		EntityType:    types.IntegrationEntityTypeInvoice,
+		ProviderTypes: []string{string(types.SecretProviderStripe)},
 	}
 
 	mappings, err := mappingService.GetEntityIntegrationMappings(ctx, filter)
@@ -1318,16 +1287,16 @@ func (h *WebhookHandler) handleInvoicePaymentPaid(c *gin.Context, event *stripe.
 
 	// Check if this payment is from a checkout session (already processed by checkout.session.completed)
 	// Skip processing to avoid double reconciliation
-	if h.isPaymentFromCheckoutSession(ctx, paymentIntentID) {
-		h.logger.Infow("payment is from checkout session, skipping invoice_payment.paid processing to avoid double reconciliation",
-			"payment_intent_id", paymentIntentID,
-			"stripe_invoice_id", stripeInvoiceID,
-			"event_id", event.ID)
-		c.JSON(http.StatusOK, gin.H{
-			"message": "Payment from checkout session already processed",
-		})
-		return
-	}
+	// if h.isPaymentFromCheckoutSession(ctx, paymentIntentID) {
+	// 	h.logger.Infow("payment is from checkout session, skipping invoice_payment.paid processing to avoid double reconciliation",
+	// 		"payment_intent_id", paymentIntentID,
+	// 		"stripe_invoice_id", stripeInvoiceID,
+	// 		"event_id", event.ID)
+	// 	c.JSON(http.StatusOK, gin.H{
+	// 		"message": "Payment from checkout session already processed",
+	// 	})
+	// 	return
+	// }
 
 	// Get payment intent details from Stripe
 	paymentIntent, err := h.stripeService.GetPaymentIntent(ctx, paymentIntentID, environmentID)
@@ -1345,21 +1314,28 @@ func (h *WebhookHandler) handleInvoicePaymentPaid(c *gin.Context, event *stripe.
 	// Check payment source to determine processing approach
 	paymentSource := paymentIntent.Metadata["payment_source"]
 	if paymentSource == "flexprice" {
-		// This is a FlexPrice-initiated payment - sync credit payments
-		h.logger.Infow("processing FlexPrice-initiated payment - syncing credit payments",
-			"payment_intent_id", paymentIntentID,
-			"stripe_invoice_id", stripeInvoiceID)
 
-		if err := h.syncFlexPriceCreditPayments(ctx, stripeInvoiceID); err != nil {
-			h.logger.Errorw("failed to sync FlexPrice credit payments",
-				"error", err,
-				"stripe_invoice_id", stripeInvoiceID,
-				"event_id", event.ID)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Failed to sync credit payments",
-			})
-			return
-		}
+		h.logger.Infow("Skipping FlexPrice-initiated payment , Skip processing to avoid double reconciliation")
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Skipping FlexPrice-initiated payment",
+		})
+		return
+
+		// // This is a FlexPrice-initiated payment - sync credit payments
+		// h.logger.Infow("processing FlexPrice-initiated payment - syncing credit payments",
+		// 	"payment_intent_id", paymentIntentID,
+		// 	"stripe_invoice_id", stripeInvoiceID)
+
+		// if err := h.syncFlexPriceCreditPayments(ctx, stripeInvoiceID); err != nil {
+		// 	h.logger.Errorw("failed to sync FlexPrice credit payments",
+		// 		"error", err,
+		// 		"stripe_invoice_id", stripeInvoiceID,
+		// 		"event_id", event.ID)
+		// 	c.JSON(http.StatusInternalServerError, gin.H{
+		// 		"error": "Failed to sync credit payments",
+		// 	})
+		// 	return
+		// }
 	} else {
 		// This is an external Stripe payment - process reconciliation
 		h.logger.Infow("processing external Stripe payment - reconciling invoice",
@@ -1376,150 +1352,150 @@ func (h *WebhookHandler) handleInvoicePaymentPaid(c *gin.Context, event *stripe.
 			})
 			return
 		}
-	}
 
-	h.logger.Infow("successfully processed invoice payment webhook",
-		"stripe_invoice_id", stripeInvoiceID,
-		"event_id", event.ID)
+		h.logger.Infow("successfully processed invoice payment webhook",
+			"stripe_invoice_id", stripeInvoiceID,
+			"event_id", event.ID)
+	}
 }
 
 // syncFlexPriceCreditPayments finds and syncs all FlexPrice credit payments for a Stripe invoice
-func (h *WebhookHandler) syncFlexPriceCreditPayments(ctx context.Context, stripeInvoiceID string) error {
-	// Step 1: Find the FlexPrice invoice ID from the Stripe invoice mapping
-	flexInvoiceID, err := h.getFlexPriceInvoiceID(ctx, stripeInvoiceID)
-	if err != nil {
-		return err
-	}
+// func (h *WebhookHandler) syncFlexPriceCreditPayments(ctx context.Context, stripeInvoiceID string) error {
+// 	// Step 1: Find the FlexPrice invoice ID from the Stripe invoice mapping
+// 	flexInvoiceID, err := h.getFlexPriceInvoiceID(ctx, stripeInvoiceID)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if flexInvoiceID == "" {
-		h.logger.Infow("no FlexPrice invoice found for Stripe invoice",
-			"stripe_invoice_id", stripeInvoiceID)
-		return nil // Not an error, just no FlexPrice invoice to sync
-	}
+// 	if flexInvoiceID == "" {
+// 		h.logger.Infow("no FlexPrice invoice found for Stripe invoice",
+// 			"stripe_invoice_id", stripeInvoiceID)
+// 		return nil // Not an error, just no FlexPrice invoice to sync
+// 	}
 
-	// Step 2: Get all successful credit payments for this FlexPrice invoice
-	creditPayments, err := h.getSuccessfulCreditPayments(ctx, flexInvoiceID)
-	if err != nil {
-		return err
-	}
+// 	// Step 2: Get all successful credit payments for this FlexPrice invoice
+// 	creditPayments, err := h.getSuccessfulCreditPayments(ctx, flexInvoiceID)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if len(creditPayments) == 0 {
-		h.logger.Infow("no credit payments found for FlexPrice invoice",
-			"flexprice_invoice_id", flexInvoiceID,
-			"stripe_invoice_id", stripeInvoiceID)
-		return nil
-	}
+// 	if len(creditPayments) == 0 {
+// 		h.logger.Infow("no credit payments found for FlexPrice invoice",
+// 			"flexprice_invoice_id", flexInvoiceID,
+// 			"stripe_invoice_id", stripeInvoiceID)
+// 		return nil
+// 	}
 
-	h.logger.Infow("syncing credit payments to Stripe invoice",
-		"flexprice_invoice_id", flexInvoiceID,
-		"stripe_invoice_id", stripeInvoiceID,
-		"credit_payments_count", len(creditPayments))
+// 	h.logger.Infow("syncing credit payments to Stripe invoice",
+// 		"flexprice_invoice_id", flexInvoiceID,
+// 		"stripe_invoice_id", stripeInvoiceID,
+// 		"credit_payments_count", len(creditPayments))
 
-	// Step 3: Initialize StripeInvoiceSyncService to sync payments
-	stripeInvoiceSyncService := service.NewStripeInvoiceSyncService(service.ServiceParams{
-		Logger:                       h.logger,
-		Config:                       h.config,
-		ConnectionRepo:               h.stripeService.ConnectionRepo,
-		EntityIntegrationMappingRepo: h.stripeService.EntityIntegrationMappingRepo,
-		InvoiceRepo:                  h.stripeService.InvoiceRepo,
-		CustomerRepo:                 h.stripeService.CustomerRepo,
-		PaymentRepo:                  h.stripeService.PaymentRepo,
-	})
+// 	// Step 3: Initialize StripeInvoiceSyncService to sync payments
+// 	stripeInvoiceSyncService := service.NewStripeInvoiceSyncService(service.ServiceParams{
+// 		Logger:                       h.logger,
+// 		Config:                       h.config,
+// 		ConnectionRepo:               h.stripeService.ConnectionRepo,
+// 		EntityIntegrationMappingRepo: h.stripeService.EntityIntegrationMappingRepo,
+// 		InvoiceRepo:                  h.stripeService.InvoiceRepo,
+// 		CustomerRepo:                 h.stripeService.CustomerRepo,
+// 		PaymentRepo:                  h.stripeService.PaymentRepo,
+// 	})
 
-	// Step 4: Calculate total credit amount from all payments
-	var totalCreditAmount decimal.Decimal
-	var creditPaymentIDs []string
+// 	// Step 4: Calculate total credit amount from all payments
+// 	var totalCreditAmount decimal.Decimal
+// 	var creditPaymentIDs []string
 
-	for _, creditPayment := range creditPayments {
-		// Skip if payment is already from Stripe (avoid double sync)
-		if creditPayment.PaymentGateway != nil && *creditPayment.PaymentGateway == string(types.PaymentGatewayTypeStripe) {
-			h.logger.Debugw("credit payment already from Stripe, skipping sync",
-				"payment_id", creditPayment.ID)
-			continue
-		}
+// 	for _, creditPayment := range creditPayments {
+// 		// Skip if payment is already from Stripe (avoid double sync)
+// 		if creditPayment.PaymentGateway != nil && *creditPayment.PaymentGateway == string(types.PaymentGatewayTypeStripe) {
+// 			h.logger.Debugw("credit payment already from Stripe, skipping sync",
+// 				"payment_id", creditPayment.ID)
+// 			continue
+// 		}
 
-		totalCreditAmount = totalCreditAmount.Add(creditPayment.Amount)
-		creditPaymentIDs = append(creditPaymentIDs, creditPayment.ID)
-	}
+// 		totalCreditAmount = totalCreditAmount.Add(creditPayment.Amount)
+// 		creditPaymentIDs = append(creditPaymentIDs, creditPayment.ID)
+// 	}
 
-	// Only proceed if we have credits to sync
-	if totalCreditAmount.GreaterThan(decimal.Zero) {
-		h.logger.Infow("syncing total credit amount to Stripe as paid out of band",
-			"flexprice_invoice_id", flexInvoiceID,
-			"stripe_invoice_id", stripeInvoiceID,
-			"total_credit_amount", totalCreditAmount,
-			"credit_payments_count", len(creditPaymentIDs))
+// 	// Only proceed if we have credits to sync
+// 	if totalCreditAmount.GreaterThan(decimal.Zero) {
+// 		h.logger.Infow("syncing total credit amount to Stripe as paid out of band",
+// 			"flexprice_invoice_id", flexInvoiceID,
+// 			"stripe_invoice_id", stripeInvoiceID,
+// 			"total_credit_amount", totalCreditAmount,
+// 			"credit_payments_count", len(creditPaymentIDs))
 
-		// Sync the total credit amount to Stripe as paid out of band (single operation)
-		err = stripeInvoiceSyncService.SyncPaymentToStripe(ctx, flexInvoiceID, totalCreditAmount, "flexprice_credits", nil)
-		if err != nil {
-			h.logger.Errorw("failed to sync total credit amount to Stripe",
-				"error", err,
-				"flexprice_invoice_id", flexInvoiceID,
-				"stripe_invoice_id", stripeInvoiceID,
-				"total_credit_amount", totalCreditAmount)
-			return err
-		}
-	}
+// 		// Sync the total credit amount to Stripe as paid out of band (single operation)
+// 		err = stripeInvoiceSyncService.SyncPaymentToStripe(ctx, flexInvoiceID, totalCreditAmount, "flexprice_credits", nil)
+// 		if err != nil {
+// 			h.logger.Errorw("failed to sync total credit amount to Stripe",
+// 				"error", err,
+// 				"flexprice_invoice_id", flexInvoiceID,
+// 				"stripe_invoice_id", stripeInvoiceID,
+// 				"total_credit_amount", totalCreditAmount)
+// 			return err
+// 		}
+// 	}
 
-	h.logger.Infow("successfully synced all credit payments to Stripe",
-		"flexprice_invoice_id", flexInvoiceID,
-		"stripe_invoice_id", stripeInvoiceID,
-		"total_credit_amount", totalCreditAmount,
-		"credit_payments_synced", len(creditPayments))
+// 	h.logger.Infow("successfully synced all credit payments to Stripe",
+// 		"flexprice_invoice_id", flexInvoiceID,
+// 		"stripe_invoice_id", stripeInvoiceID,
+// 		"total_credit_amount", totalCreditAmount,
+// 		"credit_payments_synced", len(creditPayments))
 
-	return nil
-}
+// 	return nil
+// }
 
-// getFlexPriceInvoiceID finds the FlexPrice invoice ID from a Stripe invoice ID using entity mapping
-func (h *WebhookHandler) getFlexPriceInvoiceID(ctx context.Context, stripeInvoiceID string) (string, error) {
-	// Use the existing StripeService to access repositories
-	mappingService := service.NewEntityIntegrationMappingService(service.ServiceParams{
-		Logger:                       h.logger,
-		EntityIntegrationMappingRepo: h.stripeService.EntityIntegrationMappingRepo,
-	})
+// // getFlexPriceInvoiceID finds the FlexPrice invoice ID from a Stripe invoice ID using entity mapping
+// func (h *WebhookHandler) getFlexPriceInvoiceID(ctx context.Context, stripeInvoiceID string) (string, error) {
+// 	// Use the existing StripeService to access repositories
+// 	mappingService := service.NewEntityIntegrationMappingService(service.ServiceParams{
+// 		Logger:                       h.logger,
+// 		EntityIntegrationMappingRepo: h.stripeService.EntityIntegrationMappingRepo,
+// 	})
 
-	// Find the mapping from Stripe invoice ID to FlexPrice invoice ID
-	filter := &types.EntityIntegrationMappingFilter{
-		ProviderEntityIDs: []string{stripeInvoiceID},
-		EntityType:        "invoice",
-		ProviderTypes:     []string{"stripe"},
-	}
+// 	// Find the mapping from Stripe invoice ID to FlexPrice invoice ID
+// 	filter := &types.EntityIntegrationMappingFilter{
+// 		ProviderEntityIDs: []string{stripeInvoiceID},
+// 		EntityType:        "invoice",
+// 		ProviderTypes:     []string{"stripe"},
+// 	}
 
-	mappings, err := mappingService.GetEntityIntegrationMappings(ctx, filter)
-	if err != nil {
-		return "", err
-	}
+// 	mappings, err := mappingService.GetEntityIntegrationMappings(ctx, filter)
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-	if len(mappings.Items) == 0 {
-		return "", nil // No mapping found, not an error
-	}
+// 	if len(mappings.Items) == 0 {
+// 		return "", nil // No mapping found, not an error
+// 	}
 
-	return mappings.Items[0].EntityID, nil
-}
+// 	return mappings.Items[0].EntityID, nil
+// }
 
-// getSuccessfulCreditPayments gets all successful credit payments for a FlexPrice invoice
-func (h *WebhookHandler) getSuccessfulCreditPayments(ctx context.Context, flexInvoiceID string) ([]*payment.Payment, error) {
-	// Use the payment repository directly to get domain objects
-	destinationType := string(types.PaymentDestinationTypeInvoice)
-	paymentStatus := string(types.PaymentStatusSucceeded)
-	creditPaymentType := string(types.PaymentMethodTypeCredits)
+// // getSuccessfulCreditPayments gets all successful credit payments for a FlexPrice invoice
+// func (h *WebhookHandler) getSuccessfulCreditPayments(ctx context.Context, flexInvoiceID string) ([]*payment.Payment, error) {
+// 	// Use the payment repository directly to get domain objects
+// 	destinationType := string(types.PaymentDestinationTypeInvoice)
+// 	paymentStatus := string(types.PaymentStatusSucceeded)
+// 	creditPaymentType := string(types.PaymentMethodTypeCredits)
 
-	filter := &types.PaymentFilter{
-		DestinationType:   &destinationType,
-		DestinationID:     &flexInvoiceID,
-		PaymentStatus:     &paymentStatus,
-		PaymentMethodType: &creditPaymentType,
-	}
+// 	filter := &types.PaymentFilter{
+// 		DestinationType:   &destinationType,
+// 		DestinationID:     &flexInvoiceID,
+// 		PaymentStatus:     &paymentStatus,
+// 		PaymentMethodType: &creditPaymentType,
+// 	}
 
-	// Use the repository directly to get payment domain objects
-	payments, err := h.stripeService.PaymentRepo.List(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
+// 	// Use the repository directly to get payment domain objects
+// 	payments, err := h.stripeService.PaymentRepo.List(ctx, filter)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	return payments, nil
-}
+// 	return payments, nil
+// }
 
 // handleSetupIntentSucceeded handles setup_intent.succeeded webhook
 func (h *WebhookHandler) handleSetupIntentSucceeded(c *gin.Context, event *stripe.Event, environmentID string) {

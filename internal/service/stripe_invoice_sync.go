@@ -140,7 +140,7 @@ func (s *StripeInvoiceSyncService) createDraftInvoiceInStripe(ctx context.Contex
 	params := &stripe.InvoiceCreateParams{
 		Customer:    stripe.String(stripeCustomerID),
 		Currency:    stripe.String(strings.ToLower(flexInvoice.Currency)),
-		AutoAdvance: stripe.Bool(false), // We control finalization
+		AutoAdvance: stripe.Bool(true),
 		Description: stripe.String(flexInvoice.Description),
 		Metadata:    metadata,
 	}
@@ -288,7 +288,7 @@ func (s *StripeInvoiceSyncService) finalizeStripeInvoice(ctx context.Context, st
 
 	// Finalize the invoice
 	params := &stripe.InvoiceFinalizeInvoiceParams{
-		AutoAdvance: stripe.Bool(false), // Let Stripe handle payment intent creation and sending
+		AutoAdvance: stripe.Bool(true), // Let Stripe handle payment intent creation and sending
 	}
 
 	finalizedInvoice, err := stripeClient.V1Invoices.FinalizeInvoice(ctx, stripeInvoiceID, params)
@@ -522,14 +522,14 @@ func (s *StripeInvoiceSyncService) updateFlexPriceInvoiceFromStripe(ctx context.
 	updated := false
 
 	// Update total if Stripe calculated taxes
-	if stripeInvoice.Total > 0 {
-		stripeTotal := decimal.NewFromInt(stripeInvoice.Total).Div(decimal.NewFromInt(100))
-		if !flexInvoice.Total.Equal(stripeTotal) {
-			flexInvoice.Total = stripeTotal
-			flexInvoice.AmountDue = stripeTotal
-			updated = true
-		}
-	}
+	// if stripeInvoice.Total > 0 {
+	// 	stripeTotal := decimal.NewFromInt(stripeInvoice.Total).Div(decimal.NewFromInt(100))
+	// 	if !flexInvoice.Total.Equal(stripeTotal) {
+	// 		flexInvoice.Total = stripeTotal
+	// 		flexInvoice.AmountDue = stripeTotal
+	// 		updated = true
+	// 	}
+	// }
 
 	// Update hosted invoice URL
 	if stripeInvoice.HostedInvoiceURL != "" {
