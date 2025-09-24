@@ -58,7 +58,7 @@ func (r *alertLogsRepository) Create(ctx context.Context, al *domainAlertLogs.Al
 	_, err := client.AlertLogs.Create().
 		SetID(al.ID).
 		SetTenantID(al.TenantID).
-		SetEntityType(al.EntityType).
+		SetEntityType(string(al.EntityType)).
 		SetEntityID(al.EntityID).
 		SetAlertType(string(al.AlertType)).
 		SetAlertStatus(string(al.AlertStatus)).
@@ -156,7 +156,7 @@ func (r *alertLogsRepository) List(ctx context.Context, filter *types.AlertLogFi
 
 	// Apply filters
 	if filter.EntityType != "" {
-		query = query.Where(alertlogs.EntityType(filter.EntityType))
+		query = query.Where(alertlogs.EntityType(string(filter.EntityType)))
 	}
 	if filter.EntityID != "" {
 		query = query.Where(alertlogs.EntityID(filter.EntityID))
@@ -205,7 +205,7 @@ func (r *alertLogsRepository) Count(ctx context.Context, filter *types.AlertLogF
 
 	// Apply filters
 	if filter.EntityType != "" {
-		query = query.Where(alertlogs.EntityType(filter.EntityType))
+		query = query.Where(alertlogs.EntityType(string(filter.EntityType)))
 	}
 	if filter.EntityID != "" {
 		query = query.Where(alertlogs.EntityID(filter.EntityID))
@@ -229,7 +229,7 @@ func (r *alertLogsRepository) Count(ctx context.Context, filter *types.AlertLogF
 	return count, nil
 }
 
-func (r *alertLogsRepository) GetLatestByEntity(ctx context.Context, entityType, entityID string) (*domainAlertLogs.AlertLog, error) {
+func (r *alertLogsRepository) GetLatestByEntity(ctx context.Context, entityType types.AlertEntityType, entityID string) (*domainAlertLogs.AlertLog, error) {
 	client := r.client.Querier(ctx)
 
 	// Start a span for this repository operation
@@ -240,7 +240,7 @@ func (r *alertLogsRepository) GetLatestByEntity(ctx context.Context, entityType,
 	defer FinishSpan(span)
 
 	query := client.AlertLogs.Query().Where(
-		alertlogs.EntityType(entityType),
+		alertlogs.EntityType(string(entityType)),
 		alertlogs.EntityID(entityID),
 		alertlogs.TenantID(types.GetTenantID(ctx)),
 		alertlogs.EnvironmentID(types.GetEnvironmentID(ctx)),
@@ -270,7 +270,7 @@ func (r *alertLogsRepository) GetLatestByEntity(ctx context.Context, entityType,
 	return domainAlertLogs.FromEnt(alertLog), nil
 }
 
-func (r *alertLogsRepository) GetLatestByEntityAndAlertType(ctx context.Context, entityType, entityID string, alertType types.AlertType) (*domainAlertLogs.AlertLog, error) {
+func (r *alertLogsRepository) GetLatestByEntityAndAlertType(ctx context.Context, entityType types.AlertEntityType, entityID string, alertType types.AlertType) (*domainAlertLogs.AlertLog, error) {
 	client := r.client.Querier(ctx)
 
 	// Start a span for this repository operation
@@ -282,7 +282,7 @@ func (r *alertLogsRepository) GetLatestByEntityAndAlertType(ctx context.Context,
 	defer FinishSpan(span)
 
 	query := client.AlertLogs.Query().Where(
-		alertlogs.EntityType(entityType),
+		alertlogs.EntityType(string(entityType)),
 		alertlogs.EntityID(entityID),
 		alertlogs.AlertType(string(alertType)),
 		alertlogs.TenantID(types.GetTenantID(ctx)),
@@ -314,7 +314,7 @@ func (r *alertLogsRepository) GetLatestByEntityAndAlertType(ctx context.Context,
 	return domainAlertLogs.FromEnt(alertLog), nil
 }
 
-func (r *alertLogsRepository) ListByEntity(ctx context.Context, entityType, entityID string, limit int) ([]*domainAlertLogs.AlertLog, error) {
+func (r *alertLogsRepository) ListByEntity(ctx context.Context, entityType types.AlertEntityType, entityID string, limit int) ([]*domainAlertLogs.AlertLog, error) {
 	client := r.client.Querier(ctx)
 
 	// Start a span for this repository operation
@@ -326,7 +326,7 @@ func (r *alertLogsRepository) ListByEntity(ctx context.Context, entityType, enti
 	defer FinishSpan(span)
 
 	query := client.AlertLogs.Query().Where(
-		alertlogs.EntityType(entityType),
+		alertlogs.EntityType(string(entityType)),
 		alertlogs.EntityID(entityID),
 		alertlogs.TenantID(types.GetTenantID(ctx)),
 		alertlogs.EnvironmentID(types.GetEnvironmentID(ctx)),
