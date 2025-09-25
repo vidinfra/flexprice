@@ -213,6 +213,9 @@ func (s *alertLogsService) LogAlert(ctx context.Context, req *LogAlertRequest) e
 				Mark(ierr.ErrDatabase)
 		}
 
+		// Update wallet alert state to match the current alert status
+		wallet.AlertState = string(req.AlertStatus)
+
 		// Publish webhook event using existing wallet event infrastructure
 		if webhookEventName != "" {
 			walletService := NewWalletService(s.ServiceParams)
