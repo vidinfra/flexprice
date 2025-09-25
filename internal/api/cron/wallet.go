@@ -226,21 +226,17 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 					"alert_state", wallet.AlertState,
 				)
 
-				// Check balances separately
-				isCurrentBalanceBelowThreshold := currentBalance.LessThanOrEqual(threshold)
+				// Check ongoing balance
 				isOngoingBalanceBelowThreshold := ongoingBalance.LessThanOrEqual(threshold)
-				isAnyBalanceBelowThreshold := isCurrentBalanceBelowThreshold || isOngoingBalanceBelowThreshold
 
 				h.logger.Infow("balance check results",
 					"wallet_id", wallet.ID,
-					"current_balance_below", isCurrentBalanceBelowThreshold,
 					"ongoing_balance_below", isOngoingBalanceBelowThreshold,
-					"any_balance_below", isAnyBalanceBelowThreshold,
 				)
 
 				// Determine alert status based on balance check
 				var alertStatus types.AlertState
-				if isAnyBalanceBelowThreshold {
+				if isOngoingBalanceBelowThreshold {
 					alertStatus = types.AlertStateInAlarm
 				} else {
 					alertStatus = types.AlertStateOk
@@ -249,10 +245,9 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 				h.logger.Infow("logging alert status",
 					"wallet_id", wallet.ID,
 					"threshold", threshold,
-					"current_balance", currentBalance,
 					"ongoing_balance", ongoingBalance,
 					"alert_status", alertStatus,
-					"current_alert_state", wallet.AlertState,
+					"ongoing_balance_alert_state", wallet.AlertState,
 				)
 
 				// Use AlertLogsService to handle alert logging and webhook publishing
@@ -266,7 +261,7 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 							Type:  types.AlertThresholdTypeAmount,
 							Value: threshold,
 						},
-						ValueAtTime: *ongoingBalance, // Use ongoing balance as the main value
+						ValueAtTime: *ongoingBalance,
 						Timestamp:   time.Now().UTC(),
 					},
 				})
