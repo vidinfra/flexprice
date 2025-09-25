@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
@@ -730,6 +729,17 @@ func (s *invoiceService) ProcessDraftInvoice(ctx context.Context, id string, pay
 		return err
 	}
 
+	// Sync to Stripe if Stripe connection is enabled and invoice is for subscription
+	if sub != nil {
+		if err := s.syncInvoiceToStripeIfEnabled(ctx, inv, sub, paymentParams); err != nil {
+			// Log error but don't fail the entire process
+			s.Logger.Errorw("failed to sync invoice to Stripe",
+				"error", err,
+				"invoice_id", inv.ID,
+				"subscription_id", sub.ID)
+		}
+	}
+
 	// try to process payment for the invoice based on behavior and log any errors
 	// Pass the subscription object to avoid extra DB call
 	// Error handling logic is properly handled in attemptPaymentForSubscriptionInvoice
@@ -737,6 +747,57 @@ func (s *invoiceService) ProcessDraftInvoice(ctx context.Context, id string, pay
 		// Only return error if it's a blocking error (e.g., subscription creation with error_if_incomplete)
 		return err
 	}
+
+	return nil
+}
+
+// syncInvoiceToStripeIfEnabled syncs the invoice to Stripe if Stripe connection is enabled
+func (s *invoiceService) syncInvoiceToStripeIfEnabled(ctx context.Context, inv *invoice.Invoice, sub *subscription.Subscription, paymentParams *dto.PaymentParameters) error {
+	// Check if Stripe connection exists
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderStripe)
+	if err != nil || conn == nil {
+		s.Logger.Debugw("Stripe connection not available, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"error", err)
+		return nil // Not an error, just skip sync
+	}
+
+	// Check if invoice sync is enabled for this connection
+	if !conn.IsInvoiceSyncEnabled() {
+		s.Logger.Debugw("invoice sync disabled for Stripe connection, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"connection_id", conn.ID)
+		return nil // Not an error, just skip sync
+	}
+
+	s.Logger.Infow("syncing invoice to Stripe",
+		"invoice_id", inv.ID,
+		"subscription_id", sub.ID,
+		"collection_method", sub.CollectionMethod)
+
+	// Initialize Stripe sync service
+	stripeInvoiceSyncService := NewStripeInvoiceSyncService(s.ServiceParams)
+
+	// Determine collection method from subscription
+	collectionMethod := types.CollectionMethod(sub.CollectionMethod)
+
+	// Create sync request
+	syncRequest := dto.StripeInvoiceSyncRequest{
+		InvoiceID:        inv.ID,
+		CollectionMethod: collectionMethod,
+	}
+
+	// Perform the sync
+	syncResponse, err := stripeInvoiceSyncService.SyncInvoiceToStripe(ctx, syncRequest)
+	if err != nil {
+		return err
+	}
+
+	s.Logger.Infow("successfully synced invoice to Stripe",
+		"invoice_id", inv.ID,
+		"stripe_invoice_id", syncResponse.StripeInvoiceID,
+		"status", syncResponse.Status,
+		"hosted_invoice_url", syncResponse.HostedInvoiceURL)
 
 	return nil
 }
@@ -1269,6 +1330,19 @@ func (s *invoiceService) attemptPaymentForSubscriptionInvoice(ctx context.Contex
 		}
 	}
 
+	// Check if invoice is synced to Stripe - if so, only allow payments through record payment API
+	stripeService := NewStripeService(s.ServiceParams)
+	if stripeService.IsInvoiceSyncedToStripe(ctx, inv.ID) {
+		s.Logger.Infow("invoice is synced to Stripe, skipping automatic payment processing",
+			"invoice_id", inv.ID,
+			"subscription_id", lo.FromPtr(inv.SubscriptionID),
+			"flow_type", flowType)
+
+		// For invoices synced to Stripe, payments should only be processed through the record payment API
+		// which handles payment links and card payments. Automatic payment processing is disabled.
+		return nil
+	}
+
 	// Use parameters if provided, otherwise get from subscription
 	var finalPaymentBehavior types.PaymentBehavior
 
@@ -1614,12 +1688,8 @@ func (s *invoiceService) getRecipientInfo(c *customer.Customer) *pdf.RecipientIn
 	}
 
 	result := &pdf.RecipientInfo{
-		Name: name,
-		Address: pdf.AddressInfo{
-			Street:     "--",
-			City:       "--",
-			PostalCode: "--",
-		},
+		Name:    name,
+		Address: pdf.AddressInfo{},
 	}
 
 	if c.Email != "" {
@@ -1654,12 +1724,8 @@ func (s *invoiceService) getBillerInfo(t *tenant.Tenant) *pdf.BillerInfo {
 	}
 
 	billerInfo := pdf.BillerInfo{
-		Name: t.Name,
-		Address: pdf.AddressInfo{
-			Street:     "--",
-			City:       "--",
-			PostalCode: "--",
-		},
+		Name:    t.Name,
+		Address: pdf.AddressInfo{},
 	}
 
 	if t.BillingDetails != (tenant.TenantBillingDetails{}) {
@@ -1668,8 +1734,9 @@ func (s *invoiceService) getBillerInfo(t *tenant.Tenant) *pdf.BillerInfo {
 		// billerInfo.Website = billingDetails.Website //TODO: Add this
 		billerInfo.HelpEmail = billingDetails.HelpEmail
 		// billerInfo.PaymentInstructions = billingDetails.PaymentInstructions //TODO: Add this
+
 		billerInfo.Address = pdf.AddressInfo{
-			Street:     strings.Join([]string{billingDetails.Address.Line1, billingDetails.Address.Line2}, "\n"),
+			Street:     billingDetails.Address.FormatAddressLines(),
 			City:       billingDetails.Address.City,
 			PostalCode: billingDetails.Address.PostalCode,
 			Country:    billingDetails.Address.Country,

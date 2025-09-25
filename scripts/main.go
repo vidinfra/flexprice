@@ -103,6 +103,11 @@ var commands = []Command{
 		Description: "Migrate subscriptions from anniversary to calendar billing cycle",
 		Run:         internal.MigrateBillingCycle,
 	},
+	{
+		Name:        "process-csv-features",
+		Description: "Process CSV file to create features and prices for serverless plan",
+		Run:         internal.ProcessCSVFeatures,
+	},
 }
 
 // runBulkReprocessEventsCommand wraps the bulk reprocess events with command line parameters
@@ -147,7 +152,6 @@ func main() {
 		password           string
 		environmentID      string
 		filePath           string
-		planID             string
 		apiKey             string
 		externalCustomerID string
 		eventName          string
@@ -155,6 +159,8 @@ func main() {
 		endTime            string
 		batchSize          string
 		dryRun             string
+		planID             string
+		addonID            string
 	)
 
 	flag.BoolVar(&listCommands, "list", false, "List all available commands")
@@ -176,6 +182,7 @@ func main() {
 	flag.StringVar(&endTime, "end-time", "", "End time for reprocessing (ISO-8601 format)")
 	flag.StringVar(&batchSize, "batch-size", "100", "Batch size for reprocessing")
 	flag.StringVar(&dryRun, "dry-run", "false", "Dry run mode (true/false)")
+	flag.StringVar(&addonID, "addon-id", "", "Addon ID for operations")
 	flag.Parse()
 
 	if listCommands {
@@ -220,6 +227,9 @@ func main() {
 	}
 	if planID != "" {
 		os.Setenv("PLAN_ID", planID)
+	}
+	if addonID != "" {
+		os.Setenv("ADDON_ID", addonID)
 	}
 	if apiKey != "" {
 		os.Setenv("SCRIPT_FLEXPRICE_API_KEY", apiKey)

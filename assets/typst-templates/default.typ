@@ -161,7 +161,6 @@
       #text(fill: styling.secondary-color)[#biller.at("address", default: (:)).at("street", default: "--")] \
       #text(fill: styling.secondary-color)[#biller.at("address", default: (:)).at("city", default: "--")] \
       #text(fill: styling.secondary-color)[#biller.at("address", default: (:)).at("postal-code", default: "--")]
-
     ],
     [
       #text(weight: "semibold", size: 12pt)[Bill to]
