@@ -103,18 +103,17 @@ func NewPayloadBuilderFactory(services *Services) PayloadBuilderFactory {
 	f.builders[types.WebhookEventWalletTransactionCreated] = func() PayloadBuilder {
 		return NewTransactionPayloadBuilder(f.services)
 	}
-	// alert builders - use AlertPayloadBuilder for alert events
 	f.builders[types.WebhookEventWalletCreditBalanceDropped] = func() PayloadBuilder {
-		return NewAlertPayloadBuilder(f.services)
+		return NewWalletPayloadBuilder(f.services)
 	}
 	f.builders[types.WebhookEventWalletCreditBalanceRecovered] = func() PayloadBuilder {
-		return NewAlertPayloadBuilder(f.services)
+		return NewWalletPayloadBuilder(f.services)
 	}
 	f.builders[types.WebhookEventWalletOngoingBalanceDropped] = func() PayloadBuilder {
-		return NewAlertPayloadBuilder(f.services)
+		return NewWalletPayloadBuilder(f.services)
 	}
 	f.builders[types.WebhookEventWalletOngoingBalanceRecovered] = func() PayloadBuilder {
-		return NewAlertPayloadBuilder(f.services)
+		return NewWalletPayloadBuilder(f.services)
 	}
 
 	// customer builders

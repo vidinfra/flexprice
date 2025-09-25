@@ -1153,10 +1153,10 @@ func (s *walletService) PublishEvent(ctx context.Context, eventName string, w *w
 
 func getAlertType(eventName string) string {
 	switch eventName {
-	case types.WebhookEventWalletCreditBalanceDropped:
-		return "credit_balance"
-	case types.WebhookEventWalletOngoingBalanceDropped:
-		return "ongoing_balance"
+	case types.WebhookEventWalletCreditBalanceDropped, types.WebhookEventWalletCreditBalanceRecovered:
+		return string(types.AlertTypeLowCreditBalance)
+	case types.WebhookEventWalletOngoingBalanceDropped, types.WebhookEventWalletOngoingBalanceRecovered:
+		return string(types.AlertTypeLowOngoingBalance)
 	default:
 		return ""
 	}

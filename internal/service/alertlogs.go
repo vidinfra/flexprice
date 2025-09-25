@@ -2,13 +2,11 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/flexprice/flexprice/internal/domain/alertlogs"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
-	webhookDto "github.com/flexprice/flexprice/internal/webhook/dto"
 )
 
 // AlertLogsService defines the interface for alert logs operations
@@ -196,11 +194,6 @@ func (s *alertLogsService) LogAlert(ctx context.Context, req *LogAlertRequest) e
 			Mark(ierr.ErrDatabase)
 	}
 
-	// Publish webhook event
-	if webhookEventName != "" {
-		s.publishWebhookEvent(ctx, webhookEventName, alertLog)
-	}
-
 	s.Logger.Infow("alert logged successfully",
 		"alert_log_id", alertLog.ID,
 		"entity_type", req.EntityType,
@@ -209,6 +202,47 @@ func (s *alertLogsService) LogAlert(ctx context.Context, req *LogAlertRequest) e
 		"alert_status", req.AlertStatus,
 		"webhook_event", webhookEventName,
 	)
+
+	switch req.EntityType {
+	case types.AlertEntityTypeWallet:
+		// Get wallet domain object directly from repository
+		wallet, err := s.WalletRepo.GetWalletByID(ctx, alertLog.EntityID)
+		if err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to get wallet").
+				Mark(ierr.ErrDatabase)
+		}
+
+		// Publish webhook event using existing wallet event infrastructure
+		if webhookEventName != "" {
+			walletService := NewWalletService(s.ServiceParams)
+			if err := walletService.PublishEvent(ctx, webhookEventName, wallet); err != nil {
+				s.Logger.Errorw("failed to publish webhook event",
+					"error", err,
+					"alert_log_id", alertLog.ID,
+					"entity_type", req.EntityType,
+					"entity_id", req.EntityID,
+					"alert_type", req.AlertType,
+					"alert_status", req.AlertStatus,
+					"webhook_event", webhookEventName,
+				)
+			}
+			s.Logger.Infow("webhook event published successfully",
+				"alert_log_id", alertLog.ID,
+				"entity_type", req.EntityType,
+				"entity_id", req.EntityID,
+				"alert_type", req.AlertType,
+				"alert_status", req.AlertStatus,
+				"webhook_event", webhookEventName,
+			)
+		}
+	default:
+		s.Logger.Warnw("webhook event not published for alert log:",
+			"entity_type", req.EntityType,
+			"alert_log_id", alertLog.ID,
+		)
+		return nil
+	}
 
 	return nil
 }
@@ -267,53 +301,4 @@ func (s *alertLogsService) getWebhookEventName(alertType types.AlertType, alertS
 
 	// Return empty string if no mapping found
 	return ""
-}
-
-// publishWebhookEvent publishes a webhook event for the alert
-func (s *alertLogsService) publishWebhookEvent(ctx context.Context, eventName string, alertLog *alertlogs.AlertLog) {
-	if s.WebhookPublisher == nil {
-		s.Logger.Warnw("webhook publisher not initialized", "event", eventName)
-		return
-	}
-
-	// Create internal event
-	internalEvent := &webhookDto.InternalAlertEvent{
-		AlertLogID:    alertLog.ID,
-		EntityType:    string(alertLog.EntityType),
-		EntityID:      alertLog.EntityID,
-		AlertType:     string(alertLog.AlertType),
-		AlertStatus:   string(alertLog.AlertStatus),
-		AlertInfo:     alertLog.AlertInfo,
-		TenantID:      alertLog.TenantID,
-		EnvironmentID: alertLog.EnvironmentID,
-	}
-
-	// Convert to JSON
-	eventJSON, err := json.Marshal(internalEvent)
-	if err != nil {
-		s.Logger.Errorw("failed to marshal alert webhook payload", "error", err)
-		return
-	}
-
-	// Create webhook event
-	webhookEvent := &types.WebhookEvent{
-		ID:            types.GenerateUUIDWithPrefix(types.UUID_PREFIX_WEBHOOK_EVENT),
-		EventName:     eventName,
-		TenantID:      alertLog.TenantID,
-		EnvironmentID: alertLog.EnvironmentID,
-		UserID:        types.GetUserID(ctx),
-		Timestamp:     time.Now().UTC(),
-		Payload:       json.RawMessage(eventJSON),
-	}
-
-	if err := s.WebhookPublisher.PublishWebhook(ctx, webhookEvent); err != nil {
-		s.Logger.Errorf("failed to publish %s event: %v", webhookEvent.EventName, err)
-	} else {
-		s.Logger.Infow("webhook published successfully",
-			"event_name", eventName,
-			"alert_log_id", alertLog.ID,
-			"entity_type", alertLog.EntityType,
-			"entity_id", alertLog.EntityID,
-		)
-	}
 }
