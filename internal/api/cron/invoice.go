@@ -10,6 +10,7 @@ import (
 	"github.com/flexprice/flexprice/internal/service"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 	"github.com/stripe/stripe-go/v82"
 )
 
@@ -197,10 +198,49 @@ func (h *InvoiceHandler) processIncompleteSubscriptionsForEnvironment(
 		Count:         0,
 	}
 
-	// Get all incomplete subscriptions for this environment
+	// First check if Stripe connection exists and invoice sync is enabled
+	h.logger.Infow("checking Stripe connection and invoice sync configuration",
+		"tenant_id", tenantID,
+		"environment_id", environmentID)
+
+	conn, err := h.stripeService.ConnectionRepo.GetByProvider(ctx, types.SecretProviderStripe)
+	if err != nil || conn == nil {
+		h.logger.Infow("Stripe connection not available, skipping environment",
+			"tenant_id", tenantID,
+			"environment_id", environmentID,
+			"error", err)
+		return response, nil // Not an error, just skip this environment
+	}
+
+	// Check if invoice sync is enabled for this connection
+	if !conn.IsInvoiceSyncEnabled() {
+		h.logger.Infow("invoice sync disabled for Stripe connection, skipping environment",
+			"tenant_id", tenantID,
+			"environment_id", environmentID,
+			"connection_id", conn.ID)
+		return response, nil // Not an error, just skip this environment
+	}
+
+	h.logger.Infow("Stripe connection and invoice sync are enabled, proceeding with processing",
+		"tenant_id", tenantID,
+		"environment_id", environmentID,
+		"connection_id", conn.ID)
+
+	// Get incomplete subscriptions older than 24 hours
+	cutoffTime := time.Now().UTC().Add(-24 * time.Hour)
 	subscriptionFilter := &types.SubscriptionFilter{
 		SubscriptionStatus: []types.SubscriptionStatus{
 			types.SubscriptionStatusIncomplete,
+		},
+		Filters: []*types.FilterCondition{
+			{
+				Field:    lo.ToPtr("created_at"),
+				Operator: lo.ToPtr(types.BEFORE),
+				DataType: lo.ToPtr(types.DataTypeDate),
+				Value: &types.Value{
+					Date: &cutoffTime,
+				},
+			},
 		},
 	}
 
@@ -209,20 +249,21 @@ func (h *InvoiceHandler) processIncompleteSubscriptionsForEnvironment(
 		return response, err
 	}
 
-	h.logger.Infow("found incomplete subscriptions",
+	h.logger.Infow("found old incomplete subscriptions",
 		"tenant_id", tenantID,
 		"environment_id", environmentID,
-		"count", len(subscriptions.Items))
+		"count", len(subscriptions.Items),
+		"cutoff_time", cutoffTime.Format(time.RFC3339))
 
-	// Process each incomplete subscription
+	// Process each old incomplete subscription
 	for _, sub := range subscriptions.Items {
-		h.logger.Infow("processing subscription",
+		h.logger.Infow("processing old incomplete subscription",
 			"subscription_id", sub.ID,
 			"customer_id", sub.CustomerID,
 			"created_at", sub.CreatedAt)
 
-		if err := h.processSubscriptionOldPendingInvoices(ctx, sub); err != nil {
-			h.logger.Errorw("failed to process subscription old pending invoices",
+		if err := h.processOldIncompleteSubscription(ctx, sub); err != nil {
+			h.logger.Errorw("failed to process old incomplete subscription",
 				"subscription_id", sub.ID,
 				"error", err)
 			response.Failed++
@@ -235,215 +276,93 @@ func (h *InvoiceHandler) processIncompleteSubscriptionsForEnvironment(
 	return response, nil
 }
 
-// processSubscriptionOldPendingInvoices processes old pending invoices for a specific subscription
-func (h *InvoiceHandler) processSubscriptionOldPendingInvoices(
-	ctx context.Context,
-	sub *dto.SubscriptionResponse,
-) error {
-
-	h.logger.Infow("starting to process subscription for old pending invoices",
-		"subscription_id", sub.ID,
-		"subscription_status", sub.SubscriptionStatus,
-		"customer_id", sub.CustomerID,
-		"created_at", sub.CreatedAt)
-
-	// Calculate cutoff time (24 hours ago)
+// processOldIncompleteSubscription processes old incomplete subscriptions according to new flow
+func (h *InvoiceHandler) processOldIncompleteSubscription(ctx context.Context, sub *dto.SubscriptionResponse) error {
+	// Get all old pending invoices for this subscription (no payment status filter)
 	cutoffTime := time.Now().UTC().Add(-24 * time.Hour)
-
-	h.logger.Infow("searching for old pending invoices",
-		"subscription_id", sub.ID,
-		"cutoff_time", cutoffTime.Format(time.RFC3339),
-		"looking_for_invoices_older_than", "24 hours")
-
-	// Get pending invoices for this subscription that are older than 24 hours
-	// Note: We'll filter by creation date
 	invoiceFilter := &types.InvoiceFilter{
 		SubscriptionID: sub.ID,
 		InvoiceStatus: []types.InvoiceStatus{
 			types.InvoiceStatusDraft,
 			types.InvoiceStatusFinalized,
 		},
-		PaymentStatus: []types.PaymentStatus{
-			types.PaymentStatusPending,
-			types.PaymentStatusFailed,
-		},
-		// Removed TimeRangeFilter since it uses period_end, not created_at
+		// No PaymentStatus filter - get all invoices
 	}
 
 	invoices, err := h.invoiceService.ListInvoices(ctx, invoiceFilter)
 	if err != nil {
-		h.logger.Errorw("failed to list invoices for subscription",
-			"subscription_id", sub.ID,
-			"error", err)
 		return err
 	}
 
-	h.logger.Infow("found pending invoices for subscription (before age filtering)",
-		"subscription_id", sub.ID,
-		"count", len(invoices.Items),
-		"cutoff_time", cutoffTime.Format(time.RFC3339))
-
-	// Filter invoices by creation date (older than 24 hours)
+	// Filter by creation date (older than 24 hours)
 	var oldInvoices []*dto.InvoiceResponse
 	for _, inv := range invoices.Items {
-		h.logger.Infow("checking invoice age",
-			"subscription_id", sub.ID,
-			"invoice_id", inv.ID,
-			"created_at", inv.CreatedAt,
-			"cutoff_time", cutoffTime.Format(time.RFC3339),
-			"is_old", inv.CreatedAt.Before(cutoffTime))
-
 		if inv.CreatedAt.Before(cutoffTime) {
 			oldInvoices = append(oldInvoices, inv)
-			h.logger.Infow("invoice is old enough - including",
-				"subscription_id", sub.ID,
-				"invoice_id", inv.ID,
-				"invoice_status", inv.InvoiceStatus,
-				"payment_status", inv.PaymentStatus,
-				"created_at", inv.CreatedAt,
-				"amount_due", inv.AmountDue,
-				"amount_paid", inv.AmountPaid,
-				"total", inv.Total)
-		} else {
-			h.logger.Infow("invoice is too recent - skipping",
-				"subscription_id", sub.ID,
-				"invoice_id", inv.ID,
-				"created_at", inv.CreatedAt)
 		}
 	}
 
-	h.logger.Infow("found old pending invoices for subscription (after age filtering)",
+	h.logger.Infow("processing subscription",
 		"subscription_id", sub.ID,
 		"total_invoices", len(invoices.Items),
-		"old_invoices_count", len(oldInvoices),
-		"cutoff_time", cutoffTime.Format(time.RFC3339))
+		"old_invoices", len(oldInvoices))
 
-	if len(oldInvoices) == 0 {
-		h.logger.Infow("no old pending invoices found for subscription",
-			"subscription_id", sub.ID)
+	// Decision logic based on invoice count
+	switch len(oldInvoices) {
+	case 0:
+		// No invoices - cancel subscription in FlexPrice
+		h.logger.Infow("no old invoices found, cancelling subscription", "subscription_id", sub.ID)
+		return h.cancelIncompleteSubscription(ctx, sub)
+
+	case 1:
+		// One invoice - check if eligible for voiding
+		return h.processSingleInvoice(ctx, sub, oldInvoices[0])
+
+	default:
+		// More than one invoice - skip subscription
+		h.logger.Infow("multiple old invoices found, skipping subscription",
+			"subscription_id", sub.ID,
+			"invoice_count", len(oldInvoices))
+		return nil
+	}
+}
+
+// processSingleInvoice handles the case where subscription has exactly one old invoice
+func (h *InvoiceHandler) processSingleInvoice(ctx context.Context, sub *dto.SubscriptionResponse, inv *dto.InvoiceResponse) error {
+
+	// Check if synced to Stripe
+	mapping, err := h.stripeService.GetExistingStripeMapping(ctx, inv.ID)
+	if err != nil || mapping == nil {
+		h.logger.Infow("invoice not synced to Stripe, skipping", "invoice_id", inv.ID)
 		return nil
 	}
 
-	// Check if subscription has any invoices synced to Stripe
-	var hasAnyStripeSyncedInvoices bool
-	var invoiceToVoid *dto.InvoiceResponse
-	var hasAnyPartialPayments bool
-
-	h.logger.Infow("checking if subscription has any Stripe-synced invoices",
-		"subscription_id", sub.ID,
-		"old_invoices_count", len(oldInvoices))
-
-	for _, inv := range oldInvoices {
-		// Check if this invoice is synced to Stripe
-		mapping, err := h.stripeService.GetExistingStripeMapping(ctx, inv.ID)
-		if err == nil && mapping != nil {
-			hasAnyStripeSyncedInvoices = true
-			h.logger.Infow("found Stripe-synced invoice",
-				"invoice_id", inv.ID,
-				"subscription_id", sub.ID,
-				"stripe_invoice_id", mapping.ProviderEntityID)
-		} else {
-			h.logger.Infow("invoice not synced to Stripe",
-				"invoice_id", inv.ID,
-				"subscription_id", sub.ID)
-			continue // Skip non-Stripe invoices
-		}
-
-		// Check if invoice has any partial payments in FlexPrice
-		if inv.AmountPaid.IsPositive() {
-			h.logger.Infow("found invoice with partial payment in FlexPrice",
-				"invoice_id", inv.ID,
-				"subscription_id", sub.ID,
-				"amount_paid", inv.AmountPaid,
-				"total", inv.Total,
-				"amount_remaining", inv.AmountRemaining)
-			hasAnyPartialPayments = true
-			continue
-		}
-
-		// Check if invoice has partial payments in Stripe
-		if hasStripePartialPayment, err := h.checkStripePartialPayment(ctx, inv.ID); err != nil {
-			h.logger.Errorw("failed to check Stripe partial payment status",
-				"invoice_id", inv.ID,
-				"subscription_id", sub.ID,
-				"error", err)
-			continue
-		} else if hasStripePartialPayment {
-			h.logger.Infow("found invoice with partial payment in Stripe",
-				"invoice_id", inv.ID,
-				"subscription_id", sub.ID)
-			hasAnyPartialPayments = true
-			continue
-		}
-
-		// This invoice has no partial payments and is synced to Stripe, we can void it
-		if invoiceToVoid == nil {
-			invoiceToVoid = inv
-			break // Take the first eligible invoice (oldest)
-		}
-	}
-
-	// If no invoices are synced to Stripe, skip this subscription
-	if !hasAnyStripeSyncedInvoices {
-		h.logger.Infow("subscription has no Stripe-synced invoices, skipping",
-			"subscription_id", sub.ID,
-			"total_old_invoices", len(oldInvoices))
+	// Check for partial payments in FlexPrice
+	if inv.AmountPaid.IsPositive() {
+		h.logger.Infow("invoice has partial payment in FlexPrice, skipping", "invoice_id", inv.ID)
 		return nil
 	}
 
-	// If any invoice has partial payments, don't void anything or cancel subscription
-	if hasAnyPartialPayments {
-		h.logger.Infow("subscription has invoices with partial payments, skipping cancellation",
-			"subscription_id", sub.ID,
-			"total_invoices", len(oldInvoices))
+	// Check for partial payments in Stripe
+	if hasPartial, err := h.checkStripePartialPayment(ctx, inv.ID); err != nil || hasPartial {
+		if hasPartial {
+			h.logger.Infow("invoice has partial payment in Stripe, skipping", "invoice_id", inv.ID)
+		}
 		return nil
 	}
 
-	// If no eligible invoice found, log and return
-	if invoiceToVoid == nil {
-		h.logger.Infow("no eligible invoices found for voiding",
-			"subscription_id", sub.ID,
-			"total_invoices", len(oldInvoices))
-		return nil
-	}
+	// All checks passed - void invoice and cancel subscription
+	h.logger.Infow("voiding invoice and cancelling subscription",
+		"invoice_id", inv.ID,
+		"subscription_id", sub.ID)
 
-	h.logger.Infow("proceeding to void selected invoice and cancel subscription",
-		"subscription_id", sub.ID,
-		"invoice_to_void", invoiceToVoid.ID,
-		"invoice_amount", invoiceToVoid.AmountDue,
-		"invoice_created_at", invoiceToVoid.CreatedAt)
-
-	// Void the selected invoice
-	if err := h.voidOldPendingInvoice(ctx, invoiceToVoid); err != nil {
-		h.logger.Errorw("failed to void old pending invoice",
-			"invoice_id", invoiceToVoid.ID,
-			"subscription_id", sub.ID,
-			"error", err)
+	// Void invoice in FlexPrice
+	if err := h.voidOldPendingInvoice(ctx, inv); err != nil {
 		return err
 	}
 
-	h.logger.Infow("successfully voided old pending invoice",
-		"invoice_id", invoiceToVoid.ID,
-		"subscription_id", sub.ID,
-		"amount", invoiceToVoid.AmountDue)
-
-	// Cancel the subscription
-	h.logger.Infow("proceeding to cancel incomplete subscription",
-		"subscription_id", sub.ID,
-		"customer_id", sub.CustomerID)
-
-	if err := h.cancelIncompleteSubscription(ctx, sub); err != nil {
-		h.logger.Errorw("failed to cancel incomplete subscription",
-			"subscription_id", sub.ID,
-			"error", err)
-		return err
-	}
-
-	h.logger.Infow("successfully cancelled incomplete subscription",
-		"subscription_id", sub.ID,
-		"customer_id", sub.CustomerID)
-
-	return nil
+	// Cancel subscription in FlexPrice
+	return h.cancelIncompleteSubscription(ctx, sub)
 }
 
 // cancelIncompleteSubscription cancels an incomplete subscription that has old pending invoices
