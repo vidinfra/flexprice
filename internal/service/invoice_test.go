@@ -1148,6 +1148,7 @@ func (s *InvoiceServiceSuite) setupWallets() {
 		AuthRepo:         s.GetStores().AuthRepo,
 		WalletRepo:       s.GetStores().WalletRepo,
 		PaymentRepo:      s.GetStores().PaymentRepo,
+		AlertLogsRepo:    testutil.NewMockAlertLogsRepo(),
 		EventPublisher:   s.GetPublisher(),
 		WebhookPublisher: s.GetWebhookPublisher(),
 	})

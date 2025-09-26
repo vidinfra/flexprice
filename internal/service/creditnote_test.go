@@ -416,6 +416,7 @@ func (s *CreditNoteServiceSuite) createTestWallets() {
 		Config:           s.GetConfig(),
 		DB:               s.GetDB(),
 		WalletRepo:       s.GetStores().WalletRepo,
+		AlertLogsRepo:    testutil.NewMockAlertLogsRepo(),
 		EventPublisher:   s.GetPublisher(),
 		WebhookPublisher: s.GetWebhookPublisher(),
 	})
