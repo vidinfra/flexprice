@@ -5898,6 +5898,11 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "name": "gateway_payment_id",
+                        "in": "query"
+                    },
+                    {
                         "maximum": 1000,
                         "minimum": 1,
                         "type": "integer",
@@ -11289,6 +11294,10 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
                 "name": {
                     "type": "string"
                 },
@@ -11747,6 +11756,10 @@ const docTemplate = `{
             "properties": {
                 "encrypted_secret_data": {
                     "$ref": "#/definitions/types.ConnectionMetadata"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
                 },
                 "name": {
                     "type": "string",
@@ -17190,6 +17203,10 @@ const docTemplate = `{
         "dto.UpdateConnectionRequest": {
             "type": "object",
             "properties": {
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
                 "name": {
                     "type": "string",
                     "maxLength": 255
@@ -18981,8 +18998,19 @@ const docTemplate = `{
                 "generic": {
                     "$ref": "#/definitions/types.GenericConnectionMetadata"
                 },
+                "settings": {
+                    "$ref": "#/definitions/types.ConnectionSettings"
+                },
                 "stripe": {
                     "$ref": "#/definitions/types.StripeConnectionMetadata"
+                }
+            }
+        },
+        "types.ConnectionSettings": {
+            "type": "object",
+            "properties": {
+                "invoice_sync_enable": {
+                    "type": "boolean"
                 }
             }
         },
