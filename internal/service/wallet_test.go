@@ -80,6 +80,7 @@ func (s *WalletServiceSuite) setupService() {
 		EntitlementRepo:  stores.EntitlementRepo,
 		FeatureRepo:      stores.FeatureRepo,
 		SettingsRepo:     stores.SettingsRepo,
+		AlertLogsRepo:    testutil.NewMockAlertLogsRepo(),
 		EventPublisher:   s.GetPublisher(),
 		WebhookPublisher: s.GetWebhookPublisher(),
 	})
