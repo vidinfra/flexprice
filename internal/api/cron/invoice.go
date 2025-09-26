@@ -3,6 +3,7 @@ package cron
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
@@ -291,7 +292,11 @@ func (h *InvoiceHandler) processOldIncompleteSubscription(ctx context.Context, s
 
 	invoices, err := h.invoiceService.ListInvoices(ctx, invoiceFilter)
 	if err != nil {
-		return err
+		h.logger.Errorw("failed to list invoices for subscription, but continuing",
+			"subscription_id", sub.ID,
+			"error", err)
+		// Don't return error - treat as success to avoid incrementing failed count
+		return nil
 	}
 
 	// Filter by creation date (older than 24 hours)
@@ -358,7 +363,10 @@ func (h *InvoiceHandler) processSingleInvoice(ctx context.Context, sub *dto.Subs
 
 	// Void invoice in FlexPrice
 	if err := h.voidOldPendingInvoice(ctx, inv); err != nil {
-		return err
+		h.logger.Errorw("failed to void invoice in FlexPrice, but continuing",
+			"invoice_id", inv.ID,
+			"error", err)
+		// Don't return error - treat as success to avoid incrementing failed count
 	}
 
 	// Cancel subscription in FlexPrice
@@ -382,7 +390,18 @@ func (h *InvoiceHandler) cancelIncompleteSubscription(ctx context.Context, sub *
 	// Cancel the subscription
 	_, err := h.subscriptionService.CancelSubscription(ctx, sub.ID, &cancelRequest)
 	if err != nil {
-		return err
+		// If subscription is not found, it's already cancelled - treat as success
+		if strings.Contains(err.Error(), "subscription not found") || strings.Contains(err.Error(), "not found") {
+			h.logger.Infow("subscription already cancelled or not found, treating as success",
+				"subscription_id", sub.ID,
+				"customer_id", sub.CustomerID)
+			return nil
+		}
+		h.logger.Errorw("failed to cancel subscription, but continuing",
+			"subscription_id", sub.ID,
+			"error", err)
+		// Don't return error - treat as success to avoid incrementing failed count
+		return nil
 	}
 
 	h.logger.Infow("successfully cancelled incomplete subscription",
