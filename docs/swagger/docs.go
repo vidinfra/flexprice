@@ -18776,7 +18776,8 @@ const docTemplate = `{
                 "COUNT_UNIQUE",
                 "LATEST",
                 "SUM_WITH_MULTIPLIER",
-                "MAX"
+                "MAX",
+                "WEIGHTED_SUM"
             ],
             "x-enum-comments": {
                 "AggregationSumWithMultiplier": "Sum with a multiplier - [sum(value) * multiplier]"
@@ -18788,6 +18789,7 @@ const docTemplate = `{
                 "",
                 "",
                 "Sum with a multiplier - [sum(value) * multiplier]",
+                "",
                 ""
             ],
             "x-enum-varnames": [
@@ -18797,7 +18799,8 @@ const docTemplate = `{
                 "AggregationCountUnique",
                 "AggregationLatest",
                 "AggregationSumWithMultiplier",
-                "AggregationMax"
+                "AggregationMax",
+                "AggregationWeightedSum"
             ]
         },
         "types.AlertConfig": {

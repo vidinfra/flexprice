@@ -67,7 +67,7 @@ openapi-generator-cli generate \
     -i "$SWAGGER_FILE" \
     -g typescript-fetch \
     -o "$API_DIR" \
-    --additional-properties=npmName="$SDK_NAME",npmVersion="$SDK_VERSION",npmRepository=https://github.com/flexprice/javascript-sdk.git,supportsES6=true,typescriptThreePlus=true,withNodeImports=true,withSeparateModelsAndApi=true,modelPackage=models,apiPackage=apis,enumPropertyNaming=UPPERCASE,stringEnums=true,modelPropertyNaming=camelCase,paramNaming=camelCase,withInterfaces=true,useSingleRequestParameter=true,platform=node,sortParamsByRequiredFlag=true,sortModelPropertiesByRequiredFlag=true,ensureUniqueParams=true,allowUnicodeIdentifiers=false,prependFormOrBodyParameters=false,apiNameSuffix=Api \
+    --additional-properties=npmName="$SDK_NAME",supportsES6=true,typescriptThreePlus=true,withNodeImports=true,withSeparateModelsAndApi=true,modelPackage=models,apiPackage=apis,enumPropertyNaming=UPPERCASE,stringEnums=true,modelPropertyNaming=camelCase,paramNaming=camelCase,withInterfaces=true,useSingleRequestParameter=true,platform=node,sortParamsByRequiredFlag=true,sortModelPropertiesByRequiredFlag=true,ensureUniqueParams=true,allowUnicodeIdentifiers=false,prependFormOrBodyParameters=false,apiNameSuffix=Api \
     --git-repo-id=javascript-sdk \
     --git-user-id=flexprice \
     --global-property apiTests=false,modelTests=false,apiDocs=true,modelDocs=true,withSeparateModelsAndApi=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true,platform=node

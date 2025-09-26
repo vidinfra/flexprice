@@ -1,6 +1,6 @@
 {
   "name": "@flexprice/sdk",
-  "version": "1.0.26",
+  "version": "1.0.27",
   "description": "Official TypeScript/JavaScript SDK of Flexprice",
   "author": "Flexprice",
   "repository": {
@@ -25,7 +25,7 @@
     "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.57.1",
     "jest": "^29.7.0",
-    "ts-jest": "^29.4.3",
+    "ts-jest": "^29.4.4",
     "typescript": "^5.9.2"
   },
   "publishConfig": {

@@ -5877,6 +5877,7 @@ definitions:
     - LATEST
     - SUM_WITH_MULTIPLIER
     - MAX
+    - WEIGHTED_SUM
     type: string
     x-enum-comments:
       AggregationSumWithMultiplier: Sum with a multiplier - [sum(value) * multiplier]
@@ -5888,6 +5889,7 @@ definitions:
     - ""
     - Sum with a multiplier - [sum(value) * multiplier]
     - ""
+    - ""
     x-enum-varnames:
     - AggregationCount
     - AggregationSum
@@ -5896,6 +5898,7 @@ definitions:
     - AggregationLatest
     - AggregationSumWithMultiplier
     - AggregationMax
+    - AggregationWeightedSum
   types.AlertConfig:
     properties:
       threshold:
