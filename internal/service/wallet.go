@@ -829,63 +829,6 @@ func (s *walletService) processWalletOperation(ctx context.Context, req *wallet.
 
 		s.Logger.Debugw("Wallet operation completed")
 		s.publishInternalTransactionWebhookEvent(ctx, types.WebhookEventWalletTransactionCreated, tx.ID)
-
-		// Check credit balance alerts after wallet operation
-		var thresholdValue decimal.Decimal
-		var alertStatus types.AlertState
-
-		// Get wallet threshold or use default (0)
-		if w.AlertConfig != nil && w.AlertConfig.Threshold != nil {
-			thresholdValue = w.AlertConfig.Threshold.Value
-		} else {
-			thresholdValue = decimal.Zero
-		}
-
-		// Determine alert status based on balance vs threshold
-		if newCreditBalance.LessThan(thresholdValue) {
-			alertStatus = types.AlertStateInAlarm
-		} else {
-			alertStatus = types.AlertStateOk
-		}
-
-		// Create alert info
-		alertInfo := types.AlertInfo{
-			Threshold: types.AlertThreshold{
-				Type:  types.AlertThresholdTypeAmount,
-				Value: thresholdValue,
-			},
-			ValueAtTime: newCreditBalance,
-			Timestamp:   time.Now().UTC(),
-		}
-
-		// Log the alert
-		alertService := NewAlertLogsService(s.ServiceParams)
-		logAlertReq := &LogAlertRequest{
-			EntityType:  types.AlertEntityTypeWallet,
-			EntityID:    w.ID,
-			AlertType:   types.AlertTypeLowCreditBalance,
-			AlertStatus: alertStatus,
-			AlertInfo:   alertInfo,
-		}
-
-		if err := alertService.LogAlert(ctx, logAlertReq); err != nil {
-			// Log error but don't fail the transaction
-			s.Logger.Errorw("failed to log credit balance alert",
-				"error", err,
-				"wallet_id", w.ID,
-				"new_credit_balance", newCreditBalance,
-				"threshold", thresholdValue,
-				"alert_status", alertStatus,
-			)
-		} else {
-			s.Logger.Infow("credit balance alert logged successfully",
-				"wallet_id", w.ID,
-				"new_credit_balance", newCreditBalance,
-				"threshold", thresholdValue,
-				"alert_status", alertStatus,
-			)
-		}
-
 		return nil
 	})
 }
