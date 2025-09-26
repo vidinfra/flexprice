@@ -502,7 +502,8 @@ func (s *onboardingService) createDefaultMeters(ctx context.Context) ([]*meter.M
 		Name:      "LLM Usage",
 		EventName: "llm_usage",
 		Aggregation: meter.Aggregation{
-			Type: types.AggregationCount,
+			Type: types.AggregationSum,
+			Field: "value",
 		},
 		Filters: modelFilters,
 	}
