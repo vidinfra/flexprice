@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 	"time"
@@ -28,22 +29,13 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// FeatureUsageTrackingService handles post-processing operations for metered events
+// FeatureUsageTrackingService handles feature usage tracking operations for metered events
 type FeatureUsageTrackingService interface {
-	// Publish an event for post-processing
+	// Publish an event for feature usage tracking
 	PublishEvent(ctx context.Context, event *events.Event, isBackfill bool) error
 
 	// Register message handler with the router
 	RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration)
-
-	// Get usage cost for a specific period
-	GetPeriodCost(ctx context.Context, tenantID, environmentID, customerID, subscriptionID string, periodID uint64) (decimal.Decimal, error)
-
-	// Get usage totals per feature for a period
-	GetPeriodFeatureTotals(ctx context.Context, tenantID, environmentID, customerID, subscriptionID string, periodID uint64) ([]*events.PeriodFeatureTotal, error)
-
-	// Get usage analytics for a customer
-	GetUsageAnalytics(ctx context.Context, tenantID, environmentID, customerID string, lookbackHours int) ([]*events.UsageAnalytic, error)
 
 	// Get detailed usage analytics with filtering, grouping, and time-series data
 	GetDetailedUsageAnalytics(ctx context.Context, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error)
@@ -60,7 +52,7 @@ type featureUsageTrackingService struct {
 	featureUsageRepo events.FeatureUsageRepository
 }
 
-// NewFeatureUsageTrackingService creates a new event post-processing service
+// NewFeatureUsageTrackingService creates a new feature usage tracking service
 func NewFeatureUsageTrackingService(
 	params ServiceParams,
 	eventRepo events.Repository,
@@ -97,13 +89,13 @@ func NewFeatureUsageTrackingService(
 	return ev
 }
 
-// PublishEvent publishes an event to the post-processing topic
+// PublishEvent publishes an event to the feature usage tracking topic
 func (s *featureUsageTrackingService) PublishEvent(ctx context.Context, event *events.Event, isBackfill bool) error {
 	// Create message payload
 	payload, err := json.Marshal(event)
 	if err != nil {
 		return ierr.WithError(err).
-			WithHint("Failed to marshal event for post-processing").
+			WithHint("Failed to marshal event for feature usage tracking").
 			Mark(ierr.ErrValidation)
 	}
 
@@ -125,38 +117,34 @@ func (s *featureUsageTrackingService) PublishEvent(ctx context.Context, event *e
 	msg.Metadata.Set("environment_id", event.EnvironmentID)
 	msg.Metadata.Set("partition_key", partitionKey)
 
-	// TODO: use partition key in the producer
-
-	pubSub := s.pubSub
-	topic := s.Config.FeatureUsageTracking.Topic
 	if isBackfill {
-		pubSub = s.backfillPubSub
-		topic = s.Config.EventPostProcessing.TopicBackfill
-	}
+		pubSub := s.backfillPubSub
+		topic := s.Config.FeatureUsageTracking.TopicBackfill
 
-	if pubSub == nil {
-		return ierr.NewError("pubsub not initialized").
-			WithHint("Please check the config").
-			Mark(ierr.ErrSystem)
-	}
+		if pubSub == nil {
+			return ierr.NewError("pubsub not initialized").
+				WithHint("Please check the config").
+				Mark(ierr.ErrSystem)
+		}
 
-	s.Logger.Debugw("publishing event for post-processing",
-		"event_id", event.ID,
-		"event_name", event.EventName,
-		"partition_key", partitionKey,
-		"topic", topic,
-	)
+		s.Logger.Debugw("publishing event for feature usage tracking",
+			"event_id", event.ID,
+			"event_name", event.EventName,
+			"partition_key", partitionKey,
+			"topic", topic,
+		)
 
-	// Publish to post-processing topic using the backfill PubSub (Kafka)
-	if err := pubSub.Publish(ctx, topic, msg); err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to publish event for post-processing").
-			Mark(ierr.ErrSystem)
+		// Publish to feature usage tracking topic using the backfill PubSub (Kafka)
+		if err := pubSub.Publish(ctx, topic, msg); err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to publish event for feature usage tracking").
+				Mark(ierr.ErrSystem)
+		}
 	}
 	return nil
 }
 
-// RegisterHandler registers a handler for the post-processing topic with rate limiting
+// RegisterHandler registers a handler for the feature usage tracking topic with rate limiting
 func (s *featureUsageTrackingService) RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration) {
 	// Add throttle middleware to this specific handler
 	throttle := middleware.NewThrottle(cfg.FeatureUsageTracking.RateLimit, time.Second)
@@ -170,34 +158,34 @@ func (s *featureUsageTrackingService) RegisterHandler(router *pubsubRouter.Route
 		throttle.Middleware,
 	)
 
-	s.Logger.Infow("registered event post-processing handler",
-		"topic", cfg.EventPostProcessing.Topic,
-		"rate_limit", cfg.EventPostProcessing.RateLimit,
+	s.Logger.Infow("registered event feature usage tracking handler",
+		"topic", cfg.FeatureUsageTracking.Topic,
+		"rate_limit", cfg.FeatureUsageTracking.RateLimit,
 	)
 
 	// Add backfill handler
-	if cfg.EventPostProcessing.TopicBackfill == "" {
+	if cfg.FeatureUsageTracking.TopicBackfill == "" {
 		s.Logger.Warnw("backfill topic not set, skipping backfill handler")
 		return
 	}
 
-	backfillThrottle := middleware.NewThrottle(cfg.EventPostProcessing.RateLimitBackfill, time.Second)
+	backfillThrottle := middleware.NewThrottle(cfg.FeatureUsageTracking.RateLimitBackfill, time.Second)
 	router.AddNoPublishHandler(
 		"feature_usage_tracking_backfill_handler",
-		cfg.EventPostProcessing.TopicBackfill,
+		cfg.FeatureUsageTracking.TopicBackfill,
 		s.backfillPubSub, // Use the dedicated Kafka backfill PubSub
 		s.processMessage,
 		backfillThrottle.Middleware,
 	)
 
-	s.Logger.Infow("registered event post-processing backfill handler",
-		"topic", cfg.EventPostProcessing.TopicBackfill,
-		"rate_limit", cfg.EventPostProcessing.RateLimitBackfill,
+	s.Logger.Infow("registered event feature usage tracking backfill handler",
+		"topic", cfg.FeatureUsageTracking.TopicBackfill,
+		"rate_limit", cfg.FeatureUsageTracking.RateLimitBackfill,
 		"pubsub_type", "kafka",
 	)
 }
 
-// Process a single event message
+// Process a single event message for feature usage tracking
 func (s *featureUsageTrackingService) processMessage(msg *message.Message) error {
 	// Extract tenant ID from message metadata
 	partitionKey := msg.Metadata.Get("partition_key")
@@ -224,7 +212,7 @@ func (s *featureUsageTrackingService) processMessage(msg *message.Message) error
 	// Unmarshal the event
 	var event events.Event
 	if err := json.Unmarshal(msg.Payload, &event); err != nil {
-		s.Logger.Errorw("failed to unmarshal event for post-processing",
+		s.Logger.Errorw("failed to unmarshal event for feature usage tracking",
 			"error", err,
 			"message_uuid", msg.UUID,
 		)
@@ -243,7 +231,7 @@ func (s *featureUsageTrackingService) processMessage(msg *message.Message) error
 
 	// Process the event
 	if err := s.processEvent(ctx, &event); err != nil {
-		s.Logger.Errorw("failed to process event",
+		s.Logger.Errorw("failed to process event for feature usage tracking",
 			"error", err,
 			"event_id", event.ID,
 			"event_name", event.EventName,
@@ -251,7 +239,7 @@ func (s *featureUsageTrackingService) processMessage(msg *message.Message) error
 		return err // Return error for retry
 	}
 
-	s.Logger.Infow("event processed successfully",
+	s.Logger.Infow("event for feature usage tracking processed successfully",
 		"event_id", event.ID,
 		"event_name", event.EventName,
 	)
@@ -259,7 +247,7 @@ func (s *featureUsageTrackingService) processMessage(msg *message.Message) error
 	return nil
 }
 
-// Process a single event
+// Process a single event for feature usage tracking
 func (s *featureUsageTrackingService) processEvent(ctx context.Context, event *events.Event) error {
 	s.Logger.Debugw("processing event",
 		"event_id", event.ID,
@@ -381,77 +369,82 @@ func (s *featureUsageTrackingService) prepareProcessedEvents(ctx context.Context
 		return results, nil
 	}
 
-	// Build efficient maps for lookups
-	meterMap := make(map[string]*meter.Meter)                             // Map meter_id -> meter
-	priceMap := make(map[string]*price.Price)                             // Map price_id -> price
-	featureMap := make(map[string]*feature.Feature)                       // Map feature_id -> feature
-	featureMeterMap := make(map[string]*feature.Feature)                  // Map meter_id -> feature
+	// Collect all price IDs and meter IDs from subscription line items
+	priceIDs := make([]string, 0)
+	meterIDs := make([]string, 0)
 	subLineItemMap := make(map[string]*subscription.SubscriptionLineItem) // Map price_id -> line item
 
-	addonIDs := make([]string, 0) // Collects addon EntityIDs for bulk price fetching
-	// Extract meters, prices and line items from subscriptions
+	// Extract price IDs and meter IDs from all subscription line items in a single pass
 	for _, sub := range subscriptions {
-		if sub.Plan == nil || sub.Plan.Prices == nil {
-			continue
-		}
-
 		for _, item := range sub.LineItems {
 			if !item.IsUsage() || !item.IsActive(event.Timestamp) {
 				continue
 			}
 
 			subLineItemMap[item.PriceID] = item
-			if item.EntityType == types.SubscriptionLineItemEntityTypeAddon {
-				addonIDs = append(addonIDs, item.EntityID)
-			}
-		}
-
-		for _, item := range sub.Plan.Prices {
-			if !item.IsUsage() {
-				continue
-			}
-
-			priceMap[item.ID] = item.Price
-
-			if item.MeterID != "" && item.Meter != nil {
-				meterMap[item.MeterID] = item.Meter.ToMeter()
-			}
+			priceIDs = append(priceIDs, item.PriceID)
 		}
 	}
 
-	// Fetch addon prices in bulk if we have addon IDs
-	addonIDs = lo.Uniq(addonIDs)
-	if len(addonIDs) > 0 {
-		priceService := NewPriceService(s.ServiceParams)
-		priceFilter := types.NewNoLimitPriceFilter().
-			WithEntityIDs(addonIDs).
-			WithEntityType(types.PRICE_ENTITY_TYPE_ADDON).
-			WithStatus(types.StatusPublished).
-			WithExpand(string(types.ExpandMeters))
+	// Remove duplicates
+	priceIDs = lo.Uniq(priceIDs)
 
-		prices, err := priceService.GetPrices(ctx, priceFilter)
-		if err != nil {
-			s.Logger.Errorw("failed to get addon prices",
-				"error", err,
-				"event_id", event.ID,
-				"addon_count", len(addonIDs),
-			)
-			return results, err
+	// Fetch all prices in bulk
+	priceFilter := types.NewNoLimitPriceFilter().
+		WithPriceIDs(priceIDs).
+		WithStatus(types.StatusPublished).
+		WithExpand(string(types.ExpandMeters))
+
+	prices, err := s.PriceRepo.List(ctx, priceFilter)
+	if err != nil {
+		s.Logger.Errorw("failed to get prices",
+			"error", err,
+			"event_id", event.ID,
+			"price_count", len(priceIDs),
+		)
+		return results, err
+	}
+
+	// Build price map and collect meter IDs
+	priceMap := make(map[string]*price.Price)
+	for _, p := range prices {
+		if !p.IsUsage() {
+			continue
 		}
-
-		for _, priceItem := range prices.Items {
-			if !priceItem.IsUsage() {
-				continue
-			}
-			priceMap[priceItem.ID] = priceItem.Price
-			if priceItem.MeterID != "" && priceItem.Meter != nil {
-				meterMap[priceItem.MeterID] = priceItem.Meter.ToMeter()
-			}
+		priceMap[p.ID] = p
+		if p.MeterID != "" {
+			meterIDs = append(meterIDs, p.MeterID)
 		}
 	}
 
-	// Get features if not already expanded in subscriptions
-	if len(meterMap) > 0 && len(featureMap) == 0 {
+	// Remove duplicate meter IDs
+	meterIDs = lo.Uniq(meterIDs)
+
+	// Fetch all meters in bulk
+	meterFilter := types.NewNoLimitMeterFilter()
+	meterFilter.MeterIDs = meterIDs
+
+	meters, err := s.MeterRepo.List(ctx, meterFilter)
+	if err != nil {
+		s.Logger.Errorw("failed to get meters",
+			"error", err,
+			"event_id", event.ID,
+			"meter_count", len(meterIDs),
+		)
+		return results, err
+	}
+
+	// Build meter map
+	meterMap := make(map[string]*meter.Meter)
+	for _, m := range meters {
+		meterMap[m.ID] = m
+	}
+
+	// Build feature maps
+	featureMap := make(map[string]*feature.Feature)      // Map feature_id -> feature
+	featureMeterMap := make(map[string]*feature.Feature) // Map meter_id -> feature
+
+	if len(meterMap) > 0 {
 		featureFilter := types.NewNoLimitFeatureFilter()
 		featureFilter.MeterIDs = lo.Keys(meterMap)
 		features, err := s.FeatureRepo.List(ctx, featureFilter)
@@ -581,7 +574,7 @@ func (s *featureUsageTrackingService) prepareProcessedEvents(ctx context.Context
 			}
 
 			// Extract quantity based on meter aggregation
-			quantity, _ := s.extractQuantityFromEvent(event, match.Meter)
+			quantity, _ := s.extractQuantityFromEvent(event, match.Meter, sub.Subscription, periodID)
 
 			// Validate the quantity is positive and within reasonable bounds
 			if quantity.IsNegative() {
@@ -629,7 +622,7 @@ func (s *featureUsageTrackingService) findMatchingPricesForEvent(
 
 		meter, ok := meterMap[price.MeterID]
 		if !ok || meter == nil {
-			s.Logger.Warnw("post-processing: meter not found for price",
+			s.Logger.Warnw("feature usage tracking: meter not found for price",
 				"event_id", event.ID,
 				"price_id", price.ID,
 				"meter_id", price.MeterID,
@@ -700,6 +693,8 @@ func (s *featureUsageTrackingService) checkMeterFilters(event *events.Event, fil
 func (s *featureUsageTrackingService) extractQuantityFromEvent(
 	event *events.Event,
 	meter *meter.Meter,
+	subscription *subscription.Subscription,
+	periodID uint64,
 ) (decimal.Decimal, string) {
 	switch meter.Aggregation.Type {
 	case types.AggregationCount:
@@ -791,7 +786,37 @@ func (s *featureUsageTrackingService) extractQuantityFromEvent(
 		// and convert the value to string for tracking
 		stringValue := s.convertValueToString(val)
 		return decimal.NewFromInt(1), stringValue
+	case types.AggregationWeightedSum:
+		if meter.Aggregation.Field == "" {
+			s.Logger.Warnw("weighted_sum aggregation with empty field name",
+				"event_id", event.ID,
+				"meter_id", meter.ID,
+			)
+			return decimal.Zero, ""
+		}
 
+		val, ok := event.Properties[meter.Aggregation.Field]
+		if !ok {
+			s.Logger.Warnw("property not found for weighted_sum aggregation",
+				"event_id", event.ID,
+				"meter_id", meter.ID,
+				"field", meter.Aggregation.Field,
+			)
+			return decimal.Zero, ""
+		}
+
+		// Convert value to decimal and apply multiplier
+		decimalValue, stringValue := s.convertValueToDecimal(val, event, meter)
+		if decimalValue.IsZero() {
+			return decimal.Zero, stringValue
+		}
+
+		// Apply multiplier
+		result, err := s.getTotalUsageForWeightedSumAggregation(subscription, event, decimalValue, periodID)
+		if err != nil {
+			return decimal.Zero, stringValue
+		}
+		return result, stringValue
 	default:
 		s.Logger.Warnw("unsupported aggregation type",
 			"event_id", event.ID,
@@ -908,21 +933,6 @@ func (s *featureUsageTrackingService) convertValueToString(val interface{}) stri
 	}
 }
 
-// GetPeriodCost returns the total cost for a subscription in a billing period
-func (s *featureUsageTrackingService) GetPeriodCost(ctx context.Context, tenantID, environmentID, customerID, subscriptionID string, periodID uint64) (decimal.Decimal, error) {
-	return s.featureUsageRepo.GetPeriodCost(ctx, tenantID, environmentID, customerID, subscriptionID, periodID)
-}
-
-// GetPeriodFeatureTotals returns usage totals by feature for a subscription in a period
-func (s *featureUsageTrackingService) GetPeriodFeatureTotals(ctx context.Context, tenantID, environmentID, customerID, subscriptionID string, periodID uint64) ([]*events.PeriodFeatureTotal, error) {
-	return s.featureUsageRepo.GetPeriodFeatureTotals(ctx, tenantID, environmentID, customerID, subscriptionID, periodID)
-}
-
-// GetUsageAnalytics returns recent usage analytics for a customer
-func (s *featureUsageTrackingService) GetUsageAnalytics(ctx context.Context, tenantID, environmentID, customerID string, lookbackHours int) ([]*events.UsageAnalytic, error) {
-	return s.featureUsageRepo.GetUsageAnalytics(ctx, tenantID, environmentID, customerID, lookbackHours)
-}
-
 // GetDetailedUsageAnalytics provides detailed usage analytics with filtering, grouping, and time-series data
 func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Context, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error) {
 	// Validate the request
@@ -951,11 +961,11 @@ func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Cont
 			Mark(ierr.ErrNotFound)
 	}
 
-	// Step 2: Get active subscriptions for the customer
+	// Step 2: Get active subscriptions for the customer with line items (single call)
 	subscriptionService := NewSubscriptionService(s.ServiceParams)
 	filter := types.NewSubscriptionFilter()
 	filter.CustomerID = customer.ID
-	filter.WithLineItems = false
+	filter.WithLineItems = true // Get line items in single call
 	filter.SubscriptionStatus = []types.SubscriptionStatus{
 		types.SubscriptionStatusActive,
 		types.SubscriptionStatusTrialing,
@@ -963,15 +973,14 @@ func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Cont
 
 	subscriptionsList, err := subscriptionService.ListSubscriptions(ctx, filter)
 	if err != nil {
-		s.Logger.Errorw("failed to get subscriptions for currency validation",
+		s.Logger.Errorw("failed to get subscriptions for analytics",
 			"error", err,
 			"customer_id", customer.ID,
 		)
 		return nil, err
 	}
 
-	// Step 3: Validate currency (all subscriptions should have the same currency)
-	// This ensures analytics only works when customer has a single currency across all subscriptions
+	// Step 3: Validate currency and extract subscription data
 	finalCurrency := ""
 	subscriptions := subscriptionsList.Items
 	if len(subscriptions) > 0 {
@@ -1004,8 +1013,14 @@ func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Cont
 		PropertyFilters:    req.PropertyFilters,
 	}
 
-	// Step 5: First, identify which features use MAX with bucket aggregation
-	maxBucketFeatures, err := s.identifyMaxBucketFeatures(ctx, params)
+	// Step 5: Identify MAX bucket features using subscription data (no additional call)
+	// Convert SubscriptionResponse to subscription.Subscription
+	subscriptionDomains := make([]*subscription.Subscription, len(subscriptions))
+	for i, subResp := range subscriptions {
+		subscriptionDomains[i] = subResp.Subscription
+	}
+
+	maxBucketFeatures, err := s.identifyMaxBucketFeaturesFromSubscriptions(ctx, params, subscriptionDomains)
 	if err != nil {
 		s.Logger.Errorw("failed to identify MAX bucket features",
 			"error", err,
@@ -1029,8 +1044,8 @@ func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Cont
 		return s.ToGetUsageAnalyticsResponseDTO(ctx, analytics)
 	}
 
-	// Step 8: Enrich with feature and meter data from their respective repositories
-	err = s.enrichAnalyticsWithFeatureAndMeterData(ctx, analytics)
+	// Step 8: Enrich with feature, meter, and subscription-specific price data
+	err = s.enrichAnalyticsWithFeatureMeterAndPriceData(ctx, analytics, subscriptionDomains)
 	if err != nil {
 		s.Logger.Warnw("failed to fully enrich analytics with feature and meter data",
 			"error", err,
@@ -1049,40 +1064,36 @@ func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Cont
 	return s.ToGetUsageAnalyticsResponseDTO(ctx, analytics)
 }
 
-// identifyMaxBucketFeatures identifies which features use MAX aggregation with bucket size
-func (s *featureUsageTrackingService) identifyMaxBucketFeatures(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, error) {
-	// If no feature IDs specified, we need to find all features for the customer
-	// by looking at their active subscriptions
-	if len(params.FeatureIDs) == 0 {
-		return s.identifyMaxBucketFeaturesFromSubscriptions(ctx, params)
-	}
-
-	// Use the helper method for specific feature IDs
-	return s.identifyMaxBucketFeaturesFromFeatureIDs(ctx, params)
-}
-
 // identifyMaxBucketFeaturesFromSubscriptions identifies MAX bucket features from customer's active subscriptions
-func (s *featureUsageTrackingService) identifyMaxBucketFeaturesFromSubscriptions(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, error) {
-	// Get active subscriptions for the customer
-	subscriptionService := NewSubscriptionService(s.ServiceParams)
-	filter := types.NewSubscriptionFilter()
-	filter.CustomerID = params.CustomerID
-	filter.WithLineItems = true // We need line items to get feature information
-	filter.SubscriptionStatus = []types.SubscriptionStatus{
-		types.SubscriptionStatusActive,
-		types.SubscriptionStatusTrialing,
-	}
+func (s *featureUsageTrackingService) identifyMaxBucketFeaturesFromSubscriptions(ctx context.Context, params *events.UsageAnalyticsParams, subscriptions []*subscription.Subscription) (map[string]*events.MaxBucketFeatureInfo, error) {
+	// If subscriptions not provided, fetch them
+	if subscriptions == nil {
+		subscriptionService := NewSubscriptionService(s.ServiceParams)
+		filter := types.NewSubscriptionFilter()
+		filter.CustomerID = params.CustomerID
+		filter.WithLineItems = true // We need line items to get feature information
+		filter.SubscriptionStatus = []types.SubscriptionStatus{
+			types.SubscriptionStatusActive,
+			types.SubscriptionStatusTrialing,
+		}
 
-	subscriptionsList, err := subscriptionService.ListSubscriptions(ctx, filter)
-	if err != nil {
-		return nil, ierr.WithError(err).
-			WithHint("Failed to get subscriptions for MAX bucket feature identification").
-			Mark(ierr.ErrDatabase)
+		subscriptionsList, err := subscriptionService.ListSubscriptions(ctx, filter)
+		if err != nil {
+			return nil, ierr.WithError(err).
+				WithHint("Failed to get subscriptions for MAX bucket feature identification").
+				Mark(ierr.ErrDatabase)
+		}
+		// Convert SubscriptionResponse to subscription.Subscription
+		subscriptionResponses := subscriptionsList.Items
+		subscriptions = make([]*subscription.Subscription, len(subscriptionResponses))
+		for i, subResp := range subscriptionResponses {
+			subscriptions[i] = subResp.Subscription
+		}
 	}
 
 	// Extract all meter IDs from subscription line items
 	meterIDSet := make(map[string]bool)
-	for _, sub := range subscriptionsList.Items {
+	for _, sub := range subscriptions {
 		for _, lineItem := range sub.LineItems {
 			if lineItem.IsUsage() && lineItem.MeterID != "" {
 				meterIDSet[lineItem.MeterID] = true
@@ -1136,46 +1147,8 @@ func (s *featureUsageTrackingService) identifyMaxBucketFeaturesFromSubscriptions
 	return maxBucketFeatures, nil
 }
 
-// identifyMaxBucketFeaturesFromFeatureIDs identifies MAX bucket features from specific feature IDs
-func (s *featureUsageTrackingService) identifyMaxBucketFeaturesFromFeatureIDs(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, error) {
-	// Use service layer GetFeatures with meter expansion for efficiency
-	featureService := NewFeatureService(s.ServiceParams)
-	featureFilter := types.NewNoLimitFeatureFilter()
-	featureFilter.FeatureIDs = params.FeatureIDs
-	featureFilter.Expand = lo.ToPtr(string(types.ExpandMeters)) // Expand meters in single call
-
-	featuresResponse, err := featureService.GetFeatures(ctx, featureFilter)
-	if err != nil {
-		return nil, ierr.WithError(err).
-			WithHint("Failed to fetch features with meters for MAX bucket identification").
-			Mark(ierr.ErrDatabase)
-	}
-
-	// Identify MAX with bucket features
-	maxBucketFeatures := make(map[string]*events.MaxBucketFeatureInfo)
-	for _, featureResponse := range featuresResponse.Items {
-		feature := featureResponse.Feature
-		// Check if feature has meter and meter is expanded
-		if feature.Type == types.FeatureTypeMetered && feature.MeterID != "" && featureResponse.Meter != nil {
-			meter := featureResponse.Meter.ToMeter()
-			// Check if this is a MAX aggregation with bucket size
-			if meter.Aggregation.Type == types.AggregationMax && meter.Aggregation.BucketSize != "" {
-				maxBucketFeatures[feature.ID] = &events.MaxBucketFeatureInfo{
-					FeatureID:    feature.ID,
-					MeterID:      meter.ID,
-					BucketSize:   meter.Aggregation.BucketSize,
-					EventName:    meter.EventName,
-					PropertyName: meter.Aggregation.Field,
-				}
-			}
-		}
-	}
-
-	return maxBucketFeatures, nil
-}
-
-// enrichAnalyticsWithFeatureAndMeterData fetches and adds feature and meter data to analytics results
-func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureAndMeterData(ctx context.Context, analytics []*events.DetailedUsageAnalytic) error {
+// enrichAnalyticsWithFeatureMeterAndPriceData fetches and adds feature, meter, and subscription-specific price data to analytics results
+func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureMeterAndPriceData(ctx context.Context, analytics []*events.DetailedUsageAnalytic, subscriptions []*subscription.Subscription) error {
 	// Extract all unique feature IDs
 	featureIDs := make([]string, 0)
 	featureIDSet := make(map[string]bool)
@@ -1231,29 +1204,47 @@ func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureAndMeterData(ctx
 		meterMap[m.ID] = m
 	}
 
-	// Fetch prices for the meters to enable cost calculation
-	priceFilter := types.NewNoLimitPriceFilter()
-	priceFilter.MeterIDs = meterIDs
-	priceFilter.WithStatus(types.StatusPublished)
-	prices, err := s.PriceRepo.List(ctx, priceFilter)
-	if err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to fetch prices for cost calculation").
-			Mark(ierr.ErrDatabase)
-	}
+	// Build subscription-specific price mapping from line items
+	meterToPriceMap := make(map[string]*price.Price) // meter_id -> price
+	priceService := NewPriceService(s.ServiceParams)
 
-	// Create price map for quick lookup by meter ID
-	priceMap := make(map[string]*price.Price)
-	for _, p := range prices {
-		if p.MeterID != "" {
-			priceMap[p.MeterID] = p
+	// Collect all price IDs from subscription line items
+	priceIDs := make([]string, 0)
+	priceIDSet := make(map[string]bool)
+
+	for _, sub := range subscriptions {
+		for _, lineItem := range sub.LineItems {
+			if lineItem.IsUsage() && lineItem.MeterID != "" && lineItem.PriceID != "" {
+				if !priceIDSet[lineItem.PriceID] {
+					priceIDs = append(priceIDs, lineItem.PriceID)
+					priceIDSet[lineItem.PriceID] = true
+				}
+			}
 		}
 	}
 
-	// Create price service instance for cost calculation
-	priceService := NewPriceService(s.ServiceParams)
+	// Fetch subscription-specific prices
+	if len(priceIDs) > 0 {
+		priceFilter := types.NewNoLimitPriceFilter()
+		priceFilter.PriceIDs = priceIDs
+		priceFilter.WithStatus(types.StatusPublished)
+		priceFilter.AllowExpiredPrices = true // Include expired prices for historical data
+		prices, err := s.PriceRepo.List(ctx, priceFilter)
+		if err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to fetch subscription prices for cost calculation").
+				Mark(ierr.ErrDatabase)
+		}
 
-	// Enrich analytics with feature and meter data
+		// Create price map for quick lookup by meter ID
+		for _, p := range prices {
+			if p.MeterID != "" {
+				meterToPriceMap[p.MeterID] = p
+			}
+		}
+	}
+
+	// Enrich analytics with feature, meter, and subscription-specific price data
 	for _, item := range analytics {
 		if feature, ok := featureMap[item.FeatureID]; ok {
 			item.FeatureName = feature.Name
@@ -1265,17 +1256,60 @@ func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureAndMeterData(ctx
 				item.EventName = meter.EventName
 				item.AggregationType = meter.Aggregation.Type
 
-				// Calculate cost if price is available for this meter
-				if price, hasPricing := priceMap[meter.ID]; hasPricing {
-					// Calculate cost based on usage
-					cost := priceService.CalculateCost(ctx, price, item.TotalUsage)
-					item.TotalCost = cost
-					item.Currency = price.Currency
+				// Set the correct TotalUsage based on meter's aggregation type
 
-					// Also calculate cost for each point in the time series if points exist
-					for i := range item.Points {
-						pointCost := priceService.CalculateCost(ctx, price, item.Points[i].Usage)
-						item.Points[i].Cost = pointCost
+				// Calculate cost using subscription-specific price
+				if price, hasPricing := meterToPriceMap[meter.ID]; hasPricing {
+					// Check if this is a bucketed max meter
+					if meter.IsBucketedMaxMeter() {
+						// For bucketed features, extract values from points and use CalculateBucketedCost
+						var cost decimal.Decimal
+
+						if len(item.Points) > 0 {
+							// When window size is provided, use points as buckets
+							bucketedValues := make([]decimal.Decimal, len(item.Points))
+							for i, point := range item.Points {
+								bucketedValues[i] = point.Usage
+							}
+
+							// Calculate total cost using bucketed values
+							cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+
+							// Calculate cost for each point individually (each point represents a bucket)
+							for i := range item.Points {
+								pointUsage := item.Points[i].Usage
+								pointCost := priceService.CalculateCost(ctx, price, pointUsage)
+								item.Points[i].Cost = pointCost
+							}
+						} else {
+							// When no window size is provided, treat TotalUsage as a single bucket
+							// This is a fallback for bucketedMax meters when no time windowing is requested
+							totalUsage := item.TotalUsage
+							if totalUsage.IsPositive() {
+								// Treat the total usage as a single bucket for cost calculation
+								bucketedValues := []decimal.Decimal{totalUsage}
+								cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+							} else {
+								cost = decimal.Zero
+							}
+						}
+
+						item.TotalCost = cost
+						item.Currency = price.Currency
+					} else {
+						// For non-bucketed features, use regular CalculateCost
+						item.TotalUsage = s.getCorrectUsageValue(item, meter.Aggregation.Type)
+
+						cost := priceService.CalculateCost(ctx, price, item.TotalUsage)
+						item.TotalCost = cost
+						item.Currency = price.Currency
+
+						// Also calculate cost for each point in the time series if points exist
+						for i := range item.Points {
+							pointUsage := s.getCorrectUsageValueForPoint(item.Points[i], meter.Aggregation.Type)
+							pointCost := priceService.CalculateCost(ctx, price, pointUsage)
+							item.Points[i].Cost = pointCost
+						}
 					}
 				}
 			}
@@ -1285,9 +1319,43 @@ func (s *featureUsageTrackingService) enrichAnalyticsWithFeatureAndMeterData(ctx
 	return nil
 }
 
+// getCorrectUsageValue returns the correct usage value based on the meter's aggregation type
+func (s *featureUsageTrackingService) getCorrectUsageValue(item *events.DetailedUsageAnalytic, aggregationType types.AggregationType) decimal.Decimal {
+	switch aggregationType {
+	case types.AggregationCountUnique:
+		return decimal.NewFromInt(int64(item.CountUniqueUsage))
+	case types.AggregationMax:
+		return item.MaxUsage
+	case types.AggregationLatest:
+		return item.LatestUsage
+	case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationAvg, types.AggregationWeightedSum:
+		return item.TotalUsage
+	default:
+		// Default to SUM for unknown types
+		return item.TotalUsage
+	}
+}
+
+// getCorrectUsageValueForPoint returns the correct usage value for a time series point based on aggregation type
+func (s *featureUsageTrackingService) getCorrectUsageValueForPoint(point events.UsageAnalyticPoint, aggregationType types.AggregationType) decimal.Decimal {
+	switch aggregationType {
+	case types.AggregationCountUnique:
+		return decimal.NewFromInt(int64(point.CountUniqueUsage))
+	case types.AggregationMax:
+		return point.MaxUsage
+	case types.AggregationLatest:
+		return point.LatestUsage
+	case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationAvg, types.AggregationWeightedSum:
+		return point.Usage
+	default:
+		// Default to SUM for unknown types
+		return point.Usage
+	}
+}
+
 // ReprocessEvents triggers reprocessing of events for a customer or with other filters
 func (s *featureUsageTrackingService) ReprocessEvents(ctx context.Context, params *events.ReprocessEventsParams) error {
-	s.Logger.Infow("starting event reprocessing",
+	s.Logger.Infow("starting event reprocessing for feature usage tracking",
 		"external_customer_id", params.ExternalCustomerID,
 		"event_name", params.EventName,
 		"start_time", params.StartTime,
@@ -1350,12 +1418,12 @@ func (s *featureUsageTrackingService) ReprocessEvents(ctx context.Context, param
 			break
 		}
 
-		// Publish each event to the post-processing topic
+		// Publish each event to the feature usage tracking topic
 		for _, event := range unprocessedEvents {
 			// hardcoded delay to avoid rate limiting
 			// TODO: remove this to make it configurable
 			if err := s.PublishEvent(ctx, event, true); err != nil {
-				s.Logger.Errorw("failed to publish event for reprocessing",
+				s.Logger.Errorw("failed to publish event for reprocessing for feature usage tracking",
 					"event_id", event.ID,
 					"error", err,
 				)
@@ -1369,7 +1437,7 @@ func (s *featureUsageTrackingService) ReprocessEvents(ctx context.Context, param
 			lastTimestamp = event.Timestamp
 		}
 
-		s.Logger.Infow("published events for reprocessing",
+		s.Logger.Infow("published events for reprocessing for feature usage tracking",
 			"batch", processedBatches,
 			"count", eventsCount,
 			"total_published", totalEventsPublished,
@@ -1384,7 +1452,7 @@ func (s *featureUsageTrackingService) ReprocessEvents(ctx context.Context, param
 		}
 	}
 
-	s.Logger.Infow("completed event reprocessing",
+	s.Logger.Infow("completed event reprocessing for feature usage tracking",
 		"external_customer_id", params.ExternalCustomerID,
 		"event_name", params.EventName,
 		"batches_processed", processedBatches,
@@ -1456,7 +1524,7 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			Unit:            analytic.Unit,
 			UnitPlural:      analytic.UnitPlural,
 			AggregationType: analytic.AggregationType,
-			TotalUsage:      analytic.TotalUsage,
+			TotalUsage:      analytic.TotalUsage, // This is now set correctly in enrichment
 			TotalCost:       analytic.TotalCost,
 			Currency:        analytic.Currency,
 			EventCount:      analytic.EventCount,
@@ -1466,9 +1534,11 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 
 		// Map time-series points if available
 		for _, point := range analytic.Points {
+			// Use the correct usage value based on aggregation type
+			correctUsage := s.getCorrectUsageValueForPoint(point, analytic.AggregationType)
 			item.Points = append(item.Points, dto.UsageAnalyticPoint{
 				Timestamp:  point.Timestamp,
-				Usage:      point.Usage,
+				Usage:      correctUsage,
 				Cost:       point.Cost,
 				EventCount: point.EventCount,
 			})
@@ -1485,4 +1555,51 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 	})
 
 	return response, nil
+}
+
+func (s *featureUsageTrackingService) getTotalUsageForWeightedSumAggregation(
+	subscription *subscription.Subscription,
+	event *events.Event,
+	propertyValue decimal.Decimal,
+	periodID uint64,
+) (decimal.Decimal, error) {
+	// Convert periodID (epoch milliseconds) back to time for the period start
+	periodStart := time.UnixMilli(int64(periodID))
+
+	// Calculate the period end using the subscription's billing configuration
+	periodEnd, err := types.NextBillingDate(periodStart, subscription.BillingAnchor, subscription.BillingPeriodCount, subscription.BillingPeriod, nil)
+	if err != nil {
+		return decimal.Zero, ierr.WithError(err).
+			WithHint("Failed to calculate period end for weighted sum aggregation").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_id": subscription.ID,
+				"period_id":       periodID,
+				"period_start":    periodStart,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Calculate total billing period duration in seconds
+	totalPeriodSeconds := periodEnd.Sub(periodStart).Seconds()
+	if totalPeriodSeconds <= 0 {
+		return decimal.Zero, ierr.NewError("invalid billing period duration").
+			WithHint("Billing period duration must be positive").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_id": subscription.ID,
+				"period_id":       periodID,
+				"period_start":    periodStart,
+				"period_end":      periodEnd,
+				"total_seconds":   totalPeriodSeconds,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Calculate remaining seconds from event timestamp to period end
+	remainingSeconds := math.Max(0, periodEnd.Sub(event.Timestamp).Seconds())
+
+	// Apply weighted sum formula: (value / billing_period_seconds) * remaining_seconds
+	// This gives us the proportion of the value that should be counted for the remaining period
+	weightedUsage := propertyValue.Div(decimal.NewFromFloat(totalPeriodSeconds)).Mul(decimal.NewFromFloat(remainingSeconds))
+
+	return weightedUsage, nil
 }

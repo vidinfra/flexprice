@@ -2,6 +2,7 @@ package v1
 
 import (
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
@@ -14,14 +15,14 @@ import (
 )
 
 type InvoiceHandler struct {
-	invoiceService  service.InvoiceService
-	logger          *logger.Logger
+	invoiceService service.InvoiceService
+	logger         *logger.Logger
 }
 
 func NewInvoiceHandler(invoiceService service.InvoiceService, logger *logger.Logger) *InvoiceHandler {
 	return &InvoiceHandler{
-		invoiceService:  invoiceService,
-		logger:          logger,
+		invoiceService: invoiceService,
+		logger:         logger,
 	}
 }
 
@@ -191,15 +192,23 @@ func (h *InvoiceHandler) FinalizeInvoice(c *gin.Context) {
 func (h *InvoiceHandler) VoidInvoice(c *gin.Context) {
 	id := c.Param("id")
 	var req dto.InvoiceVoidRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.logger.Error("Failed to bind request body", "error", err)
-		c.Error(ierr.WithError(err).WithHint("failed to bind request body").Mark(ierr.ErrValidation))
-		return
-	}
 
 	if id == "" {
 		c.Error(ierr.NewError("invalid invoice id").Mark(ierr.ErrValidation))
 		return
+	}
+
+	// This will handle empty body gracefully and only bind if there's valid JSON
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Check if it's actually an EOF error (empty body)
+		if err == io.EOF {
+			// Empty body is fine, use zero value
+			req = dto.InvoiceVoidRequest{}
+		} else {
+			h.logger.Error("Failed to parse request body", "error", err)
+			c.Error(ierr.WithError(err).WithHint("failed to parse request body").Mark(ierr.ErrValidation))
+			return
+		}
 	}
 
 	if err := h.invoiceService.VoidInvoice(c.Request.Context(), id, req); err != nil {

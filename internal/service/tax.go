@@ -585,14 +585,10 @@ func (s *taxService) ListTaxApplied(ctx context.Context, filter *types.TaxApplie
 	}
 
 	// Fetch tax rates if requested
-	s.Logger.Infow("DEBUG: Checking expand", "has_expand", filter.GetExpand().Has(types.ExpandTaxRate), "expand_fields", filter.GetExpand().Fields)
 	if filter.GetExpand().Has(types.ExpandTaxRate) {
-		s.Logger.Infow("DEBUG: Expanding tax rates", "tax_applied_count", len(taxAppliedRecords))
-
 		taxRateIDs := lo.Map(taxAppliedRecords, func(ta *taxapplied.TaxApplied, _ int) string {
 			return ta.TaxRateID
 		})
-		s.Logger.Infow("DEBUG: Tax rate IDs to fetch", "tax_rate_ids", taxRateIDs)
 
 		taxRateFilter := types.NewNoLimitTaxRateFilter()
 		taxRateFilter.TaxRateIDs = taxRateIDs
@@ -604,26 +600,19 @@ func (s *taxService) ListTaxApplied(ctx context.Context, filter *types.TaxApplie
 				"tax_rate_ids", taxRateIDs)
 			return nil, err
 		}
-		s.Logger.Infow("DEBUG: Fetched tax rates", "count", len(taxRatesResponse.Items))
 
 		// Create a map for quick lookup
 		taxRatesByID := make(map[string]*dto.TaxRateResponse)
 		for _, taxRate := range taxRatesResponse.Items {
 			taxRatesByID[taxRate.ID] = taxRate
-			s.Logger.Infow("DEBUG: Tax rate", "id", taxRate.ID, "name", taxRate.Name, "code", taxRate.Code)
 		}
 
 		// Assign tax rates to the appropriate tax applied records
 		for i, ta := range taxAppliedRecords {
 			if taxRate, exists := taxRatesByID[ta.TaxRateID]; exists {
 				items[i].TaxRate = taxRate
-				s.Logger.Infow("DEBUG: Assigned tax rate", "index", i, "tax_applied_id", ta.ID, "tax_rate_name", taxRate.Name)
-			} else {
-				s.Logger.Warnw("DEBUG: Tax rate not found", "tax_rate_id", ta.TaxRateID)
 			}
 		}
-	} else {
-		s.Logger.Warnw("DEBUG: Expand not requested or not working")
 	}
 
 	// Get the total count of tax applied records
