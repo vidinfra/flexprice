@@ -81,6 +81,7 @@ func (s *CreditNoteServiceSuite) setupService() {
 		TaxRateRepo:                s.GetStores().TaxRateRepo,
 		TaxAppliedRepo:             s.GetStores().TaxAppliedRepo,
 		SettingsRepo:               s.GetStores().SettingsRepo,
+		AlertLogsRepo:              s.GetStores().AlertLogsRepo,
 	})
 }
 

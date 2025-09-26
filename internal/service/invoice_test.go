@@ -101,6 +101,7 @@ func (s *InvoiceServiceSuite) setupService() {
 		TaxAppliedRepo:             s.GetStores().TaxAppliedRepo,
 		TaxAssociationRepo:         s.GetStores().TaxAssociationRepo,
 		SettingsRepo:               s.GetStores().SettingsRepo,
+		AlertLogsRepo:              s.GetStores().AlertLogsRepo,
 	})
 }
 

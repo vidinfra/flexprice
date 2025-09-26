@@ -67,7 +67,7 @@ func (s *WalletPaymentServiceSuite) setupService() {
 		WalletRepo:       s.GetStores().WalletRepo,
 		PaymentRepo:      s.GetStores().PaymentRepo,
 		SettingsRepo:     s.GetStores().SettingsRepo,
-		AlertLogsRepo:    testutil.NewMockAlertLogsRepo(),
+		AlertLogsRepo:    s.GetStores().AlertLogsRepo,
 		EventPublisher:   s.GetPublisher(),
 		WebhookPublisher: s.GetWebhookPublisher(),
 	})
