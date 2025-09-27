@@ -75,37 +75,26 @@ graph TB
 
 ### 3.2 Core Components
 
-#### 3.1.1 Feature Alert Configuration Table
-A new table to store alert configurations at the feature level:
+#### 3.1.1 Feature Alert Settings Column
+Add an `alert_settings` column to the existing `features` table to store threshold configurations:
 
 ```sql
-CREATE TABLE feature_alert_configurations (
-    id VARCHAR(50) PRIMARY KEY,
-    tenant_id VARCHAR(50) NOT NULL,
-    environment_id VARCHAR(50) NOT NULL,
-    feature_id VARCHAR(50) NOT NULL,
-    meter_id VARCHAR(50) NOT NULL,
-    entity VARCHAR(50) NOT NULL, -- entitlement_id, customer_id, subscription_id, etc.
-    threshold JSONB NOT NULL, -- {upperbound: decimal, lowerbound: decimal}
-    threshold_type VARCHAR(50) NOT NULL DEFAULT 'usage_amount',
-    status VARCHAR(20) NOT NULL DEFAULT 'published',
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    created_by VARCHAR(50),
-    updated_by VARCHAR(50),
-    
-    CONSTRAINT fk_feature_alert_feature FOREIGN KEY (feature_id) REFERENCES features(id),
-    CONSTRAINT fk_feature_alert_meter FOREIGN KEY (meter_id) REFERENCES meters(id),
-    CONSTRAINT unique_feature_alert_config UNIQUE (tenant_id, environment_id, feature_id, meter_id, entity)
-);
+ALTER TABLE features 
+ADD COLUMN alert_settings JSONB DEFAULT NULL;
+
+-- Example alert_settings structure:
+-- threshold {
+--   "upperbound": "1000.00",
+--   "lowerbound": "100.00"
+-- }
 ```
 
 #### 3.1.2 Alert State Logic
-The system supports three distinct alert states based on usage value comparison:
+The system supports three distinct alert states based on wallet balance comparison with feature thresholds:
 
-- **ok State**: `value > upperbound` - Usage is above the upper threshold (healthy)
-- **warning State**: `lowerbound <= value <= upperbound` - Usage is within the warning range
-- **in_alarm State**: `value < lowerbound` - Usage is below the lower threshold (critical)
+- **ok State**: `wallet_balance > feature.upperbound` - Balance is above the upper threshold (healthy)
+- **warning State**: `feature.lowerbound <= wallet_balance <= feature.upperbound` - Balance is within the warning range
+- **in_alarm State**: `wallet_balance < feature.lowerbound` - Balance is below the lower threshold (critical)
 
 #### 3.1.3 Threshold Configuration
 ```json
@@ -123,34 +112,31 @@ The system supports three distinct alert states based on usage value comparison:
 - **Alert Service**: Extend current alert service for feature monitoring
 
 #### 3.2.2 New Components
-- **FeatureAlertConfiguration Entity**: New Ent schema and domain model
-- **Feature Alert Service**: Service layer for alert configuration management
-- **Feature Usage Monitor**: Component to evaluate feature usage against thresholds
+- **Feature Alert Settings**: Column-based alert configuration in features table
+- **Wallet Balance Monitor**: Component to evaluate wallet balance against feature thresholds
+- **Bulk Feature Alert Processor**: Service to process all features for wallet balance alerts
 - **Feature Alert Webhook Payloads**: New webhook payload builders
 
 ## 4. Technical Specification
 
 ### 4.1 Data Models
 
-#### 4.1.1 Feature Alert Configuration Schema
+#### 4.1.1 Feature Alert Settings Schema
 ```go
-// ent/schema/featurealertconfiguration.go
-type FeatureAlertConfiguration struct {
-    ent.Schema
-}
-
-func (FeatureAlertConfiguration) Fields() []ent.Field {
+// Update existing Feature schema to include alert_settings
+func (Feature) Fields() []ent.Field {
     return []ent.Field{
-        field.String("id").Unique().Immutable(),
-        field.String("feature_id").NotEmpty(),
-        field.String("meter_id").NotEmpty(),
-        field.String("entity").NotEmpty(),
-        field.JSON("threshold", FeatureAlertThreshold{}),
-        field.String("threshold_type").Default("usage_amount"),
+        // ... existing fields ...
+        field.JSON("alert_settings", FeatureAlertSettings{}).
+            Optional().
+            Nillable().
+            SchemaType(map[string]string{
+                "postgres": "jsonb",
+            }),
     }
 }
 
-type FeatureAlertThreshold struct {
+type FeatureAlertSettings struct {
     Upperbound decimal.Decimal `json:"upperbound"`
     Lowerbound decimal.Decimal `json:"lowerbound"`
 }
@@ -165,16 +151,12 @@ const (
     AlertTypeLowCreditBalance  AlertType = "low_credit_balance"
     
     // New feature alerts
-    AlertTypeFeatureUsageThreshold AlertType = "feature_usage_threshold"
+    AlertTypeFeatureWalletBalance AlertType = "feature_wallet_balance"
 )
 
 const (
     // Existing entity types
     AlertEntityTypeWallet AlertEntityType = "wallet"
-    
-    // New entity types for feature alerts
-    AlertEntityTypeEntitlement AlertEntityType = "entitlement"
-    AlertEntityTypeSubscription AlertEntityType = "subscription"
 )
 
 // Extended alert states
@@ -189,57 +171,56 @@ const (
 ```go
 type FeatureAlertInfo struct {
     FeatureID      string                `json:"feature_id"`
-    MeterID        string                `json:"meter_id"`
-    Entity         string                `json:"entity"` // entitlement_id, customer_id, etc.
-    EntityType     string                `json:"entity_type"` // entitlement, customer, subscription, etc.
-    Threshold      FeatureAlertThreshold `json:"threshold"`
-    CurrentUsage   decimal.Decimal       `json:"current_usage"`
-    AggregationType types.AggregationType `json:"aggregation_type"`
-    Period         string                `json:"period"`
+    FeatureName    string                `json:"feature_name"`
+    WalletID       string                `json:"wallet_id"`
+    AlertSettings  FeatureAlertSettings  `json:"alert_settings"`
+    WalletBalance  decimal.Decimal       `json:"wallet_balance"`
+    BalanceType    string                `json:"balance_type"` // credit_balance or ongoing_balance
     Timestamp      time.Time             `json:"timestamp"`
 }
 ```
 
 ### 4.2 Service Layer
 
-#### 4.2.1 Feature Alert Configuration Service
+#### 4.2.1 Feature Alert Settings Service
 ```go
-type FeatureAlertConfigurationService interface {
-    CreateSetting(ctx context.Context, req *CreateFeatureAlertConfigRequest) (*FeatureAlertConfiguration, error)
-    DeleteSetting(ctx context.Context, id string) error
-    GetSetting(ctx context.Context, id string) (*FeatureAlertConfiguration, error)
-    ListSettings(ctx context.Context, filter *FeatureAlertConfigFilter) (*ListFeatureAlertConfigResponse, error)
-    GetSettingsByFeature(ctx context.Context, featureID string) ([]*FeatureAlertConfiguration, error)
-    // No UpdateSetting method - mutations not allowed at feature level
+type FeatureAlertSettingsService interface {
+    CreateFeatureAlertSettings(ctx context.Context, featureID string, settings *FeatureAlertSettings) error
+    UpdateFeatureAlertSettings(ctx context.Context, featureID string, settings *FeatureAlertSettings) error
+    GetFeatureAlertSettings(ctx context.Context, featureID string) (*FeatureAlertSettings, error)
+    // No delete method - settings can be set to null instead
 }
 ```
 
-#### 4.2.2 Feature Usage Monitor Service
+#### 4.2.2 Wallet Balance Alert Monitor Service
 ```go
-type FeatureUsageMonitorService interface {
-    EvaluateFeatureUsage(ctx context.Context, featureID, entity, entityType string, currentUsage decimal.Decimal) error
-    CheckAllFeatureAlerts(ctx context.Context) error // For cron jobs
-    GetFeatureUsageForAlert(ctx context.Context, featureID, meterID, entity, entityType string) (decimal.Decimal, error)
+type WalletBalanceAlertMonitorService interface {
+    // Triggered on credit balance updates (static runtime flag)
+    EvaluateWalletBalanceAlerts(ctx context.Context, walletID string) error
+    
+    // Triggered by cron for ongoing balance
+    EvaluateAllWalletBalanceAlerts(ctx context.Context) error
+    
+    // Bulk process all features for a wallet
+    ProcessWalletFeaturesAlerts(ctx context.Context, walletID string, balance decimal.Decimal) error
 }
 ```
 
 ### 4.3 Alert Evaluation Logic
 
-#### 4.3.1 Usage Calculation
-The system calculates current usage based on the meter's aggregation type:
-- **SUM/COUNT**: Total accumulated usage in current period
-- **MAX**: Maximum recorded value in current period  
-- **LATEST**: Most recent recorded value
-- **COUNT_UNIQUE**: Count of unique values in current period
-- **AVERAGE**: Average value in current period
+#### 4.3.1 Wallet Balance Comparison
+The system compares wallet balance against feature alert thresholds:
+- **Credit Balance**: Evaluated on balance updates (static runtime flag)
+- **Ongoing Balance**: Evaluated by cron job periodically
+- **Bulk Processing**: All features are processed for each wallet
 
 #### 4.3.2 State Determination Algorithm
 ```go
-func DetermineAlertState(currentUsage decimal.Decimal, threshold FeatureAlertThreshold) AlertState {
-    if currentUsage.GreaterThan(threshold.Upperbound) {
+func DetermineAlertState(walletBalance decimal.Decimal, alertSettings FeatureAlertSettings) AlertState {
+    if walletBalance.GreaterThan(alertSettings.Upperbound) {
         return AlertStateOk
-    } else if currentUsage.GreaterThanOrEqual(threshold.Lowerbound) && 
-              currentUsage.LessThanOrEqual(threshold.Upperbound) {
+    } else if walletBalance.GreaterThanOrEqual(alertSettings.Lowerbound) && 
+              walletBalance.LessThanOrEqual(alertSettings.Upperbound) {
         return AlertStateWarning
     } else {
         return AlertStateInAlarm
@@ -249,13 +230,15 @@ func DetermineAlertState(currentUsage decimal.Decimal, threshold FeatureAlertThr
 
 #### 4.3.3 State Transition Logic
 The system follows the existing alert engine pattern:
-1. Calculate current feature usage for the specific entity (entitlement, customer, etc.)
-2. Determine new alert state based on thresholds
-3. Query latest alert log for this feature/entity combination
-4. If state has changed or no previous alert exists:
-   - Create new alert log entry with entity_type as the actual entity being monitored
+1. **Bulk Fetch**: Get all features with alert_settings configured
+2. **Wallet Balance**: Get current wallet balance (credit or ongoing)
+3. **Iterate Features**: For each feature, compare wallet balance with feature thresholds
+4. **Determine State**: Calculate alert state based on balance vs thresholds
+5. **Check Previous State**: Query latest alert log for this feature/wallet combination
+6. **State Transition**: If state changed or no previous alert exists:
+   - Create new alert log entry with entity_type as "wallet"
    - Trigger appropriate webhook event
-5. If state unchanged, skip alert generation
+7. **Skip if Unchanged**: If state unchanged, skip alert generation
 
 ### 4.4 Alert Logging Integration Details
 
@@ -367,29 +350,23 @@ type FeatureAlertWebhookPayload struct {
 
 ### 4.5 API Endpoints
 
-#### 4.5.1 Feature Alert Configuration Management
+#### 4.5.1 Feature Alert Settings Management
 ```go
-// POST /api/v1/feature-alert-setting
-type CreateFeatureAlertConfigRequest struct {
-    FeatureID     string                `json:"feature_id" validate:"required"`
-    MeterID       string                `json:"meter_id" validate:"required"`
-    Entity        string                `json:"entity" validate:"required"` // entitlement_id, subscription_id, etc.
-    EntityType    string                `json:"entity_type" validate:"required"` // entitlement, subscription, etc.
-    Threshold     FeatureAlertThreshold `json:"threshold" validate:"required"`
-    ThresholdType string                `json:"threshold_type,omitempty"`
+// POST /api/v1/features/{feature_id}/alert-settings
+type CreateFeatureAlertSettingsRequest struct {
+    AlertSettings FeatureAlertSettings `json:"alert_settings" validate:"required"`
 }
 
-// DELETE /api/v1/feature-alert-setting/{id}
-// No update endpoint - mutations not allowed at feature level
-
-// GET /api/v1/feature-alert-setting
-type FeatureAlertConfigFilter struct {
-    *types.QueryFilter
-    FeatureID  string `json:"feature_id,omitempty" form:"feature_id"`
-    MeterID    string `json:"meter_id,omitempty" form:"meter_id"`
-    Entity     string `json:"entity,omitempty" form:"entity"`
-    EntityType string `json:"entity_type,omitempty" form:"entity_type"`
+// PUT /api/v1/features/{feature_id}/alert-settings
+type UpdateFeatureAlertSettingsRequest struct {
+    AlertSettings FeatureAlertSettings `json:"alert_settings" validate:"required"`
 }
+
+// GET /api/v1/features/{feature_id}/alert-settings
+// Returns the current alert settings for a feature
+
+// GET /api/v1/features?has_alert_settings=true
+// List features that have alert settings configured
 ```
 
 ## 5. Implementation Plan
@@ -424,19 +401,19 @@ gantt
 ```
 
 ### 5.2 Phase 1: Core Infrastructure (Week 1-2)
-- [ ] Create FeatureAlertConfiguration Ent schema
-- [ ] Implement domain models and repositories
-- [ ] Extend AlertLogs to support feature entity type
+- [ ] Add alert_settings column to features table
+- [ ] Update Feature Ent schema to include alert_settings
+- [ ] Extend AlertLogs to support wallet entity type
 - [ ] Update alert types and states in types package
 
-### 5.2 Phase 2: Service Layer (Week 3-4)
-- [ ] Implement FeatureAlertConfigurationService
-- [ ] Create FeatureUsageMonitorService
-- [ ] Extend AlertLogsService for feature alerts
-- [ ] Implement alert evaluation logic
+### 5.3 Phase 2: Service Layer (Week 3-4)
+- [ ] Implement FeatureAlertSettingsService
+- [ ] Create WalletBalanceAlertMonitorService
+- [ ] Extend AlertLogsService for wallet alerts
+- [ ] Implement bulk feature processing logic
 
-### 5.3 Phase 3: API Layer (Week 5)
-- [ ] Create feature alert configuration API endpoints
+### 5.4 Phase 3: API Layer (Week 5)
+- [ ] Create feature alert settings API endpoints
 - [ ] Implement request/response DTOs
 - [ ] Add validation and error handling
 - [ ] Create API documentation
@@ -679,75 +656,74 @@ graph TB
 
 ## Appendix A: Database Schema
 
-### Feature Alert Configuration Table
+### Feature Alert Settings Column
 ```sql
-CREATE TABLE feature_alert_configurations (
-    id VARCHAR(50) PRIMARY KEY,
-    tenant_id VARCHAR(50) NOT NULL,
-    environment_id VARCHAR(50) NOT NULL,
-    feature_id VARCHAR(50) NOT NULL,
-    meter_id VARCHAR(50) NOT NULL,
-    entity VARCHAR(50) NOT NULL,
-    threshold JSONB NOT NULL,
-    threshold_type VARCHAR(50) NOT NULL DEFAULT 'usage_amount',
-    status VARCHAR(20) NOT NULL DEFAULT 'published',
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    created_by VARCHAR(50),
-    updated_by VARCHAR(50),
-    
-    CONSTRAINT fk_feature_alert_feature FOREIGN KEY (feature_id) REFERENCES features(id),
-    CONSTRAINT fk_feature_alert_meter FOREIGN KEY (meter_id) REFERENCES meters(id),
-    CONSTRAINT unique_feature_alert_config UNIQUE (tenant_id, environment_id, feature_id, meter_id, entity)
-);
+-- Add alert_settings column to existing features table
+ALTER TABLE features 
+ADD COLUMN alert_settings JSONB DEFAULT NULL;
 
-CREATE INDEX idx_feature_alert_config_tenant_env ON feature_alert_configurations(tenant_id, environment_id);
-CREATE INDEX idx_feature_alert_config_feature ON feature_alert_configurations(feature_id);
-CREATE INDEX idx_feature_alert_config_meter ON feature_alert_configurations(meter_id);
-CREATE INDEX idx_feature_alert_config_entity ON feature_alert_configurations(entity);
+-- Create index for features with alert settings
+CREATE INDEX idx_features_alert_settings ON features(alert_settings) WHERE alert_settings IS NOT NULL;
+
+-- Example alert_settings structure:
+-- {
+--   "upperbound": "1000.00",
+--   "lowerbound": "100.00"
+-- }
 ```
 
 ## Appendix B: API Examples
 
-### Create Feature Alert Configuration
+### Create Feature Alert Settings
 ```bash
-curl -X POST /api/v1/feature-alert-setting \
+curl -X POST /api/v1/features/feature_123/alert-settings \
   -H "Content-Type: application/json" \
   -d '{
-    "feature_id": "feature_123",
-    "meter_id": "meter_456",
-    "entity": "entitlement_789",
-    "entity_type": "entitlement",
-    "threshold": {
+    "alert_settings": {
       "upperbound": "1000.00",
       "lowerbound": "100.00"
-    },
-    "threshold_type": "usage_amount"
+    }
   }'
 ```
 
-### List Feature Alert Configurations
+### Update Feature Alert Settings
 ```bash
-curl -X GET /api/v1/feature-alert-setting?feature_id=feature_123&entity_type=entitlement
+curl -X PUT /api/v1/features/feature_123/alert-settings \
+  -H "Content-Type: application/json" \
+  -d '{
+    "alert_settings": {
+      "upperbound": "1500.00",
+      "lowerbound": "200.00"
+    }
+  }'
+```
+
+### Get Feature Alert Settings
+```bash
+curl -X GET /api/v1/features/feature_123/alert-settings
+```
+
+### List Features with Alert Settings
+```bash
+curl -X GET /api/v1/features?has_alert_settings=true
 ```
 
 ### Webhook Payload Example
 ```json
 {
-  "event_type": "feature.usage.threshold.warning",
+  "event_type": "feature.wallet.balance.warning",
   "feature_id": "feature_123",
   "feature_name": "API Calls",
-  "meter_id": "meter_456",
-  "entity": "entitlement_789",
-  "entity_type": "entitlement",
+  "wallet_id": "wallet_456",
+  "entity": "wallet_456",
+  "entity_type": "wallet",
   "alert_state": "warning",
-  "current_usage": "750.00",
-  "threshold": {
+  "wallet_balance": "750.00",
+  "alert_settings": {
     "upperbound": "1000.00",
     "lowerbound": "100.00"
   },
-  "aggregation_type": "sum",
-  "period": "2024-01",
+  "balance_type": "credit_balance",
   "timestamp": "2024-01-15T10:30:00Z",
   "tenant_id": "tenant_123",
   "environment_id": "env_456"
@@ -772,22 +748,20 @@ INSERT INTO alert_logs (
     'alert_12345',
     'tenant_123',
     'env_456',
-    'entitlement',
-    'entitlement_789',
-    'feature_usage_threshold',
+    'wallet',
+    'wallet_456',
+    'feature_wallet_balance',
     'warning',
     '{
         "feature_id": "feature_123",
-        "meter_id": "meter_456",
-        "entity": "entitlement_789",
-        "entity_type": "entitlement",
-        "threshold": {
+        "feature_name": "API Calls",
+        "wallet_id": "wallet_456",
+        "alert_settings": {
             "upperbound": "1000.00",
             "lowerbound": "100.00"
         },
-        "current_usage": "750.00",
-        "aggregation_type": "sum",
-        "period": "2024-01",
+        "wallet_balance": "750.00",
+        "balance_type": "credit_balance",
         "timestamp": "2024-01-15T10:30:00Z"
     }',
     NOW()
@@ -797,26 +771,58 @@ INSERT INTO alert_logs (
 ### Alert State Transition Example
 ```mermaid
 sequenceDiagram
-    participant U as Usage Event
-    participant M as Monitor
+    participant WS as Wallet Service
+    participant M as Balance Monitor
     participant A as AlertLogs
     participant W as Webhook
     
-    Note over U,W: Feature Usage: 750 (Warning State)
+    Note over WS,W: Wallet Balance: $750 (Warning State)
     
-    U->>M: Usage event (750 units)
-    M->>M: Get alert configs for feature_123
-    M->>M: Calculate current usage: 750
+    WS->>M: Credit balance updated (750.00)
+    M->>M: Get all features with alert_settings
+    M->>M: For feature_123: wallet_balance = 750
+    M->>M: Compare with feature thresholds
     M->>M: Determine state: WARNING
-    M->>A: Query latest alert for feature_123 + entitlement_789
+    M->>A: Query latest alert for feature_123 + wallet_456
     A-->>M: Previous state: OK
     
     Note over M: State changed: OK → WARNING
     
     M->>A: Create alert log entry
-    Note over A: entity_type = "entitlement"<br/>entity_id = "entitlement_789"<br/>alert_type = "feature_usage_threshold"<br/>alert_status = "warning"
+    Note over A: entity_type = "wallet"<br/>entity_id = "wallet_456"<br/>alert_type = "feature_wallet_balance"<br/>alert_status = "warning"
     
     A->>W: Trigger webhook event
     W->>W: Build webhook payload
     W->>W: Send webhook notification
+```
+
+### Wallet Balance Alert Evaluation Workflow
+```mermaid
+flowchart TD
+    A[Wallet Balance Update] --> B[Get Features with Alert Settings]
+    B --> C{Features Found?}
+    C -->|No| D[Skip Alert Evaluation]
+    C -->|Yes| E[For Each Feature]
+    
+    E --> F[Compare Wallet Balance with Feature Thresholds]
+    F --> G[Determine Alert State]
+    G --> H[Query Latest Alert Log for Feature/Wallet]
+    H --> I{State Changed?}
+    
+    I -->|No| J[Skip Alert Generation]
+    I -->|Yes| K[Create Alert Log Entry]
+    
+    K --> L[Set Entity Type = wallet]
+    L --> M[Set Feature Alert Info]
+    M --> N[Save to AlertLogs Table]
+    N --> O[Trigger Webhook Event]
+    
+    O --> P[Build Webhook Payload]
+    P --> Q[Send Webhook]
+    Q --> R[Continue with Next Feature]
+    
+    style A fill:#e3f2fd
+    style K fill:#e8f5e8
+    style N fill:#fff3e0
+    style Q fill:#fce4ec
 ```
