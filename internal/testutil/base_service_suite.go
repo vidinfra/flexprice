@@ -192,7 +192,7 @@ func (s *BaseServiceTestSuite) setupStores() {
 		ConnectionRepo:               NewInMemoryConnectionStore(),
 		EntityIntegrationMappingRepo: NewInMemoryEntityIntegrationMappingStore(),
 		SettingsRepo:                 NewInMemorySettingsStore(),
-		AlertLogsRepo:                NewMockAlertLogsRepo(),
+		AlertLogsRepo:                NewInMemoryAlertLogsStore(),
 	}
 
 	s.db = NewMockPostgresClient(s.logger)
@@ -240,6 +240,7 @@ func (s *BaseServiceTestSuite) clearStores() {
 	s.stores.AddonAssociationRepo.(*InMemoryAddonAssociationStore).Clear()
 	s.stores.SettingsRepo.(*InMemorySettingsStore).Clear()
 	s.stores.SubscriptionLineItemRepo.(*InMemorySubscriptionLineItemStore).Clear()
+	s.stores.AlertLogsRepo.(*InMemoryAlertLogsStore).Clear()
 }
 
 func (s *BaseServiceTestSuite) ClearStores() {
