@@ -345,29 +345,10 @@ npm run build
 # Copy custom files if they exist
 echo -e "${BLUE}🔄 Copying custom files...${NC}"
 cd "$(dirname "$0")/.."  # Go back to project root
-CUSTOM_DIR="api/custom/javascript"
-if [ -d "$CUSTOM_DIR" ]; then
-    # Find all files in the custom directory (excluding README files)
-    if [ -n "$(find "$CUSTOM_DIR" -type f -not -name "README.md" 2>/dev/null)" ]; then
-        echo -e "${BLUE}📂 Found custom files, copying to generated SDK...${NC}"
-        # Copy files recursively while preserving directory structure
-        find "$CUSTOM_DIR" -type f -not -name "README.md" | while read -r file; do
-            # Calculate relative path from custom directory
-            rel_path="${file#$CUSTOM_DIR/}"
-            # Create target file path
-            target_file="$API_DIR/$rel_path"
-            # Create target directory if it doesn't exist
-            target_file_dir="$(dirname "$target_file")"
-            mkdir -p "$target_file_dir"
-            # Copy the file
-            cp "$file" "$target_file"
-            echo -e "${GREEN}✅ Copied: $rel_path${NC}"
-        done
-    else
-        echo -e "${YELLOW}💡 No custom files found in $CUSTOM_DIR${NC}"
-    fi
+if [ -f "./scripts/copy-custom-files.sh" ]; then
+    ./scripts/copy-custom-files.sh javascript
 else
-    echo -e "${YELLOW}💡 No custom directory found at $CUSTOM_DIR${NC}"
+    echo -e "${YELLOW}⚠️  Custom files copy script not found${NC}"
 fi
 
 echo -e "${GREEN}✅ TypeScript SDK generated successfully!${NC}"
@@ -383,5 +364,5 @@ echo -e "  4. npm run build   # Build the project"
 echo -e "  5. npm publish     # Publish to npm (when ready)"
 echo -e ""
 echo -e "${BLUE}💡 Custom files management:${NC}"
-echo -e "  - Add custom files to: api/javascript-custom/"
-echo -e "  - They will be automatically restored on next regeneration"
+echo -e "  - Add custom files to: api/custom/javascript/"
+echo -e "  - They will be automatically copied on next regeneration"
