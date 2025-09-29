@@ -625,12 +625,13 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 		analytics.Properties = make(map[string]string)
 
 		// Scan the row based on group by columns
-		// feature_id is always first, followed by requested grouping dimensions
-		totalGroupByColumns := 1 + len(params.GroupBy) // feature_id + requested dimensions
-		expectedColumns := totalGroupByColumns + 5     // +5 for sum_usage, max_usage, latest_usage, count_unique_usage, event_count
+		// The actual number of group by columns is determined by the query structure
+		// which includes feature_id + all requested grouping dimensions
+		totalGroupByColumns := len(groupByColumns) // This matches the actual GROUP BY columns in the query
+		expectedColumns := totalGroupByColumns + 5 // +5 for sum_usage, max_usage, latest_usage, count_unique_usage, event_count
 		scanArgs := make([]interface{}, expectedColumns)
 
-		// Prepare scan targets: feature_id first, then requested grouping dimensions
+		// Prepare scan targets: all group by columns
 		scanTargets := make([]string, totalGroupByColumns)
 		for i := range scanTargets {
 			scanArgs[i] = &scanTargets[i]
@@ -652,24 +653,33 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 				Mark(ierr.ErrDatabase)
 		}
 
-		// Populate analytics fields: feature_id is always first
-		analytics.FeatureID = scanTargets[0]
+		// Populate analytics fields based on the group by columns structure
+		// We need to map the scanned values to the correct fields based on the groupByColumns order
+		scanIndex := 0
 
-		// Then populate requested grouping dimensions
-		for i, groupBy := range params.GroupBy {
-			value := scanTargets[1+i] // +1 because feature_id is at index 0
-			switch groupBy {
+		// Process each group by column in the order they appear in the query
+		for _, groupByCol := range groupByColumns {
+			value := scanTargets[scanIndex]
+
+			// Map the column to the appropriate field
+			switch groupByCol {
 			case "feature_id":
-				// Already handled above
+				analytics.FeatureID = value
 			case "source":
 				analytics.Source = value
 			default:
-				// For properties fields, store in Properties map with simplified key
-				if strings.HasPrefix(groupBy, "properties.") {
-					propertyName := strings.TrimPrefix(groupBy, "properties.")
-					analytics.Properties[propertyName] = value
+				// For properties fields, extract the property name from the JSONExtractString expression
+				if strings.HasPrefix(groupByCol, "JSONExtractString(properties, '") {
+					// Extract property name from "JSONExtractString(properties, 'property_name')"
+					start := len("JSONExtractString(properties, '")
+					end := strings.Index(groupByCol[start:], "'")
+					if end > 0 {
+						propertyName := groupByCol[start : start+end]
+						analytics.Properties[propertyName] = value
+					}
 				}
 			}
+			scanIndex++
 		}
 
 		// If we need time-series data and a window size is specified, fetch the points
@@ -823,26 +833,20 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 			Properties:      make(map[string]string),
 		}
 
-		// Build scan targets dynamically based on group by columns
-		scanTargets := []interface{}{&analytics.FeatureID}
+		// Build scan targets dynamically based on selectColumns structure
+		// The query selects: selectColumns + total_usage + event_count
+		totalSelectColumns := len(selectColumns) + 2 // +2 for total_usage and event_count
+		scanTargets := make([]interface{}, totalSelectColumns)
 
-		// Add scan targets for grouping columns
-		groupingValues := make([]string, len(params.GroupBy))
-		for i, groupBy := range params.GroupBy {
-			switch groupBy {
-			case "source":
-				scanTargets = append(scanTargets, &groupingValues[i])
-			case "feature_id":
-				// Already handled
-			default:
-				if strings.HasPrefix(groupBy, "properties.") {
-					scanTargets = append(scanTargets, &groupingValues[i])
-				}
-			}
+		// Create string targets for all select columns
+		selectValues := make([]string, len(selectColumns))
+		for i := range selectValues {
+			scanTargets[i] = &selectValues[i]
 		}
 
-		// Add usage and event count
-		scanTargets = append(scanTargets, &analytics.TotalUsage, &analytics.EventCount)
+		// Add usage and event count targets
+		scanTargets[len(selectColumns)] = &analytics.TotalUsage
+		scanTargets[len(selectColumns)+1] = &analytics.EventCount
 
 		err := rows.Scan(scanTargets...)
 		if err != nil {
@@ -851,19 +855,24 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 				Mark(ierr.ErrDatabase)
 		}
 
-		// Populate grouping fields from scanned values
-		for i, groupBy := range params.GroupBy {
-			value := groupingValues[i]
-			switch groupBy {
+		// Populate fields based on selectColumns order
+		for i, selectCol := range selectColumns {
+			value := selectValues[i]
+			switch selectCol {
+			case "feature_id":
+				analytics.FeatureID = value
 			case "source":
 				analytics.Source = value
-			case "feature_id":
-				// Already handled above
 			default:
-				if strings.HasPrefix(groupBy, "properties.") {
-					propertyName := strings.TrimPrefix(groupBy, "properties.")
-					if value != "" {
-						analytics.Properties[propertyName] = value
+				// For properties fields, extract the property name from the alias
+				if strings.Contains(selectCol, " as ") {
+					// Extract alias from "JSONExtractString(properties, 'property_name') as property_name"
+					parts := strings.Split(selectCol, " as ")
+					if len(parts) == 2 {
+						propertyName := strings.TrimSpace(parts[1])
+						if value != "" {
+							analytics.Properties[propertyName] = value
+						}
 					}
 				}
 			}
