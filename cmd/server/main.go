@@ -706,13 +706,13 @@ func registerRouterHandlers(
 	includeProcessingHandlers bool,
 ) {
 	// Always register these basic handlers
-	webhookService.RegisterHandler(router)
-	onboardingService.RegisterHandler(router)
+	// webhookService.RegisterHandler(router)
+	// onboardingService.RegisterHandler(router)
 
 	// Only register processing handlers when needed
 	if includeProcessingHandlers {
 		eventPostProcessingSvc.RegisterHandler(router, cfg)
-		featureUsageSvc.RegisterHandler(router, cfg)
+		// featureUsageSvc.RegisterHandler(router, cfg)
 	}
 }
 
