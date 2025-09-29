@@ -60,6 +60,9 @@ build/
 api/*/*
 # custom scripts
 !api/scripts/*
+# custom files directory (should be tracked)
+!api/custom/
+!api/custom/**
 # skip examples and README.md modifications
 !api/*/examples
 !api/*/README.md
