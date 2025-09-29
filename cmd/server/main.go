@@ -218,6 +218,7 @@ func main() {
 			service.NewSettingsService,
 			service.NewSubscriptionChangeService,
 			service.NewAlertLogsService,
+			service.NewStripeSubscriptionService,
 		),
 	)
 

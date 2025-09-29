@@ -1,0 +1,37 @@
+{
+    "id": "evt_1SCfD3BVFqEMJNuGBgEFEx3S",
+    "object": "event",
+    "api_version": "2024-11-20.acacia",
+    "created": 1759145137,
+    "data": {
+      "object": {
+        "id": "prod_T8x04FT9OoTaRR",
+        "object": "product",
+        "active": false,
+        "attributes": [],
+        "created": 1759144704,
+        "default_price": null,
+        "description": null,
+        "images": [],
+        "livemode": false,
+        "marketing_features": [],
+        "metadata": {},
+        "name": "Create Plan",
+        "package_dimensions": null,
+        "shippable": null,
+        "statement_descriptor": null,
+        "tax_code": "txcd_10000000",
+        "type": "service",
+        "unit_label": null,
+        "updated": 1759145137,
+        "url": null
+      }
+    },
+    "livemode": false,
+    "pending_webhooks": 1,
+    "request": {
+      "id": "req_5l1W06lRONzLzV",
+      "idempotency_key": null
+    },
+    "type": "product.deleted"
+  }

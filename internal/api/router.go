@@ -456,6 +456,12 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			webhooks.POST("/stripe/:tenant_id/:environment_id", handlers.Webhook.HandleStripeWebhook)
 		}
 
+		// Stripe Webhook subscription
+		stripeWebhookSubscription := v1Private.Group("/webhooks-stripe-subscription")
+		{
+			stripeWebhookSubscription.POST("stripe/:tenant_id/:environment_id", handlers.Webhook.HandleStripeWebhookSubscription)
+		}
+
 		// Cron routes
 		// TODO: move crons out of API based architecture
 		cron := v1Private.Group("/cron")

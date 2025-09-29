@@ -21,10 +21,11 @@ import (
 
 // WebhookHandler handles webhook-related endpoints
 type WebhookHandler struct {
-	config        *config.Configuration
-	svixClient    *svix.Client
-	logger        *logger.Logger
-	stripeService *service.StripeService
+	config                    *config.Configuration
+	svixClient                *svix.Client
+	logger                    *logger.Logger
+	stripeService             *service.StripeService
+	stripeSubscriptionService *service.StripeSubscriptionService
 }
 
 // NewWebhookHandler creates a new webhook handler
@@ -109,6 +110,16 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 		})
 		return
 	}
+
+	jsonBody, err := json.Marshal(c.Request.Body)
+	if err != nil {
+		h.logger.Errorw("failed to marshal request body", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Failed to marshal request body",
+		})
+	}
+
+	h.logger.Infow("received stripe webhook subscription body", "body", string(jsonBody))
 
 	// Read the raw request body
 	body, err := io.ReadAll(c.Request.Body)
@@ -1598,4 +1609,35 @@ func (h *WebhookHandler) handleSetupIntentSucceeded(c *gin.Context, event *strip
 
 		"message": "Setup intent processed and payment method set as default",
 	})
+}
+
+func (h *WebhookHandler) HandleStripeWebhookSubscription(c *gin.Context) {
+	tenantID := c.Param("tenant_id")
+	environmentID := c.Param("environment_id")
+
+	if tenantID == "" || environmentID == "" {
+		h.logger.Errorw("missing tenant_id or environment_id in webhook URL")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "tenant_id and environment_id are required",
+		})
+	}
+
+	jsonBody, err := json.Marshal(c.Request.Body)
+	if err != nil {
+		h.logger.Errorw("failed to marshal request body", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Failed to marshal request body",
+		})
+	}
+
+	h.logger.Infow("received stripe webhook subscription body", "body", string(jsonBody))
+
+	h.logger.Infow("received stripe webhook subscription",
+		"tenant_id", tenantID,
+		"environment_id", environmentID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Stripe webhook subscription received",
+	})
+
 }
