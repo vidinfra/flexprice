@@ -542,7 +542,7 @@ func (s *StripeService) CreatePaymentLink(ctx context.Context, req *dto.CreateSt
 		"customer_id":    req.CustomerID,
 		"environment_id": req.EnvironmentID,
 		"payment_source": "flexprice",
-		"payment_type":   "checkout_link",
+		"payment_type":   "checkout",
 	}
 
 	// Try to get Stripe invoice ID for attachment tracking
@@ -565,12 +565,12 @@ func (s *StripeService) CreatePaymentLink(ctx context.Context, req *dto.CreateSt
 	// Provide default URLs if not provided
 	successURL := req.SuccessURL
 	if successURL == "" {
-		successURL = "https://admin-dev.flexprice.io/customer-management/invoices?page=1"
+		successURL = "https://admin.flexprice.io/"
 	}
 
 	cancelURL := req.CancelURL
 	if cancelURL == "" {
-		cancelURL = "https://admin-dev.flexprice.io/customer-management/invoices?page=1"
+		cancelURL = "https://admin.flexprice.io/"
 	}
 
 	// Create checkout session parameters

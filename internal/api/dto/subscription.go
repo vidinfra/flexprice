@@ -220,8 +220,8 @@ func (r *CreateSubscriptionRequest) Validate() error {
 		// Handle legacy default_incomplete collection method
 		if string(*r.CollectionMethod) == "default_incomplete" {
 			// Convert to send_invoice + default_incomplete for backward compatibility
-			sendInvoiceMethod := types.CollectionMethodSendInvoice
-			r.CollectionMethod = &sendInvoiceMethod
+			chargeAutomaticallyMethod := types.CollectionMethodChargeAutomatically
+			r.CollectionMethod = &chargeAutomaticallyMethod
 			if r.PaymentBehavior == nil {
 				defaultIncomplete := types.PaymentBehaviorDefaultIncomplete
 				r.PaymentBehavior = &defaultIncomplete

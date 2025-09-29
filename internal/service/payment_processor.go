@@ -247,6 +247,9 @@ func (p *paymentProcessor) handlePaymentLinkCreation(ctx context.Context, paymen
 		linkMetadata = types.Metadata{}
 	}
 
+	// Add FlexPrice payment ID to metadata for new payment_intent.succeeded webhook
+	linkMetadata["flexprice_payment_id"] = paymentObj.ID
+
 	// Convert to payment link request
 	paymentLinkReq := &dto.CreatePaymentLinkRequest{
 		InvoiceID:  paymentObj.DestinationID,
