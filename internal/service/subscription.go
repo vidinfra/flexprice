@@ -10,6 +10,7 @@ import (
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/addonassociation"
 	"github.com/flexprice/flexprice/internal/domain/customer"
+	"github.com/flexprice/flexprice/internal/domain/invoice"
 
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/proration"
@@ -3838,8 +3839,37 @@ func (s *subscriptionService) ProcessAutoCancellationSubscriptions(ctx context.C
 			"environment_id", tenantConfig.EnvironmentID,
 			"grace_period_days", tenantConfig.GracePeriodDays)
 
+		// Get all past due invoices for this tenant x environment
+		invoicesFilter := &types.InvoiceFilter{
+			InvoiceType:   types.InvoiceTypeSubscription,
+			PaymentStatus: []types.PaymentStatus{types.PaymentStatusFailed, types.PaymentStatusPending, types.PaymentStatusInitiated, types.PaymentStatusProcessing},
+			SkipLineItems: true,
+			QueryFilter:   types.NewNoLimitQueryFilter(),
+		}
+
+		invoices, err := s.InvoiceRepo.List(tenantCtx, invoicesFilter)
+		if err != nil {
+			s.Logger.Errorw("failed to get invoices for tenant",
+				"tenant_id", tenantConfig.TenantID,
+				"environment_id", tenantConfig.EnvironmentID,
+				"error", err)
+			continue // Skip this tenant but continue with others
+		}
+
+		subscriptionIDs := lo.FilterMap(invoices, func(invoice *invoice.Invoice, _ int) (string, bool) {
+			return *invoice.SubscriptionID, invoice.SubscriptionID != nil
+		})
+		subscriptionIDs = lo.Uniq(subscriptionIDs)
+
+		s.Logger.Infow("found invoices for tenant",
+			"tenant_id", tenantConfig.TenantID,
+			"environment_id", tenantConfig.EnvironmentID,
+			"invoice_count", len(invoices),
+			"subscription_count", len(subscriptionIDs))
+
 		// Get ONLY ACTIVE subscriptions for this tenant x environment
 		filter := &types.SubscriptionFilter{
+			SubscriptionIDs:    subscriptionIDs,
 			SubscriptionStatus: []types.SubscriptionStatus{types.SubscriptionStatusActive},
 		}
 
