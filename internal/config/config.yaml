@@ -144,10 +144,10 @@ cache:
 event_post_processing:
   topic: "events_post_processing"
   rate_limit: 12
-  consumer_group: "89_events_post_processing"
+  consumer_group: "v1_events_post_processing"
   topic_backfill: "events_post_processing_backfill"
   rate_limit_backfill: 1
-  consumer_group_backfill: "89_events_post_processing_backfill"
+  consumer_group_backfill: "v1_events_post_processing_backfill"
 
 feature_usage_tracking:
   topic: "events"
