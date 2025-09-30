@@ -86,14 +86,10 @@ fi
 # Copy custom files
 echo -e "${BLUE}📂 Found custom files, copying to generated SDK...${NC}"
 files_copied=0
+custom_apis=()
 
-# Find all files in the custom directory (excluding README files)
+# Find all files in the custom directory
 while IFS= read -r -d '' file; do
-    # Skip README files in the root of custom directory
-    if [[ "$file" == *"/README.md" ]] && [[ "$(dirname "$file")" == "$CUSTOM_DIR" ]]; then
-        continue
-    fi
-    
     # Calculate relative path from custom directory
     rel_path="${file#$CUSTOM_DIR/}"
     
@@ -109,7 +105,38 @@ while IFS= read -r -d '' file; do
     echo -e "${GREEN}✅ Copied: $rel_path${NC}"
     ((files_copied++))
     
+    # Track custom API files for index.ts update
+    if [[ "$rel_path" =~ ^src/apis/.*\.ts$ ]] && [[ "$rel_path" != "src/apis/index.ts" ]]; then
+        api_name=$(basename "$rel_path" .ts)
+        custom_apis+=("$api_name")
+    fi
+    
 done < <(find "$CUSTOM_DIR" -type f -print0)
+
+# Update index.ts if custom APIs were copied
+if [ ${#custom_apis[@]} -gt 0 ]; then
+    echo -e "${BLUE}📝 Updating index.ts with custom APIs...${NC}"
+    index_file="$TARGET_DIR/src/apis/index.ts"
+    
+    if [ -f "$index_file" ]; then
+        # Create a temporary file for the updated index
+        temp_index=$(mktemp)
+        
+        # Add existing exports (excluding custom APIs that might already be there)
+        grep "^export \* from" "$index_file" | grep -v -E "($(IFS='|'; echo "${custom_apis[*]}"))" > "$temp_index"
+        
+        # Add custom API exports in alphabetical order
+        printf '%s\n' "${custom_apis[@]}" | sort | while read -r api_name; do
+            echo "export * from './$api_name';" >> "$temp_index"
+        done
+        
+        # Replace the original index file
+        mv "$temp_index" "$index_file"
+        echo -e "${GREEN}✅ Updated index.ts with custom APIs: ${custom_apis[*]}${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Warning: index.ts not found at $index_file${NC}"
+    fi
+fi
 
 echo -e "${GREEN}📁 Total files copied: $files_copied${NC}"
 echo -e "${GREEN}✅ Custom files copy complete!${NC}"

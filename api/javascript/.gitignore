@@ -81,3 +81,6 @@ pids/
 
 # TernJS port file
 .tern-port
+
+# OpenAPI Generator files
+.openapi-generator/
