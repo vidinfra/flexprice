@@ -776,30 +776,22 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 	// For MAX with bucket, we need to:
 	// 1. Find the max value within each bucket (grouped by requested fields)
 	// 2. Sum all bucket maxes to get the total
-	query := fmt.Sprintf(`
-		WITH bucket_maxes AS (
-			SELECT
-				%s as bucket_start,
-				%s,
-				max(qty_total * sign) as bucket_max,
-				count(DISTINCT id) as event_count
-			FROM feature_usage
-			WHERE tenant_id = ?
-			AND environment_id = ?
-			AND customer_id = ?
-			AND feature_id = ?
-			AND timestamp >= ?
-			AND timestamp <= ?
-			AND sign != 0
-			GROUP BY %s
-		)
+
+	// Build inner query with filters
+	innerQuery := fmt.Sprintf(`
 		SELECT
+			%s as bucket_start,
 			%s,
-			sum(bucket_max) as total_usage,
-			sum(event_count) as event_count
-		FROM bucket_maxes
-		GROUP BY %s
-	`, bucketWindowExpr, strings.Join(selectColumns, ", "), strings.Join(groupByColumns, ", "), strings.Join(selectColumns, ", "), strings.Join(selectColumns, ", "))
+			max(qty_total * sign) as bucket_max,
+			count(DISTINCT id) as event_count
+		FROM feature_usage
+		WHERE tenant_id = ?
+		AND environment_id = ?
+		AND customer_id = ?
+		AND feature_id = ?
+		AND timestamp >= ?
+		AND timestamp <= ?
+		AND sign != 0`, bucketWindowExpr, strings.Join(selectColumns, ", "))
 
 	queryParams := []interface{}{
 		params.TenantID,
@@ -809,6 +801,59 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 		params.StartTime,
 		params.EndTime,
 	}
+
+	// Add filters for sources to inner query
+	if len(params.Sources) > 0 {
+		placeholders := make([]string, len(params.Sources))
+		for i := range params.Sources {
+			placeholders[i] = "?"
+		}
+		innerQuery += " AND source IN (" + strings.Join(placeholders, ", ") + ")"
+		for _, source := range params.Sources {
+			queryParams = append(queryParams, source)
+		}
+	}
+
+	// Add property filters to inner query
+	if len(params.PropertyFilters) > 0 {
+		for property, values := range params.PropertyFilters {
+			if len(values) > 0 {
+				if len(values) == 1 {
+					innerQuery += " AND JSONExtractString(properties, ?) = ?"
+					queryParams = append(queryParams, property, values[0])
+				} else {
+					placeholders := make([]string, len(values))
+					for i := range values {
+						placeholders[i] = "?"
+					}
+					innerQuery += " AND JSONExtractString(properties, ?) IN (" + strings.Join(placeholders, ",") + ")"
+					queryParams = append(queryParams, property)
+					// Now append all values after the property
+					for _, v := range values {
+						queryParams = append(queryParams, v)
+					}
+				}
+			}
+		}
+	}
+
+	// Complete the inner query with GROUP BY
+	innerQuery += fmt.Sprintf(" GROUP BY %s", strings.Join(groupByColumns, ", "))
+
+	// Build the complete query with CTE
+	query := fmt.Sprintf(`
+		WITH bucket_maxes AS (
+			%s
+		)
+		SELECT
+			%s,
+			sum(bucket_max) as total_usage,
+			sum(event_count) as event_count
+		FROM bucket_maxes
+	`, innerQuery, strings.Join(selectColumns, ", "))
+
+	// Add GROUP BY clause
+	query += " GROUP BY " + strings.Join(selectColumns, ", ")
 
 	rows, err := r.store.GetConn().Query(ctx, query, queryParams...)
 	if err != nil {
@@ -892,36 +937,24 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 	// For MAX with bucket features, we need to first get max within each bucket,
 	// then aggregate those maxes within the request window
 	// Note: For time series points, we aggregate across all groups within each time window
-	query := fmt.Sprintf(`
-		WITH bucket_maxes AS (
-			SELECT
-				%s as bucket_start,
-				%s as window_start,
-				max(qty_total * sign) as bucket_max,
-				argMax(qty_total, timestamp) as bucket_latest,
-				count(DISTINCT unique_hash) as bucket_count_unique,
-				count(DISTINCT id) as event_count
-			FROM feature_usage
-			WHERE tenant_id = ?
-			AND environment_id = ?
-			AND customer_id = ?
-			AND feature_id = ?
-			AND timestamp >= ?
-			AND timestamp <= ?
-			AND sign != 0
-			GROUP BY bucket_start, window_start
-		)
+
+	// Build inner query with filters
+	innerQuery := fmt.Sprintf(`
 		SELECT
-			window_start as timestamp,
-			sum(bucket_max) as usage,
-			max(bucket_max) as max_usage,
-			argMax(bucket_latest, window_start) as latest_usage,
-			sum(bucket_count_unique) as count_unique_usage,
-			sum(event_count) as event_count
-		FROM bucket_maxes
-		GROUP BY window_start
-		ORDER BY window_start
-	`, r.formatWindowSize(featureInfo.BucketSize, nil), windowExpr)
+			%s as bucket_start,
+			%s as window_start,
+			max(qty_total * sign) as bucket_max,
+			argMax(qty_total, timestamp) as bucket_latest,
+			count(DISTINCT unique_hash) as bucket_count_unique,
+			count(DISTINCT id) as event_count
+		FROM feature_usage
+		WHERE tenant_id = ?
+		AND environment_id = ?
+		AND customer_id = ?
+		AND feature_id = ?
+		AND timestamp >= ?
+		AND timestamp <= ?
+		AND sign != 0`, r.formatWindowSize(featureInfo.BucketSize, nil), windowExpr)
 
 	queryParams := []interface{}{
 		params.TenantID,
@@ -931,6 +964,62 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 		params.StartTime,
 		params.EndTime,
 	}
+
+	// Add filters for sources to inner query
+	if len(params.Sources) > 0 {
+		placeholders := make([]string, len(params.Sources))
+		for i := range params.Sources {
+			placeholders[i] = "?"
+		}
+		innerQuery += " AND source IN (" + strings.Join(placeholders, ", ") + ")"
+		for _, source := range params.Sources {
+			queryParams = append(queryParams, source)
+		}
+	}
+
+	// Add property filters to inner query
+	if len(params.PropertyFilters) > 0 {
+		for property, values := range params.PropertyFilters {
+			if len(values) > 0 {
+				if len(values) == 1 {
+					innerQuery += " AND JSONExtractString(properties, ?) = ?"
+					queryParams = append(queryParams, property, values[0])
+				} else {
+					placeholders := make([]string, len(values))
+					for i := range values {
+						placeholders[i] = "?"
+					}
+					innerQuery += " AND JSONExtractString(properties, ?) IN (" + strings.Join(placeholders, ",") + ")"
+					queryParams = append(queryParams, property)
+					// Now append all values after the property
+					for _, v := range values {
+						queryParams = append(queryParams, v)
+					}
+				}
+			}
+		}
+	}
+
+	// Complete the inner query with GROUP BY
+	innerQuery += " GROUP BY bucket_start, window_start"
+
+	// Build the complete query with CTE
+	query := fmt.Sprintf(`
+		WITH bucket_maxes AS (
+			%s
+		)
+		SELECT
+			window_start as timestamp,
+			sum(bucket_max) as usage,
+			max(bucket_max) as max_usage,
+			argMax(bucket_latest, window_start) as latest_usage,
+			sum(bucket_count_unique) as count_unique_usage,
+			sum(event_count) as event_count
+		FROM bucket_maxes
+	`, innerQuery)
+
+	// Add GROUP BY and ORDER BY clauses
+	query += " GROUP BY window_start ORDER BY window_start"
 
 	rows, err := r.store.GetConn().Query(ctx, query, queryParams...)
 	if err != nil {
