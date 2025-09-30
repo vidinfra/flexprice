@@ -798,8 +798,8 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 			sum(bucket_max) as total_usage,
 			sum(event_count) as event_count
 		FROM bucket_maxes
-		GROUP BY %s
-	`, bucketWindowExpr, strings.Join(selectColumns, ", "), strings.Join(groupByColumns, ", "), strings.Join(selectColumns, ", "), strings.Join(selectColumns, ", "))
+		WHERE 1=1
+	`, bucketWindowExpr, strings.Join(selectColumns, ", "), strings.Join(groupByColumns, ", "), strings.Join(selectColumns, ", "))
 
 	queryParams := []interface{}{
 		params.TenantID,
@@ -809,6 +809,44 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 		params.StartTime,
 		params.EndTime,
 	}
+
+	// Add filters for sources
+	if len(params.Sources) > 0 {
+		placeholders := make([]string, len(params.Sources))
+		for i := range params.Sources {
+			placeholders[i] = "?"
+		}
+		query += " AND source IN (" + strings.Join(placeholders, ", ") + ")"
+		for _, source := range params.Sources {
+			queryParams = append(queryParams, source)
+		}
+	}
+
+	// Add property filters
+	if len(params.PropertyFilters) > 0 {
+		for property, values := range params.PropertyFilters {
+			if len(values) > 0 {
+				if len(values) == 1 {
+					query += " AND JSONExtractString(properties, ?) = ?"
+					queryParams = append(queryParams, property, values[0])
+				} else {
+					placeholders := make([]string, len(values))
+					for i := range values {
+						placeholders[i] = "?"
+					}
+					query += " AND JSONExtractString(properties, ?) IN (" + strings.Join(placeholders, ",") + ")"
+					queryParams = append(queryParams, property)
+					// Now append all values after the property
+					for _, v := range values {
+						queryParams = append(queryParams, v)
+					}
+				}
+			}
+		}
+	}
+
+	// Add GROUP BY clause
+	query += " GROUP BY " + strings.Join(selectColumns, ", ")
 
 	rows, err := r.store.GetConn().Query(ctx, query, queryParams...)
 	if err != nil {
@@ -919,8 +957,7 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 			sum(bucket_count_unique) as count_unique_usage,
 			sum(event_count) as event_count
 		FROM bucket_maxes
-		GROUP BY window_start
-		ORDER BY window_start
+		WHERE 1=1
 	`, r.formatWindowSize(featureInfo.BucketSize, nil), windowExpr)
 
 	queryParams := []interface{}{
@@ -931,6 +968,44 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 		params.StartTime,
 		params.EndTime,
 	}
+
+	// Add filters for sources
+	if len(params.Sources) > 0 {
+		placeholders := make([]string, len(params.Sources))
+		for i := range params.Sources {
+			placeholders[i] = "?"
+		}
+		query += " AND source IN (" + strings.Join(placeholders, ", ") + ")"
+		for _, source := range params.Sources {
+			queryParams = append(queryParams, source)
+		}
+	}
+
+	// Add property filters
+	if len(params.PropertyFilters) > 0 {
+		for property, values := range params.PropertyFilters {
+			if len(values) > 0 {
+				if len(values) == 1 {
+					query += " AND JSONExtractString(properties, ?) = ?"
+					queryParams = append(queryParams, property, values[0])
+				} else {
+					placeholders := make([]string, len(values))
+					for i := range values {
+						placeholders[i] = "?"
+					}
+					query += " AND JSONExtractString(properties, ?) IN (" + strings.Join(placeholders, ",") + ")"
+					queryParams = append(queryParams, property)
+					// Now append all values after the property
+					for _, v := range values {
+						queryParams = append(queryParams, v)
+					}
+				}
+			}
+		}
+	}
+
+	// Add GROUP BY and ORDER BY clauses
+	query += " GROUP BY window_start ORDER BY window_start"
 
 	rows, err := r.store.GetConn().Query(ctx, query, queryParams...)
 	if err != nil {
