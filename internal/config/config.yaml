@@ -159,4 +159,4 @@ feature_usage_tracking:
 
 feature_flag:
   # This flag is used to enable/disable feature usage for analytics
-  enable_feature_usage_for_analytics: false # TODO: cleanup by 15th October 2025
+  enable_feature_usage_for_analytics: true # TODO: cleanup by 15th October 2025
