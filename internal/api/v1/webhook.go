@@ -21,11 +21,10 @@ import (
 
 // WebhookHandler handles webhook-related endpoints
 type WebhookHandler struct {
-	config                    *config.Configuration
-	svixClient                *svix.Client
-	logger                    *logger.Logger
-	stripeService             *service.StripeService
-	stripeSubscriptionService *service.StripeSubscriptionService
+	config        *config.Configuration
+	svixClient    *svix.Client
+	logger        *logger.Logger
+	stripeService *service.StripeService
 }
 
 // NewWebhookHandler creates a new webhook handler
@@ -191,6 +190,7 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 	}
 
 	stripePlanService := service.NewStripePlanService(h.stripeService.ServiceParams)
+	stripeSubscriptionService := service.NewStripeSubscriptionService(h.stripeService.ServiceParams)
 	// Handle different event types
 	switch string(event.Type) {
 	case string(types.WebhookEventTypeCustomerCreated):
@@ -260,6 +260,60 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 			h.logger.Errorw("failed to delete plan", "error", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Failed to delete plan",
+			})
+			return
+		}
+	case string(types.WebhookEventTypeSubscriptionCreated):
+		var subscription stripe.Subscription
+		err := json.Unmarshal(event.Data.Raw, &subscription)
+		if err != nil {
+			h.logger.Errorw("failed to parse subscription from webhook", "error", err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Failed to parse subscription data",
+			})
+			return
+		}
+		_, err = stripeSubscriptionService.CreateSubscription(c.Request.Context(), subscription.ID)
+		if err != nil {
+			h.logger.Errorw("failed to create subscription", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create subscription",
+			})
+			return
+		}
+	case string(types.WebhookEventTypeSubscriptionUpdated):
+		var subscription stripe.Subscription
+		err := json.Unmarshal(event.Data.Raw, &subscription)
+		if err != nil {
+			h.logger.Errorw("failed to parse subscription from webhook", "error", err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Failed to parse subscription data",
+			})
+			return
+		}
+		_, err = stripeSubscriptionService.UpdateSubscription(c.Request.Context(), subscription.ID)
+		if err != nil {
+			h.logger.Errorw("failed to create subscription", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create subscription",
+			})
+			return
+		}
+	case string(types.WebhookEventTypeSubscriptionDeleted):
+		var subscription stripe.Subscription
+		err := json.Unmarshal(event.Data.Raw, &subscription)
+		if err != nil {
+			h.logger.Errorw("failed to parse subscription from webhook", "error", err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Failed to parse subscription data",
+			})
+			return
+		}
+		_, err = stripeSubscriptionService.CancelSubscription(c.Request.Context(), subscription.ID)
+		if err != nil {
+			h.logger.Errorw("failed to create subscription", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create subscription",
 			})
 			return
 		}

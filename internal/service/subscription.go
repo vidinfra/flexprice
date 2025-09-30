@@ -1932,30 +1932,30 @@ func (s *subscriptionService) ValidateAndFilterPricesForSubscription(
 		return nil, err
 	}
 
-	if len(pricesResponse.Items) == 0 {
-		return nil, ierr.NewError("no prices found for entity").
-			WithHint("The entity must have at least one price to create a subscription").
-			WithReportableDetails(map[string]interface{}{
-				"entity_id":   entityID,
-				"entity_type": entityType,
-			}).
-			Mark(ierr.ErrValidation)
-	}
+	// if len(pricesResponse.Items) == 0 {
+	// 	return nil, ierr.NewError("no prices found for entity").
+	// 		WithHint("The entity must have at least one price to create a subscription").
+	// 		WithReportableDetails(map[string]interface{}{
+	// 			"entity_id":   entityID,
+	// 			"entity_type": entityType,
+	// 		}).
+	// 		Mark(ierr.ErrValidation)
+	// }
 
 	// Filter prices for subscription that are valid for the entity
 	validPrices := filterValidPricesForSubscription(pricesResponse.Items, subscription)
-	if len(validPrices) == 0 {
-		return nil, ierr.NewError("no valid prices found for subscription").
-			WithHint("No prices match the subscription criteria").
-			WithReportableDetails(map[string]interface{}{
-				"entity_id":       entityID,
-				"entity_type":     entityType,
-				"billing_period":  subscription.BillingPeriod,
-				"billing_cadence": subscription.BillingCadence,
-				"currency":        subscription.Currency,
-			}).
-			Mark(ierr.ErrValidation)
-	}
+	// if len(validPrices) == 0 {
+	// 	return nil, ierr.NewError("no valid prices found for subscription").
+	// 		WithHint("No prices match the subscription criteria").
+	// 		WithReportableDetails(map[string]interface{}{
+	// 			"entity_id":       entityID,
+	// 			"entity_type":     entityType,
+	// 			"billing_period":  subscription.BillingPeriod,
+	// 			"billing_cadence": subscription.BillingCadence,
+	// 			"currency":        subscription.Currency,
+	// 		}).
+	// 		Mark(ierr.ErrValidation)
+	// }
 
 	return validPrices, nil
 }

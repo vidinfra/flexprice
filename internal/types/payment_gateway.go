@@ -53,9 +53,9 @@ const (
 	WebhookEventTypeProductCreated                       WebhookEventType = "product.created"
 	WebhookEventTypeProductUpdated                       WebhookEventType = "product.updated"
 	WebhookEventTypeProductDeleted                       WebhookEventType = "product.deleted"
-	WebhookEventTypeSubscriptionCreated                  WebhookEventType = "subscription.created"
-	WebhookEventTypeSubscriptionUpdated                  WebhookEventType = "subscription.updated"
-	WebhookEventTypeSubscriptionDeleted                  WebhookEventType = "subscription.deleted"
+	WebhookEventTypeSubscriptionCreated                  WebhookEventType = "customer.subscription.created"
+	WebhookEventTypeSubscriptionUpdated                  WebhookEventType = "customer.subscription.updated"
+	WebhookEventTypeSubscriptionDeleted                  WebhookEventType = "customer.subscription.deleted"
 )
 
 // Validate validates the webhook event type
