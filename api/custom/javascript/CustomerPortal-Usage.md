@@ -1,6 +1,6 @@
-# FlexPrice Customer Portal SDK
+# FlexPrice Customer Portal SDK - Usage Guide
 
-A comprehensive TypeScript SDK for building customer dashboards with FlexPrice. This SDK provides a clean, type-safe interface for fetching customer data including usage, entitlements, wallet balance, subscriptions, and invoices.
+A comprehensive TypeScript SDK for building customer dashboards with FlexPrice.
 
 ## Quick Start
 
@@ -335,27 +335,3 @@ const configuration = new Configuration({
   ],
 });
 ```
-
-## Files in this Directory
-
-- `src/apis/CustomerPortal.ts` - Main CustomerPortal class implementation
-- `CustomerPortal-Usage.md` - Detailed usage guide
-- `API-Reference.md` - Complete API reference
-- `example-usage.ts` - Code examples and patterns
-- `README.md` - This file
-
-## Integration
-
-The CustomerPortal is automatically exported from the main SDK when you import from `@flexprice/javascript-sdk`. No additional setup is required.
-
-```typescript
-import { CustomerPortal, Configuration } from "@flexprice/javascript-sdk";
-```
-
-## Support
-
-For additional support and documentation, visit:
-
-- [FlexPrice Documentation](https://docs.flexprice.com)
-- [API Reference](https://api.flexprice.com/docs)
-- [GitHub Repository](https://github.com/flexprice/javascript-sdk)
