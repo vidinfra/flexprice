@@ -2413,3 +2413,44 @@ func (s *StripeService) IsInvoiceSyncedToStripe(ctx context.Context, invoiceID s
 	// If we have any mappings, the invoice is synced to Stripe
 	return len(mappings) > 0
 }
+
+// TODO: Plan services
+// fetchStripeProduct retrieves a product from Stripe
+func (s *StripeService) fetchStripeProduct(ctx context.Context, productID string) (*stripe.Product, error) {
+	// Get Stripe connection
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderStripe)
+	if err != nil {
+		return nil, ierr.NewError("failed to get Stripe connection").
+			WithHint("Stripe connection not configured for this environment").
+			Mark(ierr.ErrNotFound)
+	}
+
+	// Get Stripe configuration
+	stripeConfig, err := s.GetDecryptedStripeConfig(conn)
+	if err != nil {
+		return nil, ierr.NewError("failed to get Stripe configuration").
+			WithHint("Invalid Stripe configuration").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Initialize Stripe client
+	stripeClient := stripe.NewClient(stripeConfig.SecretKey, nil)
+
+	// Retrieve the product from Stripe
+	product, err := stripeClient.V1Products.Retrieve(ctx, productID, nil)
+	if err != nil {
+		s.Logger.Errorw("failed to retrieve product from Stripe",
+			"error", err,
+			"product_id", productID,
+		)
+		return nil, ierr.NewError("failed to retrieve product from Stripe").
+			WithHint("Could not fetch product information from Stripe").
+			WithReportableDetails(map[string]interface{}{
+				"product_id": productID,
+				"error":      err.Error(),
+			}).
+			Mark(ierr.ErrSystem)
+	}
+
+	return product, nil
+}

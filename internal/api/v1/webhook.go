@@ -111,16 +111,6 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 		return
 	}
 
-	jsonBody, err := json.Marshal(c.Request.Body)
-	if err != nil {
-		h.logger.Errorw("failed to marshal request body", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Failed to marshal request body",
-		})
-	}
-
-	h.logger.Infow("received stripe webhook subscription body", "body", string(jsonBody))
-
 	// Read the raw request body
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
@@ -200,6 +190,7 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 		return
 	}
 
+	stripePlanService := service.NewStripePlanService(h.stripeService.ServiceParams)
 	// Handle different event types
 	switch string(event.Type) {
 	case string(types.WebhookEventTypeCustomerCreated):
@@ -218,7 +209,60 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 		h.handleInvoicePaymentPaid(c, event, environmentID)
 	case string(types.WebhookEventTypeSetupIntentSucceeded):
 		h.handleSetupIntentSucceeded(c, event, environmentID)
-
+	case string(types.WebhookEventTypeProductCreated):
+		var product stripe.Product
+		err := json.Unmarshal(event.Data.Raw, &product)
+		if err != nil {
+			h.logger.Errorw("failed to parse product from webhook", "error", err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Failed to parse product data",
+			})
+			return
+		}
+		_, err = stripePlanService.CreatePlan(c.Request.Context(), product.ID)
+		if err != nil {
+			h.logger.Errorw("failed to create plan", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to create plan",
+			})
+			return
+		}
+	case string(types.WebhookEventTypeProductUpdated):
+		var product stripe.Product
+		err := json.Unmarshal(event.Data.Raw, &product)
+		if err != nil {
+			h.logger.Errorw("failed to parse product from webhook", "error", err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Failed to parse product data",
+			})
+			return
+		}
+		_, err = stripePlanService.UpdatePlan(c.Request.Context(), product.ID)
+		if err != nil {
+			h.logger.Errorw("failed to update plan", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to update plan",
+			})
+			return
+		}
+	case string(types.WebhookEventTypeProductDeleted):
+		var product stripe.Product
+		err := json.Unmarshal(event.Data.Raw, &product)
+		if err != nil {
+			h.logger.Errorw("failed to parse product from webhook", "error", err)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Failed to parse product data",
+			})
+			return
+		}
+		err = stripePlanService.DeletePlan(c.Request.Context(), product.ID)
+		if err != nil {
+			h.logger.Errorw("failed to delete plan", "error", err)
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Failed to delete plan",
+			})
+			return
+		}
 	default:
 		h.logger.Infow("unhandled Stripe webhook event type", "type", event.Type)
 		c.JSON(http.StatusOK, gin.H{
@@ -1609,35 +1653,4 @@ func (h *WebhookHandler) handleSetupIntentSucceeded(c *gin.Context, event *strip
 
 		"message": "Setup intent processed and payment method set as default",
 	})
-}
-
-func (h *WebhookHandler) HandleStripeWebhookSubscription(c *gin.Context) {
-	tenantID := c.Param("tenant_id")
-	environmentID := c.Param("environment_id")
-
-	if tenantID == "" || environmentID == "" {
-		h.logger.Errorw("missing tenant_id or environment_id in webhook URL")
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "tenant_id and environment_id are required",
-		})
-	}
-
-	jsonBody, err := json.Marshal(c.Request.Body)
-	if err != nil {
-		h.logger.Errorw("failed to marshal request body", "error", err)
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Failed to marshal request body",
-		})
-	}
-
-	h.logger.Infow("received stripe webhook subscription body", "body", string(jsonBody))
-
-	h.logger.Infow("received stripe webhook subscription",
-		"tenant_id", tenantID,
-		"environment_id", environmentID)
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Stripe webhook subscription received",
-	})
-
 }
