@@ -14,25 +14,29 @@ type AlertState string
 const (
 	AlertStateOk      AlertState = "ok"
 	AlertStateInAlarm AlertState = "in_alarm"
+	AlertStateWarning AlertState = "warning"
 )
 
 type AlertType string
 
 const (
-	AlertTypeLowOngoingBalance AlertType = "low_ongoing_balance"
-	AlertTypeLowCreditBalance  AlertType = "low_credit_balance"
+	AlertTypeLowOngoingBalance    AlertType = "low_ongoing_balance"
+	AlertTypeLowCreditBalance     AlertType = "low_credit_balance"
+	AlertTypeFeatureWalletBalance AlertType = "feature_wallet_balance"
 )
 
 // AlertEntityType represents the type of entity for alerts
 type AlertEntityType string
 
 const (
-	AlertEntityTypeWallet AlertEntityType = "wallet"
+	AlertEntityTypeWallet  AlertEntityType = "wallet"
+	AlertEntityTypeFeature AlertEntityType = "feature"
 )
 
 func (aet AlertEntityType) Validate() error {
 	allowedTypes := []AlertEntityType{
 		AlertEntityTypeWallet,
+		AlertEntityTypeFeature,
 	}
 	if !lo.Contains(allowedTypes, aet) {
 		return ierr.NewError("invalid alert entity type").
@@ -162,4 +166,36 @@ func (f *AlertLogFilter) GetOffset() int {
 		return NewDefaultQueryFilter().GetOffset()
 	}
 	return f.QueryFilter.GetOffset()
+}
+
+type FeatureAlertSettings struct {
+	Upperbound *decimal.Decimal `json:"upperbound" validate:"required"`
+	Lowerbound *decimal.Decimal `json:"lowerbound" validate:"required"`
+}
+
+// Validate validates the feature alert settings
+// Both upperbound and lowerbound must be provided and upperbound must be greater than or equal to lowerbound
+func (f *FeatureAlertSettings) Validate() error {
+	// Check if upperbound is provided
+	if f.Upperbound == nil {
+		return ierr.NewError("upperbound is required").
+			WithHint("Please provide a valid upperbound value").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Check if lowerbound is provided
+	if f.Lowerbound == nil {
+		return ierr.NewError("lowerbound is required").
+			WithHint("Please provide a valid lowerbound value").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Check if upperbound is greater than or equal to lowerbound
+	if f.Upperbound.LessThan(*f.Lowerbound) {
+		return ierr.NewError("upperbound must be greater than or equal to lowerbound").
+			WithHint("Please provide valid feature alert settings where upperbound >= lowerbound").
+			Mark(ierr.ErrValidation)
+	}
+
+	return nil
 }

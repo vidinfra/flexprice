@@ -22447,6 +22447,7 @@ type FeatureMutation struct {
 	metadata       *map[string]string
 	unit_singular  *string
 	unit_plural    *string
+	alert_settings *types.FeatureAlertSettings
 	clearedFields  map[string]struct{}
 	done           bool
 	oldValue       func(context.Context) (*Feature, error)
@@ -23201,6 +23202,55 @@ func (m *FeatureMutation) ResetUnitPlural() {
 	delete(m.clearedFields, feature.FieldUnitPlural)
 }
 
+// SetAlertSettings sets the "alert_settings" field.
+func (m *FeatureMutation) SetAlertSettings(tas types.FeatureAlertSettings) {
+	m.alert_settings = &tas
+}
+
+// AlertSettings returns the value of the "alert_settings" field in the mutation.
+func (m *FeatureMutation) AlertSettings() (r types.FeatureAlertSettings, exists bool) {
+	v := m.alert_settings
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAlertSettings returns the old "alert_settings" field's value of the Feature entity.
+// If the Feature object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *FeatureMutation) OldAlertSettings(ctx context.Context) (v types.FeatureAlertSettings, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAlertSettings is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAlertSettings requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAlertSettings: %w", err)
+	}
+	return oldValue.AlertSettings, nil
+}
+
+// ClearAlertSettings clears the value of the "alert_settings" field.
+func (m *FeatureMutation) ClearAlertSettings() {
+	m.alert_settings = nil
+	m.clearedFields[feature.FieldAlertSettings] = struct{}{}
+}
+
+// AlertSettingsCleared returns if the "alert_settings" field was cleared in this mutation.
+func (m *FeatureMutation) AlertSettingsCleared() bool {
+	_, ok := m.clearedFields[feature.FieldAlertSettings]
+	return ok
+}
+
+// ResetAlertSettings resets all changes to the "alert_settings" field.
+func (m *FeatureMutation) ResetAlertSettings() {
+	m.alert_settings = nil
+	delete(m.clearedFields, feature.FieldAlertSettings)
+}
+
 // Where appends a list predicates to the FeatureMutation builder.
 func (m *FeatureMutation) Where(ps ...predicate.Feature) {
 	m.predicates = append(m.predicates, ps...)
@@ -23235,7 +23285,7 @@ func (m *FeatureMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *FeatureMutation) Fields() []string {
-	fields := make([]string, 0, 15)
+	fields := make([]string, 0, 16)
 	if m.tenant_id != nil {
 		fields = append(fields, feature.FieldTenantID)
 	}
@@ -23281,6 +23331,9 @@ func (m *FeatureMutation) Fields() []string {
 	if m.unit_plural != nil {
 		fields = append(fields, feature.FieldUnitPlural)
 	}
+	if m.alert_settings != nil {
+		fields = append(fields, feature.FieldAlertSettings)
+	}
 	return fields
 }
 
@@ -23319,6 +23372,8 @@ func (m *FeatureMutation) Field(name string) (ent.Value, bool) {
 		return m.UnitSingular()
 	case feature.FieldUnitPlural:
 		return m.UnitPlural()
+	case feature.FieldAlertSettings:
+		return m.AlertSettings()
 	}
 	return nil, false
 }
@@ -23358,6 +23413,8 @@ func (m *FeatureMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldUnitSingular(ctx)
 	case feature.FieldUnitPlural:
 		return m.OldUnitPlural(ctx)
+	case feature.FieldAlertSettings:
+		return m.OldAlertSettings(ctx)
 	}
 	return nil, fmt.Errorf("unknown Feature field %s", name)
 }
@@ -23472,6 +23529,13 @@ func (m *FeatureMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetUnitPlural(v)
 		return nil
+	case feature.FieldAlertSettings:
+		v, ok := value.(types.FeatureAlertSettings)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAlertSettings(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Feature field %s", name)
 }
@@ -23526,6 +23590,9 @@ func (m *FeatureMutation) ClearedFields() []string {
 	if m.FieldCleared(feature.FieldUnitPlural) {
 		fields = append(fields, feature.FieldUnitPlural)
 	}
+	if m.FieldCleared(feature.FieldAlertSettings) {
+		fields = append(fields, feature.FieldAlertSettings)
+	}
 	return fields
 }
 
@@ -23563,6 +23630,9 @@ func (m *FeatureMutation) ClearField(name string) error {
 		return nil
 	case feature.FieldUnitPlural:
 		m.ClearUnitPlural()
+		return nil
+	case feature.FieldAlertSettings:
+		m.ClearAlertSettings()
 		return nil
 	}
 	return fmt.Errorf("unknown Feature nullable field %s", name)
@@ -23616,6 +23686,9 @@ func (m *FeatureMutation) ResetField(name string) error {
 		return nil
 	case feature.FieldUnitPlural:
 		m.ResetUnitPlural()
+		return nil
+	case feature.FieldAlertSettings:
+		m.ResetAlertSettings()
 		return nil
 	}
 	return fmt.Errorf("unknown Feature field %s", name)

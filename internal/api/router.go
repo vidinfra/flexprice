@@ -281,6 +281,11 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			feature.PUT("/:id", handlers.Feature.UpdateFeature)
 			feature.DELETE("/:id", handlers.Feature.DeleteFeature)
 			feature.POST("/search", handlers.Feature.ListFeaturesByFilter)
+
+			// Feature alert settings
+			feature.POST("/:id/alert-settings", handlers.Feature.CreateFeatureAlertSettings)
+			feature.PUT("/:id/alert-settings", handlers.Feature.UpdateFeatureAlertSettings)
+			feature.GET("/:id/alert-settings", handlers.Feature.GetFeatureAlertSettings)
 		}
 
 		entitlement := v1Private.Group("/entitlements")

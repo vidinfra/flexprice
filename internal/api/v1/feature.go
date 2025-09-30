@@ -222,3 +222,114 @@ func (h *FeatureHandler) ListFeaturesByFilter(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp)
 }
+
+// CreateFeatureAlertSettings godoc
+// @Summary Create feature alert settings
+// @Description Create alert settings for a feature
+// @Tags Features
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Feature ID"
+// @Param alertSettings body dto.CreateFeatureAlertSettingsRequest true "Feature alert settings to create"
+// @Success 201 {object} dto.FeatureAlertSettingsResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 404 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /features/{id}/alert-settings [post]
+func (h *FeatureHandler) CreateFeatureAlertSettings(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.Error(ierr.NewError("feature ID is required").
+			WithHint("Feature ID is required").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	var req dto.CreateFeatureAlertSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(ierr.WithError(err).
+			WithHint("Invalid request format").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	response, err := h.featureService.CreateFeatureAlertSettings(c.Request.Context(), id, req)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, response)
+}
+
+// UpdateFeatureAlertSettings godoc
+// @Summary Update feature alert settings
+// @Description Update alert settings for a feature
+// @Tags Features
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Feature ID"
+// @Param alertSettings body dto.UpdateFeatureAlertSettingsRequest true "Feature alert settings to update"
+// @Success 200 {object} dto.FeatureAlertSettingsResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 404 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /features/{id}/alert-settings [put]
+func (h *FeatureHandler) UpdateFeatureAlertSettings(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.Error(ierr.NewError("feature ID is required").
+			WithHint("Feature ID is required").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	var req dto.UpdateFeatureAlertSettingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(ierr.WithError(err).
+			WithHint("Invalid request format").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	response, err := h.featureService.UpdateFeatureAlertSettings(c.Request.Context(), id, req)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
+// GetFeatureAlertSettings godoc
+// @Summary Get feature alert settings
+// @Description Get alert settings for a feature
+// @Tags Features
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Feature ID"
+// @Success 200 {object} dto.FeatureAlertSettingsResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 404 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /features/{id}/alert-settings [get]
+func (h *FeatureHandler) GetFeatureAlertSettings(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.Error(ierr.NewError("feature ID is required").
+			WithHint("Feature ID is required").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	response, err := h.featureService.GetFeatureAlertSettings(c.Request.Context(), id)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, response)
+}

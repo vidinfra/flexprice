@@ -841,6 +841,7 @@ var (
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
 		{Name: "unit_singular", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "unit_plural", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "alert_settings", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
 	}
 	// FeaturesTable holds the schema information for the "features" table.
 	FeaturesTable = &schema.Table{
@@ -878,6 +879,11 @@ var (
 				Name:    "idx_feature_tenant_env_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{FeaturesColumns[1], FeaturesColumns[7], FeaturesColumns[3]},
+			},
+			{
+				Name:    "idx_feature_tenant_env_alert_settings",
+				Unique:  false,
+				Columns: []*schema.Column{FeaturesColumns[1], FeaturesColumns[7], FeaturesColumns[16]},
 			},
 		},
 	}

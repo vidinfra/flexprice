@@ -530,3 +530,203 @@ func (r *featureRepository) DeleteCache(ctx context.Context, featureID string) {
 	cacheKey := cache.GenerateKey(cache.PrefixFeature, tenantID, environmentID, featureID)
 	r.cache.Delete(ctx, cacheKey)
 }
+
+func (r *featureRepository) CreateFeatureAlertSettings(ctx context.Context, featureID string, alertSettings types.FeatureAlertSettings) (*domainFeature.Feature, error) {
+	client := r.client.Querier(ctx)
+
+	r.log.Debugw("creating feature alert settings",
+		"feature_id", featureID,
+		"tenant_id", types.GetTenantID(ctx),
+		"alert_settings", alertSettings,
+	)
+
+	// Start a span for this repository operation
+	span := StartRepositorySpan(ctx, "feature", "create_alert_settings", map[string]interface{}{
+		"feature_id": featureID,
+	})
+	defer FinishSpan(span)
+
+	// First check if alert settings already exist
+	existingFeature, err := r.Get(ctx, featureID)
+	if err != nil {
+		SetSpanError(span, err)
+		return nil, err
+	}
+
+	// Check if alert settings already exist
+	if existingFeature.AlertSettings != nil {
+		return nil, ierr.NewError("feature alert settings already exist").
+			WithHintf("Feature with ID %s already has alert settings configured. Use update endpoint to modify them", featureID).
+			WithReportableDetails(map[string]any{
+				"feature_id": featureID,
+			}).
+			Mark(ierr.ErrAlreadyExists)
+	}
+
+	// Create the feature alert settings in the database
+	_, err = client.Feature.Update().
+		Where(
+			feature.ID(featureID),
+			feature.TenantID(types.GetTenantID(ctx)),
+			feature.EnvironmentID(types.GetEnvironmentID(ctx)),
+		).
+		SetAlertSettings(alertSettings).
+		SetUpdatedAt(time.Now().UTC()).
+		SetUpdatedBy(types.GetUserID(ctx)).
+		Save(ctx)
+
+	if err != nil {
+		SetSpanError(span, err)
+
+		if ent.IsNotFound(err) {
+			return nil, ierr.WithError(err).
+				WithHintf("Feature with ID %s was not found", featureID).
+				WithReportableDetails(map[string]any{
+					"feature_id": featureID,
+				}).
+				Mark(ierr.ErrNotFound)
+		}
+		return nil, ierr.WithError(err).
+			WithHint("Failed to create feature alert settings").
+			Mark(ierr.ErrDatabase)
+	}
+
+	SetSpanSuccess(span)
+	r.DeleteCache(ctx, featureID)
+
+	// Get the updated feature to return
+	updatedFeature, err := r.Get(ctx, featureID)
+	if err != nil {
+		return nil, err
+	}
+
+	return updatedFeature, nil
+}
+
+func (r *featureRepository) UpdateFeatureAlertSettings(ctx context.Context, featureID string, alertSettings types.FeatureAlertSettings) (*domainFeature.Feature, error) {
+	client := r.client.Querier(ctx)
+
+	r.log.Debugw("updating feature alert settings",
+		"feature_id", featureID,
+		"tenant_id", types.GetTenantID(ctx),
+		"alert_settings", alertSettings,
+	)
+
+	// Start a span for this repository operation
+	span := StartRepositorySpan(ctx, "feature", "update_alert_settings", map[string]interface{}{
+		"feature_id": featureID,
+	})
+	defer FinishSpan(span)
+
+	// First check if alert settings exist
+	existingFeature, err := r.Get(ctx, featureID)
+	if err != nil {
+		SetSpanError(span, err)
+		return nil, err
+	}
+
+	// Check if alert settings exist
+	if existingFeature.AlertSettings == nil {
+		return nil, ierr.NewError("feature alert settings not found").
+			WithHintf("Feature with ID %s does not have alert settings configured. Use create endpoint to set them up", featureID).
+			WithReportableDetails(map[string]any{
+				"feature_id": featureID,
+			}).
+			Mark(ierr.ErrNotFound)
+	}
+
+	// Update the feature alert settings in the database
+	_, err = client.Feature.Update().
+		Where(
+			feature.ID(featureID),
+			feature.TenantID(types.GetTenantID(ctx)),
+			feature.EnvironmentID(types.GetEnvironmentID(ctx)),
+		).
+		SetAlertSettings(alertSettings).
+		SetUpdatedAt(time.Now().UTC()).
+		SetUpdatedBy(types.GetUserID(ctx)).
+		Save(ctx)
+
+	if err != nil {
+		SetSpanError(span, err)
+
+		if ent.IsNotFound(err) {
+			return nil, ierr.WithError(err).
+				WithHintf("Feature with ID %s was not found", featureID).
+				WithReportableDetails(map[string]any{
+					"feature_id": featureID,
+				}).
+				Mark(ierr.ErrNotFound)
+		}
+		return nil, ierr.WithError(err).
+			WithHint("Failed to update feature alert settings").
+			Mark(ierr.ErrDatabase)
+	}
+
+	SetSpanSuccess(span)
+	r.DeleteCache(ctx, featureID)
+
+	// Get the updated feature to return
+	updatedFeature, err := r.Get(ctx, featureID)
+	if err != nil {
+		return nil, err
+	}
+
+	return updatedFeature, nil
+}
+
+func (r *featureRepository) GetFeatureAlertSettings(ctx context.Context, featureID string) (*domainFeature.Feature, error) {
+	client := r.client.Querier(ctx)
+
+	r.log.Debugw("getting feature alert settings (bypassing cache)",
+		"feature_id", featureID,
+		"tenant_id", types.GetTenantID(ctx),
+	)
+
+	// Start a span for this repository operation
+	span := StartRepositorySpan(ctx, "feature", "get_alert_settings", map[string]interface{}{
+		"feature_id": featureID,
+	})
+	defer FinishSpan(span)
+
+	// Query DB directly to get fresh alert_settings data (bypass cache)
+	f, err := client.Feature.Query().
+		Where(
+			feature.ID(featureID),
+			feature.TenantID(types.GetTenantID(ctx)),
+			feature.EnvironmentID(types.GetEnvironmentID(ctx)),
+		).
+		Only(ctx)
+
+	if err != nil {
+		SetSpanError(span, err)
+
+		if ent.IsNotFound(err) {
+			return nil, ierr.WithError(err).
+				WithHintf("Feature with ID %s was not found", featureID).
+				WithReportableDetails(map[string]any{
+					"feature_id": featureID,
+				}).
+				Mark(ierr.ErrNotFound)
+		}
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get feature alert settings").
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Convert to domain model
+	featureData := domainFeature.FromEnt(f)
+
+	// Check if alert settings exist
+	if featureData.AlertSettings == nil {
+		return nil, ierr.NewError("feature alert settings not found").
+			WithHintf("Feature with ID %s does not have alert settings configured", featureID).
+			WithReportableDetails(map[string]any{
+				"feature_id": featureID,
+			}).
+			Mark(ierr.ErrNotFound)
+	}
+
+	SetSpanSuccess(span)
+	return featureData, nil
+}

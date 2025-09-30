@@ -16,4 +16,9 @@ type Repository interface {
 	Update(ctx context.Context, feature *Feature) error
 	Delete(ctx context.Context, id string) error
 	ListByIDs(ctx context.Context, featureIDs []string) ([]*Feature, error)
+
+	// Feature alert settings operations
+	CreateFeatureAlertSettings(ctx context.Context, featureID string, alertSettings types.FeatureAlertSettings) (*Feature, error)
+	UpdateFeatureAlertSettings(ctx context.Context, featureID string, alertSettings types.FeatureAlertSettings) (*Feature, error)
+	GetFeatureAlertSettings(ctx context.Context, featureID string) (*Feature, error)
 }

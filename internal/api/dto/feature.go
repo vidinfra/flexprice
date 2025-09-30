@@ -86,3 +86,23 @@ type FeatureResponse struct {
 
 // ListFeaturesResponse represents a paginated list of features
 type ListFeaturesResponse = types.ListResponse[*FeatureResponse]
+
+type CreateFeatureAlertSettingsRequest struct {
+	AlertSettings types.FeatureAlertSettings `json:"alert_settings" validate:"required"`
+}
+
+func (r *CreateFeatureAlertSettingsRequest) Validate() error {
+	return r.AlertSettings.Validate()
+}
+
+type UpdateFeatureAlertSettingsRequest struct {
+	AlertSettings types.FeatureAlertSettings `json:"alert_settings" validate:"required"`
+}
+
+func (r *UpdateFeatureAlertSettingsRequest) Validate() error {
+	return r.AlertSettings.Validate()
+}
+
+type FeatureAlertSettingsResponse struct {
+	AlertSettings types.FeatureAlertSettings `json:"alert_settings,omitempty"`
+}
