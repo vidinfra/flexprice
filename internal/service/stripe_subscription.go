@@ -51,7 +51,8 @@ func (s *stripeSubscriptionService) CreateSubscription(ctx context.Context, stri
 	}
 
 	// Step 2: Fetch Stripe subscription data
-	stripeSubscription, err := s.fetchStripeSubscription(ctx, stripeSubscriptionID)
+	stripeService := NewStripeService(s.ServiceParams)
+	stripeSubscription, err := stripeService.fetchStripeSubscription(ctx, stripeSubscriptionID)
 	if err != nil {
 		return nil, err
 	}
@@ -98,59 +99,83 @@ func (s *stripeSubscriptionService) CreateSubscription(ctx context.Context, stri
 }
 
 func (s *stripeSubscriptionService) UpdateSubscription(ctx context.Context, stripeSubscriptionID string) (*dto.SubscriptionResponse, error) {
+	// TODO: IMPLEMENT THIS
+	/*
+		1. Check if the mapping with the stripe subscription id exists
+		2. Fetch Stripe subscription data
+		3. Update the subscription in Flexprice
+		4. Create entity mapping for subscription
+		5. Return the subscription
+
+		6. Return the subscription
+	*/
+
+	// Step 1: Check if the mapping with the stripe subscription id exists
+	entityMappingService := NewEntityIntegrationMappingService(s.ServiceParams)
+	filter := &types.EntityIntegrationMappingFilter{
+		EntityType:        types.IntegrationEntityTypeSubscription,
+		ProviderTypes:     []string{"stripe"},
+		ProviderEntityIDs: []string{stripeSubscriptionID},
+	}
+
+	existingMappings, err := entityMappingService.GetEntityIntegrationMappings(ctx, filter)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to check for existing subscription mapping").
+			Mark(ierr.ErrInternal)
+	}
+
+	// If mapping exists, return the existing subscription
+	if len(existingMappings.Items) > 0 {
+		existingMapping := existingMappings.Items[0]
+		subscriptionService := NewSubscriptionService(s.ServiceParams)
+		return subscriptionService.GetSubscription(ctx, existingMapping.EntityID)
+	}
+
+	// Step 2: Fetch Stripe subscription data
+	stripeService := NewStripeService(s.ServiceParams)
+	stripeSubscription, err := stripeService.fetchStripeSubscription(ctx, stripeSubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	s.Logger.Infow("stripe subscription", "stripe_subscription", stripeSubscription)
+
 	return nil, nil
 }
 
 func (s *stripeSubscriptionService) CancelSubscription(ctx context.Context, stripeSubscriptionID string) (*dto.SubscriptionResponse, error) {
+
+	entityMappingService := NewEntityIntegrationMappingService(s.ServiceParams)
+	filter := &types.EntityIntegrationMappingFilter{
+		EntityType:        types.IntegrationEntityTypeSubscription,
+		ProviderTypes:     []string{"stripe"},
+		ProviderEntityIDs: []string{stripeSubscriptionID},
+	}
+
+	existingMappings, err := entityMappingService.GetEntityIntegrationMappings(ctx, filter)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to check for existing subscription mapping").
+			Mark(ierr.ErrInternal)
+	}
+
+	// If mapping exists, return the existing subscription
+	if len(existingMappings.Items) > 0 {
+		existingMapping := existingMappings.Items[0]
+
+		// Step 3: Cancel the subscription
+		subscriptionService := NewSubscriptionService(s.ServiceParams)
+		_, err := subscriptionService.CancelSubscription(ctx, existingMapping.EntityID, &dto.CancelSubscriptionRequest{
+			CancellationType: types.CancellationTypeImmediate,
+			Reason:           "Customer cancelled subscription",
+		})
+		if err != nil {
+			return nil, err
+		}
+
+	}
 	return nil, nil
-}
-
-// fetchStripeSubscription retrieves a subscription from Stripe
-func (s *stripeSubscriptionService) fetchStripeSubscription(ctx context.Context, subscriptionID string) (*stripe.Subscription, error) {
-	// Get Stripe connection
-	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderStripe)
-	if err != nil {
-		return nil, ierr.NewError("failed to get Stripe connection").
-			WithHint("Stripe connection not configured for this environment").
-			Mark(ierr.ErrNotFound)
-	}
-
-	// Get Stripe configuration
-	stripeService := NewStripeService(s.ServiceParams)
-	stripeConfig, err := stripeService.GetDecryptedStripeConfig(conn)
-	if err != nil {
-		return nil, ierr.NewError("failed to get Stripe configuration").
-			WithHint("Invalid Stripe configuration").
-			Mark(ierr.ErrValidation)
-	}
-
-	// Initialize Stripe client
-	stripeClient := stripe.NewClient(stripeConfig.SecretKey, nil)
-
-	// Retrieve the subscription from Stripe with expanded fields
-	params := &stripe.SubscriptionRetrieveParams{
-		Expand: []*string{
-			stripe.String("customer"),
-			stripe.String("items.data.price.product"),
-		},
-	}
-
-	stripeSub, err := stripeClient.V1Subscriptions.Retrieve(ctx, subscriptionID, params)
-	if err != nil {
-		s.Logger.Errorw("failed to retrieve subscription from Stripe",
-			"error", err,
-			"subscription_id", subscriptionID,
-		)
-		return nil, ierr.NewError("failed to retrieve subscription from Stripe").
-			WithHint("Could not fetch subscription information from Stripe").
-			WithReportableDetails(map[string]interface{}{
-				"subscription_id": subscriptionID,
-				"error":           err.Error(),
-			}).
-			Mark(ierr.ErrSystem)
-	}
-
-	return stripeSub, nil
 }
 
 // createOrFindCustomer creates or finds a customer based on Stripe subscription data

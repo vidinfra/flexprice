@@ -156,3 +156,24 @@ save mapping: stripe_subscription_id ↔ flex_subscription_id
 - Be careful about consistency (retries, race conditions) — e.g. two webhook events for the same subscription arriving out of order.  
 - A periodic **reconciliation / backfill job** is recommended: scan Stripe for all customers, plans, subscriptions, compare to Flexprice, and repair missing or inconsistent mappings.  
 - Optionally, you could support Flexprice → Stripe sync (e.g. letting an admin create a plan or subscription in Flexprice which then pushes to Stripe), but that complicates the design especially around conflict resolution.
+
+
+
+
+
+
+### Current Issues
+
+1. In flexprice we cannot make subscription with empty plan
+2. 
+
+
+
+
+
+
+#### Stripe <> Flexprice
+1. I want to sync subscription
+2. I dont want to sync any line items
+3. I want to capture all the plan change
+4. I will only have usage charges, in my system and fixed charges 
