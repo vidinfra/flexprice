@@ -563,9 +563,23 @@ export class CustomerPortal {
         options: { limit?: number } = {}
     ): Promise<DtoCustomerResponse[]> {
         try {
+            // Try exact lookup by external ID first
+            const match = await this.customersApi.customersLookupLookupKeyGet({ 
+                lookupKey: query 
+            }).catch(() => undefined);
+            
+            if (match?.id) {
+                return [match];
+            }
+            
+            // Fallback to list with server-side filtering
             const result = await this.customersApi.customersGet({
-                limit: options.limit || 10
+                limit: options.limit || 10,
+                // Try both email and externalId filters
+                email: query.includes('@') ? query : undefined,
+                externalId: !query.includes('@') ? query : undefined
             });
+            
             return (result as any).data || [];
         } catch (error) {
             console.error('Error searching customers:', error);

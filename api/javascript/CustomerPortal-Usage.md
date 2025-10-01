@@ -10,7 +10,7 @@ import { CustomerPortal, Configuration } from "@flexprice/javascript-sdk";
 // Initialize with your API configuration
 const configuration = new Configuration({
   apiKey: "your-api-key",
-  basePath: "https://api.flexprice.com",
+  basePath: "https://api.cloud.flexprice.io",
 });
 
 // Create CustomerPortal instance

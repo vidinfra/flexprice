@@ -18,7 +18,7 @@ async function basicExample() {
     // Initialize with your API configuration
     const configuration = new Configuration({
         apiKey: 'your-api-key',
-        basePath: 'https://api.flexprice.com'
+        basePath: 'https://api.cloud.flexprice.io'
     });
 
     // Create CustomerPortal instance
@@ -157,7 +157,7 @@ async function factoryFunctionsExample() {
 async function customConfigurationExample() {
     const configuration = new Configuration({
         apiKey: 'your-api-key',
-        basePath: 'https://api.flexprice.com',
+        basePath: 'https://api.cloud.flexprice.io',
         middleware: [
             {
                 pre: (context) => {

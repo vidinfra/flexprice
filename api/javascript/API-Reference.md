@@ -19,7 +19,7 @@ constructor(configuration?: runtime.Configuration)
 ```typescript
 const configuration = new Configuration({
   apiKey: "your-api-key",
-  basePath: "https://api.flexprice.com",
+  basePath: "https://api.cloud.flexprice.io",
 });
 
 const customerPortal = new CustomerPortal(configuration);
