@@ -674,27 +674,32 @@ func (s *priceService) UpdatePrice(ctx context.Context, id string, req dto.Updat
 				Mark(ierr.ErrValidation)
 		}
 
+		var newPriceResp *dto.PriceResponse
+
 		// Set termination end date - use EndDate from request if provided, otherwise use current time
 		terminationEndDate := time.Now().UTC()
 		if req.EffectiveFrom != nil {
 			terminationEndDate = *req.EffectiveFrom
 		}
 
-		// Terminate the existing price
-		existingPrice.EndDate = &terminationEndDate
-		if err := s.PriceRepo.Update(ctx, existingPrice); err != nil {
-			return nil, err
-		}
+		if err := s.DB.WithTx(ctx, func(ctx context.Context) error {
+			// Terminate the existing price
+			existingPrice.EndDate = &terminationEndDate
+			if err := s.PriceRepo.Update(ctx, existingPrice); err != nil {
+				return err
+			}
 
-		// Convert update request to create request - this handles all the field mapping
-		createReq := req.ToCreatePriceRequest(existingPrice)
+			// Convert update request to create request - this handles all the field mapping
+			createReq := req.ToCreatePriceRequest(existingPrice)
 
-		// Set start date for new price to be exactly when the old price ends
-		createReq.StartDate = &terminationEndDate
+			// Set start date for new price to be exactly when the old price ends
+			createReq.StartDate = &terminationEndDate
 
-		// Create the new price - this will use all existing validation logic
-		newPriceResp, err := s.CreatePrice(ctx, createReq)
-		if err != nil {
+			// Create the new price - this will use all existing validation logic
+			newPriceResp, err = s.CreatePrice(ctx, createReq)
+			return err
+
+		}); err != nil {
 			return nil, err
 		}
 
