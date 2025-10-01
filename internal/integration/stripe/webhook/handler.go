@@ -379,31 +379,36 @@ func (h *Handler) handlePaymentIntentPaymentFailed(ctx context.Context, event *s
 		return nil
 	}
 
-	// Find payment record
-	var payment *dto.PaymentResponse
-	paymentType := paymentIntent.Metadata["payment_type"]
-	if paymentType == "checkout" {
-		// Find by session ID for checkout payments
-		sessionID := paymentIntent.Metadata["session_id"]
-		if sessionID != "" {
-			payment, err = h.findPaymentBySessionID(ctx, sessionID, services.PaymentService)
-		}
-	} else {
-		// Find by payment intent ID for direct payments
-		payment, err = h.findPaymentByPaymentIntentID(ctx, paymentIntentID, services.PaymentService)
+	// Get flexprice_payment_id from metadata
+	flexpricePaymentID := ""
+	if paymentID, exists := paymentIntent.Metadata["flexprice_payment_id"]; exists {
+		flexpricePaymentID = paymentID
 	}
 
+	if flexpricePaymentID == "" {
+		h.logger.Warnw("no flexprice_payment_id found in payment intent metadata",
+			"payment_intent_id", paymentIntentID)
+		return nil
+	}
+
+	h.logger.Infow("processing FlexPrice payment failure",
+		"payment_intent_id", paymentIntentID,
+		"flexprice_payment_id", flexpricePaymentID)
+
+	// Get payment record by flexprice_payment_id
+	payment, err := services.PaymentService.GetPayment(ctx, flexpricePaymentID)
 	if err != nil {
-		h.logger.Errorw("failed to find payment record",
+		h.logger.Errorw("failed to get payment record",
 			"error", err,
+			"flexprice_payment_id", flexpricePaymentID,
 			"payment_intent_id", paymentIntentID)
 		return ierr.WithError(err).
-			WithHint("Failed to find payment record").
+			WithHint("Failed to get payment record").
 			Mark(ierr.ErrSystem)
 	}
 
 	if payment == nil {
-		h.logger.Warnw("no payment record found for failed payment intent", "payment_intent_id", paymentIntentID)
+		h.logger.Warnw("no payment record found", "flexprice_payment_id", flexpricePaymentID, "payment_intent_id", paymentIntentID)
 		return nil
 	}
 
@@ -533,54 +538,6 @@ func (h *Handler) handleSetupIntentSucceeded(ctx context.Context, event *stripea
 }
 
 // Helper methods
-
-// findPaymentBySessionID finds a payment record by Stripe session ID
-func (h *Handler) findPaymentBySessionID(ctx context.Context, sessionID string, paymentService interfaces.PaymentService) (*dto.PaymentResponse, error) {
-	filter := types.NewNoLimitPaymentFilter()
-	// Set a reasonable limit for searching
-	if filter.QueryFilter != nil {
-		limit := 50
-		filter.QueryFilter.Limit = &limit
-	}
-
-	payments, err := paymentService.ListPayments(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-
-	// Find payment with matching session ID
-	for _, payment := range payments.Items {
-		if payment.GatewayTrackingID != nil && *payment.GatewayTrackingID == sessionID {
-			return payment, nil
-		}
-	}
-
-	return nil, nil // Not found
-}
-
-// findPaymentByPaymentIntentID finds a payment record by Stripe payment intent ID
-func (h *Handler) findPaymentByPaymentIntentID(ctx context.Context, paymentIntentID string, paymentService interfaces.PaymentService) (*dto.PaymentResponse, error) {
-	filter := types.NewNoLimitPaymentFilter()
-	// Set a reasonable limit for searching
-	if filter.QueryFilter != nil {
-		limit := 50
-		filter.QueryFilter.Limit = &limit
-	}
-
-	payments, err := paymentService.ListPayments(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-
-	// Find payment with matching payment intent ID
-	for _, payment := range payments.Items {
-		if payment.GatewayPaymentID != nil && *payment.GatewayPaymentID == paymentIntentID {
-			return payment, nil
-		}
-	}
-
-	return nil, nil // Not found
-}
 
 // attachPaymentToStripeInvoiceAndReconcile attempts to attach payment to Stripe invoice and reconcile with FlexPrice invoice
 func (h *Handler) attachPaymentToStripeInvoiceAndReconcile(ctx context.Context, payment *dto.PaymentResponse, paymentIntent *stripeapi.PaymentIntent, services *ServiceDependencies) {
