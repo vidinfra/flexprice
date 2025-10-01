@@ -11,6 +11,7 @@ import (
 	"github.com/flexprice/flexprice/internal/testutil"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/samber/lo"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -575,6 +576,52 @@ func (s *FeatureServiceSuite) TestUpdateFeature() {
 			},
 		},
 		{
+			name: "successful update with alert settings",
+			id:   s.testData.features.apiCalls.ID,
+			req: dto.UpdateFeatureRequest{
+				Name:        lo.ToPtr("Updated API Calls"),
+				Description: lo.ToPtr("Updated Description"),
+				AlertSettings: &types.FeatureAlertSettings{
+					Upperbound: lo.ToPtr(decimal.NewFromInt(1000)),
+					Lowerbound: lo.ToPtr(decimal.NewFromInt(100)),
+				},
+			},
+		},
+		{
+			name: "error - invalid alert settings (upperbound < lowerbound)",
+			id:   s.testData.features.apiCalls.ID,
+			req: dto.UpdateFeatureRequest{
+				AlertSettings: &types.FeatureAlertSettings{
+					Upperbound: lo.ToPtr(decimal.NewFromInt(100)),
+					Lowerbound: lo.ToPtr(decimal.NewFromInt(1000)),
+				},
+			},
+			wantErr:   true,
+			errString: "upperbound must be greater than or equal to lowerbound",
+		},
+		{
+			name: "error - invalid alert settings (missing upperbound)",
+			id:   s.testData.features.apiCalls.ID,
+			req: dto.UpdateFeatureRequest{
+				AlertSettings: &types.FeatureAlertSettings{
+					Lowerbound: lo.ToPtr(decimal.NewFromInt(100)),
+				},
+			},
+			wantErr:   true,
+			errString: "upperbound is required",
+		},
+		{
+			name: "error - invalid alert settings (missing lowerbound)",
+			id:   s.testData.features.apiCalls.ID,
+			req: dto.UpdateFeatureRequest{
+				AlertSettings: &types.FeatureAlertSettings{
+					Upperbound: lo.ToPtr(decimal.NewFromInt(1000)),
+				},
+			},
+			wantErr:   true,
+			errString: "lowerbound is required",
+		},
+		{
 			name: "error - feature not found",
 			id:   "nonexistent-id",
 			req: dto.UpdateFeatureRequest{
@@ -598,9 +645,20 @@ func (s *FeatureServiceSuite) TestUpdateFeature() {
 
 			s.NoError(err)
 			s.NotNil(resp)
-			s.Equal(*tt.req.Name, resp.Name)
-			s.Equal(*tt.req.Description, resp.Description)
-			s.Equal(*tt.req.Metadata, resp.Metadata)
+			if tt.req.Name != nil {
+				s.Equal(*tt.req.Name, resp.Name)
+			}
+			if tt.req.Description != nil {
+				s.Equal(*tt.req.Description, resp.Description)
+			}
+			if tt.req.Metadata != nil {
+				s.Equal(*tt.req.Metadata, resp.Metadata)
+			}
+			if tt.req.AlertSettings != nil {
+				s.NotNil(resp.AlertSettings)
+				s.Equal(tt.req.AlertSettings.Upperbound, resp.AlertSettings.Upperbound)
+				s.Equal(tt.req.AlertSettings.Lowerbound, resp.AlertSettings.Lowerbound)
+			}
 		})
 	}
 }
