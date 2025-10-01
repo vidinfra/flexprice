@@ -19,6 +19,7 @@ type WalletCronHandler struct {
 	walletService      service.WalletService
 	tenantService      service.TenantService
 	environmentService service.EnvironmentService
+	featureService     service.FeatureService
 	alertLogsService   service.AlertLogsService
 }
 
@@ -26,6 +27,7 @@ func NewWalletCronHandler(logger *logger.Logger,
 	walletService service.WalletService,
 	tenantService service.TenantService,
 	environmentService service.EnvironmentService,
+	featureService service.FeatureService,
 	alertLogsService service.AlertLogsService,
 ) *WalletCronHandler {
 	return &WalletCronHandler{
@@ -33,6 +35,7 @@ func NewWalletCronHandler(logger *logger.Logger,
 		walletService:      walletService,
 		tenantService:      tenantService,
 		environmentService: environmentService,
+		featureService:     featureService,
 		alertLogsService:   alertLogsService,
 	}
 }
@@ -114,7 +117,7 @@ func (h *WalletCronHandler) ExpireCredits(c *gin.Context) {
 
 // CheckAlerts checks wallet balances and triggers alerts based on thresholds
 func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
-	h.logger.Infow("starting wallet balance alert check cron job", "time", time.Now().UTC().Format(time.RFC3339))
+	h.logger.Infow("starting wallet balance alert and feature alert check cron job", "time", time.Now().UTC().Format(time.RFC3339))
 
 	// parse request body
 	var req types.CheckAlertsRequest
@@ -174,6 +177,28 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 				"count", len(wallets.Items),
 			)
 
+			// Get only features with alert settings configured for this tenant+environment
+			features, err := h.featureService.GetFeatures(ctx, &types.FeatureFilter{
+				QueryFilter:      types.NewNoLimitQueryFilter(),
+				HasAlertSettings: lo.ToPtr(true), // Only fetch features with alert_settings not null
+			})
+			if err != nil {
+				h.logger.Errorw("failed to get features for alert checking",
+					"environment_id", environment.ID,
+					"tenant_id", tenantID,
+					"error", err,
+				)
+				continue
+			}
+
+			featuresWithAlerts := features.Items
+
+			h.logger.Infow("found features with alert settings",
+				"environment_id", environment.ID,
+				"tenant_id", tenantID,
+				"count", len(featuresWithAlerts),
+			)
+
 			// Process each wallet
 			for _, wallet := range wallets.Items {
 				h.logger.Infow("processing wallet",
@@ -218,6 +243,55 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 					ongoingBalance = &currentBalance
 				}
 
+				// Check feature alerts
+				// Process each feature with alert settings for this wallet
+				for _, feature := range featuresWithAlerts {
+					// Determine alert status based on ongoing balance vs alert settings
+					alertStatus := feature.AlertSettings.DetermineFeatureAlertStatus(*ongoingBalance)
+
+					h.logger.Infow("feature alert status determined",
+						"feature_id", feature.ID,
+						"feature_name", feature.Name,
+						"wallet_id", wallet.ID,
+						"ongoing_balance", ongoingBalance,
+						"upperbound", feature.AlertSettings.Upperbound,
+						"lowerbound", feature.AlertSettings.Lowerbound,
+						"alert_status", alertStatus,
+					)
+
+					// Log the alert using AlertLogsService (includes state transition logic and webhook publishing)
+					err = h.alertLogsService.LogAlert(ctx, &service.LogAlertRequest{
+						EntityType:  types.AlertEntityTypeFeature,
+						EntityID:    feature.ID,
+						AlertType:   types.AlertTypeFeatureBalance,
+						AlertStatus: alertStatus,
+						AlertInfo: types.AlertInfo{
+							FeatureAlertSettings: feature.AlertSettings, // Include full alert settings
+							ValueAtTime:          *ongoingBalance,       // Ongoing balance at time of check
+							Timestamp:            time.Now().UTC(),
+						},
+						Metadata: map[string]string{
+							"wallet_id": wallet.ID, // Pass wallet ID for webhook payload
+						},
+					})
+					if err != nil {
+						h.logger.Errorw("failed to log feature alert",
+							"feature_id", feature.ID,
+							"wallet_id", wallet.ID,
+							"alert_status", alertStatus,
+							"error", err,
+						)
+						continue
+					}
+
+					h.logger.Infow("feature alert logged successfully",
+						"feature_id", feature.ID,
+						"wallet_id", wallet.ID,
+						"alert_status", alertStatus,
+					)
+				}
+
+				// Check wallet ongoing balance alert
 				h.logger.Infow("checking balances against threshold",
 					"wallet_id", wallet.ID,
 					"threshold", threshold,

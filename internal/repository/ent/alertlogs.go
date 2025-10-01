@@ -55,7 +55,7 @@ func (r *alertLogsRepository) Create(ctx context.Context, al *domainAlertLogs.Al
 		al.EnvironmentID = types.GetEnvironmentID(ctx)
 	}
 
-	_, err := client.AlertLogs.Create().
+	createQuery := client.AlertLogs.Create().
 		SetID(al.ID).
 		SetTenantID(al.TenantID).
 		SetEntityType(string(al.EntityType)).
@@ -68,8 +68,14 @@ func (r *alertLogsRepository) Create(ctx context.Context, al *domainAlertLogs.Al
 		SetUpdatedAt(al.UpdatedAt).
 		SetCreatedBy(al.CreatedBy).
 		SetUpdatedBy(al.UpdatedBy).
-		SetEnvironmentID(al.EnvironmentID).
-		Save(ctx)
+		SetEnvironmentID(al.EnvironmentID)
+
+	// Set metadata if provided
+	if al.Metadata != nil {
+		createQuery = createQuery.SetMetadata(al.Metadata)
+	}
+
+	_, err := createQuery.Save(ctx)
 
 	if err != nil {
 		SetSpanError(span, err)
@@ -312,6 +318,71 @@ func (r *alertLogsRepository) GetLatestByEntityAndAlertType(ctx context.Context,
 
 	SetSpanSuccess(span)
 	return domainAlertLogs.FromEnt(alertLog), nil
+}
+
+func (r *alertLogsRepository) GetLatestByEntityAlertTypeAndMetadata(ctx context.Context, entityType types.AlertEntityType, entityID string, alertType types.AlertType, metadata map[string]string) (*domainAlertLogs.AlertLog, error) {
+	client := r.client.Querier(ctx)
+
+	// Start a span for this repository operation
+	span := StartRepositorySpan(ctx, "alertlogs", "get_latest_by_entity_alert_type_and_metadata", map[string]interface{}{
+		"entity_type": entityType,
+		"entity_id":   entityID,
+		"alert_type":  alertType,
+		"metadata":    metadata,
+	})
+	defer FinishSpan(span)
+
+	// Fetch all alerts matching entity type, entity ID, and alert type
+	// Then filter by metadata in memory (since JSONB predicates may not be generated yet)
+	query := client.AlertLogs.Query().Where(
+		alertlogs.EntityType(string(entityType)),
+		alertlogs.EntityID(entityID),
+		alertlogs.AlertType(string(alertType)),
+		alertlogs.TenantID(types.GetTenantID(ctx)),
+		alertlogs.EnvironmentID(types.GetEnvironmentID(ctx)),
+	)
+
+	// Order by creation time descending to get the latest first
+	query = query.Order(ent.Desc(alertlogs.FieldCreatedAt))
+
+	alertLogs, err := query.All(ctx)
+	if err != nil {
+		SetSpanError(span, err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to fetch alert logs").
+			WithReportableDetails(map[string]any{
+				"entity_type": entityType,
+				"entity_id":   entityID,
+				"alert_type":  alertType,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Filter by metadata to find the latest matching alert
+	for _, alertLog := range alertLogs {
+		if alertLog.Metadata == nil {
+			continue
+		}
+
+		// Check if all required metadata key-value pairs match
+		allMatch := true
+		for key, value := range metadata {
+			if alertLog.Metadata[key] != value {
+				allMatch = false
+				break
+			}
+		}
+
+		if allMatch {
+			// Found the latest alert matching all metadata criteria
+			SetSpanSuccess(span)
+			return domainAlertLogs.FromEnt(alertLog), nil
+		}
+	}
+
+	// No matching alert found
+	SetSpanSuccess(span)
+	return nil, nil
 }
 
 func (r *alertLogsRepository) ListByEntity(ctx context.Context, entityType types.AlertEntityType, entityID string, limit int) ([]*domainAlertLogs.AlertLog, error) {

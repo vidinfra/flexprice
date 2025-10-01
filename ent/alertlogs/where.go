@@ -814,6 +814,16 @@ func AlertStatusContainsFold(v string) predicate.AlertLogs {
 	return predicate.AlertLogs(sql.FieldContainsFold(FieldAlertStatus, v))
 }
 
+// MetadataIsNil applies the IsNil predicate on the "metadata" field.
+func MetadataIsNil() predicate.AlertLogs {
+	return predicate.AlertLogs(sql.FieldIsNull(FieldMetadata))
+}
+
+// MetadataNotNil applies the NotNil predicate on the "metadata" field.
+func MetadataNotNil() predicate.AlertLogs {
+	return predicate.AlertLogs(sql.FieldNotNull(FieldMetadata))
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.AlertLogs) predicate.AlertLogs {
 	return predicate.AlertLogs(sql.AndPredicates(predicates...))

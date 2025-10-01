@@ -13,6 +13,7 @@ type AlertLog struct {
 	AlertType     types.AlertType       `db:"alert_type" json:"alert_type"`
 	AlertStatus   types.AlertState      `db:"alert_status" json:"alert_status"`
 	AlertInfo     types.AlertInfo       `db:"alert_info" json:"alert_info"`
+	Metadata      map[string]string     `db:"metadata" json:"metadata"`
 	EnvironmentID string                `db:"environment_id" json:"environment_id"`
 	types.BaseModel
 }
@@ -29,6 +30,7 @@ func FromEnt(e *ent.AlertLogs) *AlertLog {
 		AlertType:     types.AlertType(e.AlertType),
 		AlertStatus:   types.AlertState(e.AlertStatus),
 		AlertInfo:     e.AlertInfo,
+		Metadata:      e.Metadata,
 		EnvironmentID: e.EnvironmentID,
 		BaseModel: types.BaseModel{
 			TenantID:  e.TenantID,

@@ -17,6 +17,7 @@ type Repository interface {
 	// Entity-specific operations
 	GetLatestByEntity(ctx context.Context, entityType types.AlertEntityType, entityID string) (*AlertLog, error)
 	GetLatestByEntityAndAlertType(ctx context.Context, entityType types.AlertEntityType, entityID string, alertType types.AlertType) (*AlertLog, error)
+	GetLatestByEntityAlertTypeAndMetadata(ctx context.Context, entityType types.AlertEntityType, entityID string, alertType types.AlertType, metadata map[string]string) (*AlertLog, error)
 	ListByEntity(ctx context.Context, entityType types.AlertEntityType, entityID string, limit int) ([]*AlertLog, error)
 	ListByAlertType(ctx context.Context, alertType types.AlertType, limit int) ([]*AlertLog, error)
 }

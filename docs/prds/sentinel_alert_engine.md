@@ -90,11 +90,11 @@ ADD COLUMN alert_settings JSONB DEFAULT NULL;
 ```
 
 #### 3.1.2 Alert State Logic
-The system supports three distinct alert states based on wallet balance comparison with feature thresholds:
+The system supports three distinct alert states based on ongoing wallet balance comparison with feature thresholds:
 
-- **ok State**: `wallet_balance > feature.upperbound` - Balance is above the upper threshold (healthy)
-- **warning State**: `feature.lowerbound <= wallet_balance <= feature.upperbound` - Balance is within the warning range
-- **in_alarm State**: `wallet_balance < feature.lowerbound` - Balance is below the lower threshold (critical)
+- **ok State**: `ongoing_balance >= feature.upperbound` - Balance is at or above the upper threshold (healthy)
+- **warning State**: `feature.upperbound > ongoing_balance && ongoing_balance > feature.lowerbound` - Balance is within the warning range
+- **in_alarm State**: `ongoing_balance <= feature.lowerbound` - Balance is at or below the lower threshold (critical)
 
 #### 3.1.3 Threshold Configuration
 ```json
@@ -151,12 +151,13 @@ const (
     AlertTypeLowCreditBalance  AlertType = "low_credit_balance"
     
     // New feature alerts
-    AlertTypeFeatureWalletBalance AlertType = "feature_wallet_balance"
+    AlertTypeFeatureBalance AlertType = "feature_balance"
 )
 
 const (
     // Existing entity types
-    AlertEntityTypeWallet AlertEntityType = "wallet"
+    AlertEntityTypeWallet   AlertEntityType = "wallet"
+    AlertEntityTypeFeature  AlertEntityType = "feature"  // New entity type
 )
 
 // Extended alert states
@@ -216,29 +217,190 @@ The system compares wallet balance against feature alert thresholds:
 
 #### 4.3.2 State Determination Algorithm
 ```go
-func DetermineAlertState(walletBalance decimal.Decimal, alertSettings FeatureAlertSettings) AlertState {
-    if walletBalance.GreaterThan(alertSettings.Upperbound) {
+func DetermineFeatureAlertStatus(ongoingBalance decimal.Decimal, alertSettings *FeatureAlertSettings) AlertState {
+    if ongoingBalance.GreaterThanOrEqual(*alertSettings.Upperbound) {
         return AlertStateOk
-    } else if walletBalance.GreaterThanOrEqual(alertSettings.Lowerbound) && 
-              walletBalance.LessThanOrEqual(alertSettings.Upperbound) {
+    } else if ongoingBalance.GreaterThan(*alertSettings.Lowerbound) && 
+              ongoingBalance.LessThan(*alertSettings.Upperbound) {
         return AlertStateWarning
-    } else {
+    } else { // ongoingBalance <= lowerbound
         return AlertStateInAlarm
     }
 }
 ```
 
-#### 4.3.3 State Transition Logic
-The system follows the existing alert engine pattern:
-1. **Bulk Fetch**: Get all features with alert_settings configured
-2. **Wallet Balance**: Get current wallet balance (credit or ongoing)
-3. **Iterate Features**: For each feature, compare wallet balance with feature thresholds
-4. **Determine State**: Calculate alert state based on balance vs thresholds
-5. **Check Previous State**: Query latest alert log for this feature/wallet combination
-6. **State Transition**: If state changed or no previous alert exists:
-   - Create new alert log entry with entity_type as "wallet"
-   - Trigger appropriate webhook event
-7. **Skip if Unchanged**: If state unchanged, skip alert generation
+#### 4.3.3 Feature Alert State Check Cron Workflow
+
+The system runs a scheduled cron job to evaluate feature alerts against wallet ongoing balances:
+
+```mermaid
+flowchart TD
+    A[Start Cron Job] --> B[Iterate Through Each Tenant]
+    B --> C[Get Environments for Tenant]
+    C --> D[Iterate Through Each Environment]
+    
+    D --> E[Get Features with Alert Settings]
+    E --> F{Features Found?}
+    F -->|No| D
+    F -->|Yes| G[Get Active Wallets for Environment]
+    
+    G --> H[Iterate Through Each Wallet]
+    H --> I[Get Wallet Ongoing Balance]
+    I --> J[Iterate Through Each Feature with Alert Settings]
+    
+    J --> K[Get Feature Alert Settings]
+    K --> L[Compare Ongoing Balance vs Alert Settings]
+    L --> M[Determine Alert Status]
+    
+    M --> N[Fetch Previous Alert Log for Feature+Wallet]
+    N --> O{State Changed?}
+    
+    O -->|Yes| P[Create New Alert Log Entry]
+    O -->|No| Q[Skip - No State Change]
+    
+    P --> R[Publish Webhook Event]
+    R --> S{More Features?}
+    Q --> S
+    
+    S -->|Yes| J
+    S -->|No| T{More Wallets?}
+    T -->|Yes| H
+    T -->|No| U{More Environments?}
+    U -->|Yes| D
+    U -->|No| V{More Tenants?}
+    V -->|Yes| B
+    V -->|No| W[End Cron Job]
+    
+    style A fill:#e3f2fd
+    style P fill:#e8f5e8
+    style R fill:#fff3e0
+    style W fill:#fce4ec
+```
+
+**Detailed Workflow Steps:**
+
+1. **Tenant & Environment Iteration**
+   - Iterate through each tenant
+   - Get all environments for the current tenant
+   - Process each environment in the context
+
+2. **Bulk Feature Fetch**
+   - Query features filtered by:
+     - `tenant_id` = current tenant
+     - `environment_id` = current environment
+     - `alert_settings IS NOT NULL` (database-level filter)
+   - Only fetch features that have alert configurations
+
+3. **Active Wallet Fetch**
+   - Get all active wallets for the current tenant and environment
+   - Filter wallets with `wallet_status = active` and `alert_enabled = true`
+
+4. **Per-Wallet Processing**
+   - For each active wallet:
+     - Get the **ongoing balance** (real-time balance including pending charges)
+     - Iterate through all features with alert settings
+
+5. **Feature Alert Evaluation**
+   - For each feature:
+     - Get the `alert_settings` (upperbound, lowerbound)
+     - Compare `ongoing_balance` against thresholds
+     - Determine alert status using state determination algorithm
+
+6. **Alert State Determination**
+   ```
+   if ongoing_balance >= upperbound:
+       alert_status = ok
+   
+   if upperbound > ongoing_balance && ongoing_balance > lowerbound:
+       alert_status = warning
+   
+   if ongoing_balance <= lowerbound:
+       alert_status = in_alarm
+   ```
+
+7. **State Transition Check**
+   - Fetch latest alert log for this specific `feature_id` + `wallet_id` combination
+   - Compare previous alert status with newly determined status
+   - Only proceed if state has changed
+
+8. **Alert Logging & Webhook Publishing**
+   - If state changed:
+     - Create alert log entry with:
+       - `entity_type` = "feature"
+       - `entity_id` = feature ID
+       - `alert_type` = "feature_balance"
+       - `alert_status` = determined status (ok, warning, in_alarm)
+       - `metadata` = { "wallet_id": wallet.id }
+     - Publish webhook event with payload containing:
+       - Complete feature object (with alert_settings)
+       - Complete wallet object
+       - `alert_status`
+       - `alert_type`
+
+#### 4.3.4 State Transition Logic
+
+The system implements intelligent state transition logic to prevent alert spam:
+
+**When to Log & Publish Alert:**
+
+1. **Fetch Previous Alert**
+   ```
+   prev_alertLog = GetLatestByEntityAlertTypeAndMetadata(
+       entity_type: "feature",
+       entity_id: feature.id,
+       alert_type: "feature_balance",
+       metadata: { "wallet_id": wallet.id }
+   )
+   ```
+
+2. **State Transition Rules**
+
+   | Determined Status | Previous Status | Action |
+   |------------------|----------------|--------|
+   | **ok** | in_alarm OR warning | ✅ Create new alert log |
+   | **ok** | ok | ❌ Skip - no change |
+   | **ok** | NULL (no previous) | ✅ Create new alert log |
+   | **warning** | ok OR in_alarm | ✅ Create new alert log |
+   | **warning** | warning | ❌ Skip - no change |
+   | **warning** | NULL (no previous) | ✅ Create new alert log |
+   | **in_alarm** | ok OR warning | ✅ Create new alert log |
+   | **in_alarm** | in_alarm | ❌ Skip - no change |
+   | **in_alarm** | NULL (no previous) | ✅ Create new alert log |
+
+3. **State Transition Logic (Code)**
+   ```go
+   if prev_alertLog == nil {
+       // No previous alert exists - create new alert log
+       shouldCreateLog = true
+   } else if prev_alertLog.alert_status != determined_alert_status {
+       // State changed - create new alert log
+       shouldCreateLog = true
+   } else {
+       // State unchanged - skip alert generation
+       shouldCreateLog = false
+   }
+   ```
+
+4. **Alert Log Creation**
+   - Only create alert log when `shouldCreateLog == true`
+   - Store complete alert context in `alert_info`:
+     - Feature alert settings (upperbound, lowerbound)
+     - Ongoing balance at time of check
+     - Timestamp
+   - Store `wallet_id` in `metadata` field for proper alert uniqueness per wallet
+
+5. **Webhook Event Publishing**
+   - Event Name: `feature.balance.threshold.alert` (for all states)
+   - Payload includes:
+     ```json
+     {
+       "event_type": "feature.balance.threshold.alert",
+       "alert_type": "feature_balance",
+       "alert_status": "warning",
+       "feature": { /* complete feature object with alert_settings */ },
+       "wallet": { /* complete wallet object */ }
+     }
+     ```
 
 ### 4.4 Alert Logging Integration Details
 
@@ -321,10 +483,14 @@ sequenceDiagram
 ```go
 // internal/types/webhook.go
 const (
-    // Feature alert events
-    WebhookEventFeatureUsageThresholdOk      = "feature.usage.threshold.ok"
-    WebhookEventFeatureUsageThresholdWarning = "feature.usage.threshold.warning"
-    WebhookEventFeatureUsageThresholdAlarm   = "feature.usage.threshold.alarm"
+    // Feature alert events - single event for all states
+    WebhookEventFeatureBalanceThresholdAlert = "feature.balance.threshold.alert"
+    
+    // Wallet alert events (existing)
+    WebhookEventWalletOngoingBalanceDropped   = "wallet.ongoing_balance.dropped"
+    WebhookEventWalletOngoingBalanceRecovered = "wallet.ongoing_balance.recovered"
+    WebhookEventWalletCreditBalanceDropped    = "wallet.credit_balance.dropped"
+    WebhookEventWalletCreditBalanceRecovered  = "wallet.credit_balance.recovered"
 )
 ```
 

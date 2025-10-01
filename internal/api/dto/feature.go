@@ -10,15 +10,16 @@ import (
 )
 
 type CreateFeatureRequest struct {
-	Name         string              `json:"name" binding:"required"`
-	Description  string              `json:"description"`
-	LookupKey    string              `json:"lookup_key"`
-	Type         types.FeatureType   `json:"type" binding:"required"`
-	MeterID      string              `json:"meter_id,omitempty"`
-	Meter        *CreateMeterRequest `json:"meter,omitempty"`
-	Metadata     types.Metadata      `json:"metadata,omitempty"`
-	UnitSingular string              `json:"unit_singular,omitempty"`
-	UnitPlural   string              `json:"unit_plural,omitempty"`
+	Name          string                      `json:"name" binding:"required"`
+	Description   string                      `json:"description"`
+	LookupKey     string                      `json:"lookup_key"`
+	Type          types.FeatureType           `json:"type" binding:"required"`
+	MeterID       string                      `json:"meter_id,omitempty"`
+	Meter         *CreateMeterRequest         `json:"meter,omitempty"`
+	Metadata      types.Metadata              `json:"metadata,omitempty"`
+	UnitSingular  string                      `json:"unit_singular,omitempty"`
+	UnitPlural    string                      `json:"unit_plural,omitempty"`
+	AlertSettings *types.FeatureAlertSettings `json:"alert_settings,omitempty"`
 }
 
 func (r *CreateFeatureRequest) Validate() error {
@@ -51,6 +52,13 @@ func (r *CreateFeatureRequest) Validate() error {
 			Mark(ierr.ErrValidation)
 	}
 
+	// Validate alert settings if provided
+	if r.AlertSettings != nil {
+		if err := r.AlertSettings.Validate(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -65,18 +73,30 @@ func (r *CreateFeatureRequest) ToFeature(ctx context.Context) (*feature.Feature,
 		MeterID:       r.MeterID,
 		UnitSingular:  r.UnitSingular,
 		UnitPlural:    r.UnitPlural,
+		AlertSettings: r.AlertSettings,
 		EnvironmentID: types.GetEnvironmentID(ctx),
 		BaseModel:     types.GetDefaultBaseModel(ctx),
 	}, nil
 }
 
 type UpdateFeatureRequest struct {
-	Name         *string         `json:"name,omitempty"`
-	Description  *string         `json:"description,omitempty"`
-	Metadata     *types.Metadata `json:"metadata,omitempty"`
-	UnitSingular *string         `json:"unit_singular,omitempty"`
-	UnitPlural   *string         `json:"unit_plural,omitempty"`
-	Filters      *[]meter.Filter `json:"filters,omitempty"`
+	Name          *string                     `json:"name,omitempty"`
+	Description   *string                     `json:"description,omitempty"`
+	Metadata      *types.Metadata             `json:"metadata,omitempty"`
+	UnitSingular  *string                     `json:"unit_singular,omitempty"`
+	UnitPlural    *string                     `json:"unit_plural,omitempty"`
+	Filters       *[]meter.Filter             `json:"filters,omitempty"`
+	AlertSettings *types.FeatureAlertSettings `json:"alert_settings,omitempty"`
+}
+
+func (r *UpdateFeatureRequest) Validate() error {
+	// Validate alert settings if provided
+	if r.AlertSettings != nil {
+		if err := r.AlertSettings.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type FeatureResponse struct {
@@ -86,23 +106,3 @@ type FeatureResponse struct {
 
 // ListFeaturesResponse represents a paginated list of features
 type ListFeaturesResponse = types.ListResponse[*FeatureResponse]
-
-type CreateFeatureAlertSettingsRequest struct {
-	AlertSettings types.FeatureAlertSettings `json:"alert_settings" validate:"required"`
-}
-
-func (r *CreateFeatureAlertSettingsRequest) Validate() error {
-	return r.AlertSettings.Validate()
-}
-
-type UpdateFeatureAlertSettingsRequest struct {
-	AlertSettings types.FeatureAlertSettings `json:"alert_settings" validate:"required"`
-}
-
-func (r *UpdateFeatureAlertSettingsRequest) Validate() error {
-	return r.AlertSettings.Validate()
-}
-
-type FeatureAlertSettingsResponse struct {
-	AlertSettings types.FeatureAlertSettings `json:"alert_settings,omitempty"`
-}

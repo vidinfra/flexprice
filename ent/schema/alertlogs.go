@@ -70,6 +70,14 @@ func (AlertLogs) Fields() []ent.Field {
 				"postgres": "jsonb",
 			}).
 			Immutable(),
+
+		// JSONB field storing metadata
+		field.JSON("metadata", map[string]string{}).
+			SchemaType(map[string]string{
+				"postgres": "jsonb",
+			}).
+			Optional().
+			Immutable(),
 	}
 }
 

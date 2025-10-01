@@ -20,9 +20,9 @@ const (
 type AlertType string
 
 const (
-	AlertTypeLowOngoingBalance    AlertType = "low_ongoing_balance"
-	AlertTypeLowCreditBalance     AlertType = "low_credit_balance"
-	AlertTypeFeatureWalletBalance AlertType = "feature_wallet_balance"
+	AlertTypeLowOngoingBalance AlertType = "low_ongoing_balance"
+	AlertTypeLowCreditBalance  AlertType = "low_credit_balance"
+	AlertTypeFeatureBalance    AlertType = "feature_balance"
 )
 
 // AlertEntityType represents the type of entity for alerts
@@ -69,6 +69,7 @@ func (at AlertType) Validate() error {
 	allowedTypes := []AlertType{
 		AlertTypeLowOngoingBalance,
 		AlertTypeLowCreditBalance,
+		AlertTypeFeatureBalance,
 	}
 	if !lo.Contains(allowedTypes, at) {
 		return ierr.NewError("invalid alert type").
@@ -79,9 +80,10 @@ func (at AlertType) Validate() error {
 }
 
 type AlertInfo struct {
-	Threshold   AlertThreshold  `json:"threshold"`
-	ValueAtTime decimal.Decimal `json:"value_at_time"`
-	Timestamp   time.Time       `json:"timestamp"`
+	Threshold            AlertThreshold        `json:"threshold,omitempty"`              // For wallet alerts
+	FeatureAlertSettings *FeatureAlertSettings `json:"feature_alert_settings,omitempty"` // For feature alerts
+	ValueAtTime          decimal.Decimal       `json:"value_at_time"`
+	Timestamp            time.Time             `json:"timestamp"`
 }
 
 // AlertConfig represents the configuration for wallet alerts
@@ -198,4 +200,26 @@ func (f *FeatureAlertSettings) Validate() error {
 	}
 
 	return nil
+}
+
+// determineFeatureAlertStatus determines the alert status based on ongoing balance vs alert settings
+// if ongoing_balance > upperbound: alert_status = ok
+// if upperbound >= ongoing_balance >= lowerbound: alert_status = warning
+// if ongoing_balance < lowerbound: alert_status = in_alarm
+func (f *FeatureAlertSettings) DetermineFeatureAlertStatus(ongoingBalance decimal.Decimal) AlertState {
+	upperbound := *f.Upperbound
+	lowerbound := *f.Lowerbound
+
+	// ongoing_balance >= upperbound
+	if ongoingBalance.GreaterThanOrEqual(upperbound) {
+		return AlertStateOk
+	}
+
+	// upperbound > ongoing_balance > lowerbound
+	if ongoingBalance.LessThan(upperbound) && ongoingBalance.GreaterThan(lowerbound) {
+		return AlertStateWarning
+	}
+
+	// ongoing_balance <= lowerbound
+	return AlertStateInAlarm
 }

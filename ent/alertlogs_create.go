@@ -141,6 +141,12 @@ func (alc *AlertLogsCreate) SetAlertInfo(ti types.AlertInfo) *AlertLogsCreate {
 	return alc
 }
 
+// SetMetadata sets the "metadata" field.
+func (alc *AlertLogsCreate) SetMetadata(m map[string]string) *AlertLogsCreate {
+	alc.mutation.SetMetadata(m)
+	return alc
+}
+
 // SetID sets the "id" field.
 func (alc *AlertLogsCreate) SetID(s string) *AlertLogsCreate {
 	alc.mutation.SetID(s)
@@ -336,6 +342,10 @@ func (alc *AlertLogsCreate) createSpec() (*AlertLogs, *sqlgraph.CreateSpec) {
 	if value, ok := alc.mutation.AlertInfo(); ok {
 		_spec.SetField(alertlogs.FieldAlertInfo, field.TypeJSON, value)
 		_node.AlertInfo = value
+	}
+	if value, ok := alc.mutation.Metadata(); ok {
+		_spec.SetField(alertlogs.FieldMetadata, field.TypeJSON, value)
+		_node.Metadata = value
 	}
 	return _node, _spec
 }

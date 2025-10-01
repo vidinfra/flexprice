@@ -52,10 +52,11 @@ type FeatureFilter struct {
 	Sort    []*SortCondition   `json:"sort,omitempty" form:"sort" validate:"omitempty"`
 
 	// Feature specific filters
-	FeatureIDs   []string `form:"feature_ids" json:"feature_ids"`
-	MeterIDs     []string `form:"meter_ids" json:"meter_ids"`
-	LookupKey    string   `form:"lookup_key" json:"lookup_key"`
-	NameContains string   `form:"name_contains" json:"name_contains"`
+	FeatureIDs       []string `form:"feature_ids" json:"feature_ids"`
+	MeterIDs         []string `form:"meter_ids" json:"meter_ids"`
+	LookupKey        string   `form:"lookup_key" json:"lookup_key"`
+	NameContains     string   `form:"name_contains" json:"name_contains"`
+	HasAlertSettings *bool    `form:"has_alert_settings" json:"has_alert_settings"` // Filter by alert_settings not null
 }
 
 func NewDefaultFeatureFilter() *FeatureFilter {

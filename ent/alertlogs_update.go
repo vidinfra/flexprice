@@ -136,6 +136,9 @@ func (alu *AlertLogsUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	if alu.mutation.EnvironmentIDCleared() {
 		_spec.ClearField(alertlogs.FieldEnvironmentID, field.TypeString)
 	}
+	if alu.mutation.MetadataCleared() {
+		_spec.ClearField(alertlogs.FieldMetadata, field.TypeJSON)
+	}
 	if n, err = sqlgraph.UpdateNodes(ctx, alu.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{alertlogs.Label}
@@ -293,6 +296,9 @@ func (aluo *AlertLogsUpdateOne) sqlSave(ctx context.Context) (_node *AlertLogs, 
 	}
 	if aluo.mutation.EnvironmentIDCleared() {
 		_spec.ClearField(alertlogs.FieldEnvironmentID, field.TypeString)
+	}
+	if aluo.mutation.MetadataCleared() {
+		_spec.ClearField(alertlogs.FieldMetadata, field.TypeJSON)
 	}
 	_node = &AlertLogs{config: aluo.config}
 	_spec.Assign = _node.assignValues

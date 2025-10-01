@@ -42,7 +42,9 @@ type AlertLogs struct {
 	// AlertStatus holds the value of the "alert_status" field.
 	AlertStatus string `json:"alert_status,omitempty"`
 	// AlertInfo holds the value of the "alert_info" field.
-	AlertInfo    types.AlertInfo `json:"alert_info,omitempty"`
+	AlertInfo types.AlertInfo `json:"alert_info,omitempty"`
+	// Metadata holds the value of the "metadata" field.
+	Metadata     map[string]string `json:"metadata,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -51,7 +53,7 @@ func (*AlertLogs) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case alertlogs.FieldAlertInfo:
+		case alertlogs.FieldAlertInfo, alertlogs.FieldMetadata:
 			values[i] = new([]byte)
 		case alertlogs.FieldID, alertlogs.FieldTenantID, alertlogs.FieldStatus, alertlogs.FieldCreatedBy, alertlogs.FieldUpdatedBy, alertlogs.FieldEnvironmentID, alertlogs.FieldEntityType, alertlogs.FieldEntityID, alertlogs.FieldAlertType, alertlogs.FieldAlertStatus:
 			values[i] = new(sql.NullString)
@@ -152,6 +154,14 @@ func (al *AlertLogs) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field alert_info: %w", err)
 				}
 			}
+		case alertlogs.FieldMetadata:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field metadata", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &al.Metadata); err != nil {
+					return fmt.Errorf("unmarshal field metadata: %w", err)
+				}
+			}
 		default:
 			al.selectValues.Set(columns[i], values[i])
 		}
@@ -223,6 +233,9 @@ func (al *AlertLogs) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("alert_info=")
 	builder.WriteString(fmt.Sprintf("%v", al.AlertInfo))
+	builder.WriteString(", ")
+	builder.WriteString("metadata=")
+	builder.WriteString(fmt.Sprintf("%v", al.Metadata))
 	builder.WriteByte(')')
 	return builder.String()
 }

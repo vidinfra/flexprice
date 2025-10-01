@@ -37,6 +37,8 @@ const (
 	FieldAlertStatus = "alert_status"
 	// FieldAlertInfo holds the string denoting the alert_info field in the database.
 	FieldAlertInfo = "alert_info"
+	// FieldMetadata holds the string denoting the metadata field in the database.
+	FieldMetadata = "metadata"
 	// Table holds the table name of the alertlogs in the database.
 	Table = "alert_logs"
 )
@@ -56,6 +58,7 @@ var Columns = []string{
 	FieldAlertType,
 	FieldAlertStatus,
 	FieldAlertInfo,
+	FieldMetadata,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).

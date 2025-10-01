@@ -20,11 +20,6 @@ type FeatureService interface {
 	GetFeatures(ctx context.Context, filter *types.FeatureFilter) (*dto.ListFeaturesResponse, error)
 	UpdateFeature(ctx context.Context, id string, req dto.UpdateFeatureRequest) (*dto.FeatureResponse, error)
 	DeleteFeature(ctx context.Context, id string) error
-
-	// Feature alert settings
-	CreateFeatureAlertSettings(ctx context.Context, id string, req dto.CreateFeatureAlertSettingsRequest) (*dto.FeatureResponse, error)
-	UpdateFeatureAlertSettings(ctx context.Context, id string, req dto.UpdateFeatureAlertSettingsRequest) (*dto.FeatureResponse, error)
-	GetFeatureAlertSettings(ctx context.Context, id string) (*dto.FeatureAlertSettingsResponse, error)
 }
 
 type featureService struct {
@@ -215,6 +210,15 @@ func (s *featureService) UpdateFeature(ctx context.Context, id string, req dto.U
 		feature.UnitPlural = *req.UnitPlural
 	}
 
+	// Update alert settings if provided
+	if req.AlertSettings != nil {
+		// Validate alert settings
+		if err := req.Validate(); err != nil {
+			return nil, err
+		}
+		feature.AlertSettings = req.AlertSettings
+	}
+
 	if feature.Type == types.FeatureTypeMetered && feature.MeterID != "" {
 		// update meter filters if provided
 		meterService := NewMeterService(s.MeterRepo)
@@ -309,84 +313,4 @@ func (s *featureService) publishWebhookEvent(ctx context.Context, eventName stri
 	if err := s.WebhookPublisher.PublishWebhook(ctx, webhookEvent); err != nil {
 		s.Logger.Errorf("failed to publish %s event: %v", webhookEvent.EventName, err)
 	}
-}
-
-func (s *featureService) CreateFeatureAlertSettings(ctx context.Context, id string, req dto.CreateFeatureAlertSettingsRequest) (*dto.FeatureResponse, error) {
-
-	// Verify the feature exists first
-	_, err := s.FeatureRepo.Get(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create the feature alert settings
-	feature, err := s.FeatureRepo.CreateFeatureAlertSettings(ctx, id, req.AlertSettings)
-	if err != nil {
-		return nil, err
-	}
-
-	response := &dto.FeatureResponse{
-		Feature: feature,
-	}
-
-	// Expand meter if it exists and feature is metered
-	if feature.Type == types.FeatureTypeMetered && feature.MeterID != "" {
-		meter, err := s.MeterRepo.GetMeter(ctx, feature.MeterID)
-		if err != nil {
-			return nil, err
-		}
-		response.Meter = dto.ToMeterResponse(meter)
-	}
-
-	return response, nil
-}
-
-func (s *featureService) UpdateFeatureAlertSettings(ctx context.Context, id string, req dto.UpdateFeatureAlertSettingsRequest) (*dto.FeatureResponse, error) {
-
-	// Verify the feature exists first
-	_, err := s.FeatureRepo.Get(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	// Update the feature alert settings
-	feature, err := s.FeatureRepo.UpdateFeatureAlertSettings(ctx, id, req.AlertSettings)
-	if err != nil {
-		return nil, err
-	}
-
-	response := &dto.FeatureResponse{
-		Feature: feature,
-	}
-
-	// Expand meter if it exists and feature is metered
-	if feature.Type == types.FeatureTypeMetered && feature.MeterID != "" {
-		meter, err := s.MeterRepo.GetMeter(ctx, feature.MeterID)
-		if err != nil {
-			return nil, err
-		}
-		response.Meter = dto.ToMeterResponse(meter)
-	}
-
-	return response, nil
-}
-
-func (s *featureService) GetFeatureAlertSettings(ctx context.Context, id string) (*dto.FeatureAlertSettingsResponse, error) {
-	// Verify the feature exists first
-	_, err := s.FeatureRepo.Get(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get the feature alert settings
-	feature, err := s.FeatureRepo.GetFeatureAlertSettings(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	response := &dto.FeatureAlertSettingsResponse{
-		AlertSettings: *feature.AlertSettings,
-	}
-
-	return response, nil
 }
