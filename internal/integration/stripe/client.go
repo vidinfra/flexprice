@@ -168,54 +168,6 @@ func (c *Client) decryptConnectionMetadata(conn *connection.Connection) (types.M
 
 		return merged, nil
 	}
-
-	// For other provider types, handle generic encrypted data
-	if conn.EncryptedSecretData.Generic != nil {
-		decryptedData := make(map[string]interface{})
-		for key, value := range conn.EncryptedSecretData.Generic.Data {
-			if strValue, ok := value.(string); ok {
-				decryptedValue, err := c.encryptionService.Decrypt(strValue)
-				if err != nil {
-					c.logger.Errorw("failed to decrypt generic data", "connection_id", conn.ID, "key", key, "error", err)
-					return nil, ierr.NewError("failed to decrypt generic data").Mark(ierr.ErrInternal)
-				}
-				decryptedData[key] = decryptedValue
-			} else {
-				decryptedData[key] = value
-			}
-		}
-
-		decryptedMetadata := types.Metadata{}
-		for k, v := range decryptedData {
-			if vStr, ok := v.(string); ok {
-				decryptedMetadata[k] = vStr
-			} else {
-				decryptedMetadata[k] = fmt.Sprintf("%v", v)
-			}
-		}
-
-		c.logger.Infow("successfully decrypted generic connection metadata",
-			"connection_id", conn.ID,
-			"decrypted_keys", lo.Keys(decryptedMetadata))
-
-		// Merge with existing non-encrypted metadata
-		merged := make(types.Metadata)
-		if conn.Metadata != nil {
-			for k, v := range conn.Metadata {
-				if vStr, ok := v.(string); ok {
-					merged[k] = vStr
-				} else {
-					merged[k] = fmt.Sprintf("%v", v)
-				}
-			}
-		}
-		for k, v := range decryptedMetadata {
-			merged[k] = v
-		}
-
-		return merged, nil
-	}
-
 	// If no encrypted data, return the metadata as-is
 	if conn.Metadata != nil {
 		metadata := make(types.Metadata)

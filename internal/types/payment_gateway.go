@@ -38,33 +38,33 @@ type WebhookEventType string
 
 const (
 	// Stripe webhook events
-	WebhookEventTypeCheckoutSessionExpired     WebhookEventType = "checkout.session.expired"
 	WebhookEventTypeCustomerCreated            WebhookEventType = "customer.created"
 	WebhookEventTypePaymentIntentSucceeded     WebhookEventType = "payment_intent.succeeded"
 	WebhookEventTypePaymentIntentPaymentFailed WebhookEventType = "payment_intent.payment_failed"
 	WebhookEventTypeSetupIntentSucceeded       WebhookEventType = "setup_intent.succeeded"
+	WebhookEventTypeInvoicePaymentPaid         WebhookEventType = "invoice_payment.paid"
 )
 
 // Validate validates the webhook event type
 func (w WebhookEventType) Validate() error {
 	switch w {
 	case
-		WebhookEventTypeCheckoutSessionExpired,
 		WebhookEventTypeCustomerCreated,
 		WebhookEventTypePaymentIntentSucceeded,
 		WebhookEventTypePaymentIntentPaymentFailed,
-		WebhookEventTypeSetupIntentSucceeded:
+		WebhookEventTypeSetupIntentSucceeded,
+		WebhookEventTypeInvoicePaymentPaid:
 		return nil
 	default:
 		return ierr.NewError("invalid webhook event type").
 			WithHint("Please provide a valid webhook event type").
 			WithReportableDetails(map[string]any{
 				"allowed": []WebhookEventType{
-					WebhookEventTypeCheckoutSessionExpired,
 					WebhookEventTypeCustomerCreated,
 					WebhookEventTypePaymentIntentSucceeded,
 					WebhookEventTypePaymentIntentPaymentFailed,
 					WebhookEventTypeSetupIntentSucceeded,
+					WebhookEventTypeInvoicePaymentPaid,
 				},
 			}).
 			Mark(ierr.ErrValidation)
@@ -80,11 +80,11 @@ func (w WebhookEventType) String() string {
 func (w WebhookEventType) GetGatewayFromEventType() PaymentGatewayType {
 	switch w {
 	case
-		WebhookEventTypeCheckoutSessionExpired,
 		WebhookEventTypeCustomerCreated,
 		WebhookEventTypePaymentIntentSucceeded,
 		WebhookEventTypePaymentIntentPaymentFailed,
-		WebhookEventTypeSetupIntentSucceeded:
+		WebhookEventTypeSetupIntentSucceeded,
+		WebhookEventTypeInvoicePaymentPaid:
 		return PaymentGatewayTypeStripe
 	default:
 		return PaymentGatewayTypeStripe // Default to Stripe for unknown events

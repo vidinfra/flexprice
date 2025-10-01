@@ -455,6 +455,58 @@ func (s *InvoiceSyncService) GetExistingStripeMapping(ctx context.Context, invoi
 	return s.getExistingStripeMapping(ctx, invoiceID)
 }
 
+// GetStripeInvoiceID gets the Stripe invoice ID for a FlexPrice invoice
+func (s *InvoiceSyncService) GetStripeInvoiceID(ctx context.Context, flexpriceInvoiceID string) (string, error) {
+	mapping, err := s.getExistingStripeMapping(ctx, flexpriceInvoiceID)
+	if err != nil {
+		s.logger.Debugw("no Stripe invoice mapping found",
+			"invoice_id", flexpriceInvoiceID)
+		return "", ierr.WithError(err).Mark(ierr.ErrNotFound)
+	}
+
+	stripeInvoiceID := mapping.ProviderEntityID
+	s.logger.Debugw("found Stripe invoice mapping",
+		"invoice_id", flexpriceInvoiceID,
+		"stripe_invoice_id", stripeInvoiceID)
+
+	return stripeInvoiceID, nil
+}
+
+// GetFlexPriceInvoiceID gets the FlexPrice invoice ID from a Stripe invoice ID
+func (s *InvoiceSyncService) GetFlexPriceInvoiceID(ctx context.Context, stripeInvoiceID string) (string, error) {
+	if s.entityIntegrationMappingRepo == nil {
+		return "", ierr.NewError("entity integration mapping repository not available").Mark(ierr.ErrNotFound)
+	}
+
+	filter := &types.EntityIntegrationMappingFilter{
+		ProviderEntityIDs: []string{stripeInvoiceID},
+		EntityType:        types.IntegrationEntityTypeInvoice,
+		ProviderTypes:     []string{"stripe"},
+		QueryFilter:       types.NewDefaultQueryFilter(),
+	}
+
+	mappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
+	if err != nil {
+		s.logger.Debugw("failed to query entity integration mapping",
+			"error", err,
+			"stripe_invoice_id", stripeInvoiceID)
+		return "", ierr.WithError(err).Mark(ierr.ErrDatabase)
+	}
+
+	if len(mappings) == 0 {
+		s.logger.Debugw("no FlexPrice invoice mapping found",
+			"stripe_invoice_id", stripeInvoiceID)
+		return "", ierr.NewError("flexprice invoice mapping not found").Mark(ierr.ErrNotFound)
+	}
+
+	flexpriceInvoiceID := mappings[0].EntityID
+	s.logger.Debugw("found FlexPrice invoice mapping",
+		"stripe_invoice_id", stripeInvoiceID,
+		"flexprice_invoice_id", flexpriceInvoiceID)
+
+	return flexpriceInvoiceID, nil
+}
+
 // getExistingStripeMapping gets existing Stripe mapping for an invoice
 func (s *InvoiceSyncService) getExistingStripeMapping(ctx context.Context, invoiceID string) (*entityintegrationmapping.EntityIntegrationMapping, error) {
 	if s.entityIntegrationMappingRepo == nil {

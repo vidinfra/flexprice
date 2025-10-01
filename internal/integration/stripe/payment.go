@@ -21,27 +21,30 @@ import (
 
 // PaymentService handles Stripe payment operations
 type PaymentService struct {
-	client      *Client
-	customerSvc *CustomerService
-	invoiceRepo invoice.Repository
-	paymentRepo payment.Repository
-	logger      *logger.Logger
+	client         *Client
+	customerSvc    *CustomerService
+	invoiceSyncSvc *InvoiceSyncService
+	invoiceRepo    invoice.Repository
+	paymentRepo    payment.Repository
+	logger         *logger.Logger
 }
 
 // NewPaymentService creates a new Stripe payment service
 func NewPaymentService(
 	client *Client,
 	customerSvc *CustomerService,
+	invoiceSyncSvc *InvoiceSyncService,
 	invoiceRepo invoice.Repository,
 	paymentRepo payment.Repository,
 	logger *logger.Logger,
 ) *PaymentService {
 	return &PaymentService{
-		client:      client,
-		customerSvc: customerSvc,
-		invoiceRepo: invoiceRepo,
-		paymentRepo: paymentRepo,
-		logger:      logger,
+		client:         client,
+		customerSvc:    customerSvc,
+		invoiceSyncSvc: invoiceSyncSvc,
+		invoiceRepo:    invoiceRepo,
+		paymentRepo:    paymentRepo,
+		logger:         logger,
 	}
 }
 
@@ -225,7 +228,7 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *dto.CreateS
 	}
 
 	// Try to get Stripe invoice ID for attachment tracking
-	if stripeInvoiceID, err := s.getStripeInvoiceID(ctx, req.InvoiceID); err == nil && stripeInvoiceID != "" {
+	if stripeInvoiceID, err := s.invoiceSyncSvc.GetStripeInvoiceID(ctx, req.InvoiceID); err == nil && stripeInvoiceID != "" {
 		metadata["stripe_invoice_id"] = stripeInvoiceID
 		s.logger.Infow("payment link will be tracked for Stripe invoice attachment",
 			"flexprice_invoice_id", req.InvoiceID,
@@ -394,11 +397,12 @@ func (s *PaymentService) ChargeSavedPaymentMethod(ctx context.Context, req *dto.
 			"environment_id":        types.GetEnvironmentID(ctx),
 			"invoice_id":            req.InvoiceID,
 			"payment_source":        "flexprice", // KEY DIFFERENTIATOR
+			"payment_type":          "charge",
 		},
 	}
 
 	// Try to get Stripe invoice ID for later attachment
-	stripeInvoiceID, err := s.getStripeInvoiceID(ctx, req.InvoiceID)
+	stripeInvoiceID, err := s.invoiceSyncSvc.GetStripeInvoiceID(ctx, req.InvoiceID)
 	if err != nil {
 		s.logger.Debugw("no Stripe invoice found, creating standalone payment",
 			"flexprice_invoice_id", req.InvoiceID,
@@ -735,12 +739,10 @@ func (s *PaymentService) GetPaymentIntent(ctx context.Context, paymentIntentID s
 	}
 
 	// Get the payment intent with expanded fields
-	params := &stripe.PaymentIntentRetrieveParams{
-		Expand: []*string{
-			stripe.String("payment_method"),
-			stripe.String("customer"),
-		},
-	}
+	params := &stripe.PaymentIntentRetrieveParams{}
+	params.AddExpand("invoice")
+	params.AddExpand("payment_method")
+	params.AddExpand("customer")
 	paymentIntent, err := stripeClient.V1PaymentIntents.Retrieve(ctx, paymentIntentID, params)
 	if err != nil {
 		s.logger.Errorw("failed to get Stripe payment intent",
@@ -1056,41 +1058,27 @@ func (s *PaymentService) ReconcilePaymentWithInvoice(ctx context.Context, paymen
 	return nil
 }
 
-// AttachPaymentToStripeInvoice attaches a payment to a Stripe invoice
+// AttachPaymentToStripeInvoice attaches a successful PaymentIntent to a Stripe invoice
 func (s *PaymentService) AttachPaymentToStripeInvoice(ctx context.Context, stripeClient *stripe.Client, paymentIntentID, stripeInvoiceID string) error {
-	s.logger.Infow("attempting to attach payment to Stripe invoice",
+	s.logger.Infow("attaching payment to Stripe invoice",
 		"payment_intent_id", paymentIntentID,
 		"stripe_invoice_id", stripeInvoiceID)
 
-	// Get the invoice to check its status
-	invoice, err := stripeClient.V1Invoices.Retrieve(ctx, stripeInvoiceID, nil)
+	// Use the invoice.AttachPayment method as per Stripe documentation
+	attachParams := &stripe.InvoiceAttachPaymentParams{
+		PaymentIntent: stripe.String(paymentIntentID),
+	}
+
+	_, err := stripeClient.V1Invoices.AttachPayment(ctx, stripeInvoiceID, attachParams)
 	if err != nil {
-		s.logger.Errorw("failed to retrieve Stripe invoice for attachment",
-			"error", err,
-			"stripe_invoice_id", stripeInvoiceID)
-		return err
-	}
-
-	// Only attach to finalized invoices
-	if invoice.Status != stripe.InvoiceStatusOpen {
-		s.logger.Warnw("cannot attach payment to non-open invoice",
-			"stripe_invoice_id", stripeInvoiceID,
-			"invoice_status", invoice.Status)
-		return nil // Don't error, just skip attachment
-	}
-
-	// Pay the invoice using the payment intent
-	params := &stripe.InvoicePayParams{
-		PaymentMethod: stripe.String(paymentIntentID),
-	}
-
-	_, err = stripeClient.V1Invoices.Pay(ctx, stripeInvoiceID, params)
-	if err != nil {
-		s.logger.Errorw("failed to attach payment to Stripe invoice",
-			"error", err,
-			"payment_intent_id", paymentIntentID,
-			"stripe_invoice_id", stripeInvoiceID)
-		return err
+		return ierr.NewError("failed to attach payment to Stripe invoice").
+			WithHint("Payment succeeded but couldn't be attached to invoice").
+			WithReportableDetails(map[string]interface{}{
+				"stripe_invoice_id": stripeInvoiceID,
+				"payment_intent_id": paymentIntentID,
+				"error":             err.Error(),
+			}).
+			Mark(ierr.ErrSystem)
 	}
 
 	s.logger.Infow("successfully attached payment to Stripe invoice",
@@ -1100,11 +1088,31 @@ func (s *PaymentService) AttachPaymentToStripeInvoice(ctx context.Context, strip
 	return nil
 }
 
-// getStripeInvoiceID gets the Stripe invoice ID for a FlexPrice invoice
-func (s *PaymentService) getStripeInvoiceID(ctx context.Context, flexpriceInvoiceID string) (string, error) {
-	// This would typically query the entity integration mapping table
-	// For now, return empty string to indicate no Stripe invoice found
-	return "", ierr.NewError("stripe invoice not found").Mark(ierr.ErrNotFound)
+// PaymentExistsByGatewayPaymentID checks if a payment already exists with the given gateway payment ID
+func (s *PaymentService) PaymentExistsByGatewayPaymentID(ctx context.Context, gatewayPaymentID string) (bool, error) {
+	if gatewayPaymentID == "" {
+		return false, nil
+	}
+
+	filter := types.NewNoLimitPaymentFilter()
+	if filter.QueryFilter != nil {
+		limit := 1
+		filter.QueryFilter.Limit = &limit
+	}
+
+	payments, err := s.paymentRepo.List(ctx, filter)
+	if err != nil {
+		return false, err
+	}
+
+	// Check if any payment has matching gateway_payment_id
+	for _, p := range payments {
+		if p.GatewayPaymentID != nil && *p.GatewayPaymentID == gatewayPaymentID {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 // SetupIntent creates a Setup Intent with Stripe for saving payment methods
@@ -1509,14 +1517,7 @@ func (s *PaymentService) ProcessExternalStripePayment(ctx context.Context, payme
 
 // getFlexPriceInvoiceID gets the FlexPrice invoice ID from a Stripe invoice ID
 func (s *PaymentService) getFlexPriceInvoiceID(ctx context.Context, stripeInvoiceID string) (string, error) {
-	// This would typically query the entity integration mapping table to find the FlexPrice invoice
-	// For now, return an error indicating this functionality needs to be implemented
-	return "", ierr.NewError("flexprice invoice mapping not found").
-		WithHint("Unable to find FlexPrice invoice for Stripe invoice").
-		WithReportableDetails(map[string]interface{}{
-			"stripe_invoice_id": stripeInvoiceID,
-		}).
-		Mark(ierr.ErrNotFound)
+	return s.invoiceSyncSvc.GetFlexPriceInvoiceID(ctx, stripeInvoiceID)
 }
 
 // createExternalPaymentRecord creates a payment record for an external Stripe payment

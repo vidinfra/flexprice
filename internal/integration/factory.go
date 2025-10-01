@@ -3,8 +3,6 @@ package integration
 import (
 	"context"
 
-	"strings"
-
 	"github.com/flexprice/flexprice/internal/config"
 	"github.com/flexprice/flexprice/internal/domain/connection"
 	"github.com/flexprice/flexprice/internal/domain/customer"
@@ -71,21 +69,22 @@ func (f *Factory) GetStripeIntegration(ctx context.Context) (*StripeIntegration,
 		f.logger,
 	)
 
-	// Create payment service
-	paymentSvc := stripe.NewPaymentService(
-		stripeClient,
-		customerSvc,
-		f.invoiceRepo,
-		f.paymentRepo,
-		f.logger,
-	)
-
-	// Create invoice sync service
+	// Create invoice sync service first
 	invoiceSyncSvc := stripe.NewInvoiceSyncService(
 		stripeClient,
 		customerSvc,
 		f.invoiceRepo,
 		f.entityIntegrationMappingRepo,
+		f.logger,
+	)
+
+	// Create payment service
+	paymentSvc := stripe.NewPaymentService(
+		stripeClient,
+		customerSvc,
+		invoiceSyncSvc,
+		f.invoiceRepo,
+		f.paymentRepo,
 		f.logger,
 	)
 
@@ -95,6 +94,7 @@ func (f *Factory) GetStripeIntegration(ctx context.Context) (*StripeIntegration,
 		customerSvc,
 		paymentSvc,
 		invoiceSyncSvc,
+		f.entityIntegrationMappingRepo,
 		f.logger,
 	)
 
@@ -193,65 +193,4 @@ func (f *Factory) GetAvailableProviders(ctx context.Context) ([]IntegrationProvi
 	// }
 
 	return providers, nil
-}
-
-// ValidateProviderConnection validates a connection to a specific provider
-func (f *Factory) ValidateProviderConnection(ctx context.Context, providerType types.SecretProvider, connectionData map[string]interface{}) error {
-	switch providerType {
-	case types.SecretProviderStripe:
-		return f.validateStripeConnection(ctx, connectionData)
-	default:
-		return ierr.NewError("unsupported provider for validation").
-			WithHint("Provider type is not supported for validation").
-			WithReportableDetails(map[string]interface{}{
-				"provider_type": providerType,
-			}).
-			Mark(ierr.ErrValidation)
-	}
-}
-
-// validateStripeConnection validates Stripe connection data
-func (f *Factory) validateStripeConnection(ctx context.Context, connectionData map[string]interface{}) error {
-	// Extract required fields
-	secretKey, ok := connectionData["secret_key"].(string)
-	if !ok || secretKey == "" {
-		return ierr.NewError("missing or invalid secret_key").
-			WithHint("Stripe secret key is required").
-			Mark(ierr.ErrValidation)
-	}
-
-	publishableKey, ok := connectionData["publishable_key"].(string)
-	if !ok || publishableKey == "" {
-		return ierr.NewError("missing or invalid publishable_key").
-			WithHint("Stripe publishable key is required").
-			Mark(ierr.ErrValidation)
-	}
-
-	// Test the connection by making a simple API call
-	stripeClient := stripe.NewClient(
-		f.connectionRepo,
-		f.encryptionService,
-		f.logger,
-	)
-
-	// This would typically make a test API call to validate the keys
-	// For now, we'll just validate the format
-	_ = stripeClient // Suppress unused variable warning
-	if !strings.HasPrefix(secretKey, "sk_") {
-		return ierr.NewError("invalid secret key format").
-			WithHint("Stripe secret key should start with 'sk_'").
-			Mark(ierr.ErrValidation)
-	}
-
-	if !strings.HasPrefix(publishableKey, "pk_") {
-		return ierr.NewError("invalid publishable key format").
-			WithHint("Stripe publishable key should start with 'pk_'").
-			Mark(ierr.ErrValidation)
-	}
-
-	f.logger.Infow("Stripe connection validation successful",
-		"secret_key_prefix", secretKey[:7]+"...",
-		"publishable_key_prefix", publishableKey[:7]+"...")
-
-	return nil
 }
