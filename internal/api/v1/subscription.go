@@ -339,7 +339,7 @@ func (h *SubscriptionHandler) RemoveAddonToSubscription(c *gin.Context) {
 // @Success 200 {object} dto.SubscriptionLineItemResponse
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
-// @Router /subscriptions/lineitems/{id} [post]
+// @Router /subscriptions/lineitems/{id} [put]
 func (h *SubscriptionHandler) UpdateSubscriptionLineItem(c *gin.Context) {
 	lineItemID := c.Param("id")
 	if lineItemID == "" {
