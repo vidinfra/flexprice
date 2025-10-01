@@ -676,6 +676,12 @@ func (s *planService) SyncPlanPrices(ctx context.Context, id string) (*dto.SyncP
 	// Create price map for quick lookups
 	planPriceMap := make(map[string]*price.Price)
 	for _, priceResp := range pricesResponse.Items {
+
+		// skip the fixed fee prices
+		if priceResp.Price.Type == types.PRICE_TYPE_FIXED {
+			continue
+		}
+
 		planPriceMap[priceResp.ID] = priceResp.Price
 	}
 
