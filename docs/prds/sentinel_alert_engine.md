@@ -467,7 +467,7 @@ sequenceDiagram
     
     alt State Changed
         FAM->>AL: Create alert log entry
-        Note over AL: entity_type = "entitlement"<br/>entity_id = "ent_123"<br/>alert_type = "feature_usage_threshold"<br/>alert_status = "warning"
+        Note over AL: entity_type = "feature"<br/>entity_id = "ent_123"<br/>alert_type = "feature_balance"<br/>alert_status = "warning"
         AL->>AL: Save to AlertLogs table
         AL->>WH: Trigger webhook event
         WH->>WH: Build webhook payload
@@ -991,4 +991,59 @@ flowchart TD
     style K fill:#e8f5e8
     style N fill:#fff3e0
     style Q fill:#fce4ec
+```
+# Sequence diagrams
+```
+sequenceDiagram
+  autonumber
+  participant Cron as Cron Wallet Handler
+  participant FeatureSvc as FeatureService
+  participant WalletSvc as WalletService
+  participant AlertSvc as AlertLogsService
+  participant Repo as AlertLogsRepo
+  participant Webhook as WebhookPublisher
+
+  Cron->>FeatureSvc: ListFeatures(has_alert_settings=true) per tenant/env
+  Cron->>WalletSvc: ListWallets()
+  loop For each wallet
+    Cron->>WalletSvc: ComputeOngoingBalance(wallet)
+    Note over Cron: For each feature with alert_settings
+    Cron->>AlertSvc: LogAlert(type=FeatureBalance,<br/>entity=Feature,<br/>status=DetermineStatus(balance, bounds),<br/>metadata={wallet_id,...})
+    alt FeatureBalance alert
+      AlertSvc->>Repo: GetLatestByEntityAlertTypeAndMetadata(...)
+      Repo-->>AlertSvc: Latest or nil
+      alt State changed or no prior
+        AlertSvc->>Repo: Create AlertLog (with metadata)
+        AlertSvc->>Webhook: Publish feature.balance.threshold.alert
+        Webhook-->>AlertSvc: Ack/Err
+      else Unchanged
+        Note right of AlertSvc: Skip log/webhook
+      end
+    end
+    Cron->>AlertSvc: LogAlert(type=WalletBalance, entity=Wallet, status=...)
+  end
+```
+
+```
+sequenceDiagram
+  autonumber
+  participant Publisher as AlertLogsService
+  participant PayloadFactory as Webhook Payload Factory
+  participant Builder as AlertPayloadBuilder
+  participant FeatureSvc as FeatureService
+  participant WalletSvc as WalletService
+  participant Sink as Webhook Sink
+
+  Publisher->>PayloadFactory: Build(WebhookEventFeatureBalanceThresholdAlert, data)
+  PayloadFactory-->>Builder: AlertPayloadBuilder
+  Builder->>Builder: Unmarshal InternalAlertEvent
+  alt Has FeatureID and WalletID
+    Builder->>FeatureSvc: GetFeature(FeatureID)
+    Builder->>WalletSvc: GetWallet(WalletID)
+    Builder-->>Publisher: JSON payload (feature, wallet, alert_type, alert_status)
+    Publisher->>Sink: Publish(payload)
+  else Missing IDs
+    Builder-->>Publisher: nil payload (no-op)
+  end
+
 ```

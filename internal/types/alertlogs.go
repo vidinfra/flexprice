@@ -203,9 +203,9 @@ func (f *FeatureAlertSettings) Validate() error {
 }
 
 // determineFeatureAlertStatus determines the alert status based on ongoing balance vs alert settings
-// if ongoing_balance > upperbound: alert_status = ok
-// if upperbound >= ongoing_balance >= lowerbound: alert_status = warning
-// if ongoing_balance < lowerbound: alert_status = in_alarm
+// if ongoing_balance >= upperbound: alert_status: ok
+// if upperbound > ongoing_balance > lowerbound: alert_status: warning
+// if ongoing_balance <= lowerbound: alert_status: in_alarm
 func (f *FeatureAlertSettings) DetermineFeatureAlertStatus(ongoingBalance decimal.Decimal) AlertState {
 	upperbound := *f.Upperbound
 	lowerbound := *f.Lowerbound
