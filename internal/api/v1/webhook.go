@@ -291,7 +291,7 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 			})
 			return
 		}
-		_, err = stripeSubscriptionService.UpdateSubscription(c.Request.Context(), subscription.ID)
+		err = stripeSubscriptionService.UpdateSubscription(c.Request.Context(), subscription.ID)
 		if err != nil {
 			h.logger.Errorw("failed to create subscription", "error", err)
 			c.JSON(http.StatusInternalServerError, gin.H{

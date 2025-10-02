@@ -27,8 +27,21 @@ func NewStripeSubscriptionService(params ServiceParams) *stripeSubscriptionServi
 	}
 }
 
+// TODOS:
+/*
+	1. Handle Billing Cycle Conversion (Stripe dont have any billing cycle conversion, so we need to handle it)
+*/
+
 func (s *stripeSubscriptionService) CreateSubscription(ctx context.Context, stripeSubscriptionID string) (*dto.SubscriptionResponse, error) {
-	// Step 1: Check if the mapping with the stripe subscription id exists
+
+	// Step 1: Fetch Stripe subscription data
+	stripeService := NewStripeService(s.ServiceParams)
+	stripeSubscription, err := stripeService.fetchStripeSubscription(ctx, stripeSubscriptionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 2: Check if the mapping with the stripe subscription id exists
 	entityMappingService := NewEntityIntegrationMappingService(s.ServiceParams)
 	filter := &types.EntityIntegrationMappingFilter{
 		EntityType:        types.IntegrationEntityTypeSubscription,
@@ -48,13 +61,6 @@ func (s *stripeSubscriptionService) CreateSubscription(ctx context.Context, stri
 		existingMapping := existingMappings.Items[0]
 		subscriptionService := NewSubscriptionService(s.ServiceParams)
 		return subscriptionService.GetSubscription(ctx, existingMapping.EntityID)
-	}
-
-	// Step 2: Fetch Stripe subscription data
-	stripeService := NewStripeService(s.ServiceParams)
-	stripeSubscription, err := stripeService.fetchStripeSubscription(ctx, stripeSubscriptionID)
-	if err != nil {
-		return nil, err
 	}
 
 	// Step 3: Create or find customer
@@ -98,7 +104,7 @@ func (s *stripeSubscriptionService) CreateSubscription(ctx context.Context, stri
 	return subscriptionResp, nil
 }
 
-func (s *stripeSubscriptionService) UpdateSubscription(ctx context.Context, stripeSubscriptionID string) (*dto.SubscriptionResponse, error) {
+func (s *stripeSubscriptionService) UpdateSubscription(ctx context.Context, stripeSubscriptionID string) error {
 	// TODO: IMPLEMENT THIS
 	/*
 		1. Check if the mapping with the stripe subscription id exists
@@ -110,7 +116,13 @@ func (s *stripeSubscriptionService) UpdateSubscription(ctx context.Context, stri
 		6. Return the subscription
 	*/
 
-	// Step 1: Check if the mapping with the stripe subscription id exists
+	// Step 1: Fetch Stripe Subscription
+	stripeService := NewStripeService(s.ServiceParams)
+	stripeSubscription, err := stripeService.fetchStripeSubscription(ctx, stripeSubscriptionID)
+	if err != nil {
+		return err
+	}
+	// Step 2: Check if the mapping with the stripe subscription id exists
 	entityMappingService := NewEntityIntegrationMappingService(s.ServiceParams)
 	filter := &types.EntityIntegrationMappingFilter{
 		EntityType:        types.IntegrationEntityTypeSubscription,
@@ -120,28 +132,31 @@ func (s *stripeSubscriptionService) UpdateSubscription(ctx context.Context, stri
 
 	existingMappings, err := entityMappingService.GetEntityIntegrationMappings(ctx, filter)
 	if err != nil {
-		return nil, ierr.WithError(err).
+		return ierr.WithError(err).
 			WithHint("Failed to check for existing subscription mapping").
 			Mark(ierr.ErrInternal)
 	}
 
-	// If mapping exists, return the existing subscription
-	if len(existingMappings.Items) > 0 {
-		existingMapping := existingMappings.Items[0]
-		subscriptionService := NewSubscriptionService(s.ServiceParams)
-		return subscriptionService.GetSubscription(ctx, existingMapping.EntityID)
-	}
+	// Step 3: Get the existing mapping
+	existingSubscriptionMapping := existingMappings.Items[0]
 
-	// Step 2: Fetch Stripe subscription data
-	stripeService := NewStripeService(s.ServiceParams)
-	stripeSubscription, err := stripeService.fetchStripeSubscription(ctx, stripeSubscriptionID)
+	// Step 4: Get the exisitng subcription
+	subscriptionService := NewSubscriptionService(s.ServiceParams)
+	existingSubscription, err := subscriptionService.GetSubscription(ctx, existingSubscriptionMapping.EntityID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	s.Logger.Infow("stripe subscription", "stripe_subscription", stripeSubscription)
+	planChange, err := s.isPlanChange(ctx, existingSubscription, stripeSubscription)
+	if err != nil {
+		return err
+	}
 
-	return nil, nil
+	if planChange {
+		return s.handlePlanChange(ctx, existingSubscription, stripeSubscription)
+	} else {
+		return s.handleNormalChange(ctx, existingSubscription, stripeSubscription)
+	}
 }
 
 func (s *stripeSubscriptionService) CancelSubscription(ctx context.Context, stripeSubscriptionID string) (*dto.SubscriptionResponse, error) {
@@ -416,4 +431,156 @@ func (s *stripeSubscriptionService) createFlexPriceSubscription(ctx context.Cont
 	}
 
 	return subscriptionService.CreateSubscription(ctx, createReq)
+}
+
+func (s *stripeSubscriptionService) isPlanChange(ctx context.Context, existingSubscription *dto.SubscriptionResponse, stripeSubscription *stripe.Subscription) (bool, error) {
+	// Step 1: Get the exisiting Plan Mapping
+	entityMappingService := NewEntityIntegrationMappingService(s.ServiceParams)
+	filter := &types.EntityIntegrationMappingFilter{
+		EntityType:    types.IntegrationEntityTypePlan,
+		ProviderTypes: []string{"stripe"},
+		EntityID:      existingSubscription.PlanID,
+	}
+	existingPlanMapping, err := entityMappingService.GetEntityIntegrationMappings(ctx, filter)
+	if err != nil {
+		return false, ierr.WithError(err).
+			WithHint("Failed to get existing plan mapping").
+			Mark(ierr.ErrInternal)
+	}
+
+	if len(existingPlanMapping.Items) == 0 {
+		return false, ierr.NewError("no existing plan mapping found").
+			WithHint("Existing plan mapping not found").
+			Mark(ierr.ErrInternal)
+	}
+
+	existingPlanID := existingPlanMapping.Items[0].ProviderEntityID
+
+	if existingPlanID != stripeSubscription.Items.Data[0].Plan.ID {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (s *stripeSubscriptionService) handlePlanChange(ctx context.Context, existingSubscription *dto.SubscriptionResponse, stripeSubscription *stripe.Subscription) error {
+	s.Logger.Infow("handling plan change for subscription",
+		"existing_subscription_id", existingSubscription.ID,
+		"stripe_subscription_id", stripeSubscription.ID)
+
+	// STEP 1: Cancel existing subscription which will automatically generate proration invoice
+	subscriptionService := NewSubscriptionService(s.ServiceParams)
+	cancelReq := &dto.CancelSubscriptionRequest{
+		CancellationType:  types.CancellationTypeImmediate,
+		ProrationBehavior: types.ProrationBehaviorNone,
+		Reason:            "Plan change - upgrading to new plan",
+	}
+
+	_, err := subscriptionService.CancelSubscription(ctx, existingSubscription.ID, cancelReq)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to cancel existing subscription during plan change").
+			Mark(ierr.ErrInternal)
+	}
+
+	s.Logger.Infow("successfully cancelled existing subscription",
+		"subscription_id", existingSubscription.ID)
+
+	// STEP 2: Create new subscription with updated plan
+	// First, get or create the new plan
+	newPlanID, err := s.createOrFindPlan(ctx, stripeSubscription)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to create or find new plan for subscription").
+			Mark(ierr.ErrInternal)
+	}
+
+	// Get or create customer (should already exist)
+	customerID, err := s.createOrFindCustomer(ctx, stripeSubscription)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get customer for new subscription").
+			Mark(ierr.ErrInternal)
+	}
+
+	// Create new subscription with the updated plan
+	newSubscription, err := s.createFlexPriceSubscription(ctx, stripeSubscription, customerID, newPlanID)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to create new subscription with updated plan").
+			Mark(ierr.ErrInternal)
+	}
+
+	s.Logger.Infow("successfully created new subscription",
+		"new_subscription_id", newSubscription.ID,
+		"new_plan_id", newPlanID)
+
+	// STEP 3: Update the entity mapping to point to the new subscription
+	entityMappingService := NewEntityIntegrationMappingService(s.ServiceParams)
+
+	// Find the existing mapping
+	filter := &types.EntityIntegrationMappingFilter{
+		EntityType:        types.IntegrationEntityTypeSubscription,
+		ProviderTypes:     []string{"stripe"},
+		ProviderEntityIDs: []string{stripeSubscription.ID},
+	}
+
+	existingMappings, err := entityMappingService.GetEntityIntegrationMappings(ctx, filter)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to find existing entity mapping").
+			Mark(ierr.ErrInternal)
+	}
+
+	if len(existingMappings.Items) == 0 {
+		return ierr.NewError("no existing entity mapping found").
+			WithHint("Entity mapping should exist for the subscription").
+			Mark(ierr.ErrInternal)
+	}
+
+	// Delete the old mapping and create a new one pointing to the new subscription
+	existingMapping := existingMappings.Items[0]
+
+	// Delete the old mapping
+	err = entityMappingService.DeleteEntityIntegrationMapping(ctx, existingMapping.ID)
+	if err != nil {
+		s.Logger.Warnw("failed to delete old entity mapping for subscription",
+			"error", err,
+			"mapping_id", existingMapping.ID,
+			"old_subscription_id", existingSubscription.ID,
+			"stripe_subscription_id", stripeSubscription.ID)
+		// Don't fail the entire operation if entity mapping deletion fails
+	}
+
+	// Create new mapping pointing to the new subscription
+	_, err = entityMappingService.CreateEntityIntegrationMapping(ctx, dto.CreateEntityIntegrationMappingRequest{
+		EntityID:         newSubscription.ID,
+		EntityType:       types.IntegrationEntityTypeSubscription,
+		ProviderType:     "stripe",
+		ProviderEntityID: stripeSubscription.ID,
+		Metadata: map[string]interface{}{
+			"created_via":              "stripe_subscription_service_plan_change",
+			"stripe_subscription_id":   stripeSubscription.ID,
+			"previous_subscription_id": existingSubscription.ID,
+			"created_at":               time.Now().UTC().Format(time.RFC3339),
+		},
+	})
+	if err != nil {
+		s.Logger.Warnw("failed to create new entity mapping for subscription",
+			"error", err,
+			"new_subscription_id", newSubscription.ID,
+			"stripe_subscription_id", stripeSubscription.ID)
+		// Don't fail the entire operation if entity mapping creation fails
+	}
+
+	s.Logger.Infow("successfully handled plan change",
+		"old_subscription_id", existingSubscription.ID,
+		"new_subscription_id", newSubscription.ID,
+		"stripe_subscription_id", stripeSubscription.ID)
+
+	return nil
+}
+
+func (s *stripeSubscriptionService) handleNormalChange(ctx context.Context, existingSubscription *dto.SubscriptionResponse, stripeSubscription *stripe.Subscription) error {
+	return nil
 }
