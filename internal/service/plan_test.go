@@ -11,6 +11,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/entitlement"
 	"github.com/flexprice/flexprice/internal/domain/feature"
+	"github.com/flexprice/flexprice/internal/domain/meter"
 	"github.com/flexprice/flexprice/internal/domain/plan"
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
@@ -1351,6 +1352,21 @@ func (s *PlanServiceSuite) TestSyncPlanPrices_Price_Synchronization() {
 		err = s.GetStores().SubscriptionRepo.Create(s.GetContext(), testSub)
 		s.NoError(err)
 
+		// Create a meter for usage price
+		testMeter := &meter.Meter{
+			ID:        "meter-test-sync-009",
+			Name:      "Test Meter Sync 009",
+			EventName: "test_event_sync_009",
+			Aggregation: meter.Aggregation{
+				Type:  types.AggregationSum,
+				Field: "value",
+			},
+			EnvironmentID: types.GetEnvironmentID(s.GetContext()),
+			BaseModel:     types.GetDefaultBaseModel(s.GetContext()),
+		}
+		err = s.GetStores().MeterRepo.CreateMeter(s.GetContext(), testMeter)
+		s.NoError(err)
+
 		// Add new price to plan
 		newPrice := &price.Price{
 			ID:                 "price-new",
@@ -1359,6 +1375,7 @@ func (s *PlanServiceSuite) TestSyncPlanPrices_Price_Synchronization() {
 			EntityType:         types.PRICE_ENTITY_TYPE_PLAN,
 			EntityID:           testPlan.ID,
 			Type:               types.PRICE_TYPE_USAGE,
+			MeterID:            testMeter.ID, // Add meter ID for usage price
 			BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
 			BillingPeriodCount: 1,
 			BillingModel:       types.BILLING_MODEL_FLAT_FEE,
@@ -1374,7 +1391,7 @@ func (s *PlanServiceSuite) TestSyncPlanPrices_Price_Synchronization() {
 		s.Equal(testPlan.ID, result.PlanID)
 		s.Equal(testPlan.Name, result.PlanName)
 		s.Equal(1, result.SynchronizationSummary.SubscriptionsProcessed)
-		s.Equal(2, result.SynchronizationSummary.LineItemsCreated) // Both existing and new prices
+		s.Equal(1, result.SynchronizationSummary.LineItemsCreated) // Only the new price creates a line item
 		s.Equal(0, result.SynchronizationSummary.LineItemsTerminated)
 		s.Equal(0, result.SynchronizationSummary.LineItemsSkipped)
 	})
