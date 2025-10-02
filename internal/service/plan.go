@@ -426,8 +426,7 @@ func (s *planService) UpdatePlan(ctx context.Context, id string, req dto.UpdateP
 			}
 
 			// Create new prices
-			newPrices := make([]*price.Price, 0)
-			bulkCreatePrices := make([]*price.Price, 0) // Separate slice for bulk creation
+			bulkCreatePrices := make([]*price.Price, 0) // Slice for bulk creation
 
 			for _, reqPrice := range req.Prices {
 				if reqPrice.ID == "" {
@@ -448,8 +447,7 @@ func (s *planService) UpdatePlan(ctx context.Context, id string, req dto.UpdateP
 								Mark(ierr.ErrValidation)
 						}
 						newPrice = priceResp.Price
-						// Add to newPrices but not to bulkCreatePrices since it's already created
-						newPrices = append(newPrices, newPrice)
+						// Price is already created through the price service
 					} else {
 						// For regular prices without unit config, use ToPrice
 						// Ensure price unit type is set, default to FIAT if not provided
@@ -464,8 +462,7 @@ func (s *planService) UpdatePlan(ctx context.Context, id string, req dto.UpdateP
 						}
 						newPrice.EntityType = types.PRICE_ENTITY_TYPE_PLAN
 						newPrice.EntityID = plan.ID
-						// Add to both slices since this needs bulk creation
-						newPrices = append(newPrices, newPrice)
+						// Add to bulkCreatePrices for bulk creation
 						bulkCreatePrices = append(bulkCreatePrices, newPrice)
 					}
 				}
@@ -712,6 +709,9 @@ func (s *planService) SyncPlanPrices(ctx context.Context, id string) (*dto.SyncP
 	totalSkipped := 0
 	totalFailed := 0
 	totalPricesProcessed := 0
+	totalSkippedAlreadyTerminated := 0
+	totalSkippedOverridden := 0
+	totalSkippedIncompatible := 0
 
 	// Iterate through each subscription
 	for _, sub := range subs {
@@ -769,30 +769,21 @@ func (s *planService) SyncPlanPrices(ctx context.Context, id string) (*dto.SyncP
 			syncResult.LineItemsSkippedIncompatible
 		totalFailed += syncResult.LineItemsFailed
 		totalPricesProcessed += syncResult.PricesProcessed
+
+		// Aggregate detailed skip counters
+		totalSkippedAlreadyTerminated += syncResult.LineItemsSkippedAlreadyTerminated
+		totalSkippedOverridden += syncResult.LineItemsSkippedOverridden
+		totalSkippedIncompatible += syncResult.LineItemsSkippedIncompatible
 	}
 
-	// Calculate detailed statistics
-	totalSkippedAlreadyTerminated := 0
-	totalSkippedOverridden := 0
-	totalSkippedIncompatible := 0
+	// Count active and expired prices
 	activePrices := 0
 	expiredPrices := 0
-
-	// Count active and expired prices
 	for _, planPrice := range planPriceMap {
 		if planPrice.EndDate == nil {
 			activePrices++
 		} else {
 			expiredPrices++
-		}
-	}
-
-	// Count incompatible prices
-	for _, sub := range subs {
-		for _, planPrice := range planPriceMap {
-			if !planPrice.IsEligibleForSubscription(sub.Currency, sub.BillingPeriod, sub.BillingPeriodCount) {
-				totalSkippedIncompatible++
-			}
 		}
 	}
 
