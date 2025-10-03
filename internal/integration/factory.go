@@ -88,13 +88,26 @@ func (f *Factory) GetStripeIntegration(ctx context.Context) (*StripeIntegration,
 		f.logger,
 	)
 
+	planSvc := stripe.NewStripePlanService(
+		stripeClient,
+		f.logger,
+	)
+
+	subSvc := stripe.NewStripeSubscriptionService(
+		stripeClient,
+		f.logger,
+	)
+
 	// Create webhook handler
 	webhookHandler := webhook.NewHandler(
 		stripeClient,
 		customerSvc,
 		paymentSvc,
 		invoiceSyncSvc,
+		planSvc,
+		subSvc,
 		f.entityIntegrationMappingRepo,
+		f.connectionRepo,
 		f.logger,
 	)
 

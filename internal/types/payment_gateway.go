@@ -38,11 +38,21 @@ type WebhookEventType string
 
 const (
 	// Stripe webhook events
-	WebhookEventTypeCustomerCreated            WebhookEventType = "customer.created"
-	WebhookEventTypePaymentIntentSucceeded     WebhookEventType = "payment_intent.succeeded"
-	WebhookEventTypePaymentIntentPaymentFailed WebhookEventType = "payment_intent.payment_failed"
-	WebhookEventTypeSetupIntentSucceeded       WebhookEventType = "setup_intent.succeeded"
-	WebhookEventTypeInvoicePaymentPaid         WebhookEventType = "invoice_payment.paid"
+	WebhookEventTypeCheckoutSessionCompleted             WebhookEventType = "checkout.session.completed"
+	WebhookEventTypeCheckoutSessionAsyncPaymentSucceeded WebhookEventType = "checkout.session.async_payment_succeeded"
+	WebhookEventTypeCheckoutSessionAsyncPaymentFailed    WebhookEventType = "checkout.session.async_payment_failed"
+	WebhookEventTypeCheckoutSessionExpired               WebhookEventType = "checkout.session.expired"
+	WebhookEventTypeCustomerCreated                      WebhookEventType = "customer.created"
+	WebhookEventTypePaymentIntentPaymentFailed           WebhookEventType = "payment_intent.payment_failed"
+	WebhookEventTypeInvoicePaymentPaid                   WebhookEventType = "invoice_payment.paid"
+	WebhookEventTypeSetupIntentSucceeded                 WebhookEventType = "setup_intent.succeeded"
+	WebhookEventTypeProductCreated                       WebhookEventType = "product.created"
+	WebhookEventTypeProductUpdated                       WebhookEventType = "product.updated"
+	WebhookEventTypeProductDeleted                       WebhookEventType = "product.deleted"
+	WebhookEventTypeSubscriptionCreated                  WebhookEventType = "customer.subscription.created"
+	WebhookEventTypeSubscriptionUpdated                  WebhookEventType = "customer.subscription.updated"
+	WebhookEventTypeSubscriptionDeleted                  WebhookEventType = "customer.subscription.deleted"
+	WebhookEventTypePaymentIntentSucceeded               WebhookEventType = "payment_intent.succeeded"
 )
 
 // Validate validates the webhook event type

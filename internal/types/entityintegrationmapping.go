@@ -15,6 +15,7 @@ const (
 	IntegrationEntityTypeSubscription IntegrationEntityType = "subscription"
 	IntegrationEntityTypePayment      IntegrationEntityType = "payment"
 	IntegrationEntityTypeCreditNote   IntegrationEntityType = "credit_note"
+	IntegrationEntityTypeAddon        IntegrationEntityType = "addon"
 )
 
 func (e IntegrationEntityType) String() string {
