@@ -218,7 +218,6 @@ func main() {
 			service.NewSettingsService,
 			service.NewSubscriptionChangeService,
 			service.NewAlertLogsService,
-			service.NewStripeSubscriptionService,
 		),
 	)
 
@@ -320,7 +319,7 @@ func provideHandlers(
 		Connection:               v1.NewConnectionHandler(connectionService, logger),
 		EntityIntegrationMapping: v1.NewEntityIntegrationMappingHandler(entityIntegrationMappingService, logger),
 		PriceUnit:                v1.NewPriceUnitHandler(priceUnitService, logger),
-		Webhook:                  v1.NewWebhookHandler(cfg, svixClient, logger, integrationFactory, customerService, paymentService, invoiceService),
+		Webhook:                  v1.NewWebhookHandler(cfg, svixClient, logger, integrationFactory, customerService, paymentService, invoiceService, planService, subscriptionService),
 		Coupon:                   v1.NewCouponHandler(couponService, logger),
 		Addon:                    v1.NewAddonHandler(addonService, logger),
 		Settings:                 v1.NewSettingsHandler(settingsService, logger),

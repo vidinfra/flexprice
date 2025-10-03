@@ -1,31 +1,62 @@
-package service
+package stripe
 
 import (
 	"context"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
 	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/interfaces"
+	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/stripe/stripe-go/v82"
 )
 
+type ServiceDependencies = interfaces.ServiceDependencies
+
 type StripePlanService interface {
-	CreatePlan(ctx context.Context, planID string) (string, error)
-	GetPlan(ctx context.Context, id string) (*dto.PlanResponse, error)
-	UpdatePlan(ctx context.Context, stripeProductID string) (*dto.PlanResponse, error)
-	DeletePlan(ctx context.Context, stripeProductID string) error
+	CreatePlan(ctx context.Context, planID string, service *ServiceDependencies) (string, error)
+	UpdatePlan(ctx context.Context, stripeProductID string, services *ServiceDependencies) (*dto.PlanResponse, error)
+	DeletePlan(ctx context.Context, stripeProductID string, services *ServiceDependencies) error
 }
 
 type stripePlanService struct {
-	ServiceParams
+	client *Client
+	logger *logger.Logger
 }
 
-func NewStripePlanService(params ServiceParams) *stripePlanService {
+func NewStripePlanService(client *Client, logger *logger.Logger) *stripePlanService {
 	return &stripePlanService{
-		ServiceParams: params,
+		client: client,
+		logger: logger,
 	}
 }
 
-func (s *stripePlanService) CreatePlan(ctx context.Context, planID string) (string, error) {
+// TODO: Plan services
+// fetchStripeProduct retrieves a product from Stripe
+func (s *stripePlanService) fetchStripeProduct(ctx context.Context, productID string) (*stripe.Product, error) {
+
+	stripeClient, _, err := s.client.GetStripeClient(ctx)
+
+	// Retrieve the product from Stripe
+	product, err := stripeClient.V1Products.Retrieve(ctx, productID, nil)
+	if err != nil {
+		s.logger.Errorw("failed to retrieve product from Stripe",
+			"error", err,
+			"product_id", productID,
+		)
+		return nil, ierr.NewError("failed to retrieve product from Stripe").
+			WithHint("Could not fetch product information from Stripe").
+			WithReportableDetails(map[string]interface{}{
+				"product_id": productID,
+				"error":      err.Error(),
+			}).
+			Mark(ierr.ErrSystem)
+	}
+
+	return product, nil
+}
+
+func (s *stripePlanService) CreatePlan(ctx context.Context, planID string, services *ServiceDependencies) (string, error) {
 	// Check if the plan already exists in Entity Mapping
 	filter := &types.EntityIntegrationMappingFilter{
 		EntityType:        types.IntegrationEntityTypePlan,
@@ -33,7 +64,7 @@ func (s *stripePlanService) CreatePlan(ctx context.Context, planID string) (stri
 		ProviderEntityIDs: []string{planID},
 	}
 
-	existingMappings, err := s.EntityIntegrationMappingRepo.List(ctx, filter)
+	existingMappings, err := services.EntityIntegrationMappingService.GetEntityIntegrationMappings(ctx, filter)
 	if err != nil {
 		return "", ierr.WithError(err).
 			WithHint("Failed to check for existing plan mapping").
@@ -41,14 +72,13 @@ func (s *stripePlanService) CreatePlan(ctx context.Context, planID string) (stri
 	}
 
 	// If yes: return the plan ID
-	if len(existingMappings) > 0 {
-		existingMapping := existingMappings[0]
+	if len(existingMappings.Items) > 0 {
+		existingMapping := existingMappings.Items[0]
 		return existingMapping.EntityID, nil
 	}
 
 	// Fetch the Product from Stripe
-	stripeService := NewStripeService(s.ServiceParams)
-	stripeProduct, err := stripeService.fetchStripeProduct(ctx, planID)
+	stripeProduct, err := s.fetchStripeProduct(ctx, planID)
 	if err != nil {
 		return "", err
 	}
@@ -76,8 +106,7 @@ func (s *stripePlanService) CreatePlan(ctx context.Context, planID string) (stri
 	}
 
 	// Create the plan using the plan service
-	planService := NewPlanService(s.ServiceParams)
-	createPlanResp, err := planService.CreatePlan(ctx, createPlanReq)
+	createPlanResp, err := services.PlanService.CreatePlan(ctx, createPlanReq)
 	if err != nil {
 		return "", ierr.WithError(err).
 			WithHint("Failed to create plan").
@@ -104,7 +133,7 @@ func (s *stripePlanService) CreatePlan(ctx context.Context, planID string) (stri
 	}
 
 	// Create the entity integration mapping
-	entityMappingService := NewEntityIntegrationMappingService(s.ServiceParams)
+	entityMappingService := services.EntityIntegrationMappingService
 	_, err = entityMappingService.CreateEntityIntegrationMapping(ctx, entityMappingReq)
 	if err != nil {
 		return "", ierr.WithError(err).
@@ -115,13 +144,7 @@ func (s *stripePlanService) CreatePlan(ctx context.Context, planID string) (stri
 	return createPlanResp.ID, nil
 }
 
-func (s *stripePlanService) GetPlan(ctx context.Context, id string) (*dto.PlanResponse, error) {
-	// Get the plan using the regular plan service
-	planService := NewPlanService(s.ServiceParams)
-	return planService.GetPlan(ctx, id)
-}
-
-func (s *stripePlanService) UpdatePlan(ctx context.Context, stripeProductID string) (*dto.PlanResponse, error) {
+func (s *stripePlanService) UpdatePlan(ctx context.Context, stripeProductID string, services *ServiceDependencies) (*dto.PlanResponse, error) {
 	if stripeProductID == "" {
 		return nil, ierr.NewError("stripe product ID is required").
 			WithHint("Stripe product ID is required").
@@ -135,14 +158,14 @@ func (s *stripePlanService) UpdatePlan(ctx context.Context, stripeProductID stri
 		ProviderTypes:     []string{"stripe"},
 	}
 
-	mappings, err := s.EntityIntegrationMappingRepo.List(ctx, filter)
+	mappings, err := services.EntityIntegrationMappingService.GetEntityIntegrationMappings(ctx, filter)
 	if err != nil {
 		return nil, ierr.WithError(err).
 			WithHint("Failed to find plan mapping for Stripe product").
 			Mark(ierr.ErrInternal)
 	}
 
-	if len(mappings) == 0 {
+	if len(mappings.Items) == 0 {
 		return nil, ierr.NewError("no FlexPrice plan found for Stripe product").
 			WithHint("No FlexPrice plan is mapped to this Stripe product").
 			WithReportableDetails(map[string]interface{}{
@@ -152,11 +175,9 @@ func (s *stripePlanService) UpdatePlan(ctx context.Context, stripeProductID stri
 	}
 
 	// Get the FlexPrice plan ID from the mapping
-	flexPricePlanID := mappings[0].EntityID
+	flexPricePlanID := mappings.Items[0].EntityID
 
-	// Fetch the latest product data from Stripe
-	stripeService := NewStripeService(s.ServiceParams)
-	stripeProduct, err := stripeService.fetchStripeProduct(ctx, stripeProductID)
+	stripeProduct, err := s.fetchStripeProduct(ctx, stripeProductID)
 	if err != nil {
 		return nil, ierr.WithError(err).
 			WithHint("Failed to fetch updated product data from Stripe").
@@ -182,11 +203,10 @@ func (s *stripePlanService) UpdatePlan(ctx context.Context, stripeProductID stri
 	req.Metadata["last_synced_from_stripe"] = "true"
 
 	// Use the regular plan service to update the FlexPrice plan
-	planService := NewPlanService(s.ServiceParams)
-	return planService.UpdatePlan(ctx, flexPricePlanID, req)
+	return services.PlanService.UpdatePlan(ctx, flexPricePlanID, req)
 }
 
-func (s *stripePlanService) DeletePlan(ctx context.Context, stripeProductID string) error {
+func (s *stripePlanService) DeletePlan(ctx context.Context, stripeProductID string, services *ServiceDependencies) error {
 	if stripeProductID == "" {
 		return ierr.NewError("stripe product ID is required").
 			WithHint("Stripe product ID is required").
@@ -200,14 +220,14 @@ func (s *stripePlanService) DeletePlan(ctx context.Context, stripeProductID stri
 		ProviderTypes:     []string{"stripe"},
 	}
 
-	mappings, err := s.EntityIntegrationMappingRepo.List(ctx, filter)
+	mappings, err := services.EntityIntegrationMappingService.GetEntityIntegrationMappings(ctx, filter)
 	if err != nil {
 		return ierr.WithError(err).
 			WithHint("Failed to find plan mapping for Stripe product").
 			Mark(ierr.ErrInternal)
 	}
 
-	if len(mappings) == 0 {
+	if len(mappings.Items) == 0 {
 		return ierr.NewError("no FlexPrice plan found for Stripe product").
 			WithHint("No FlexPrice plan is mapped to this Stripe product").
 			WithReportableDetails(map[string]interface{}{
@@ -217,13 +237,12 @@ func (s *stripePlanService) DeletePlan(ctx context.Context, stripeProductID stri
 	}
 
 	// Get the FlexPrice plan ID from the mapping
-	flexPricePlanID := mappings[0].EntityID
+	flexPricePlanID := mappings.Items[0].EntityID
 
 	// Delete the entity integration mapping first
-	entityMappingService := NewEntityIntegrationMappingService(s.ServiceParams)
-	for _, mapping := range mappings {
-		if err := entityMappingService.DeleteEntityIntegrationMapping(ctx, mapping.ID); err != nil {
-			s.Logger.Errorw("failed to delete entity integration mapping",
+	for _, mapping := range mappings.Items {
+		if err := services.EntityIntegrationMappingService.DeleteEntityIntegrationMapping(ctx, mapping.ID); err != nil {
+			s.logger.Errorw("failed to delete entity integration mapping",
 				"error", err,
 				"mapping_id", mapping.ID,
 				"plan_id", flexPricePlanID,
@@ -233,6 +252,5 @@ func (s *stripePlanService) DeletePlan(ctx context.Context, stripeProductID stri
 	}
 
 	// Use the regular plan service to delete the FlexPrice plan
-	planService := NewPlanService(s.ServiceParams)
-	return planService.DeletePlan(ctx, flexPricePlanID)
+	return services.PlanService.DeletePlan(ctx, flexPricePlanID)
 }

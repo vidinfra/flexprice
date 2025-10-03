@@ -16,13 +16,15 @@ import (
 
 // WebhookHandler handles webhook-related endpoints
 type WebhookHandler struct {
-	config             *config.Configuration
-	svixClient         *svix.Client
-	logger             *logger.Logger
-	integrationFactory *integration.Factory
-	customerService    interfaces.CustomerService
-	paymentService     interfaces.PaymentService
-	invoiceService     interfaces.InvoiceService
+	config              *config.Configuration
+	svixClient          *svix.Client
+	logger              *logger.Logger
+	integrationFactory  *integration.Factory
+	customerService     interfaces.CustomerService
+	paymentService      interfaces.PaymentService
+	invoiceService      interfaces.InvoiceService
+	planService         interfaces.PlanService
+	subscriptionService interfaces.SubscriptionService
 }
 
 // NewWebhookHandler creates a new webhook handler
@@ -34,15 +36,19 @@ func NewWebhookHandler(
 	customerService interfaces.CustomerService,
 	paymentService interfaces.PaymentService,
 	invoiceService interfaces.InvoiceService,
+	planService interfaces.PlanService,
+	subscriptionService interfaces.SubscriptionService,
 ) *WebhookHandler {
 	return &WebhookHandler{
-		config:             cfg,
-		svixClient:         svixClient,
-		logger:             logger,
-		integrationFactory: integrationFactory,
-		customerService:    customerService,
-		paymentService:     paymentService,
-		invoiceService:     invoiceService,
+		config:              cfg,
+		svixClient:          svixClient,
+		logger:              logger,
+		integrationFactory:  integrationFactory,
+		customerService:     customerService,
+		paymentService:      paymentService,
+		invoiceService:      invoiceService,
+		planService:         planService,
+		subscriptionService: subscriptionService,
 	}
 }
 
@@ -203,6 +209,7 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 		CustomerService: h.customerService,
 		PaymentService:  h.paymentService,
 		InvoiceService:  h.invoiceService,
+		PlanService:     h.planService,
 	}
 
 	// Handle the webhook event using new integration

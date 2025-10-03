@@ -23,6 +23,8 @@ type Handler struct {
 	customerSvc                  *stripe.CustomerService
 	paymentSvc                   *stripe.PaymentService
 	invoiceSyncSvc               *stripe.InvoiceSyncService
+	planSvc                      stripe.StripePlanService
+	subSvc                       stripe.StripeSubscriptionService
 	entityIntegrationMappingRepo entityintegrationmapping.Repository
 	logger                       *logger.Logger
 }
@@ -33,6 +35,8 @@ func NewHandler(
 	customerSvc *stripe.CustomerService,
 	paymentSvc *stripe.PaymentService,
 	invoiceSyncSvc *stripe.InvoiceSyncService,
+	planSvc stripe.StripePlanService,
+	subSvc stripe.StripeSubscriptionService,
 	entityIntegrationMappingRepo entityintegrationmapping.Repository,
 	logger *logger.Logger,
 ) *Handler {
@@ -41,6 +45,8 @@ func NewHandler(
 		customerSvc:                  customerSvc,
 		paymentSvc:                   paymentSvc,
 		invoiceSyncSvc:               invoiceSyncSvc,
+		planSvc:                      planSvc,
+		subSvc:                       subSvc,
 		entityIntegrationMappingRepo: entityIntegrationMappingRepo,
 		logger:                       logger,
 	}
@@ -65,6 +71,19 @@ func (h *Handler) HandleWebhookEvent(ctx context.Context, event *stripeapi.Event
 		return h.handleSetupIntentSucceeded(ctx, event, environmentID, services)
 	case string(types.WebhookEventTypeInvoicePaymentPaid):
 		return h.handleInvoicePaymentPaid(ctx, event, environmentID, services)
+	case string(types.WebhookEventTypeProductCreated):
+		return h.handleProductCreated(ctx, event, environmentID, services)
+	case string(types.WebhookEventTypeProductUpdated):
+		return h.handleProductUpdated(ctx, event, environmentID, services)
+	case string(types.WebhookEventTypeProductDeleted):
+		return h.handleProductDeleted(ctx, event, environmentID, services)
+	case string(types.WebhookEventSubscriptionCreated):
+		return h.handleSubscriptionCreated(ctx, event, environmentID, services)
+	case string(types.WebhookEventSubscriptionUpdated):
+		return h.handleSubscriptionUpdated(ctx, event, environmentID, services)
+	case string(types.WebhookEventSubscriptionCancelled):
+		return h.handleSubscriptionCancellation(ctx, event, environmentID, services)
+
 	default:
 		h.logger.Infow("unhandled Stripe webhook event type", "type", event.Type)
 		return nil // Not an error, just unhandled
@@ -72,11 +91,8 @@ func (h *Handler) HandleWebhookEvent(ctx context.Context, event *stripeapi.Event
 }
 
 // ServiceDependencies contains all service dependencies needed by webhook handlers
-type ServiceDependencies struct {
-	CustomerService interfaces.CustomerService
-	PaymentService  interfaces.PaymentService
-	InvoiceService  interfaces.InvoiceService
-}
+
+type ServiceDependencies = interfaces.ServiceDependencies
 
 // handleCustomerCreated handles customer.created webhook
 func (h *Handler) handleCustomerCreated(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
@@ -733,6 +749,174 @@ func (h *Handler) handleInvoicePaymentPaid(ctx context.Context, event *stripeapi
 	h.logger.Infow("successfully processed invoice.paid webhook",
 		"payment_intent_id", paymentIntentID,
 		"stripe_invoice_id", stripeInvoiceID)
+
+	return nil
+}
+
+func (h *Handler) handleProductCreated(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Parse webhook to get payment intent data
+	var product stripeapi.Product
+	err := json.Unmarshal(event.Data.Raw, &product)
+	if err != nil {
+		h.logger.Errorw("failed to parse product from webhook", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrValidation)
+	}
+
+	h.logger.Infow("received product.created webhook",
+		"product_id", product.ID,
+		"environment_id", environmentID,
+		"event_id", event.ID,
+		"event_type", event.Type,
+	)
+
+	// Create plan in FlexPrice
+	planID := product.ID
+
+	plan, err := h.planSvc.CreatePlan(ctx, planID, services)
+	if err != nil {
+		h.logger.Errorw("failed to create plan in FlexPrice", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrSystem)
+	}
+
+	h.logger.Infow("successfully created plan in FlexPrice", "plan_id", plan)
+
+	return nil
+
+}
+
+func (h *Handler) handleProductUpdated(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Parse webhook to get product data
+	var product stripeapi.Product
+	err := json.Unmarshal(event.Data.Raw, &product)
+	if err != nil {
+		h.logger.Errorw("failed to parse product from webhook", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrValidation)
+	}
+
+	h.logger.Infow("received product.updated webhook",
+		"product_id", product.ID,
+		"environment_id", environmentID,
+		"event_id", event.ID,
+		"event_type", event.Type,
+	)
+
+	// Update plan in FlexPrice
+	planID := product.ID
+	plan, err := h.planSvc.UpdatePlan(ctx, planID, services)
+	if err != nil {
+		h.logger.Errorw("failed to update plan in FlexPrice", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrSystem)
+	}
+
+	h.logger.Infow("successfully updated plan in FlexPrice", "plan_id", plan.ID)
+
+	return nil
+}
+
+func (h *Handler) handleProductDeleted(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Parse webhook to get product data
+	var product stripeapi.Product
+	err := json.Unmarshal(event.Data.Raw, &product)
+	if err != nil {
+		h.logger.Errorw("failed to parse product from webhook", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrValidation)
+	}
+
+	h.logger.Infow("received product.deleted webhook", "product_id", product.ID)
+
+	// Delete plan in FlexPrice
+	planID := product.ID
+	err = h.planSvc.DeletePlan(ctx, planID, services)
+	if err != nil {
+		h.logger.Errorw("failed to delete plan in FlexPrice", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrSystem)
+	}
+
+	h.logger.Infow("successfully deleted plan in FlexPrice", "plan_id", planID)
+
+	return nil
+}
+
+func (h *Handler) handleSubscriptionCreated(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Parse webhook to get payment intent data
+	var subscription stripeapi.Subscription
+	err := json.Unmarshal(event.Data.Raw, &subscription)
+	if err != nil {
+		h.logger.Errorw("failed to parse product from webhook", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrValidation)
+	}
+
+	h.logger.Infow("received product.created webhook",
+		"product_id", subscription.ID,
+		"environment_id", environmentID,
+		"event_id", event.ID,
+		"event_type", event.Type,
+	)
+
+	// Create plan in FlexPrice
+	subID := subscription.ID
+
+	plan, err := h.subSvc.CreateSubscription(ctx, subID, services)
+	if err != nil {
+		h.logger.Errorw("failed to create plan in FlexPrice", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrSystem)
+	}
+
+	h.logger.Infow("successfully created plan in FlexPrice", "plan_id", plan)
+
+	return nil
+
+}
+
+func (h *Handler) handleSubscriptionUpdated(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Parse webhook to get product data
+	var subscription stripeapi.Subscription
+	err := json.Unmarshal(event.Data.Raw, &subscription)
+	if err != nil {
+		h.logger.Errorw("failed to parse product from webhook", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrValidation)
+	}
+
+	h.logger.Infow("received product.updated webhook",
+		"product_id", subscription.ID,
+		"environment_id", environmentID,
+		"event_id", event.ID,
+		"event_type", event.Type,
+	)
+
+	// Update plan in FlexPrice
+	subscriptionID := subscription.ID
+	err = h.subSvc.UpdateSubscription(ctx, subscriptionID, services)
+	if err != nil {
+		h.logger.Errorw("failed to update plan in FlexPrice", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrSystem)
+	}
+
+	h.logger.Infow("successfully updated plan in FlexPrice", "plan_id", subscriptionID)
+
+	return nil
+}
+
+func (h *Handler) handleSubscriptionCancellation(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Parse webhook to get product data
+	var subscription stripeapi.Subscription
+	err := json.Unmarshal(event.Data.Raw, &subscription)
+	if err != nil {
+		h.logger.Errorw("failed to parse product from webhook", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrValidation)
+	}
+
+	h.logger.Infow("received product.deleted webhook", "product_id", subscription.ID)
+
+	// Delete plan in FlexPrice
+	subID := subscription.ID
+	sub, err := h.subSvc.CancelSubscription(ctx, subID, services)
+	if err != nil {
+		h.logger.Errorw("failed to delete plan in FlexPrice", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrSystem)
+	}
+
+	h.logger.Infow("successfully deleted plan in FlexPrice", "plan_id", sub.ID)
 
 	return nil
 }
