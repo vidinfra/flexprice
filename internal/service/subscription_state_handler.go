@@ -53,8 +53,8 @@ func (h *SubscriptionStateHandler) DetermineCreditGrantAction() (StateAction, er
 		return StateActionCancel, nil
 
 	case types.SubscriptionStatusIncomplete:
-		// Defer incomplete subscriptions as they might become active
-		return StateActionDefer, nil
+		// Skip incomplete subscriptions until they become active
+		return StateActionSkip, nil
 
 	case types.SubscriptionStatusIncompleteExpired:
 		// Expired incomplete subscriptions should be cancelled
