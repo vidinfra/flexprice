@@ -107,6 +107,7 @@ func (f *Factory) GetStripeIntegration(ctx context.Context) (*StripeIntegration,
 		planSvc,
 		subSvc,
 		f.entityIntegrationMappingRepo,
+		f.connectionRepo,
 		f.logger,
 	)
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
+	"github.com/flexprice/flexprice/internal/domain/connection"
 	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/integration/stripe"
@@ -26,6 +27,7 @@ type Handler struct {
 	planSvc                      stripe.StripePlanService
 	subSvc                       stripe.StripeSubscriptionService
 	entityIntegrationMappingRepo entityintegrationmapping.Repository
+	connectionRepo               connection.Repository
 	logger                       *logger.Logger
 }
 
@@ -38,6 +40,7 @@ func NewHandler(
 	planSvc stripe.StripePlanService,
 	subSvc stripe.StripeSubscriptionService,
 	entityIntegrationMappingRepo entityintegrationmapping.Repository,
+	connectionRepo connection.Repository,
 	logger *logger.Logger,
 ) *Handler {
 	return &Handler{
@@ -48,6 +51,7 @@ func NewHandler(
 		planSvc:                      planSvc,
 		subSvc:                       subSvc,
 		entityIntegrationMappingRepo: entityIntegrationMappingRepo,
+		connectionRepo:               connectionRepo,
 		logger:                       logger,
 	}
 }
@@ -96,9 +100,29 @@ type ServiceDependencies = interfaces.ServiceDependencies
 
 // handleCustomerCreated handles customer.created webhook
 func (h *Handler) handleCustomerCreated(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Check sync config first
+	conn, err := h.getConnection(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get connection for sync config check",
+			"error", err,
+			"environment_id", environmentID,
+			"event_id", event.ID)
+		return ierr.WithError(err).
+			WithHint("Failed to load connection configuration").
+			Mark(ierr.ErrSystem)
+	}
+
+	if !conn.IsCustomerInboundEnabled() {
+		h.logger.Infow("customer inbound sync disabled, skipping event",
+			"event_id", event.ID,
+			"event_type", event.Type,
+			"connection_id", conn.ID)
+		return nil
+	}
+
 	// Parse webhook to get customer data
 	var stripeCustomer stripeapi.Customer
-	err := json.Unmarshal(event.Data.Raw, &stripeCustomer)
+	err = json.Unmarshal(event.Data.Raw, &stripeCustomer)
 	if err != nil {
 		h.logger.Errorw("failed to parse customer from webhook", "error", err)
 		return ierr.NewError("failed to parse customer data").
@@ -555,6 +579,17 @@ func (h *Handler) handleSetupIntentSucceeded(ctx context.Context, event *stripea
 
 // Helper methods
 
+// getConnection retrieves the Stripe connection for the given environment
+func (h *Handler) getConnection(ctx context.Context) (*connection.Connection, error) {
+	conn, err := h.connectionRepo.GetByProvider(ctx, types.SecretProviderStripe)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get Stripe connection").
+			Mark(ierr.ErrDatabase)
+	}
+	return conn, nil
+}
+
 // attachPaymentToStripeInvoiceAndReconcile attempts to attach payment to Stripe invoice and reconcile with FlexPrice invoice
 func (h *Handler) attachPaymentToStripeInvoiceAndReconcile(ctx context.Context, payment *dto.PaymentResponse, paymentIntent *stripeapi.PaymentIntent, services *ServiceDependencies) {
 	// Find Stripe invoice ID using entity integration mapping
@@ -655,6 +690,26 @@ func (h *Handler) getStripeInvoiceIDFromMapping(ctx context.Context, flexpriceIn
 
 // handleInvoicePaymentPaid handles invoice.paid webhook for external Stripe payments without invoice field in payment_intent
 func (h *Handler) handleInvoicePaymentPaid(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Check sync config first
+	conn, err := h.getConnection(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get connection for sync config check",
+			"error", err,
+			"environment_id", environmentID,
+			"event_id", event.ID)
+		return ierr.WithError(err).
+			WithHint("Failed to load connection configuration").
+			Mark(ierr.ErrSystem)
+	}
+
+	if !conn.IsInvoiceInboundEnabled() {
+		h.logger.Infow("invoice inbound sync disabled, skipping event",
+			"event_id", event.ID,
+			"event_type", event.Type,
+			"connection_id", conn.ID)
+		return nil
+	}
+
 	// Parse it manually from the raw JSON since the invoice field is separate from id
 	var rawData map[string]interface{}
 	if err := json.Unmarshal(event.Data.Raw, &rawData); err != nil {
@@ -754,9 +809,29 @@ func (h *Handler) handleInvoicePaymentPaid(ctx context.Context, event *stripeapi
 }
 
 func (h *Handler) handleProductCreated(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Check sync config first
+	conn, err := h.getConnection(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get connection for sync config check",
+			"error", err,
+			"environment_id", environmentID,
+			"event_id", event.ID)
+		return ierr.WithError(err).
+			WithHint("Failed to load connection configuration").
+			Mark(ierr.ErrSystem)
+	}
+
+	if !conn.IsPlanInboundEnabled() {
+		h.logger.Infow("plan inbound sync disabled, skipping event",
+			"event_id", event.ID,
+			"event_type", event.Type,
+			"connection_id", conn.ID)
+		return nil
+	}
+
 	// Parse webhook to get payment intent data
 	var product stripeapi.Product
-	err := json.Unmarshal(event.Data.Raw, &product)
+	err = json.Unmarshal(event.Data.Raw, &product)
 	if err != nil {
 		h.logger.Errorw("failed to parse product from webhook", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrValidation)
@@ -785,9 +860,29 @@ func (h *Handler) handleProductCreated(ctx context.Context, event *stripeapi.Eve
 }
 
 func (h *Handler) handleProductUpdated(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Check sync config first
+	conn, err := h.getConnection(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get connection for sync config check",
+			"error", err,
+			"environment_id", environmentID,
+			"event_id", event.ID)
+		return ierr.WithError(err).
+			WithHint("Failed to load connection configuration").
+			Mark(ierr.ErrSystem)
+	}
+
+	if !conn.IsPlanInboundEnabled() {
+		h.logger.Infow("plan inbound sync disabled, skipping event",
+			"event_id", event.ID,
+			"event_type", event.Type,
+			"connection_id", conn.ID)
+		return nil
+	}
+
 	// Parse webhook to get product data
 	var product stripeapi.Product
-	err := json.Unmarshal(event.Data.Raw, &product)
+	err = json.Unmarshal(event.Data.Raw, &product)
 	if err != nil {
 		h.logger.Errorw("failed to parse product from webhook", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrValidation)
@@ -814,9 +909,29 @@ func (h *Handler) handleProductUpdated(ctx context.Context, event *stripeapi.Eve
 }
 
 func (h *Handler) handleProductDeleted(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Check sync config first
+	conn, err := h.getConnection(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get connection for sync config check",
+			"error", err,
+			"environment_id", environmentID,
+			"event_id", event.ID)
+		return ierr.WithError(err).
+			WithHint("Failed to load connection configuration").
+			Mark(ierr.ErrSystem)
+	}
+
+	if !conn.IsPlanInboundEnabled() {
+		h.logger.Infow("plan inbound sync disabled, skipping event",
+			"event_id", event.ID,
+			"event_type", event.Type,
+			"connection_id", conn.ID)
+		return nil
+	}
+
 	// Parse webhook to get product data
 	var product stripeapi.Product
-	err := json.Unmarshal(event.Data.Raw, &product)
+	err = json.Unmarshal(event.Data.Raw, &product)
 	if err != nil {
 		h.logger.Errorw("failed to parse product from webhook", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrValidation)
@@ -838,9 +953,29 @@ func (h *Handler) handleProductDeleted(ctx context.Context, event *stripeapi.Eve
 }
 
 func (h *Handler) handleSubscriptionCreated(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Check sync config first
+	conn, err := h.getConnection(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get connection for sync config check",
+			"error", err,
+			"environment_id", environmentID,
+			"event_id", event.ID)
+		return ierr.WithError(err).
+			WithHint("Failed to load connection configuration").
+			Mark(ierr.ErrSystem)
+	}
+
+	if !conn.IsSubscriptionInboundEnabled() {
+		h.logger.Infow("subscription inbound sync disabled, skipping event",
+			"event_id", event.ID,
+			"event_type", event.Type,
+			"connection_id", conn.ID)
+		return nil
+	}
+
 	// Parse webhook to get payment intent data
 	var subscription stripeapi.Subscription
-	err := json.Unmarshal(event.Data.Raw, &subscription)
+	err = json.Unmarshal(event.Data.Raw, &subscription)
 	if err != nil {
 		h.logger.Errorw("failed to parse product from webhook", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrValidation)
@@ -869,9 +1004,29 @@ func (h *Handler) handleSubscriptionCreated(ctx context.Context, event *stripeap
 }
 
 func (h *Handler) handleSubscriptionUpdated(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Check sync config first
+	conn, err := h.getConnection(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get connection for sync config check",
+			"error", err,
+			"environment_id", environmentID,
+			"event_id", event.ID)
+		return ierr.WithError(err).
+			WithHint("Failed to load connection configuration").
+			Mark(ierr.ErrSystem)
+	}
+
+	if !conn.IsSubscriptionInboundEnabled() {
+		h.logger.Infow("subscription inbound sync disabled, skipping event",
+			"event_id", event.ID,
+			"event_type", event.Type,
+			"connection_id", conn.ID)
+		return nil
+	}
+
 	// Parse webhook to get product data
 	var subscription stripeapi.Subscription
-	err := json.Unmarshal(event.Data.Raw, &subscription)
+	err = json.Unmarshal(event.Data.Raw, &subscription)
 	if err != nil {
 		h.logger.Errorw("failed to parse product from webhook", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrValidation)
@@ -898,9 +1053,29 @@ func (h *Handler) handleSubscriptionUpdated(ctx context.Context, event *stripeap
 }
 
 func (h *Handler) handleSubscriptionCancellation(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Check sync config first
+	conn, err := h.getConnection(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get connection for sync config check",
+			"error", err,
+			"environment_id", environmentID,
+			"event_id", event.ID)
+		return ierr.WithError(err).
+			WithHint("Failed to load connection configuration").
+			Mark(ierr.ErrSystem)
+	}
+
+	if !conn.IsSubscriptionInboundEnabled() {
+		h.logger.Infow("subscription inbound sync disabled, skipping event",
+			"event_id", event.ID,
+			"event_type", event.Type,
+			"connection_id", conn.ID)
+		return nil
+	}
+
 	// Parse webhook to get product data
 	var subscription stripeapi.Subscription
-	err := json.Unmarshal(event.Data.Raw, &subscription)
+	err = json.Unmarshal(event.Data.Raw, &subscription)
 	if err != nil {
 		h.logger.Errorw("failed to parse product from webhook", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrValidation)
