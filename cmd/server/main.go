@@ -162,6 +162,7 @@ func main() {
 			repository.NewAddonAssociationRepository,
 			repository.NewSubscriptionLineItemRepository,
 			repository.NewSettingsRepository,
+			repository.NewAlertLogsRepository,
 
 			// PubSub
 			pubsubRouter.NewRouter,
@@ -207,6 +208,7 @@ func main() {
 			service.NewCreditNoteService,
 			service.NewConnectionService,
 			service.NewStripeService,
+			service.NewStripeInvoiceSyncService,
 			service.NewEntityIntegrationMappingService,
 			service.NewIntegrationService,
 			service.NewTaxService,
@@ -215,6 +217,7 @@ func main() {
 			service.NewAddonService,
 			service.NewSettingsService,
 			service.NewSubscriptionChangeService,
+			service.NewAlertLogsService,
 		),
 	)
 
@@ -271,6 +274,7 @@ func provideHandlers(
 	costSheetService service.CostSheetService,
 	creditNoteService service.CreditNoteService,
 	stripeService *service.StripeService,
+	stripeInvoiceSyncService *service.StripeInvoiceSyncService,
 	connectionService service.ConnectionService,
 	entityIntegrationMappingService service.EntityIntegrationMappingService,
 	integrationService service.IntegrationService,
@@ -282,9 +286,10 @@ func provideHandlers(
 	settingsService service.SettingsService,
 	subscriptionChangeService service.SubscriptionChangeService,
 	featureUsageTrackingService service.FeatureUsageTrackingService,
+	alertLogsService service.AlertLogsService,
 ) api.Handlers {
 	return api.Handlers{
-		Events:                   v1.NewEventsHandler(eventService, eventPostProcessingService, featureUsageTrackingService, logger),
+		Events:                   v1.NewEventsHandler(eventService, eventPostProcessingService, featureUsageTrackingService, cfg, logger),
 		Meter:                    v1.NewMeterHandler(meterService, logger),
 		Auth:                     v1.NewAuthHandler(cfg, authService, logger),
 		User:                     v1.NewUserHandler(userService, logger),
@@ -307,7 +312,8 @@ func provideHandlers(
 		Tax:                      v1.NewTaxHandler(taxService, logger),
 		Onboarding:               v1.NewOnboardingHandler(onboardingService, logger),
 		CronSubscription:         cron.NewSubscriptionHandler(subscriptionService, logger),
-		CronWallet:               cron.NewWalletCronHandler(logger, walletService, tenantService, environmentService),
+		CronInvoice:              cron.NewInvoiceHandler(invoiceService, subscriptionService, connectionService, tenantService, environmentService, stripeInvoiceSyncService, logger),
+		CronWallet:               cron.NewWalletCronHandler(logger, walletService, tenantService, environmentService, alertLogsService),
 		CreditGrant:              v1.NewCreditGrantHandler(creditGrantService, logger),
 		CostSheet:                v1.NewCostSheetHandler(costSheetService, logger),
 		CronCreditGrant:          cron.NewCreditGrantCronHandler(creditGrantService, logger),
