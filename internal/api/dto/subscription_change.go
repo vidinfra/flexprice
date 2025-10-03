@@ -31,7 +31,7 @@ type SubscriptionChangeRequest struct {
 	BillingPeriod types.BillingPeriod `json:"billing_period" validate:"required" binding:"required"`
 
 	// billing_period_count is the billing period count for the new subscription
-	BillingPeriodCount int `json:"billing_period_count" default:"1" binding:"required"`
+	BillingPeriodCount int `json:"billing_period_count" default:"1"`
 
 	// billing_cycle is the billing cycle for the new subscription
 	BillingCycle types.BillingCycle `json:"billing_cycle" validate:"required" binding:"required"`
