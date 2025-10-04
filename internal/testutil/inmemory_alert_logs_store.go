@@ -3,7 +3,6 @@ package testutil
 import (
 	"context"
 
-	"github.com/flexprice/flexprice/ent"
 	domainAlertLogs "github.com/flexprice/flexprice/internal/domain/alertlogs"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
@@ -96,7 +95,8 @@ func (s *InMemoryAlertLogsStore) GetLatestAlert(ctx context.Context, entityType 
 		return log, nil
 	}
 
-	return nil, &ent.NotFoundError{}
+	// No matching log found - return nil without error (this is expected behavior)
+	return nil, nil
 }
 
 // ListByEntity retrieves alert logs for a specific entity with limit
