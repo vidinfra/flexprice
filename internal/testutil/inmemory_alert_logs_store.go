@@ -57,12 +57,18 @@ func (s *InMemoryAlertLogsStore) Count(ctx context.Context, filter *types.AlertL
 	return s.InMemoryStore.Count(ctx, filter, alertLogFilterFn)
 }
 
-// GetLatestByEntity retrieves the latest alert log for a specific entity
-func (s *InMemoryAlertLogsStore) GetLatestByEntity(ctx context.Context, entityType types.AlertEntityType, entityID string) (*domainAlertLogs.AlertLog, error) {
+// GetLatestAlert retrieves the latest alert log based on provided filters
+// All parameters except entityType and entityID are optional
+func (s *InMemoryAlertLogsStore) GetLatestAlert(ctx context.Context, entityType types.AlertEntityType, entityID string, alertType *types.AlertType, parentEntityType *string, parentEntityID *string) (*domainAlertLogs.AlertLog, error) {
 	filter := &types.AlertLogFilter{
 		QueryFilter: types.NewNoLimitAlertLogFilter().QueryFilter,
 		EntityType:  entityType,
 		EntityID:    entityID,
+	}
+
+	// Add optional alert type filter
+	if alertType != nil {
+		filter.AlertType = *alertType
 	}
 
 	alertLogs, err := s.List(ctx, filter)
@@ -70,63 +76,24 @@ func (s *InMemoryAlertLogsStore) GetLatestByEntity(ctx context.Context, entityTy
 		return nil, err
 	}
 
-	if len(alertLogs) == 0 {
-		return nil, &ent.NotFoundError{}
-	}
-
-	// Return the first one (newest due to sorting)
-	return alertLogs[0], nil
-}
-
-// GetLatestByEntityAndAlertType retrieves the latest alert log for a specific entity and alert type
-func (s *InMemoryAlertLogsStore) GetLatestByEntityAndAlertType(ctx context.Context, entityType types.AlertEntityType, entityID string, alertType types.AlertType) (*domainAlertLogs.AlertLog, error) {
-	filter := &types.AlertLogFilter{
-		QueryFilter: types.NewNoLimitAlertLogFilter().QueryFilter,
-		EntityType:  entityType,
-		EntityID:    entityID,
-		AlertType:   alertType,
-	}
-
-	alertLogs, err := s.List(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(alertLogs) == 0 {
-		return nil, &ent.NotFoundError{}
-	}
-
-	// Return the first one (newest due to sorting)
-	return alertLogs[0], nil
-}
-
-// GetLatestByEntityAlertTypeAndMetadata retrieves the latest alert log for a specific entity, alert type, and matching metadata
-func (s *InMemoryAlertLogsStore) GetLatestByEntityAlertTypeAndMetadata(ctx context.Context, entityType types.AlertEntityType, entityID string, alertType types.AlertType, metadata map[string]string) (*domainAlertLogs.AlertLog, error) {
-	filter := &types.AlertLogFilter{
-		QueryFilter: types.NewNoLimitAlertLogFilter().QueryFilter,
-		EntityType:  entityType,
-		EntityID:    entityID,
-		AlertType:   alertType,
-	}
-
-	alertLogs, err := s.List(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-
-	// Filter by metadata - all key-value pairs must match
+	// Further filter by parent entity fields if provided
 	for _, log := range alertLogs {
-		matches := true
-		for key, value := range metadata {
-			logValue, exists := log.Metadata[key]
-			if !exists || logValue != value {
-				matches = false
-				break
+		// Check parent entity type match
+		if parentEntityType != nil {
+			if log.ParentEntityType == nil || *log.ParentEntityType != *parentEntityType {
+				continue
 			}
 		}
-		if matches {
-			return log, nil
+
+		// Check parent entity ID match
+		if parentEntityID != nil {
+			if log.ParentEntityID == nil || *log.ParentEntityID != *parentEntityID {
+				continue
+			}
 		}
+
+		// Found a matching log
+		return log, nil
 	}
 
 	return nil, &ent.NotFoundError{}

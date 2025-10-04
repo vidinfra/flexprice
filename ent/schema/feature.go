@@ -96,7 +96,5 @@ func (Feature) Indexes() []ent.Index {
 			StorageKey("idx_feature_tenant_env_status"),
 		index.Fields("tenant_id", "environment_id", "created_at").
 			StorageKey("idx_feature_tenant_env_created_at"),
-		index.Fields("tenant_id", "environment_id", "alert_settings").
-			StorageKey("idx_feature_tenant_env_alert_settings"),
 	}
 }

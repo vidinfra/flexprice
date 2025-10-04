@@ -37,14 +37,16 @@ type AlertLogs struct {
 	EntityType string `json:"entity_type,omitempty"`
 	// EntityID holds the value of the "entity_id" field.
 	EntityID string `json:"entity_id,omitempty"`
+	// ParentEntityType holds the value of the "parent_entity_type" field.
+	ParentEntityType *string `json:"parent_entity_type,omitempty"`
+	// ParentEntityID holds the value of the "parent_entity_id" field.
+	ParentEntityID *string `json:"parent_entity_id,omitempty"`
 	// AlertType holds the value of the "alert_type" field.
 	AlertType string `json:"alert_type,omitempty"`
 	// AlertStatus holds the value of the "alert_status" field.
 	AlertStatus string `json:"alert_status,omitempty"`
 	// AlertInfo holds the value of the "alert_info" field.
-	AlertInfo types.AlertInfo `json:"alert_info,omitempty"`
-	// Metadata holds the value of the "metadata" field.
-	Metadata     map[string]string `json:"metadata,omitempty"`
+	AlertInfo    types.AlertInfo `json:"alert_info,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -53,9 +55,9 @@ func (*AlertLogs) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case alertlogs.FieldAlertInfo, alertlogs.FieldMetadata:
+		case alertlogs.FieldAlertInfo:
 			values[i] = new([]byte)
-		case alertlogs.FieldID, alertlogs.FieldTenantID, alertlogs.FieldStatus, alertlogs.FieldCreatedBy, alertlogs.FieldUpdatedBy, alertlogs.FieldEnvironmentID, alertlogs.FieldEntityType, alertlogs.FieldEntityID, alertlogs.FieldAlertType, alertlogs.FieldAlertStatus:
+		case alertlogs.FieldID, alertlogs.FieldTenantID, alertlogs.FieldStatus, alertlogs.FieldCreatedBy, alertlogs.FieldUpdatedBy, alertlogs.FieldEnvironmentID, alertlogs.FieldEntityType, alertlogs.FieldEntityID, alertlogs.FieldParentEntityType, alertlogs.FieldParentEntityID, alertlogs.FieldAlertType, alertlogs.FieldAlertStatus:
 			values[i] = new(sql.NullString)
 		case alertlogs.FieldCreatedAt, alertlogs.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -134,6 +136,20 @@ func (al *AlertLogs) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				al.EntityID = value.String
 			}
+		case alertlogs.FieldParentEntityType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field parent_entity_type", values[i])
+			} else if value.Valid {
+				al.ParentEntityType = new(string)
+				*al.ParentEntityType = value.String
+			}
+		case alertlogs.FieldParentEntityID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field parent_entity_id", values[i])
+			} else if value.Valid {
+				al.ParentEntityID = new(string)
+				*al.ParentEntityID = value.String
+			}
 		case alertlogs.FieldAlertType:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field alert_type", values[i])
@@ -152,14 +168,6 @@ func (al *AlertLogs) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &al.AlertInfo); err != nil {
 					return fmt.Errorf("unmarshal field alert_info: %w", err)
-				}
-			}
-		case alertlogs.FieldMetadata:
-			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field metadata", values[i])
-			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &al.Metadata); err != nil {
-					return fmt.Errorf("unmarshal field metadata: %w", err)
 				}
 			}
 		default:
@@ -225,6 +233,16 @@ func (al *AlertLogs) String() string {
 	builder.WriteString("entity_id=")
 	builder.WriteString(al.EntityID)
 	builder.WriteString(", ")
+	if v := al.ParentEntityType; v != nil {
+		builder.WriteString("parent_entity_type=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := al.ParentEntityID; v != nil {
+		builder.WriteString("parent_entity_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
 	builder.WriteString("alert_type=")
 	builder.WriteString(al.AlertType)
 	builder.WriteString(", ")
@@ -233,9 +251,6 @@ func (al *AlertLogs) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("alert_info=")
 	builder.WriteString(fmt.Sprintf("%v", al.AlertInfo))
-	builder.WriteString(", ")
-	builder.WriteString("metadata=")
-	builder.WriteString(fmt.Sprintf("%v", al.Metadata))
 	builder.WriteByte(')')
 	return builder.String()
 }

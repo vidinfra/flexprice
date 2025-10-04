@@ -152,7 +152,7 @@ func NewPayloadBuilderFactory(services *Services) PayloadBuilderFactory {
 	f.builders[types.WebhookEventCreditNoteUpdated] = func() PayloadBuilder {
 		return NewCreditNotePayloadBuilder(f.services)
 	}
-	f.builders[types.WebhookEventFeatureBalanceThresholdAlert] = func() PayloadBuilder {
+	f.builders[types.WebhookEventFeatureWalletBalanceAlert] = func() PayloadBuilder {
 		return NewAlertPayloadBuilder(f.services)
 	}
 

@@ -29,8 +29,8 @@ func FromEnt(f *ent.Feature) *Feature {
 
 	// Extract alert settings from Ent entity
 	var alertSettings *types.FeatureAlertSettings
-	// Check if alert settings are set (both fields must be provided)
-	if f.AlertSettings.Upperbound != nil && f.AlertSettings.Lowerbound != nil {
+	// Check if alert settings are set (at least one field must be provided)
+	if f.AlertSettings.Upperbound != nil || f.AlertSettings.Lowerbound != nil {
 		alertSettings = &f.AlertSettings
 	}
 

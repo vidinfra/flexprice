@@ -7,7 +7,6 @@ type InternalAlertEvent struct {
 	WalletID    string `json:"wallet_id,omitempty"`
 	AlertType   string `json:"alert_type"`
 	AlertStatus string `json:"alert_status"`
-	TenantID    string `json:"tenant_id"`
 }
 
 type AlertWebhookPayload struct {

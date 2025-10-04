@@ -455,15 +455,6 @@ func (o FeatureQueryOptions) applyEntityQueryOptions(ctx context.Context, f *typ
 		query = query.Where(feature.NameContainsFold(f.NameContains))
 	}
 
-	// Apply alert settings filter if specified
-	if f.HasAlertSettings != nil {
-		if *f.HasAlertSettings {
-			query = query.Where(feature.AlertSettingsNotNil())
-		} else {
-			query = query.Where(feature.AlertSettingsIsNil())
-		}
-	}
-
 	// Apply time range filters if specified
 	if f.TimeRangeFilter != nil {
 		if f.StartTime != nil {

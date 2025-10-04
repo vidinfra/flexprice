@@ -600,26 +600,47 @@ func (s *FeatureServiceSuite) TestUpdateFeature() {
 			errString: "upperbound must be greater than or equal to lowerbound",
 		},
 		{
-			name: "error - invalid alert settings (missing upperbound)",
+			name: "success - alert settings with only lowerbound (upperbound auto-set)",
 			id:   s.testData.features.apiCalls.ID,
 			req: dto.UpdateFeatureRequest{
 				AlertSettings: &types.FeatureAlertSettings{
 					Lowerbound: lo.ToPtr(decimal.NewFromInt(100)),
 				},
 			},
-			wantErr:   true,
-			errString: "upperbound is required",
+			wantErr: false,
 		},
 		{
-			name: "error - invalid alert settings (missing lowerbound)",
+			name: "success - alert settings with only upperbound (lowerbound auto-set)",
 			id:   s.testData.features.apiCalls.ID,
 			req: dto.UpdateFeatureRequest{
 				AlertSettings: &types.FeatureAlertSettings{
 					Upperbound: lo.ToPtr(decimal.NewFromInt(1000)),
 				},
 			},
-			wantErr:   true,
-			errString: "lowerbound is required",
+			wantErr: false,
+		},
+		{
+			name: "success - alert settings with alert_enabled explicitly set to false",
+			id:   s.testData.features.apiCalls.ID,
+			req: dto.UpdateFeatureRequest{
+				AlertSettings: &types.FeatureAlertSettings{
+					Upperbound:   lo.ToPtr(decimal.NewFromInt(1000)),
+					Lowerbound:   lo.ToPtr(decimal.NewFromInt(500)),
+					AlertEnabled: lo.ToPtr(false),
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "success - alert settings without alert_enabled (defaults to false)",
+			id:   s.testData.features.apiCalls.ID,
+			req: dto.UpdateFeatureRequest{
+				AlertSettings: &types.FeatureAlertSettings{
+					Upperbound: lo.ToPtr(decimal.NewFromInt(2000)),
+					Lowerbound: lo.ToPtr(decimal.NewFromInt(1000)),
+				},
+			},
+			wantErr: false,
 		},
 		{
 			name: "error - feature not found",

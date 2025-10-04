@@ -7,6 +7,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/meter"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
 )
 
 type CreateFeatureRequest struct {
@@ -52,7 +53,7 @@ func (r *CreateFeatureRequest) Validate() error {
 			Mark(ierr.ErrValidation)
 	}
 
-	// Validate alert settings if provided
+	// Validate alert settings if provided (NO mutation here)
 	if r.AlertSettings != nil {
 		if err := r.AlertSettings.Validate(); err != nil {
 			return err
@@ -63,6 +64,29 @@ func (r *CreateFeatureRequest) Validate() error {
 }
 
 func (r *CreateFeatureRequest) ToFeature(ctx context.Context) (*feature.Feature, error) {
+	// Normalize alert settings for CREATE (not in validation)
+	var alertSettings *types.FeatureAlertSettings
+	if r.AlertSettings != nil {
+		alertSettings = &types.FeatureAlertSettings{
+			Upperbound:   r.AlertSettings.Upperbound,
+			Lowerbound:   r.AlertSettings.Lowerbound,
+			AlertEnabled: r.AlertSettings.AlertEnabled,
+		}
+
+		// If only upperbound is provided, set lowerbound to the same value
+		if alertSettings.Upperbound != nil && alertSettings.Lowerbound == nil {
+			alertSettings.Lowerbound = alertSettings.Upperbound
+		}
+		// If only lowerbound is provided, set upperbound to the same value
+		if alertSettings.Lowerbound != nil && alertSettings.Upperbound == nil {
+			alertSettings.Upperbound = alertSettings.Lowerbound
+		}
+		// If alert_enabled is not provided, default to false
+		if alertSettings.AlertEnabled == nil {
+			alertSettings.AlertEnabled = lo.ToPtr(false)
+		}
+	}
+
 	return &feature.Feature{
 		ID:            types.GenerateUUIDWithPrefix(types.UUID_PREFIX_FEATURE),
 		Name:          r.Name,
@@ -73,7 +97,7 @@ func (r *CreateFeatureRequest) ToFeature(ctx context.Context) (*feature.Feature,
 		MeterID:       r.MeterID,
 		UnitSingular:  r.UnitSingular,
 		UnitPlural:    r.UnitPlural,
-		AlertSettings: r.AlertSettings,
+		AlertSettings: alertSettings,
 		EnvironmentID: types.GetEnvironmentID(ctx),
 		BaseModel:     types.GetDefaultBaseModel(ctx),
 	}, nil
@@ -87,16 +111,6 @@ type UpdateFeatureRequest struct {
 	UnitPlural    *string                     `json:"unit_plural,omitempty"`
 	Filters       *[]meter.Filter             `json:"filters,omitempty"`
 	AlertSettings *types.FeatureAlertSettings `json:"alert_settings,omitempty"`
-}
-
-func (r *UpdateFeatureRequest) Validate() error {
-	// Validate alert settings if provided
-	if r.AlertSettings != nil {
-		if err := r.AlertSettings.Validate(); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 type FeatureResponse struct {

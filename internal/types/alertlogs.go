@@ -20,9 +20,9 @@ const (
 type AlertType string
 
 const (
-	AlertTypeLowOngoingBalance AlertType = "low_ongoing_balance"
-	AlertTypeLowCreditBalance  AlertType = "low_credit_balance"
-	AlertTypeFeatureBalance    AlertType = "feature_balance"
+	AlertTypeLowOngoingBalance    AlertType = "low_ongoing_balance"
+	AlertTypeLowCreditBalance     AlertType = "low_credit_balance"
+	AlertTypeFeatureWalletBalance AlertType = "feature_wallet_balance"
 )
 
 // AlertEntityType represents the type of entity for alerts
@@ -69,7 +69,7 @@ func (at AlertType) Validate() error {
 	allowedTypes := []AlertType{
 		AlertTypeLowOngoingBalance,
 		AlertTypeLowCreditBalance,
-		AlertTypeFeatureBalance,
+		AlertTypeFeatureWalletBalance,
 	}
 	if !lo.Contains(allowedTypes, at) {
 		return ierr.NewError("invalid alert type").
@@ -171,52 +171,54 @@ func (f *AlertLogFilter) GetOffset() int {
 }
 
 type FeatureAlertSettings struct {
-	Upperbound *decimal.Decimal `json:"upperbound" validate:"required"`
-	Lowerbound *decimal.Decimal `json:"lowerbound" validate:"required"`
+	Upperbound   *decimal.Decimal `json:"upperbound"`
+	Lowerbound   *decimal.Decimal `json:"lowerbound"`
+	AlertEnabled *bool            `json:"alert_enabled"`
 }
 
 // Validate validates the feature alert settings
-// Both upperbound and lowerbound must be provided and upperbound must be greater than or equal to lowerbound
+// At least one of upperbound or lowerbound must be provided
+// If both are provided, upperbound must be greater than or equal to lowerbound
 func (f *FeatureAlertSettings) Validate() error {
-	// Check if upperbound is provided
-	if f.Upperbound == nil {
-		return ierr.NewError("upperbound is required").
-			WithHint("Please provide a valid upperbound value").
+	// Check if at least one bound is provided
+	if f.Upperbound == nil && f.Lowerbound == nil {
+		return ierr.NewError("upperbound or lowerbound are required").
+			WithHint("Please provide a valid upperbound or lowerbound value").
 			Mark(ierr.ErrValidation)
 	}
 
-	// Check if lowerbound is provided
-	if f.Lowerbound == nil {
-		return ierr.NewError("lowerbound is required").
-			WithHint("Please provide a valid lowerbound value").
-			Mark(ierr.ErrValidation)
-	}
-
-	// Check if upperbound is greater than or equal to lowerbound
-	if f.Upperbound.LessThan(*f.Lowerbound) {
-		return ierr.NewError("upperbound must be greater than or equal to lowerbound").
-			WithHint("Please provide valid feature alert settings where upperbound >= lowerbound").
-			Mark(ierr.ErrValidation)
+	// If both are provided, check if upperbound is greater than or equal to lowerbound
+	if f.Upperbound != nil && f.Lowerbound != nil {
+		if f.Upperbound.LessThan(*f.Lowerbound) {
+			return ierr.NewError("upperbound must be greater than or equal to lowerbound").
+				WithHint("Please provide valid feature alert settings where upperbound >= lowerbound").
+				Mark(ierr.ErrValidation)
+		}
 	}
 
 	return nil
 }
 
-// determineFeatureAlertStatus determines the alert status based on ongoing balance vs alert settings
-// if ongoing_balance >= upperbound: alert_status: ok
-// if upperbound > ongoing_balance > lowerbound: alert_status: warning
-// if ongoing_balance <= lowerbound: alert_status: in_alarm
-func (f *FeatureAlertSettings) DetermineFeatureAlertStatus(ongoingBalance decimal.Decimal) AlertState {
-	upperbound := *f.Upperbound
-	lowerbound := *f.Lowerbound
+// IsAlertEnabled returns true if alerts are enabled for this feature
+func (f *FeatureAlertSettings) IsAlertEnabled() bool {
+	return f.AlertEnabled != nil && *f.AlertEnabled
+}
 
-	// ongoing_balance >= upperbound
-	if ongoingBalance.GreaterThanOrEqual(upperbound) {
+// determineFeatureAlertStatus determines the alert status based on ongoing balance vs alert settings
+// if ongoing_balance > upperbound: alert_status: ok
+// if upperbound >= ongoing_balance > lowerbound: alert_status: warning
+// if ongoing_balance <= lowerbound: alert_status: in_alarm
+func (f *FeatureAlertSettings) FeatureAlertStatus(ongoingBalance decimal.Decimal) AlertState {
+	upperbound := lo.FromPtr(f.Upperbound)
+	lowerbound := lo.FromPtr(f.Lowerbound)
+
+	// ongoing_balance > upperbound
+	if ongoingBalance.GreaterThan(upperbound) {
 		return AlertStateOk
 	}
 
-	// upperbound > ongoing_balance > lowerbound
-	if ongoingBalance.LessThan(upperbound) && ongoingBalance.GreaterThan(lowerbound) {
+	// upperbound >= ongoing_balance > lowerbound
+	if ongoingBalance.Equal(upperbound) || (ongoingBalance.LessThan(upperbound) && ongoingBalance.GreaterThan(lowerbound)) {
 		return AlertStateWarning
 	}
 
