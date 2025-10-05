@@ -646,6 +646,47 @@ func (s *subscriptionService) GetSubscription(ctx context.Context, id string) (*
 	return response, nil
 }
 
+// UpdateSubscription updates a subscription with the provided request
+func (s *subscriptionService) UpdateSubscription(ctx context.Context, subscriptionID string, req dto.UpdateSubscriptionRequest) (*dto.SubscriptionResponse, error) {
+	logger := s.Logger.With(
+		zap.String("subscription_id", subscriptionID),
+	)
+
+	logger.Info("updating subscription")
+
+	// Get the current subscription
+	subscription, _, err := s.SubRepo.GetWithLineItems(ctx, subscriptionID)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to retrieve subscription").
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Update fields from request
+	if req.Status != "" {
+		subscription.SubscriptionStatus = req.Status
+	}
+
+	if req.CancelAt != nil {
+		subscription.CancelAt = req.CancelAt
+	}
+
+	subscription.CancelAtPeriodEnd = req.CancelAtPeriodEnd
+
+	// Update the subscription in the database
+	err = s.SubRepo.Update(ctx, subscription)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to update subscription").
+			Mark(ierr.ErrDatabase)
+	}
+
+	logger.Info("successfully updated subscription")
+
+	// Return the updated subscription
+	return s.GetSubscription(ctx, subscriptionID)
+}
+
 // CancelSubscription provides enhanced cancellation with proration support
 func (s *subscriptionService) CancelSubscription(
 	ctx context.Context,
