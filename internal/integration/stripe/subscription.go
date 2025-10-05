@@ -205,7 +205,7 @@ func (s *stripeSubscriptionService) CancelSubscription(ctx context.Context, stri
 			Mark(ierr.ErrInternal)
 	}
 
-	// If mapping exists, return the existing subscription
+	// If mapping exists, cancel the subscription
 	if len(existingMappings.Items) > 0 {
 		existingMapping := existingMappings.Items[0]
 
@@ -219,7 +219,14 @@ func (s *stripeSubscriptionService) CancelSubscription(ctx context.Context, stri
 		}
 
 	}
-	return nil, nil
+
+	// If no mapping exists, return an error indicating subscription not found
+	return nil, ierr.NewError("subscription not found in FlexPrice").
+		WithHint("No FlexPrice subscription found for the given Stripe subscription ID").
+		WithReportableDetails(map[string]interface{}{
+			"stripe_subscription_id": stripeSubscriptionID,
+		}).
+		Mark(ierr.ErrNotFound)
 }
 
 // createOrFindCustomer creates or finds a customer based on Stripe subscription data
@@ -463,17 +470,18 @@ func (s *stripeSubscriptionService) createFlexPriceSubscription(ctx context.Cont
 	}
 
 	createReq := dto.CreateSubscriptionRequest{
-		CustomerID:     customerID,
-		PlanID:         planID,
-		Currency:       strings.ToUpper(string(stripeSub.Currency)),
-		LookupKey:      stripeSub.ID,
-		StartDate:      &startDate,
-		EndDate:        endDate,
-		TrialStart:     trialStart,
-		TrialEnd:       trialEnd,
-		BillingCadence: types.BILLING_CADENCE_RECURRING,
-		BillingPeriod:  billingPeriod,
-		BillingCycle:   billingCycle,
+		CustomerID:         customerID,
+		PlanID:             planID,
+		Currency:           strings.ToUpper(string(stripeSub.Currency)),
+		LookupKey:          stripeSub.ID,
+		StartDate:          &startDate,
+		EndDate:            endDate,
+		TrialStart:         trialStart,
+		TrialEnd:           trialEnd,
+		BillingCadence:     types.BILLING_CADENCE_RECURRING,
+		BillingPeriod:      billingPeriod,
+		BillingCycle:       billingCycle,
+		BillingPeriodCount: 1,
 		Metadata: map[string]string{
 			"stripe_subscription_id": stripeSub.ID,
 			"source":                 "stripe",

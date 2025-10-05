@@ -16,15 +16,16 @@ import (
 
 // WebhookHandler handles webhook-related endpoints
 type WebhookHandler struct {
-	config              *config.Configuration
-	svixClient          *svix.Client
-	logger              *logger.Logger
-	integrationFactory  *integration.Factory
-	customerService     interfaces.CustomerService
-	paymentService      interfaces.PaymentService
-	invoiceService      interfaces.InvoiceService
-	planService         interfaces.PlanService
-	subscriptionService interfaces.SubscriptionService
+	config                          *config.Configuration
+	svixClient                      *svix.Client
+	logger                          *logger.Logger
+	integrationFactory              *integration.Factory
+	customerService                 interfaces.CustomerService
+	paymentService                  interfaces.PaymentService
+	invoiceService                  interfaces.InvoiceService
+	planService                     interfaces.PlanService
+	subscriptionService             interfaces.SubscriptionService
+	entityIntegrationMappingService interfaces.EntityIntegrationMappingService
 }
 
 // NewWebhookHandler creates a new webhook handler
@@ -38,17 +39,19 @@ func NewWebhookHandler(
 	invoiceService interfaces.InvoiceService,
 	planService interfaces.PlanService,
 	subscriptionService interfaces.SubscriptionService,
+	entityIntegrationMappingService interfaces.EntityIntegrationMappingService,
 ) *WebhookHandler {
 	return &WebhookHandler{
-		config:              cfg,
-		svixClient:          svixClient,
-		logger:              logger,
-		integrationFactory:  integrationFactory,
-		customerService:     customerService,
-		paymentService:      paymentService,
-		invoiceService:      invoiceService,
-		planService:         planService,
-		subscriptionService: subscriptionService,
+		config:                          cfg,
+		svixClient:                      svixClient,
+		logger:                          logger,
+		integrationFactory:              integrationFactory,
+		customerService:                 customerService,
+		paymentService:                  paymentService,
+		invoiceService:                  invoiceService,
+		planService:                     planService,
+		subscriptionService:             subscriptionService,
+		entityIntegrationMappingService: entityIntegrationMappingService,
 	}
 }
 
@@ -198,10 +201,12 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 
 	// Create service dependencies for webhook handler
 	serviceDeps := &webhook.ServiceDependencies{
-		CustomerService: h.customerService,
-		PaymentService:  h.paymentService,
-		InvoiceService:  h.invoiceService,
-		PlanService:     h.planService,
+		CustomerService:                 h.customerService,
+		PaymentService:                  h.paymentService,
+		InvoiceService:                  h.invoiceService,
+		PlanService:                     h.planService,
+		SubscriptionService:             h.subscriptionService,
+		EntityIntegrationMappingService: h.entityIntegrationMappingService,
 	}
 
 	// Handle the webhook event using new integration
