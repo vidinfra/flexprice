@@ -300,3 +300,24 @@ func (h *CustomerHandler) ListCustomersByFilter(c *gin.Context) {
 
 	c.JSON(http.StatusOK, resp)
 }
+
+// @Summary Get customer payment methods
+// @Description Get customer payment methods
+// @Tags Customers
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Customer ID"
+// @Success 200 {object} dto.PaymentMethodResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /customers/{id}/payment-methods [get]
+func (h *CustomerHandler) GetCustomerPaymentMethods(c *gin.Context) {
+	id := c.Param("id")
+	resp, err := h.service.GetCustomerPaymentMethods(c.Request.Context(), id)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}

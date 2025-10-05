@@ -20,6 +20,7 @@ type CustomerService interface {
 	UpdateCustomer(ctx context.Context, id string, req dto.UpdateCustomerRequest) (*dto.CustomerResponse, error)
 	DeleteCustomer(ctx context.Context, id string) error
 	GetCustomerByLookupKey(ctx context.Context, lookupKey string) (*dto.CustomerResponse, error)
+	GetCustomerPaymentMethods(ctx context.Context, customerID string) ([]*dto.PaymentMethodResponse, error)
 }
 
 type customerService struct {
@@ -429,6 +430,15 @@ func (s *customerService) GetCustomerByLookupKey(ctx context.Context, lookupKey 
 	}
 
 	return &dto.CustomerResponse{Customer: customer}, nil
+}
+
+func (s *customerService) GetCustomerPaymentMethods(ctx context.Context, customerID string) ([]*dto.PaymentMethodResponse, error) {
+	stripeService := NewStripeService(s.ServiceParams)
+	stripeCustomerPaymentMethods, err := stripeService.GetCustomerPaymentMethods(ctx, &dto.GetCustomerPaymentMethodsRequest{CustomerID: customerID})
+	if err != nil {
+		return nil, err
+	}
+	return stripeCustomerPaymentMethods, nil
 }
 
 func (s *customerService) publishWebhookEvent(ctx context.Context, eventName string, customerID string) {
