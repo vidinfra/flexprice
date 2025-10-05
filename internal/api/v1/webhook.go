@@ -168,14 +168,6 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 		return
 	}
 
-	// Debug: Log the Stripe configuration
-	h.logger.Infow("Stripe configuration loaded",
-		"environment_id", environmentID,
-		"has_secret_key", stripeConfig.SecretKey != "",
-		"has_publishable_key", stripeConfig.PublishableKey != "",
-		"has_webhook_secret", stripeConfig.WebhookSecret != "",
-		"webhook_secret_length", len(stripeConfig.WebhookSecret))
-
 	// Verify webhook secret is configured
 	if stripeConfig.WebhookSecret == "" {
 		h.logger.Errorw("webhook secret not configured for Stripe connection",
