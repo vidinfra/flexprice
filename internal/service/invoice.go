@@ -764,7 +764,7 @@ func (s *invoiceService) syncInvoiceToStripeIfEnabled(ctx context.Context, inv *
 	}
 
 	// Check if invoice sync is enabled for this connection
-	if !conn.IsInvoiceSyncEnabled() {
+	if !conn.IsInvoiceOutboundEnabled() {
 		s.Logger.Debugw("invoice sync disabled for Stripe connection, skipping invoice sync",
 			"invoice_id", inv.ID,
 			"connection_id", conn.ID)
