@@ -81,11 +81,11 @@ func (h *Handler) HandleWebhookEvent(ctx context.Context, event *stripeapi.Event
 		return h.handleProductUpdated(ctx, event, environmentID, services)
 	case string(types.WebhookEventTypeProductDeleted):
 		return h.handleProductDeleted(ctx, event, environmentID, services)
-	case string(types.WebhookEventSubscriptionCreated):
+	case string(types.WebhookEventTypeSubscriptionCreated):
 		return h.handleSubscriptionCreated(ctx, event, environmentID, services)
-	case string(types.WebhookEventSubscriptionUpdated):
+	case string(types.WebhookEventTypeSubscriptionUpdated):
 		return h.handleSubscriptionUpdated(ctx, event, environmentID, services)
-	case string(types.WebhookEventSubscriptionCancelled):
+	case string(types.WebhookEventTypeSubscriptionDeleted):
 		return h.handleSubscriptionCancellation(ctx, event, environmentID, services)
 
 	default:
