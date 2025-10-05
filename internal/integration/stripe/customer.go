@@ -242,8 +242,40 @@ func (s *CustomerService) CreateCustomerFromStripe(ctx context.Context, stripeCu
 		createReq.AddressCountry = stripeCustomer.Address.Country
 	}
 
-	_, err := customerService.CreateCustomer(ctx, createReq)
-	return err
+	customerResp, err := customerService.CreateCustomer(ctx, createReq)
+	if err != nil {
+		return err
+	}
+
+	// Create entity mapping if repository is available
+	if s.entityIntegrationMappingRepo != nil {
+		mapping := &entityintegrationmapping.EntityIntegrationMapping{
+			ID:               types.GenerateUUIDWithPrefix(types.UUID_PREFIX_ENTITY_INTEGRATION_MAPPING),
+			EntityID:         customerResp.ID,
+			EntityType:       types.IntegrationEntityTypeCustomer,
+			ProviderType:     string(types.SecretProviderStripe),
+			ProviderEntityID: stripeCustomer.ID,
+			Metadata: map[string]interface{}{
+				"created_via":           "provider_to_flexprice",
+				"stripe_customer_email": stripeCustomer.Email,
+				"stripe_customer_name":  stripeCustomer.Name,
+				"synced_at":             time.Now().UTC().Format(time.RFC3339),
+			},
+			EnvironmentID: types.GetEnvironmentID(ctx),
+			BaseModel:     types.GetDefaultBaseModel(ctx),
+		}
+
+		err = s.entityIntegrationMappingRepo.Create(ctx, mapping)
+		if err != nil {
+			s.logger.Warnw("failed to create entity mapping for customer",
+				"error", err,
+				"customer_id", customerResp.ID,
+				"stripe_customer_id", stripeCustomer.ID)
+			// Don't fail the entire operation if entity mapping creation fails
+		}
+	}
+
+	return nil
 }
 
 // GetDefaultPaymentMethod gets the default payment method for a customer

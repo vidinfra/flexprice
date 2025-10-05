@@ -326,19 +326,21 @@ func (s *InvoiceSyncService) finalizeStripeInvoice(ctx context.Context, stripeIn
 		"status", finalizedInvoice.Status,
 		"total", finalizedInvoice.Total)
 
-	s.logger.Infow("sending invoice to customer via Stripe",
-		"stripe_invoice_id", stripeInvoiceID,
-		"collection_method", collectionMethod)
+	if collectionMethod == types.CollectionMethodSendInvoice {
+		s.logger.Infow("sending invoice to customer via Stripe",
+			"stripe_invoice_id", stripeInvoiceID,
+			"collection_method", collectionMethod)
 
-	_, err = stripeClient.V1Invoices.SendInvoice(ctx, stripeInvoiceID, &stripe.InvoiceSendInvoiceParams{})
-	if err != nil {
-		s.logger.Errorw("failed to send Stripe invoice",
-			"error", err,
-			"stripe_invoice_id", stripeInvoiceID)
-		// Don't fail the entire sync if sending fails, just log the error
-	} else {
-		s.logger.Infow("successfully sent Stripe invoice to customer",
-			"stripe_invoice_id", stripeInvoiceID)
+		_, err = stripeClient.V1Invoices.SendInvoice(ctx, stripeInvoiceID, &stripe.InvoiceSendInvoiceParams{})
+		if err != nil {
+			s.logger.Errorw("failed to send Stripe invoice",
+				"error", err,
+				"stripe_invoice_id", stripeInvoiceID)
+			// Don't fail the entire sync if sending fails, just log the error
+		} else {
+			s.logger.Infow("successfully sent Stripe invoice to customer",
+				"stripe_invoice_id", stripeInvoiceID)
+		}
 	}
 
 	return finalizedInvoice, nil
