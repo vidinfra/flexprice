@@ -599,7 +599,6 @@ func (h *Handler) attachPaymentToStripeInvoiceAndReconcile(ctx context.Context, 
 			"flexprice_invoice_id", payment.DestinationID,
 			"payment_id", payment.ID,
 			"error", err)
-		return
 	}
 
 	h.logger.Infow("attempting to attach payment to Stripe invoice",
@@ -616,10 +615,10 @@ func (h *Handler) attachPaymentToStripeInvoiceAndReconcile(ctx context.Context, 
 		return
 	}
 
-	if paymentIntent.ID != "" {
+	if stripeInvoiceID != "" {
 		err = h.paymentSvc.AttachPaymentToStripeInvoice(ctx, stripeClient, paymentIntent.ID, stripeInvoiceID)
 	} else {
-		h.logger.Warnw("no payment method found in payment intent, skipping Stripe invoice attachment",
+		h.logger.Warnw("no Stripe invoice ID found, skipping Stripe invoice attachment",
 			"payment_intent_id", paymentIntent.ID,
 			"stripe_invoice_id", stripeInvoiceID)
 		err = nil
