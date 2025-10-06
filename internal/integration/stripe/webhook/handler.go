@@ -1032,7 +1032,7 @@ func (h *Handler) handleSubscriptionUpdated(ctx context.Context, event *stripeap
 	}
 
 	h.logger.Infow("received customer.subscription.updated webhook",
-		"product_id", subscription.ID,
+		"subscription_id", subscription.ID,
 		"environment_id", environmentID,
 		"event_id", event.ID,
 		"event_type", event.Type,
