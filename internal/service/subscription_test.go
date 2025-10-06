@@ -1336,7 +1336,7 @@ func (s *SubscriptionServiceSuite) TestCancelSubscription() {
 			Currency:           "usd",
 			EntityType:         types.PRICE_ENTITY_TYPE_PLAN,
 			EntityID:           s.testData.plan.ID,
-			Type:               types.PRICE_TYPE_USAGE, // Changed from FIXED to USAGE
+			Type:               types.PRICE_TYPE_FIXED,
 			BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
 			BillingPeriodCount: 1,
 			BillingModel:       types.BILLING_MODEL_FLAT_FEE,
@@ -1437,7 +1437,7 @@ func (s *SubscriptionServiceSuite) TestCancelSubscription() {
 			Currency:           "usd",
 			EntityType:         types.PRICE_ENTITY_TYPE_PLAN,
 			EntityID:           s.testData.plan.ID,
-			Type:               types.PRICE_TYPE_USAGE, // Changed from FIXED to USAGE
+			Type:               types.PRICE_TYPE_FIXED,
 			BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
 			BillingPeriodCount: 1,
 			BillingModel:       types.BILLING_MODEL_FLAT_FEE,
@@ -1540,7 +1540,7 @@ func (s *SubscriptionServiceSuite) TestCancelSubscription() {
 			Currency:           "usd",
 			EntityType:         types.PRICE_ENTITY_TYPE_PLAN,
 			EntityID:           s.testData.plan.ID,
-			Type:               types.PRICE_TYPE_USAGE, // Changed from FIXED to USAGE
+			Type:               types.PRICE_TYPE_FIXED,
 			BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
 			BillingPeriodCount: 1,
 			BillingModel:       types.BILLING_MODEL_FLAT_FEE,
@@ -2093,7 +2093,7 @@ func (s *SubscriptionServiceSuite) TestCancelSubscription() {
 			Currency:           "usd",
 			EntityType:         types.PRICE_ENTITY_TYPE_PLAN,
 			EntityID:           s.testData.plan.ID,
-			Type:               types.PRICE_TYPE_USAGE, // Changed from FIXED to USAGE
+			Type:               types.PRICE_TYPE_FIXED,
 			BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
 			BillingPeriodCount: 1,
 			BillingModel:       types.BILLING_MODEL_FLAT_FEE,
@@ -2428,7 +2428,7 @@ func (s *SubscriptionServiceSuite) TestCancelSubscription() {
 				Currency:           "usd",
 				EntityType:         types.PRICE_ENTITY_TYPE_PLAN,
 				EntityID:           s.testData.plan.ID,
-				Type:               types.PRICE_TYPE_USAGE, // Changed from FIXED to USAGE
+				Type:               types.PRICE_TYPE_FIXED,
 				BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
 				BillingPeriodCount: 1,
 				BillingModel:       types.BILLING_MODEL_FLAT_FEE,
@@ -2443,7 +2443,7 @@ func (s *SubscriptionServiceSuite) TestCancelSubscription() {
 				Currency:           "usd",
 				EntityType:         types.PRICE_ENTITY_TYPE_PLAN,
 				EntityID:           s.testData.plan.ID,
-				Type:               types.PRICE_TYPE_USAGE, // Changed from FIXED to USAGE
+				Type:               types.PRICE_TYPE_FIXED,
 				BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
 				BillingPeriodCount: 1,
 				BillingModel:       types.BILLING_MODEL_FLAT_FEE,
@@ -2797,7 +2797,7 @@ func (s *SubscriptionServiceSuite) TestCancelSubscription() {
 			Currency:           "usd",
 			EntityType:         types.PRICE_ENTITY_TYPE_PLAN,
 			EntityID:           s.testData.plan.ID,
-			Type:               types.PRICE_TYPE_USAGE, // Changed from FIXED to USAGE
+			Type:               types.PRICE_TYPE_FIXED,
 			BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
 			BillingPeriodCount: 1,
 			BillingModel:       types.BILLING_MODEL_FLAT_FEE,
