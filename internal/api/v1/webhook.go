@@ -9,6 +9,7 @@ import (
 	"github.com/flexprice/flexprice/internal/integration/stripe/webhook"
 	"github.com/flexprice/flexprice/internal/interfaces"
 	"github.com/flexprice/flexprice/internal/logger"
+	"github.com/flexprice/flexprice/internal/postgres"
 	"github.com/flexprice/flexprice/internal/svix"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/gin-gonic/gin"
@@ -26,6 +27,7 @@ type WebhookHandler struct {
 	planService                     interfaces.PlanService
 	subscriptionService             interfaces.SubscriptionService
 	entityIntegrationMappingService interfaces.EntityIntegrationMappingService
+	db                              postgres.IClient
 }
 
 // NewWebhookHandler creates a new webhook handler
@@ -40,6 +42,7 @@ func NewWebhookHandler(
 	planService interfaces.PlanService,
 	subscriptionService interfaces.SubscriptionService,
 	entityIntegrationMappingService interfaces.EntityIntegrationMappingService,
+	db postgres.IClient,
 ) *WebhookHandler {
 	return &WebhookHandler{
 		config:                          cfg,
@@ -52,6 +55,7 @@ func NewWebhookHandler(
 		planService:                     planService,
 		subscriptionService:             subscriptionService,
 		entityIntegrationMappingService: entityIntegrationMappingService,
+		db:                              db,
 	}
 }
 
@@ -207,6 +211,7 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 		PlanService:                     h.planService,
 		SubscriptionService:             h.subscriptionService,
 		EntityIntegrationMappingService: h.entityIntegrationMappingService,
+		DB:                              h.db,
 	}
 
 	// Handle the webhook event using new integration

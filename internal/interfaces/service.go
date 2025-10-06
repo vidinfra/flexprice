@@ -6,6 +6,7 @@ import (
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/addonassociation"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
+	"github.com/flexprice/flexprice/internal/postgres"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/shopspring/decimal"
 )
@@ -111,4 +112,5 @@ type ServiceDependencies struct {
 	PlanService                     PlanService
 	SubscriptionService             SubscriptionService
 	EntityIntegrationMappingService EntityIntegrationMappingService
+	DB                              postgres.IClient
 }
