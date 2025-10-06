@@ -222,7 +222,7 @@ func (r *CreateSubscriptionRequest) Validate() error {
 			// Convert to charge_automatically + allow_incomplete for backward compatibility
 			chargeAutomaticallyMethod := types.CollectionMethodChargeAutomatically
 			r.CollectionMethod = &chargeAutomaticallyMethod
-			if r.PaymentBehavior == nil {
+			if r.PaymentBehavior == nil || *r.PaymentBehavior == types.PaymentBehaviorDefaultIncomplete {
 				allowIncomplete := types.PaymentBehaviorAllowIncomplete
 				r.PaymentBehavior = &allowIncomplete
 			}
@@ -579,9 +579,9 @@ func (r *CreateSubscriptionRequest) ToSubscription(ctx context.Context) *subscri
 
 	// Handle legacy default_incomplete collection method conversion
 	if r.CollectionMethod != nil && string(*r.CollectionMethod) == "default_incomplete" {
-		// Convert legacy default_incomplete collection method to send_invoice + default_incomplete
-		collectionMethod = types.CollectionMethodSendInvoice
-		paymentBehavior = types.PaymentBehaviorDefaultIncomplete
+		// Convert legacy default_incomplete collection method to charge_automatically + allow_incomplete
+		collectionMethod = types.CollectionMethodChargeAutomatically
+		paymentBehavior = types.PaymentBehaviorAllowIncomplete
 	} else {
 		// Normal flow - use provided values or defaults
 		if r.CollectionMethod != nil {
@@ -590,12 +590,6 @@ func (r *CreateSubscriptionRequest) ToSubscription(ctx context.Context) *subscri
 		if r.PaymentBehavior != nil {
 			paymentBehavior = *r.PaymentBehavior
 		}
-	}
-
-	// Validate collection method and payment behavior combination
-	if err := r.validatePaymentBehaviorForCollectionMethod(collectionMethod, paymentBehavior); err != nil {
-		// This validation will be caught in the main Validate() method
-		// We don't fail here to allow the conversion to happen first
 	}
 
 	// Set initial status based on payment behavior

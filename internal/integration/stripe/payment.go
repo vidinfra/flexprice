@@ -224,7 +224,7 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *dto.CreateS
 		"environment_id":       req.EnvironmentID,
 		"payment_source":       "flexprice",
 		"payment_type":         "checkout",
-		"flexprice_payment_id": req.InvoiceID,
+		"flexprice_payment_id": req.PaymentID,
 	}
 
 	// Try to get Stripe invoice ID for attachment tracking
@@ -1099,6 +1099,7 @@ func (s *PaymentService) PaymentExistsByGatewayPaymentID(ctx context.Context, ga
 		limit := 1
 		filter.QueryFilter.Limit = &limit
 	}
+	filter.GatewayPaymentID = &gatewayPaymentID
 
 	payments, err := s.paymentRepo.List(ctx, filter)
 	if err != nil {

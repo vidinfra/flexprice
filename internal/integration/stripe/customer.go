@@ -293,8 +293,35 @@ func (s *CustomerService) GetDefaultPaymentMethod(ctx context.Context, customerI
 	}
 	ourCustomer := ourCustomerResp.Customer
 
-	stripeCustomerID, exists := ourCustomer.Metadata["stripe_customer_id"]
-	if !exists || stripeCustomerID == "" {
+	stripeCustomerID := ""
+	if ourCustomer.Metadata != nil {
+		stripeCustomerID = ourCustomer.Metadata["stripe_customer_id"]
+	}
+	if stripeCustomerID == "" && s.entityIntegrationMappingRepo != nil {
+		filter := &types.EntityIntegrationMappingFilter{
+			EntityID:      customerID,
+			EntityType:    types.IntegrationEntityTypeCustomer,
+			ProviderTypes: []string{string(types.SecretProviderStripe)},
+		}
+		mappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
+		if err == nil && len(mappings) > 0 {
+			stripeCustomerID = mappings[0].ProviderEntityID
+			updateReq := dto.UpdateCustomerRequest{
+				Metadata: s.mergeCustomerMetadata(
+					ourCustomer.Metadata,
+					map[string]string{"stripe_customer_id": stripeCustomerID},
+				),
+			}
+			if _, err := customerService.UpdateCustomer(ctx, ourCustomer.ID, updateReq); err != nil {
+				s.logger.Warnw("failed to backfill stripe_customer_id metadata",
+					"customer_id", customerID,
+					"error", err)
+			} else {
+				ourCustomer.Metadata = updateReq.Metadata
+			}
+		}
+	}
+	if stripeCustomerID == "" {
 		return nil, ierr.NewError("customer not found in Stripe").
 			WithHint("Customer must have a Stripe account").
 			Mark(ierr.ErrNotFound)
@@ -498,6 +525,39 @@ func (s *CustomerService) HasCustomerStripeMapping(ctx context.Context, customer
 		return false
 	}
 
-	stripeCustomerID, exists := customerResp.Customer.Metadata["stripe_customer_id"]
-	return exists && stripeCustomerID != ""
+	if customerResp.Customer.Metadata != nil {
+		if stripeCustomerID := customerResp.Customer.Metadata["stripe_customer_id"]; stripeCustomerID != "" {
+			return true
+		}
+	}
+	if s.entityIntegrationMappingRepo == nil {
+		return false
+	}
+
+	filter := &types.EntityIntegrationMappingFilter{
+		EntityID:      customerID,
+		EntityType:    types.IntegrationEntityTypeCustomer,
+		ProviderTypes: []string{string(types.SecretProviderStripe)},
+	}
+	mappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
+	if err != nil || len(mappings) == 0 {
+		return false
+	}
+
+	stripeCustomerID := mappings[0].ProviderEntityID
+	updateReq := dto.UpdateCustomerRequest{
+		Metadata: s.mergeCustomerMetadata(
+			customerResp.Customer.Metadata,
+			map[string]string{"stripe_customer_id": stripeCustomerID},
+		),
+	}
+	if _, err := customerService.UpdateCustomer(ctx, customerResp.Customer.ID, updateReq); err != nil {
+		s.logger.Warnw("failed to backfill stripe_customer_id metadata",
+			"customer_id", customerID,
+			"error", err)
+	} else {
+		customerResp.Customer.Metadata = updateReq.Metadata
+	}
+
+	return true
 }

@@ -330,7 +330,6 @@ func (h *Handler) handleFlexPriceCheckoutPayment(ctx context.Context, paymentInt
 	updateReq := dto.UpdatePaymentRequest{
 		PaymentStatus:    &paymentStatus,
 		GatewayPaymentID: &paymentIntent.ID,
-		PaymentMethodID:  &paymentMethodID,
 	}
 
 	if paymentMethodID != "" {
