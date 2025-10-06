@@ -76,13 +76,8 @@ func (s *stripeSubscriptionService) CreateSubscription(ctx context.Context, stri
 
 	subscriptionService := services.SubscriptionService
 	entityMappingService := services.EntityIntegrationMappingService
-	// Step 1: Fetch Stripe subscription data
-	stripeSubscription, err := s.fetchStripeSubscription(ctx, stripeSubscriptionID)
-	if err != nil {
-		return nil, err
-	}
 
-	// Step 2: Check if the mapping with the stripe subscription id exists
+	// Step 1: Check if the mapping with the stripe subscription id exists
 	filter := &types.EntityIntegrationMappingFilter{
 		EntityType:        types.IntegrationEntityTypeSubscription,
 		ProviderTypes:     []string{"stripe"},
@@ -102,6 +97,11 @@ func (s *stripeSubscriptionService) CreateSubscription(ctx context.Context, stri
 		return subscriptionService.GetSubscription(ctx, existingMapping.EntityID)
 	}
 
+	// Step 2: Fetch Stripe subscription data
+	stripeSubscription, err := s.fetchStripeSubscription(ctx, stripeSubscriptionID)
+	if err != nil {
+		return nil, err
+	}
 	// Step 3: Create or find customer
 	customerID, err := s.createOrFindCustomer(ctx, stripeSubscription, services)
 	if err != nil {
@@ -129,6 +129,7 @@ func (s *stripeSubscriptionService) CreateSubscription(ctx context.Context, stri
 		Metadata: map[string]interface{}{
 			"created_via":            "stripe_subscription_service",
 			"stripe_subscription_id": stripeSubscriptionID,
+			"mapping_type":           "proxy",
 			"synced_at":              time.Now().UTC().Format(time.RFC3339),
 		},
 	})
@@ -215,12 +216,6 @@ func (s *stripeSubscriptionService) CancelSubscription(ctx context.Context, stri
 			CancellationType: types.CancellationTypeImmediate,
 			Reason:           "Customer cancelled subscription",
 		})
-		if err != nil {
-			return err
-		}
-
-		// STEP 4: Delete the entity mapping
-		err = services.EntityIntegrationMappingService.DeleteEntityIntegrationMapping(ctx, existingMapping.ID)
 		if err != nil {
 			return err
 		}
@@ -703,7 +698,7 @@ func (s *stripeSubscriptionService) mapStripeStatusToFlexPrice(stripeStatus stri
 	case stripe.SubscriptionStatusIncompleteExpired:
 		return types.SubscriptionStatusCancelled
 	case stripe.SubscriptionStatusTrialing:
-		return types.SubscriptionStatusTrialing
+		return types.SubscriptionStatusActive
 	case stripe.SubscriptionStatusPastDue:
 		return types.SubscriptionStatusActive // Or create a past_due status if needed
 	case stripe.SubscriptionStatusUnpaid:
