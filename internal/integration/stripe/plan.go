@@ -36,6 +36,11 @@ func NewStripePlanService(client *Client, logger *logger.Logger) *stripePlanServ
 func (s *stripePlanService) fetchStripeProduct(ctx context.Context, productID string) (*stripe.Product, error) {
 
 	stripeClient, _, err := s.client.GetStripeClient(ctx)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get Stripe client").
+			Mark(ierr.ErrSystem)
+	}
 
 	// Retrieve the product from Stripe
 	product, err := stripeClient.V1Products.Retrieve(ctx, productID, nil)
