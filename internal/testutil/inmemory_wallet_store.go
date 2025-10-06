@@ -558,3 +558,9 @@ func (s *InMemoryWalletStore) GetWalletsByFilter(ctx context.Context, filter *ty
 	}
 	return wallets, nil
 }
+
+// HasTopup checks if a wallet has a topup
+func (s *InMemoryWalletStore) HasTopupForPayment(ctx context.Context, paymentID string) (bool, error) {
+	// TODO: Implement this
+	return false, nil
+}

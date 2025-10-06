@@ -81,7 +81,10 @@ type WalletService interface {
 	TopUpWalletForProratedCharge(ctx context.Context, customerID string, amount decimal.Decimal, currency string) error
 
 	// TopUpWalletForPayment tops up a wallet for payment
-	TopUpWalletForPayment(ctx context.Context, customerID string, amount decimal.Decimal, currency string) error
+	TopUpWalletForPayment(ctx context.Context, customerID string, paymentID string, amount decimal.Decimal, currency string) error
+
+	// HasTopupForPayment checks if a wallet has a topup for a payment
+	HasTopupForPayment(ctx context.Context, paymentID string) (bool, error)
 }
 
 type walletService struct {
@@ -1459,7 +1462,7 @@ func (s *walletService) TopUpWalletForProratedCharge(ctx context.Context, custom
 	return nil
 }
 
-func (s *walletService) TopUpWalletForPayment(ctx context.Context, customerID string, amount decimal.Decimal, currency string) error {
+func (s *walletService) TopUpWalletForPayment(ctx context.Context, customerID string, paymentID string, amount decimal.Decimal, currency string) error {
 	if customerID == "" {
 		return ierr.NewError("customer_id is required").
 			WithHint("Customer ID is required for wallet top-up").
@@ -1550,7 +1553,8 @@ func (s *walletService) TopUpWalletForPayment(ctx context.Context, customerID st
 			"source":      "payment",
 			"customer_id": customerID,
 		},
-		IdempotencyKey: lo.ToPtr(fmt.Sprintf("payment_%s_%s", customerID, time.Now().Format("20060102150405"))),
+		// IdempotencyKey: lo.ToPtr(fmt.Sprintf("payment_%s_%s", customerID, time.Now().Format("20060102150405"))),
+		IdempotencyKey: lo.ToPtr(paymentID),
 	}
 
 	_, err = s.TopUpWallet(ctx, selectedWallet.ID, topUpReq)
@@ -1572,6 +1576,19 @@ func (s *walletService) TopUpWalletForPayment(ctx context.Context, customerID st
 		"currency", currency)
 
 	return nil
+}
+
+func (s *walletService) HasTopupForPayment(ctx context.Context, paymentID string) (bool, error) {
+	hasTopup, err := s.WalletRepo.HasTopupForPayment(ctx, paymentID)
+	if err != nil {
+		return false, ierr.WithError(err).
+			WithHint("Failed to check if the payment has topup").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id": paymentID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	return hasTopup, nil
 }
 
 func (s *walletService) GetWalletBalanceV2(ctx context.Context, walletID string) (*dto.WalletBalanceResponse, error) {

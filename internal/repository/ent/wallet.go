@@ -506,6 +506,36 @@ func (r *walletRepository) ListWalletTransactions(ctx context.Context, f *types.
 	return walletdomain.TransactionListFromEnt(transactions), nil
 }
 
+// HasTopup
+func (r *walletRepository) HasTopupForPayment(ctx context.Context, paymentID string) (bool, error) {
+	// Start a span for this repository operation
+	span := StartRepositorySpan(ctx, "wallet", "has_topup", map[string]interface{}{
+		"payment_id": paymentID,
+	})
+	defer FinishSpan(span)
+
+	client := r.client.Querier(ctx)
+	count, err := client.WalletTransaction.Query().
+		Where(
+			wallettransaction.Type(string(types.TransactionTypeCredit)),
+			wallettransaction.StatusEQ(string(types.StatusPublished)),
+			wallettransaction.EnvironmentID(types.GetEnvironmentID(ctx)),
+			wallettransaction.ReferenceIDEQ(paymentID),
+		).
+		Count(ctx)
+
+	if err != nil {
+		return false, ierr.WithError(err).
+			WithHint("Failed to check if the payment has topup").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id": paymentID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	return count > 0, nil
+}
+
 func (r *walletRepository) ListAllWalletTransactions(ctx context.Context, f *types.WalletTransactionFilter) ([]*walletdomain.Transaction, error) {
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "wallet", "list_all_wallet_transactions", map[string]interface{}{

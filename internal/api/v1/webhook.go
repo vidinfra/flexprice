@@ -826,9 +826,20 @@ func (h *WebhookHandler) topUpWallet(c *gin.Context, payment *dto.PaymentRespons
 
 	walletService := service.NewWalletService(h.stripeService.ServiceParams)
 
+	hasTopup, err := walletService.HasTopupForPayment(c.Request.Context(), payment.ID)
+	if err != nil {
+		h.logger.Errorw("failed to check if the payment has topup", "error", err, "payment_id", payment.ID)
+		return
+	}
+	if hasTopup {
+		h.logger.Infow("wallet already has topup for payment, skipping duplicate topup", "payment_id", payment.ID)
+		return
+	}
+
 	err = walletService.TopUpWalletForPayment(
 		c.Request.Context(),
 		customerID,
+		payment.ID,
 		payment.Amount,
 		payment.Currency,
 	)
