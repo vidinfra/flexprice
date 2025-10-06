@@ -632,6 +632,7 @@ func (p *paymentProcessor) handleCardPayment(ctx context.Context, paymentObj *pa
 		Amount:          paymentObj.Amount,
 		Currency:        paymentObj.Currency,
 		InvoiceID:       paymentObj.DestinationID,
+		PaymentID:       paymentObj.ID,
 	}
 
 	// Create service instances for charging
