@@ -219,12 +219,12 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *dto.CreateS
 
 	// Build metadata for the session
 	metadata := map[string]string{
-		"invoice_id":           req.InvoiceID,
+		"flexprice_invoice_id": req.InvoiceID,
 		"customer_id":          req.CustomerID,
 		"environment_id":       req.EnvironmentID,
 		"payment_source":       "flexprice",
 		"payment_type":         "checkout",
-		"flexprice_payment_id": req.InvoiceID,
+		"flexprice_payment_id": req.PaymentID,
 	}
 
 	// Try to get Stripe invoice ID for attachment tracking
@@ -1099,6 +1099,7 @@ func (s *PaymentService) PaymentExistsByGatewayPaymentID(ctx context.Context, ga
 		limit := 1
 		filter.QueryFilter.Limit = &limit
 	}
+	filter.GatewayPaymentID = &gatewayPaymentID
 
 	payments, err := s.paymentRepo.List(ctx, filter)
 	if err != nil {
@@ -1174,9 +1175,11 @@ func (s *PaymentService) SetupIntent(ctx context.Context, customerID string, req
 		"usage":          usage,
 	}
 
-	// Add custom metadata if provided
+	// Add custom metadata if provided (exclude internal connection fields)
 	for k, v := range req.Metadata {
-		metadata[k] = v
+		if k != "connection_id" && k != "connection_name" {
+			metadata[k] = v
+		}
 	}
 
 	// Add set_default flag to metadata if requested

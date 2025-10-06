@@ -239,9 +239,14 @@ func (p *paymentProcessor) handlePaymentLinkCreation(ctx context.Context, paymen
 	}
 
 	// Prepare metadata for payment link request
-	linkMetadata := paymentObj.Metadata
-	if linkMetadata == nil {
-		linkMetadata = types.Metadata{}
+	linkMetadata := types.Metadata{}
+	if paymentObj.Metadata != nil {
+		// Copy metadata but exclude connection-related fields (internal use only)
+		for k, v := range paymentObj.Metadata {
+			if k != "connection_id" && k != "connection_name" {
+				linkMetadata[k] = v
+			}
+		}
 	}
 
 	// Add FlexPrice payment ID to metadata for new payment_intent.succeeded webhook
