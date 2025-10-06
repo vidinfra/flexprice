@@ -30,11 +30,6 @@ func NewStripeSubscriptionService(client *Client, logger *logger.Logger) *stripe
 	}
 }
 
-// TODOS:
-/*
-	1. Handle Billing Cycle Conversion (Stripe dont have any billing cycle conversion, so we need to handle it)
-*/
-
 // fetchStripeSubscription retrieves a subscription from Stripe
 func (s *stripeSubscriptionService) fetchStripeSubscription(ctx context.Context, subscriptionID string) (*stripe.Subscription, error) {
 
@@ -186,7 +181,7 @@ func (s *stripeSubscriptionService) UpdateSubscription(ctx context.Context, stri
 	if planChange {
 		return s.handlePlanChange(ctx, existingSubscription, stripeSubscription, services)
 	} else {
-		return s.handleNormalChange(existingSubscription, stripeSubscription)
+		return s.handleNormalChange(ctx, existingSubscription, stripeSubscription, services)
 	}
 }
 
@@ -205,7 +200,7 @@ func (s *stripeSubscriptionService) CancelSubscription(ctx context.Context, stri
 			Mark(ierr.ErrInternal)
 	}
 
-	// If mapping exists, return the existing subscription
+	// If mapping exists, cancel the subscription
 	if len(existingMappings.Items) > 0 {
 		existingMapping := existingMappings.Items[0]
 
@@ -219,7 +214,14 @@ func (s *stripeSubscriptionService) CancelSubscription(ctx context.Context, stri
 		}
 
 	}
-	return nil, nil
+
+	// If no mapping exists, return an error indicating subscription not found
+	return nil, ierr.NewError("subscription not found in FlexPrice").
+		WithHint("No FlexPrice subscription found for the given Stripe subscription ID").
+		WithReportableDetails(map[string]interface{}{
+			"stripe_subscription_id": stripeSubscriptionID,
+		}).
+		Mark(ierr.ErrNotFound)
 }
 
 // createOrFindCustomer creates or finds a customer based on Stripe subscription data
@@ -457,23 +459,24 @@ func (s *stripeSubscriptionService) createFlexPriceSubscription(ctx context.Cont
 
 	// Set end date if subscription is canceled
 	var endDate *time.Time
-	if stripeSub.CanceledAt != 0 {
-		endDateTime := time.Unix(stripeSub.CanceledAt, 0).UTC()
+	if stripeSub.CancelAt != 0 {
+		endDateTime := time.Unix(stripeSub.CancelAt, 0).UTC()
 		endDate = &endDateTime
 	}
 
 	createReq := dto.CreateSubscriptionRequest{
-		CustomerID:     customerID,
-		PlanID:         planID,
-		Currency:       strings.ToUpper(string(stripeSub.Currency)),
-		LookupKey:      stripeSub.ID,
-		StartDate:      &startDate,
-		EndDate:        endDate,
-		TrialStart:     trialStart,
-		TrialEnd:       trialEnd,
-		BillingCadence: types.BILLING_CADENCE_RECURRING,
-		BillingPeriod:  billingPeriod,
-		BillingCycle:   billingCycle,
+		CustomerID:         customerID,
+		PlanID:             planID,
+		Currency:           strings.ToUpper(string(stripeSub.Currency)),
+		LookupKey:          stripeSub.ID,
+		StartDate:          &startDate,
+		EndDate:            endDate,
+		TrialStart:         trialStart,
+		TrialEnd:           trialEnd,
+		BillingCadence:     types.BILLING_CADENCE_RECURRING,
+		BillingPeriod:      billingPeriod,
+		BillingCycle:       billingCycle,
+		BillingPeriodCount: 1,
 		Metadata: map[string]string{
 			"stripe_subscription_id": stripeSub.ID,
 			"source":                 "stripe",
@@ -506,7 +509,7 @@ func (s *stripeSubscriptionService) isPlanChange(ctx context.Context, existingSu
 
 	existingPlanID := existingPlanMapping.Items[0].ProviderEntityID
 
-	if existingPlanID != stripeSubscription.Items.Data[0].Plan.ID {
+	if existingPlanID != stripeSubscription.Items.Data[0].Plan.Product.ID {
 		return true, nil
 	}
 
@@ -631,18 +634,10 @@ func (s *stripeSubscriptionService) handlePlanChange(ctx context.Context, existi
 	return nil
 }
 
-func (s *stripeSubscriptionService) handleNormalChange(existingSubscription *dto.SubscriptionResponse, stripeSubscription *stripe.Subscription) error {
+func (s *stripeSubscriptionService) handleNormalChange(ctx context.Context, existingSubscription *dto.SubscriptionResponse, stripeSubscription *stripe.Subscription, services *ServiceDependencies) error {
 	s.logger.Infow("handling normal subscription change",
 		"existing_subscription_id", existingSubscription.ID,
 		"stripe_subscription_id", stripeSubscription.ID)
-
-	// For normal changes (non-plan changes), we update subscription fields that can change
-	// without affecting the plan, such as:
-	// - Trial dates
-	// - Subscription status
-	// - Metadata
-	// - Billing dates (if billing cycle changes)
-	// - Customer information (handled separately)
 
 	// Prepare update request with fields that can change
 	updateReq := dto.UpdateSubscriptionRequest{
@@ -650,18 +645,13 @@ func (s *stripeSubscriptionService) handleNormalChange(existingSubscription *dto
 	}
 
 	// Handle cancellation dates if subscription is cancelled in Stripe
-	if stripeSubscription.CanceledAt != 0 {
-		cancelAt := time.Unix(stripeSubscription.CanceledAt, 0).UTC()
+	if stripeSubscription.CancelAt != 0 {
+		cancelAt := time.Unix(stripeSubscription.CancelAt, 0).UTC()
 		updateReq.CancelAt = &cancelAt
 		updateReq.CancelAtPeriodEnd = stripeSubscription.CancelAtPeriodEnd
 	}
 
-	// Update the subscription using the subscription service
-	// Note: We're using a basic update here. In a more sophisticated implementation,
-	// you might want to create a more comprehensive update method that handles
-	// trial dates, metadata, and other fields.
-
-	// For now, we'll log the changes that would be made
+	// Log the changes that will be made
 	s.logger.Infow("subscription changes detected",
 		"subscription_id", existingSubscription.ID,
 		"stripe_status", stripeSubscription.Status,
@@ -669,8 +659,19 @@ func (s *stripeSubscriptionService) handleNormalChange(existingSubscription *dto
 		"cancel_at", updateReq.CancelAt,
 		"cancel_at_period_end", updateReq.CancelAtPeriodEnd)
 
-	// TODO: Implement actual subscription update when UpdateSubscription method is available
-	// For now, we'll just log that we would update the subscription
+	// Update the subscription using the subscription service
+	_, err := services.SubscriptionService.UpdateSubscription(ctx, existingSubscription.ID, updateReq)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to update subscription with Stripe changes").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_id":        existingSubscription.ID,
+				"stripe_subscription_id": stripeSubscription.ID,
+				"error":                  err.Error(),
+			}).
+			Mark(ierr.ErrInternal)
+	}
+
 	s.logger.Infow("normal subscription change processed successfully",
 		"subscription_id", existingSubscription.ID,
 		"stripe_subscription_id", stripeSubscription.ID)
