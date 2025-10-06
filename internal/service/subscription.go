@@ -656,7 +656,7 @@ func (s *subscriptionService) UpdateSubscription(ctx context.Context, subscripti
 	logger.Info("updating subscription")
 
 	// Get the current subscription
-	subscription, _, err := s.SubRepo.GetWithLineItems(ctx, subscriptionID)
+	subscription, err := s.SubRepo.Get(ctx, subscriptionID)
 	if err != nil {
 		return nil, ierr.WithError(err).
 			WithHint("Failed to retrieve subscription").
