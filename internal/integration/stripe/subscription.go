@@ -165,6 +165,12 @@ func (s *stripeSubscriptionService) UpdateSubscription(ctx context.Context, stri
 	}
 
 	// Step 3: Get the existing mapping
+	if len(existingMappings.Items) == 0 {
+		return ierr.NewError("no existing subscription mapping found").
+			WithHint("Existing subscription mapping not found").
+			Mark(ierr.ErrInternal)
+	}
+
 	existingSubscriptionMapping := existingMappings.Items[0]
 
 	// Step 4: Get the exisitng subcription
