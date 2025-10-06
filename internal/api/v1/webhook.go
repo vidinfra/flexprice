@@ -639,6 +639,10 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(c *gin.Context, event *s
 		}
 	}
 
+	if paymentStatus == string(types.PaymentStatusSucceeded) {
+		h.topUpWallet(c, payment)
+	}
+
 	h.logger.Infow("successfully updated payment status from webhook",
 		"payment_id", payment.ID,
 		"session_id", session.ID,
@@ -808,6 +812,44 @@ func (h *WebhookHandler) handleCheckoutSessionAsyncPaymentSucceeded(c *gin.Conte
 		"status", paymentStatus,
 		"environment_id", environmentID,
 	)
+}
+
+func (h *WebhookHandler) topUpWallet(c *gin.Context, payment *dto.PaymentResponse) {
+	invoiceService := service.NewInvoiceService(h.stripeService.ServiceParams)
+	invoice, err := invoiceService.GetInvoice(c.Request.Context(), payment.DestinationID)
+	if err != nil {
+		h.logger.Errorw("failed to get invoice", "error", err, "invoice_id", payment.DestinationID)
+		return
+	}
+
+	customerID := invoice.CustomerID
+
+	walletService := service.NewWalletService(h.stripeService.ServiceParams)
+
+	hasTopup, err := walletService.HasTopupForPayment(c.Request.Context(), payment.ID)
+	if err != nil {
+		h.logger.Errorw("failed to check if the payment has topup", "error", err, "payment_id", payment.ID)
+		return
+	}
+	if hasTopup {
+		h.logger.Infow("wallet already has topup for payment, skipping duplicate topup", "payment_id", payment.ID)
+		return
+	}
+
+	err = walletService.TopUpWalletForPayment(
+		c.Request.Context(),
+		customerID,
+		payment.ID,
+		payment.Amount,
+		payment.Currency,
+	)
+	if err != nil {
+		h.logger.Errorw("failed to top up wallet for payment", "error", err, "customer_id", customerID)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to top up wallet for payment",
+		})
+		return
+	}
 }
 
 // handleCheckoutSessionAsyncPaymentFailed handles checkout.session.async_payment_failed webhook

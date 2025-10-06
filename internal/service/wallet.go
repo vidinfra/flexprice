@@ -79,6 +79,12 @@ type WalletService interface {
 
 	// TopUpWalletForProratedCharge tops up a wallet for proration credits from subscription changes
 	TopUpWalletForProratedCharge(ctx context.Context, customerID string, amount decimal.Decimal, currency string) error
+
+	// TopUpWalletForPayment tops up a wallet for payment
+	TopUpWalletForPayment(ctx context.Context, customerID string, paymentID string, amount decimal.Decimal, currency string) error
+
+	// HasTopupForPayment checks if a wallet has a topup for a payment
+	HasTopupForPayment(ctx context.Context, paymentID string) (bool, error)
 }
 
 type walletService struct {
@@ -1454,6 +1460,135 @@ func (s *walletService) TopUpWalletForProratedCharge(ctx context.Context, custom
 		"currency", currency)
 
 	return nil
+}
+
+func (s *walletService) TopUpWalletForPayment(ctx context.Context, customerID string, paymentID string, amount decimal.Decimal, currency string) error {
+	if customerID == "" {
+		return ierr.NewError("customer_id is required").
+			WithHint("Customer ID is required for wallet top-up").
+			Mark(ierr.ErrValidation)
+	}
+
+	if amount.LessThanOrEqual(decimal.Zero) {
+		return ierr.NewError("amount must be positive").
+			WithHint("Top-up amount must be greater than zero").
+			Mark(ierr.ErrValidation)
+	}
+
+	if currency == "" {
+		currency = "usd" // Default to USD if no currency provided
+	}
+
+	// Get customer to validate existence
+	_, err := s.CustomerRepo.Get(ctx, customerID)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get customer").
+			WithReportableDetails(map[string]interface{}{
+				"customer_id": customerID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Get existing wallets for the customer
+	existingWallets, err := s.GetWalletsByCustomerID(ctx, customerID)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get existing wallets").
+			WithReportableDetails(map[string]interface{}{
+				"customer_id": customerID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Find or create a suitable wallet for the payment
+
+	var selectedWallet *dto.WalletResponse
+	for _, w := range existingWallets {
+		if w.WalletStatus == types.WalletStatusActive &&
+			types.IsMatchingCurrency(w.Currency, currency) &&
+			w.WalletType == types.WalletTypePrePaid {
+			selectedWallet = w
+			break
+		}
+	}
+
+	// Create a new wallet if none exists
+	if selectedWallet == nil {
+		s.Logger.Infow("creating new wallet for payment",
+			"customer_id", customerID,
+			"currency", currency,
+			"amount", amount.String())
+
+		walletReq := &dto.CreateWalletRequest{
+			Name:           "Prepaid Wallet",
+			CustomerID:     customerID,
+			Currency:       currency,
+			ConversionRate: decimal.NewFromInt(1), // 1:1 conversion rate for credits
+			WalletType:     types.WalletTypePrePaid,
+			Metadata: types.Metadata{
+				"created_for": "payment",
+				"source":      "payment",
+			},
+		}
+
+		selectedWallet, err = s.CreateWallet(ctx, walletReq)
+		if err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to create wallet for payment").
+				WithReportableDetails(map[string]interface{}{
+					"customer_id": customerID,
+					"currency":    currency,
+				}).
+				Mark(ierr.ErrDatabase)
+		}
+	}
+
+	// Top up the wallet with the payment
+	topUpReq := &dto.TopUpWalletRequest{
+		Amount:            amount,
+		TransactionReason: types.TransactionReasonPurchasedCreditDirect,
+		Description:       "Payment from invoice",
+		Metadata: types.Metadata{
+			"source":      "payment",
+			"customer_id": customerID,
+		},
+		// IdempotencyKey: lo.ToPtr(fmt.Sprintf("payment_%s_%s", customerID, time.Now().Format("20060102150405"))),
+		IdempotencyKey: lo.ToPtr(paymentID),
+	}
+
+	_, err = s.TopUpWallet(ctx, selectedWallet.ID, topUpReq)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to top up wallet with payment").
+			WithReportableDetails(map[string]interface{}{
+				"customer_id": customerID,
+				"wallet_id":   selectedWallet.ID,
+				"amount":      amount.String(),
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	s.Logger.Infow("successfully topped up wallet for payment",
+		"customer_id", customerID,
+		"wallet_id", selectedWallet.ID,
+		"amount", amount.String(),
+		"currency", currency)
+
+	return nil
+}
+
+func (s *walletService) HasTopupForPayment(ctx context.Context, paymentID string) (bool, error) {
+	hasTopup, err := s.WalletRepo.HasTopupForPayment(ctx, paymentID)
+	if err != nil {
+		return false, ierr.WithError(err).
+			WithHint("Failed to check if the payment has topup").
+			WithReportableDetails(map[string]interface{}{
+				"payment_id": paymentID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	return hasTopup, nil
 }
 
 func (s *walletService) GetWalletBalanceV2(ctx context.Context, walletID string) (*dto.WalletBalanceResponse, error) {
