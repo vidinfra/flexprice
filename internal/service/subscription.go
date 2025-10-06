@@ -1929,6 +1929,8 @@ func (s *subscriptionService) ValidateAndFilterPricesForSubscription(
 		return nil, err
 	}
 
+	// DEVNOTE: Commented out to allow to create a subscription with no prices
+
 	// if len(pricesResponse.Items) == 0 {
 	// 	return nil, ierr.NewError("no prices found for entity").
 	// 		WithHint("The entity must have at least one price to create a subscription").
