@@ -219,7 +219,7 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *dto.CreateS
 
 	// Build metadata for the session
 	metadata := map[string]string{
-		"invoice_id":           req.InvoiceID,
+		"flexprice_invoice_id": req.InvoiceID,
 		"customer_id":          req.CustomerID,
 		"environment_id":       req.EnvironmentID,
 		"payment_source":       "flexprice",
@@ -1175,9 +1175,11 @@ func (s *PaymentService) SetupIntent(ctx context.Context, customerID string, req
 		"usage":          usage,
 	}
 
-	// Add custom metadata if provided
+	// Add custom metadata if provided (exclude internal connection fields)
 	for k, v := range req.Metadata {
-		metadata[k] = v
+		if k != "connection_id" && k != "connection_name" {
+			metadata[k] = v
+		}
 	}
 
 	// Add set_default flag to metadata if requested
