@@ -15,7 +15,7 @@ import (
 type StripeSubscriptionService interface {
 	CreateSubscription(ctx context.Context, stripeSubscriptionID string, services *ServiceDependencies) (*dto.SubscriptionResponse, error)
 	UpdateSubscription(ctx context.Context, stripeSubscriptionID string, services *ServiceDependencies) error
-	CancelSubscription(ctx context.Context, stripeSubscriptionID string, services *ServiceDependencies) (*dto.SubscriptionResponse, error)
+	CancelSubscription(ctx context.Context, stripeSubscriptionID string, services *ServiceDependencies) error
 }
 
 type stripeSubscriptionService struct {
@@ -191,7 +191,7 @@ func (s *stripeSubscriptionService) UpdateSubscription(ctx context.Context, stri
 	}
 }
 
-func (s *stripeSubscriptionService) CancelSubscription(ctx context.Context, stripeSubscriptionID string, services *ServiceDependencies) (*dto.SubscriptionResponse, error) {
+func (s *stripeSubscriptionService) CancelSubscription(ctx context.Context, stripeSubscriptionID string, services *ServiceDependencies) error {
 
 	filter := &types.EntityIntegrationMappingFilter{
 		EntityType:        types.IntegrationEntityTypeSubscription,
@@ -201,7 +201,7 @@ func (s *stripeSubscriptionService) CancelSubscription(ctx context.Context, stri
 
 	existingMappings, err := services.EntityIntegrationMappingService.GetEntityIntegrationMappings(ctx, filter)
 	if err != nil {
-		return nil, ierr.WithError(err).
+		return ierr.WithError(err).
 			WithHint("Failed to check for existing subscription mapping").
 			Mark(ierr.ErrInternal)
 	}
@@ -216,13 +216,21 @@ func (s *stripeSubscriptionService) CancelSubscription(ctx context.Context, stri
 			Reason:           "Customer cancelled subscription",
 		})
 		if err != nil {
-			return nil, err
+			return err
 		}
+
+		// STEP 4: Delete the entity mapping
+		err = services.EntityIntegrationMappingService.DeleteEntityIntegrationMapping(ctx, existingMapping.ID)
+		if err != nil {
+			return err
+		}
+
+		return nil
 
 	}
 
 	// If no mapping exists, return an error indicating subscription not found
-	return nil, ierr.NewError("subscription not found in FlexPrice").
+	return ierr.NewError("subscription not found in FlexPrice").
 		WithHint("No FlexPrice subscription found for the given Stripe subscription ID").
 		WithReportableDetails(map[string]interface{}{
 			"stripe_subscription_id": stripeSubscriptionID,

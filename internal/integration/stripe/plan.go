@@ -31,7 +31,6 @@ func NewStripePlanService(client *Client, logger *logger.Logger) *stripePlanServ
 	}
 }
 
-// TODO: Plan services
 // fetchStripeProduct retrieves a product from Stripe
 func (s *stripePlanService) fetchStripeProduct(ctx context.Context, productID string) (*stripe.Product, error) {
 

@@ -976,12 +976,12 @@ func (h *Handler) handleSubscriptionCreated(ctx context.Context, event *stripeap
 	var subscription stripeapi.Subscription
 	err = json.Unmarshal(event.Data.Raw, &subscription)
 	if err != nil {
-		h.logger.Errorw("failed to parse product from webhook", "error", err)
+		h.logger.Errorw("failed to parse subscription from webhook", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrValidation)
 	}
 
-	h.logger.Infow("received product.created webhook",
-		"product_id", subscription.ID,
+	h.logger.Infow("received customer.subscription.created webhook",
+		"subscription_id", subscription.ID,
 		"environment_id", environmentID,
 		"event_id", event.ID,
 		"event_type", event.Type,
@@ -990,13 +990,13 @@ func (h *Handler) handleSubscriptionCreated(ctx context.Context, event *stripeap
 	// Create plan in FlexPrice
 	subID := subscription.ID
 
-	plan, err := h.subSvc.CreateSubscription(ctx, subID, services)
+	sub, err := h.subSvc.CreateSubscription(ctx, subID, services)
 	if err != nil {
-		h.logger.Errorw("failed to create plan in FlexPrice", "error", err)
+		h.logger.Errorw("failed to create subscription in FlexPrice", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrSystem)
 	}
 
-	h.logger.Infow("successfully created plan in FlexPrice", "plan_id", plan)
+	h.logger.Infow("successfully created subscription in FlexPrice", "subscription_id", sub.ID)
 
 	return nil
 
@@ -1027,11 +1027,11 @@ func (h *Handler) handleSubscriptionUpdated(ctx context.Context, event *stripeap
 	var subscription stripeapi.Subscription
 	err = json.Unmarshal(event.Data.Raw, &subscription)
 	if err != nil {
-		h.logger.Errorw("failed to parse product from webhook", "error", err)
+		h.logger.Errorw("failed to parse subscription from webhook", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrValidation)
 	}
 
-	h.logger.Infow("received product.updated webhook",
+	h.logger.Infow("received customer.subscription.updated webhook",
 		"product_id", subscription.ID,
 		"environment_id", environmentID,
 		"event_id", event.ID,
@@ -1042,11 +1042,11 @@ func (h *Handler) handleSubscriptionUpdated(ctx context.Context, event *stripeap
 	subscriptionID := subscription.ID
 	err = h.subSvc.UpdateSubscription(ctx, subscriptionID, services)
 	if err != nil {
-		h.logger.Errorw("failed to update plan in FlexPrice", "error", err)
+		h.logger.Errorw("failed to update subscription in FlexPrice", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrSystem)
 	}
 
-	h.logger.Infow("successfully updated plan in FlexPrice", "plan_id", subscriptionID)
+	h.logger.Infow("successfully updated subscription in FlexPrice", "subscription_id", subscriptionID)
 
 	return nil
 }
@@ -1076,21 +1076,21 @@ func (h *Handler) handleSubscriptionCancellation(ctx context.Context, event *str
 	var subscription stripeapi.Subscription
 	err = json.Unmarshal(event.Data.Raw, &subscription)
 	if err != nil {
-		h.logger.Errorw("failed to parse product from webhook", "error", err)
+		h.logger.Errorw("failed to parse subscription from webhook", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrValidation)
 	}
 
-	h.logger.Infow("received product.deleted webhook", "product_id", subscription.ID)
+	h.logger.Infow("received customer.subscription.deleted webhook", "subscription_id", subscription.ID)
 
 	// Delete plan in FlexPrice
 	subID := subscription.ID
-	sub, err := h.subSvc.CancelSubscription(ctx, subID, services)
+	err = h.subSvc.CancelSubscription(ctx, subID, services)
 	if err != nil {
 		h.logger.Errorw("failed to delete plan in FlexPrice", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrSystem)
 	}
 
-	h.logger.Infow("successfully deleted plan in FlexPrice", "plan_id", sub.ID)
+	h.logger.Infow("successfully deleted subscription in FlexPrice", "subscription_id", subID)
 
 	return nil
 }
