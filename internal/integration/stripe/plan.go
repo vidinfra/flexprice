@@ -243,7 +243,14 @@ func (s *stripePlanService) DeletePlan(ctx context.Context, stripeProductID stri
 	// Get the FlexPrice plan ID from the mapping
 	flexPricePlanID := mappings.Items[0].EntityID
 
-	// Delete the entity integration mapping first
+	// Use the regular plan service to delete the FlexPrice plan first
+	if err := services.PlanService.DeletePlan(ctx, flexPricePlanID); err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to delete FlexPrice plan").
+			Mark(ierr.ErrInternal)
+	}
+
+	// Clean up entity integration mappings as best-effort
 	for _, mapping := range mappings.Items {
 		if err := services.EntityIntegrationMappingService.DeleteEntityIntegrationMapping(ctx, mapping.ID); err != nil {
 			s.logger.Errorw("failed to delete entity integration mapping",
@@ -251,10 +258,8 @@ func (s *stripePlanService) DeletePlan(ctx context.Context, stripeProductID stri
 				"mapping_id", mapping.ID,
 				"plan_id", flexPricePlanID,
 				"stripe_product_id", stripeProductID)
-			// Continue with plan deletion even if mapping cleanup fails
+			// Continue cleanup even if one mapping deletion fails
 		}
 	}
-
-	// Use the regular plan service to delete the FlexPrice plan
-	return services.PlanService.DeletePlan(ctx, flexPricePlanID)
+	return nil
 }
