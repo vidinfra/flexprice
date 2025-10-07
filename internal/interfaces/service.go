@@ -66,6 +66,7 @@ type EntityIntegrationMappingService interface {
 type SubscriptionService interface {
 	CreateSubscription(ctx context.Context, req dto.CreateSubscriptionRequest) (*dto.SubscriptionResponse, error)
 	GetSubscription(ctx context.Context, id string) (*dto.SubscriptionResponse, error)
+	UpdateSubscription(ctx context.Context, subscriptionID string, req dto.UpdateSubscriptionRequest) (*dto.SubscriptionResponse, error)
 	CancelSubscription(ctx context.Context, subscriptionID string, req *dto.CancelSubscriptionRequest) (*dto.CancelSubscriptionResponse, error)
 	ActivateIncompleteSubscription(ctx context.Context, subscriptionID string) error
 	ListSubscriptions(ctx context.Context, filter *types.SubscriptionFilter) (*dto.ListSubscriptionsResponse, error)
@@ -91,7 +92,7 @@ type SubscriptionService interface {
 	// Coupon-related methods
 	ApplyCouponsToSubscriptionWithLineItems(ctx context.Context, subscriptionID string, subscriptionCoupons []string, lineItemCoupons map[string][]string, lineItems []*subscription.SubscriptionLineItem) error
 
-	ValidateAndFilterPricesForSubscription(ctx context.Context, entityID string, entityType types.PriceEntityType, subscription *subscription.Subscription) ([]*dto.PriceResponse, error)
+	ValidateAndFilterPricesForSubscription(ctx context.Context, entityID string, entityType types.PriceEntityType, subscription *subscription.Subscription, workflowType *types.TemporalWorkflowType) ([]*dto.PriceResponse, error)
 
 	// Addon management for subscriptions
 	AddAddonToSubscription(ctx context.Context, subscriptionID string, req *dto.AddAddonToSubscriptionRequest) (*addonassociation.AddonAssociation, error)
