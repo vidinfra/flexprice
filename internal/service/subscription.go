@@ -450,6 +450,7 @@ func (s *subscriptionService) ProcessSubscriptionPriceOverrides(
 			MeterID:              originalPrice.MeterID,
 			Description:          originalPrice.Description,
 			Metadata:             originalPrice.Metadata,
+			ParentPriceID:        originalPrice.GetRootPriceID(), // Always point to the root price ID
 			SkipEntityValidation: true,
 		}
 
@@ -473,8 +474,6 @@ func (s *subscriptionService) ProcessSubscriptionPriceOverrides(
 			transformQuantity := price.TransformQuantity(originalPrice.TransformQuantity)
 			createPriceReq.TransformQuantity = &transformQuantity
 		}
-
-		// Apply overrides - handle all override fields
 
 		// Amount override
 		if override.Amount != nil {
