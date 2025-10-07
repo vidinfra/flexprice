@@ -61,6 +61,8 @@ func (s *WalletServiceSuite) SetupTest() {
 // TearDownTest is called after each test
 func (s *WalletServiceSuite) TearDownTest() {
 	s.BaseServiceTestSuite.TearDownTest()
+	// Clear stores to prevent data persistence between tests
+	s.BaseServiceTestSuite.ClearStores()
 }
 
 func (s *WalletServiceSuite) setupService() {
