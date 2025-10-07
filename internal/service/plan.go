@@ -10,24 +10,12 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
 	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/interfaces"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/samber/lo"
 )
 
-type PlanService interface {
-	CreatePlan(ctx context.Context, req dto.CreatePlanRequest) (*dto.CreatePlanResponse, error)
-	GetPlan(ctx context.Context, id string) (*dto.PlanResponse, error)
-	GetPlans(ctx context.Context, filter *types.PlanFilter) (*dto.ListPlansResponse, error)
-	UpdatePlan(ctx context.Context, id string, req dto.UpdatePlanRequest) (*dto.PlanResponse, error)
-	DeletePlan(ctx context.Context, id string) error
-	SyncPlanPrices(ctx context.Context, id string) (*dto.SyncPlanPricesResponse, error)
-
-	// SyncSubscriptionWithPlanPrices synchronizes a single subscription with plan prices
-	// NOTE: This method is primarily intended for internal use and testing.
-	// For API handlers, use SyncPlanPrices instead which provides comprehensive
-	// synchronization across all subscriptions for a plan.
-	SyncSubscriptionWithPlanPrices(params *dto.SubscriptionSyncParams) *dto.SubscriptionSyncResult
-}
+type PlanService = interfaces.PlanService
 
 type planService struct {
 	ServiceParams
