@@ -460,8 +460,6 @@ func (s *stripeSubscriptionService) createFlexPriceSubscription(ctx context.Cont
 
 	billingPeriod := s.calculateBillingPeriod(stripeSub)
 
-	billingCycle := s.calculateBillingCycle(stripeSub)
-
 	// Set start date
 	startDate := time.Unix(stripeSub.StartDate, 0).UTC()
 
@@ -494,7 +492,7 @@ func (s *stripeSubscriptionService) createFlexPriceSubscription(ctx context.Cont
 		TrialEnd:           trialEnd,
 		BillingCadence:     types.BILLING_CADENCE_RECURRING,
 		BillingPeriod:      billingPeriod,
-		BillingCycle:       billingCycle,
+		BillingCycle:       types.BillingCycleAnniversary,
 		BillingPeriodCount: 1,
 		Metadata: map[string]string{
 			"stripe_subscription_id": stripeSub.ID,
