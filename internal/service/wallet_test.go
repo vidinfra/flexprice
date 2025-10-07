@@ -1615,6 +1615,9 @@ func (s *WalletServiceSuite) TestGetWalletBalanceWithEntitlements() {
 		{
 			name: "disabled_entitlement",
 			setupFunc: func() {
+				// Clear any existing entitlements first
+				s.GetStores().EntitlementRepo.(*testutil.InMemoryEntitlementStore).Clear()
+
 				entitlement := &entitlement.Entitlement{
 					ID:               "ent_test_4",
 					EntityType:       types.ENTITLEMENT_ENTITY_TYPE_PLAN,
@@ -1629,6 +1632,11 @@ func (s *WalletServiceSuite) TestGetWalletBalanceWithEntitlements() {
 				}
 				_, err := s.GetStores().EntitlementRepo.Create(s.GetContext(), entitlement)
 				s.NoError(err)
+
+				// Verify the entitlement was created as disabled
+				created, err := s.GetStores().EntitlementRepo.Get(s.GetContext(), "ent_test_4")
+				s.NoError(err)
+				s.False(created.IsEnabled, "Entitlement should be disabled")
 			},
 			// Disabled entitlement should not adjust usage; expect same charges as baseline
 			expectedRealTimeBalance: decimal.NewFromInt(877), // 1000 - 123
