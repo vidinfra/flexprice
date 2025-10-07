@@ -14,7 +14,6 @@ import (
 	"github.com/flexprice/flexprice/internal/interfaces"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
-	"github.com/shopspring/decimal"
 	stripeapi "github.com/stripe/stripe-go/v82"
 )
 
@@ -197,198 +196,53 @@ func (h *Handler) handlePaymentIntentSucceeded(ctx context.Context, event *strip
 		"metadata", paymentIntent.Metadata,
 	)
 
-	// Check if payment already exists with this payment intent ID
-	exists, err := h.paymentSvc.PaymentExistsByGatewayPaymentID(ctx, paymentIntent.ID)
-	if err != nil {
-		h.logger.Errorw("failed to check if payment exists by gateway payment ID",
-			"error", err,
-			"payment_intent_id", paymentIntent.ID)
-		// Continue processing on error
-	} else if exists {
-		h.logger.Infow("payment already exists for this payment intent, skipping",
-			"payment_intent_id", paymentIntent.ID)
-		return nil
-	}
+	// Check if this is a FlexPrice-initiated payment by looking for flexprice_payment_id
+	flexpricePaymentID := paymentIntent.Metadata["flexprice_payment_id"]
 
-	// Check payment source to determine processing approach
-	paymentSource := paymentIntent.Metadata["payment_source"]
-	paymentType := paymentIntent.Metadata["payment_type"]
+	if flexpricePaymentID != "" {
+		// This is a FlexPrice-initiated payment - check its status
+		h.logger.Infow("found FlexPrice payment ID in metadata, checking payment status",
+			"payment_intent_id", paymentIntent.ID,
+			"flexprice_payment_id", flexpricePaymentID)
 
-	if paymentSource == "flexprice" && paymentType == "checkout" {
-		return h.handleFlexPriceCheckoutPayment(ctx, paymentIntent, services)
-	} else if paymentSource == "flexprice" && paymentType == "charge" {
-		return nil // No need to handle charge payments
-	} else {
-		// This is an external Stripe payment - process reconciliation
-		h.logger.Infow("processing external Stripe payment - reconciling invoice",
-			"payment_intent_id", paymentIntent.ID)
-
-		// Parse the raw webhook data to get the invoice ID
-		var webhookData struct {
-			Invoice string `json:"invoice"`
-		}
-		err = json.Unmarshal(event.Data.Raw, &webhookData)
+		payment, err := services.PaymentService.GetPayment(ctx, flexpricePaymentID)
 		if err != nil {
-			h.logger.Errorw("failed to parse webhook data for invoice ID", "error", err)
-			return ierr.WithError(err).Mark(ierr.ErrValidation)
+			h.logger.Errorw("failed to get FlexPrice payment",
+				"error", err,
+				"flexprice_payment_id", flexpricePaymentID,
+				"payment_intent_id", paymentIntent.ID)
+			return ierr.WithError(err).
+				WithHint("Failed to get FlexPrice payment").
+				Mark(ierr.ErrSystem)
 		}
 
-		stripeInvoiceID := webhookData.Invoice
-		if stripeInvoiceID == "" {
-			h.logger.Warnw("no Stripe invoice ID found in external payment",
+		// Skip card payments - they're handled synchronously by charge API
+		if payment.PaymentMethodType == types.PaymentMethodTypeCard {
+			h.logger.Infow("payment is a card payment, skipping the webhook processing",
+				"flexprice_payment_id", flexpricePaymentID,
 				"payment_intent_id", paymentIntent.ID)
 			return nil
 		}
 
-		h.logger.Infow("found Stripe invoice ID from webhook data",
-			"payment_intent_id", paymentIntent.ID,
-			"stripe_invoice_id", stripeInvoiceID)
-
-		// Process external Stripe payment
-		if err := h.paymentSvc.ProcessExternalStripePayment(ctx, paymentIntent, stripeInvoiceID, services.PaymentService, services.InvoiceService); err != nil {
-			h.logger.Errorw("failed to process external Stripe payment",
-				"error", err,
+		// If payment is already succeeded, skip processing
+		if payment.PaymentStatus == types.PaymentStatusSucceeded {
+			h.logger.Infow("FlexPrice payment already succeeded, skipping webhook processing",
+				"flexprice_payment_id", flexpricePaymentID,
 				"payment_intent_id", paymentIntent.ID,
-				"stripe_invoice_id", stripeInvoiceID)
-			return ierr.WithError(err).
-				WithHint("Failed to process external payment").
-				Mark(ierr.ErrSystem)
+				"payment_status", payment.PaymentStatus)
+			return nil
 		}
 
-		h.logger.Infow("successfully processed external Stripe payment",
-			"payment_intent_id", paymentIntent.ID,
-			"stripe_invoice_id", stripeInvoiceID)
-		return nil
-	}
-}
-
-// handleFlexPriceCheckoutPayment handles payment intents from FlexPrice checkout sessions
-func (h *Handler) handleFlexPriceCheckoutPayment(ctx context.Context, paymentIntent *stripeapi.PaymentIntent, services *ServiceDependencies) error {
-	// Get flexprice_payment_id from metadata
-	flexpricePaymentID := ""
-	if paymentID, exists := paymentIntent.Metadata["flexprice_payment_id"]; exists {
-		flexpricePaymentID = paymentID
-	}
-
-	if flexpricePaymentID == "" {
-		h.logger.Warnw("no flexprice_payment_id found in payment intent metadata",
-			"payment_intent_id", paymentIntent.ID)
-		return nil
-	}
-
-	h.logger.Infow("processing FlexPrice checkout payment",
-		"payment_intent_id", paymentIntent.ID,
-		"flexprice_payment_id", flexpricePaymentID,
-		"amount", paymentIntent.Amount,
-		"currency", paymentIntent.Currency)
-
-	// Get payment record by flexprice_payment_id
-	payment, err := services.PaymentService.GetPayment(ctx, flexpricePaymentID)
-	if err != nil {
-		h.logger.Errorw("failed to get payment record",
-			"error", err,
-			"flexprice_payment_id", flexpricePaymentID,
-			"payment_intent_id", paymentIntent.ID)
-		return ierr.WithError(err).
-			WithHint("Failed to get payment record").
-			Mark(ierr.ErrSystem)
-	}
-
-	if payment == nil {
-		h.logger.Warnw("no payment record found", "flexprice_payment_id", flexpricePaymentID, "payment_intent_id", paymentIntent.ID)
-		return nil
-	}
-
-	h.logger.Infow("found payment record", "payment_id", payment.ID, "flexprice_payment_id", flexpricePaymentID)
-
-	// Check if payment is already successful - prevent any updates to successful payments
-	if payment.PaymentStatus == types.PaymentStatusSucceeded {
-		h.logger.Warnw("payment is already successful, skipping update",
-			"payment_id", payment.ID,
+		// Payment exists but not succeeded - process it
+		h.logger.Infow("FlexPrice payment exists but not succeeded, processing",
 			"flexprice_payment_id", flexpricePaymentID,
 			"payment_intent_id", paymentIntent.ID,
-			"current_status", payment.PaymentStatus)
-		return nil
+			"payment_status", payment.PaymentStatus)
+		return h.paymentSvc.HandleFlexPriceCheckoutPayment(ctx, paymentIntent, payment, services.CustomerService, services.InvoiceService, services.PaymentService)
 	}
 
-	// Since this is payment_intent.succeeded webhook, we know payment is successful
-	paymentStatus := string(types.PaymentStatusSucceeded)
-
-	// Extract payment method ID from payment intent
-	var paymentMethodID string
-	if paymentIntent.PaymentMethod != nil {
-		paymentMethodID = paymentIntent.PaymentMethod.ID
-	}
-
-	h.logger.Infow("processing successful payment",
-		"payment_intent_id", paymentIntent.ID,
-		"payment_method_id", paymentMethodID,
-		"amount", paymentIntent.Amount,
-		"currency", paymentIntent.Currency)
-
-	// Update payment record
-	updateReq := dto.UpdatePaymentRequest{
-		PaymentStatus:    &paymentStatus,
-		GatewayPaymentID: &paymentIntent.ID,
-	}
-
-	if paymentMethodID != "" {
-		updateReq.PaymentMethodID = &paymentMethodID
-		// Set payment method as default if save_card_and_make_default was requested
-		if payment.GatewayMetadata != nil {
-			if saveCard, exists := payment.GatewayMetadata["save_card_and_make_default"]; exists && saveCard == "true" {
-				// Get customer ID from invoice
-				invoiceResp, err := services.InvoiceService.GetInvoice(ctx, payment.DestinationID)
-				if err != nil {
-					h.logger.Errorw("failed to get invoice for customer ID",
-						"error", err,
-						"payment_id", payment.ID,
-						"invoice_id", payment.DestinationID)
-				} else {
-					h.logger.Infow("setting payment method as default for customer",
-						"payment_id", payment.ID,
-						"customer_id", invoiceResp.CustomerID,
-						"payment_method_id", paymentMethodID)
-
-					err := h.paymentSvc.SetDefaultPaymentMethod(ctx, invoiceResp.CustomerID, paymentMethodID, services.CustomerService)
-					if err != nil {
-						h.logger.Errorw("failed to set default payment method",
-							"error", err,
-							"payment_id", payment.ID,
-							"customer_id", invoiceResp.CustomerID,
-							"payment_method_id", paymentMethodID)
-						// Don't fail the entire webhook processing
-					} else {
-						h.logger.Infow("successfully set default payment method",
-							"payment_id", payment.ID,
-							"customer_id", invoiceResp.CustomerID,
-							"payment_method_id", paymentMethodID)
-					}
-				}
-			}
-		}
-	}
-
-	_, err = services.PaymentService.UpdatePayment(ctx, payment.ID, updateReq)
-	if err != nil {
-		h.logger.Errorw("failed to update payment record",
-			"error", err,
-			"payment_id", payment.ID,
-			"new_status", paymentStatus)
-		return ierr.WithError(err).
-			WithHint("Failed to update payment record").
-			Mark(ierr.ErrSystem)
-	}
-
-	h.logger.Infow("successfully updated payment record",
-		"payment_id", payment.ID,
-		"new_status", paymentStatus,
-		"flexprice_payment_id", flexpricePaymentID)
-
-	// If payment succeeded, attach to Stripe invoice if available and reconcile with FlexPrice invoice
-	h.attachPaymentToStripeInvoiceAndReconcile(ctx, payment, paymentIntent, services)
-
-	return nil
+	// No flexprice_payment_id - this is an external Stripe payment
+	return h.paymentSvc.HandleExternalStripePaymentFromWebhook(ctx, paymentIntent, event.Data.Raw, services.PaymentService, services.InvoiceService)
 }
 
 // handlePaymentIntentPaymentFailed handles payment_intent.payment_failed webhook
@@ -408,15 +262,6 @@ func (h *Handler) handlePaymentIntentPaymentFailed(ctx context.Context, event *s
 		"payment_intent_id", paymentIntentID,
 		"environment_id", environmentID,
 		"event_id", event.ID)
-
-	// Check if this is a FlexPrice payment
-	paymentSource := paymentIntent.Metadata["payment_source"]
-	if paymentSource != "flexprice" {
-		h.logger.Infow("ignoring payment intent failure from external source",
-			"payment_intent_id", paymentIntentID,
-			"payment_source", paymentSource)
-		return nil
-	}
 
 	// Get flexprice_payment_id from metadata
 	flexpricePaymentID := ""
@@ -589,103 +434,6 @@ func (h *Handler) getConnection(ctx context.Context) (*connection.Connection, er
 	return conn, nil
 }
 
-// attachPaymentToStripeInvoiceAndReconcile attempts to attach payment to Stripe invoice and reconcile with FlexPrice invoice
-func (h *Handler) attachPaymentToStripeInvoiceAndReconcile(ctx context.Context, payment *dto.PaymentResponse, paymentIntent *stripeapi.PaymentIntent, services *ServiceDependencies) {
-	// Find Stripe invoice ID using entity integration mapping
-	stripeInvoiceID, err := h.getStripeInvoiceIDFromMapping(ctx, payment.DestinationID)
-	if err != nil {
-		h.logger.Debugw("no Stripe invoice found for FlexPrice invoice, skipping attachment",
-			"flexprice_invoice_id", payment.DestinationID,
-			"payment_id", payment.ID,
-			"error", err)
-	}
-
-	h.logger.Infow("attempting to attach payment to Stripe invoice",
-		"payment_id", payment.ID,
-		"payment_intent_id", paymentIntent.ID,
-		"stripe_invoice_id", stripeInvoiceID)
-
-	// Get Stripe client
-	stripeClient, _, err := h.client.GetStripeClient(ctx)
-	if err != nil {
-		h.logger.Errorw("failed to get Stripe client for invoice attachment",
-			"error", err,
-			"payment_id", payment.ID)
-		return
-	}
-
-	if stripeInvoiceID != "" {
-		err = h.paymentSvc.AttachPaymentToStripeInvoice(ctx, stripeClient, paymentIntent.ID, stripeInvoiceID)
-	} else {
-		h.logger.Warnw("no Stripe invoice ID found, skipping Stripe invoice attachment",
-			"payment_intent_id", paymentIntent.ID,
-			"stripe_invoice_id", stripeInvoiceID)
-		err = nil
-	}
-
-	if err != nil {
-		h.logger.Errorw("failed to attach payment to Stripe invoice",
-			"error", err,
-			"payment_id", payment.ID,
-			"payment_intent_id", paymentIntent.ID,
-			"stripe_invoice_id", stripeInvoiceID)
-		// Don't fail the entire webhook processing
-	} else {
-		h.logger.Infow("successfully attached payment to Stripe invoice",
-			"payment_id", payment.ID,
-			"payment_intent_id", paymentIntent.ID,
-			"stripe_invoice_id", stripeInvoiceID)
-	}
-
-	// Reconcile with FlexPrice invoice
-	// Convert amount from cents to decimal
-	amount := decimal.NewFromInt(paymentIntent.Amount).Div(decimal.NewFromInt(100))
-	err = h.paymentSvc.ReconcilePaymentWithInvoice(ctx, payment.ID, amount, services.PaymentService, services.InvoiceService)
-	if err != nil {
-		h.logger.Errorw("failed to reconcile payment with invoice",
-			"error", err,
-			"payment_id", payment.ID,
-			"amount", amount.String())
-		// Don't fail the entire webhook processing
-	} else {
-		h.logger.Infow("successfully reconciled payment with invoice",
-			"payment_id", payment.ID,
-			"amount", amount.String())
-	}
-}
-
-// getStripeInvoiceIDFromMapping gets the Stripe invoice ID from entity integration mapping
-func (h *Handler) getStripeInvoiceIDFromMapping(ctx context.Context, flexpriceInvoiceID string) (string, error) {
-	// Find Stripe invoice ID using entity integration mapping (same pattern as StripeService)
-	filter := &types.EntityIntegrationMappingFilter{
-		EntityIDs:     []string{flexpriceInvoiceID},
-		EntityType:    types.IntegrationEntityTypeInvoice,
-		ProviderTypes: []string{string(types.SecretProviderStripe)},
-		QueryFilter:   types.NewDefaultQueryFilter(),
-	}
-
-	mappings, err := h.entityIntegrationMappingRepo.List(ctx, filter)
-	if err != nil {
-		h.logger.Debugw("failed to query entity integration mapping",
-			"error", err,
-			"flexprice_invoice_id", flexpriceInvoiceID)
-		return "", ierr.WithError(err).Mark(ierr.ErrDatabase)
-	}
-
-	if len(mappings) == 0 {
-		h.logger.Debugw("no Stripe invoice mapping found",
-			"flexprice_invoice_id", flexpriceInvoiceID)
-		return "", ierr.NewError("stripe invoice mapping not found").Mark(ierr.ErrNotFound)
-	}
-
-	stripeInvoiceID := mappings[0].ProviderEntityID
-	h.logger.Debugw("found Stripe invoice mapping",
-		"flexprice_invoice_id", flexpriceInvoiceID,
-		"stripe_invoice_id", stripeInvoiceID)
-
-	return stripeInvoiceID, nil
-}
-
 // handleInvoicePaymentPaid handles invoice.paid webhook for external Stripe payments without invoice field in payment_intent
 func (h *Handler) handleInvoicePaymentPaid(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
 	// Check sync config first
@@ -776,14 +524,6 @@ func (h *Handler) handleInvoicePaymentPaid(ctx context.Context, event *stripeapi
 			"error", err,
 			"payment_intent_id", paymentIntentID)
 		return ierr.WithError(err).Mark(ierr.ErrSystem)
-	}
-
-	// Check payment source - skip FlexPrice payments as they're already processed
-	paymentSource := paymentIntent.Metadata["payment_source"]
-	if paymentSource == "flexprice" {
-		h.logger.Infow("skipping FlexPrice-initiated payment to avoid double processing",
-			"payment_intent_id", paymentIntentID)
-		return nil
 	}
 
 	// Process external Stripe payment

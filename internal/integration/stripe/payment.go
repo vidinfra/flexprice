@@ -2,6 +2,7 @@ package stripe
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -398,6 +399,7 @@ func (s *PaymentService) ChargeSavedPaymentMethod(ctx context.Context, req *dto.
 			"invoice_id":            req.InvoiceID,
 			"payment_source":        "flexprice", // KEY DIFFERENTIATOR
 			"payment_type":          "charge",
+			"flexprice_payment_id":  req.PaymentID,
 		},
 	}
 
@@ -1484,6 +1486,50 @@ func (s *PaymentService) GetPaymentMethodDetails(ctx context.Context, paymentMet
 	return s.convertPaymentMethodToResponse(paymentMethod), nil
 }
 
+// HandleExternalStripePaymentFromWebhook handles external Stripe payment from webhook event
+func (s *PaymentService) HandleExternalStripePaymentFromWebhook(ctx context.Context, paymentIntent *stripe.PaymentIntent, webhookRawData []byte, paymentService interfaces.PaymentService, invoiceService interfaces.InvoiceService) error {
+	s.logger.Infow("no FlexPrice payment ID found, processing as external Stripe payment",
+		"payment_intent_id", paymentIntent.ID,
+		"metadata", paymentIntent.Metadata)
+
+	// Parse the raw webhook data to get the invoice ID
+	var webhookData struct {
+		Invoice string `json:"invoice"`
+	}
+	err := json.Unmarshal(webhookRawData, &webhookData)
+	if err != nil {
+		s.logger.Errorw("failed to parse webhook data for invoice ID", "error", err)
+		return ierr.WithError(err).Mark(ierr.ErrValidation)
+	}
+
+	stripeInvoiceID := webhookData.Invoice
+	if stripeInvoiceID == "" {
+		s.logger.Warnw("no Stripe invoice ID found in external payment",
+			"payment_intent_id", paymentIntent.ID)
+		return nil
+	}
+
+	s.logger.Infow("found Stripe invoice ID from webhook data",
+		"payment_intent_id", paymentIntent.ID,
+		"stripe_invoice_id", stripeInvoiceID)
+
+	// Process external Stripe payment
+	if err := s.ProcessExternalStripePayment(ctx, paymentIntent, stripeInvoiceID, paymentService, invoiceService); err != nil {
+		s.logger.Errorw("failed to process external Stripe payment",
+			"error", err,
+			"payment_intent_id", paymentIntent.ID,
+			"stripe_invoice_id", stripeInvoiceID)
+		return ierr.WithError(err).
+			WithHint("Failed to process external payment").
+			Mark(ierr.ErrSystem)
+	}
+
+	s.logger.Infow("successfully processed external Stripe payment",
+		"payment_intent_id", paymentIntent.ID,
+		"stripe_invoice_id", stripeInvoiceID)
+	return nil
+}
+
 // ProcessExternalStripePayment processes a payment that was made directly in Stripe (external to FlexPrice)
 func (s *PaymentService) ProcessExternalStripePayment(ctx context.Context, paymentIntent *stripe.PaymentIntent, stripeInvoiceID string, paymentService interfaces.PaymentService, invoiceService interfaces.InvoiceService) error {
 	// Get FlexPrice invoice ID from Stripe invoice
@@ -1659,4 +1705,169 @@ func (s *PaymentService) VerifyWebhookSignature(payload []byte, signature string
 			Mark(ierr.ErrValidation)
 	}
 	return nil
+}
+
+// HandleFlexPriceCheckoutPayment handles payment intents from FlexPrice checkout sessions
+func (s *PaymentService) HandleFlexPriceCheckoutPayment(
+	ctx context.Context,
+	paymentIntent *stripe.PaymentIntent,
+	payment *dto.PaymentResponse,
+	customerService interfaces.CustomerService,
+	invoiceService interfaces.InvoiceService,
+	paymentService interfaces.PaymentService,
+) error {
+	s.logger.Infow("processing FlexPrice checkout payment",
+		"payment_intent_id", paymentIntent.ID,
+		"flexprice_payment_id", payment.ID,
+		"amount", paymentIntent.Amount,
+		"currency", paymentIntent.Currency)
+
+	// Since this is payment_intent.succeeded webhook, we know payment is successful
+	paymentStatus := string(types.PaymentStatusSucceeded)
+
+	// Extract payment method ID from payment intent
+	var paymentMethodID string
+	if paymentIntent.PaymentMethod != nil {
+		paymentMethodID = paymentIntent.PaymentMethod.ID
+	}
+
+	s.logger.Infow("processing successful payment",
+		"payment_intent_id", paymentIntent.ID,
+		"payment_method_id", paymentMethodID,
+		"amount", paymentIntent.Amount,
+		"currency", paymentIntent.Currency)
+
+	// Update payment record
+	updateReq := dto.UpdatePaymentRequest{
+		PaymentStatus:    &paymentStatus,
+		GatewayPaymentID: &paymentIntent.ID,
+	}
+
+	if paymentMethodID != "" {
+		updateReq.PaymentMethodID = &paymentMethodID
+		// Set payment method as default if save_card_and_make_default was requested
+		if payment.GatewayMetadata != nil {
+			if saveCard, exists := payment.GatewayMetadata["save_card_and_make_default"]; exists && saveCard == "true" {
+				// Get customer ID from invoice
+				invoiceResp, err := invoiceService.GetInvoice(ctx, payment.DestinationID)
+				if err != nil {
+					s.logger.Errorw("failed to get invoice for customer ID",
+						"error", err,
+						"payment_id", payment.ID,
+						"invoice_id", payment.DestinationID)
+				} else {
+					s.logger.Infow("setting payment method as default for customer",
+						"payment_id", payment.ID,
+						"customer_id", invoiceResp.CustomerID,
+						"payment_method_id", paymentMethodID)
+
+					err := s.SetDefaultPaymentMethod(ctx, invoiceResp.CustomerID, paymentMethodID, customerService)
+					if err != nil {
+						s.logger.Errorw("failed to set default payment method",
+							"error", err,
+							"payment_id", payment.ID,
+							"customer_id", invoiceResp.CustomerID,
+							"payment_method_id", paymentMethodID)
+						// Don't fail the entire webhook processing
+					} else {
+						s.logger.Infow("successfully set default payment method",
+							"payment_id", payment.ID,
+							"customer_id", invoiceResp.CustomerID,
+							"payment_method_id", paymentMethodID)
+					}
+				}
+			}
+		}
+	}
+
+	_, err := paymentService.UpdatePayment(ctx, payment.ID, updateReq)
+	if err != nil {
+		s.logger.Errorw("failed to update payment record",
+			"error", err,
+			"payment_id", payment.ID,
+			"new_status", paymentStatus)
+		return ierr.WithError(err).
+			WithHint("Failed to update payment record").
+			Mark(ierr.ErrSystem)
+	}
+
+	s.logger.Infow("successfully updated payment record",
+		"payment_id", payment.ID,
+		"new_status", paymentStatus)
+
+	// If payment succeeded, attach to Stripe invoice if available and reconcile with FlexPrice invoice
+	s.AttachPaymentToStripeInvoiceAndReconcile(ctx, payment, paymentIntent, paymentService, invoiceService)
+
+	return nil
+}
+
+// AttachPaymentToStripeInvoiceAndReconcile attaches payment to Stripe invoice and reconciles with FlexPrice invoice
+func (s *PaymentService) AttachPaymentToStripeInvoiceAndReconcile(
+	ctx context.Context,
+	payment *dto.PaymentResponse,
+	paymentIntent *stripe.PaymentIntent,
+	paymentService interfaces.PaymentService,
+	invoiceService interfaces.InvoiceService,
+) {
+	// Find Stripe invoice ID using invoice sync service
+	stripeInvoiceID, err := s.invoiceSyncSvc.GetStripeInvoiceID(ctx, payment.DestinationID)
+	if err != nil {
+		s.logger.Debugw("no Stripe invoice found for FlexPrice invoice, skipping attachment",
+			"flexprice_invoice_id", payment.DestinationID,
+			"payment_id", payment.ID,
+			"error", err)
+	}
+
+	s.logger.Infow("attempting to attach payment to Stripe invoice",
+		"payment_id", payment.ID,
+		"payment_intent_id", paymentIntent.ID,
+		"stripe_invoice_id", stripeInvoiceID)
+
+	// Get Stripe client
+	stripeClient, _, err := s.client.GetStripeClient(ctx)
+	if err != nil {
+		s.logger.Errorw("failed to get Stripe client for invoice attachment",
+			"error", err,
+			"payment_id", payment.ID)
+		return
+	}
+
+	if stripeInvoiceID != "" {
+		err = s.AttachPaymentToStripeInvoice(ctx, stripeClient, paymentIntent.ID, stripeInvoiceID)
+	} else {
+		s.logger.Warnw("no Stripe invoice ID found, skipping Stripe invoice attachment",
+			"payment_intent_id", paymentIntent.ID,
+			"stripe_invoice_id", stripeInvoiceID)
+		err = nil
+	}
+
+	if err != nil {
+		s.logger.Errorw("failed to attach payment to Stripe invoice",
+			"error", err,
+			"payment_id", payment.ID,
+			"payment_intent_id", paymentIntent.ID,
+			"stripe_invoice_id", stripeInvoiceID)
+		// Don't fail the entire webhook processing
+	} else {
+		s.logger.Infow("successfully attached payment to Stripe invoice",
+			"payment_id", payment.ID,
+			"payment_intent_id", paymentIntent.ID,
+			"stripe_invoice_id", stripeInvoiceID)
+	}
+
+	// Reconcile with FlexPrice invoice
+	// Convert amount from cents to decimal
+	amount := decimal.NewFromInt(paymentIntent.Amount).Div(decimal.NewFromInt(100))
+	err = s.ReconcilePaymentWithInvoice(ctx, payment.ID, amount, paymentService, invoiceService)
+	if err != nil {
+		s.logger.Errorw("failed to reconcile payment with invoice",
+			"error", err,
+			"payment_id", payment.ID,
+			"amount", amount.String())
+		// Don't fail the entire webhook processing
+	} else {
+		s.logger.Infow("successfully reconciled payment with invoice",
+			"payment_id", payment.ID,
+			"amount", amount.String())
+	}
 }
