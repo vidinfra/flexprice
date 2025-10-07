@@ -1492,11 +1492,27 @@ func (s *PaymentService) HandleExternalStripePaymentFromWebhook(ctx context.Cont
 		"payment_intent_id", paymentIntent.ID,
 		"metadata", paymentIntent.Metadata)
 
+	// Check if invoice sync is enabled for this connection
+	conn, err := s.client.connectionRepo.GetByProvider(ctx, types.SecretProviderStripe)
+	if err != nil {
+		s.logger.Errorw("failed to get connection for invoice sync check, skipping external payment",
+			"error", err,
+			"payment_intent_id", paymentIntent.ID)
+		return nil
+	}
+
+	if !conn.IsInvoiceInboundEnabled() {
+		s.logger.Infow("invoice inbound sync disabled, skipping external payment",
+			"payment_intent_id", paymentIntent.ID,
+			"connection_id", conn.ID)
+		return nil
+	}
+
 	// Parse the raw webhook data to get the invoice ID
 	var webhookData struct {
 		Invoice string `json:"invoice"`
 	}
-	err := json.Unmarshal(webhookRawData, &webhookData)
+	err = json.Unmarshal(webhookRawData, &webhookData)
 	if err != nil {
 		s.logger.Errorw("failed to parse webhook data for invoice ID", "error", err)
 		return ierr.WithError(err).Mark(ierr.ErrValidation)

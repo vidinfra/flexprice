@@ -575,3 +575,4 @@ flowchart TD
 This document provides comprehensive technical documentation for FlexPrice's Stripe integration. The system supports complex bidirectional synchronization scenarios while maintaining data consistency and providing robust error handling. The modular architecture allows for easy extension and maintenance of integration features.
 
 For implementation details, refer to the specific service files in the `internal/integration/stripe/` directory.
+
