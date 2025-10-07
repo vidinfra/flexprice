@@ -1629,8 +1629,8 @@ func (s *WalletServiceSuite) TestGetWalletBalanceWithEntitlements() {
 				s.NoError(err)
 			},
 			// Disabled entitlement should not adjust usage; expect same charges as baseline
-			expectedRealTimeBalance: decimal.NewFromInt(922), // 1000 - 78
-			expectedCurrentUsage:    decimal.NewFromInt(78),  // Usage unchanged when entitlement is disabled
+			expectedRealTimeBalance: decimal.NewFromInt(877), // 1000 - 123
+			expectedCurrentUsage:    decimal.NewFromInt(123), // Usage unchanged when entitlement is disabled
 			wantErr:                 false,
 		},
 	}

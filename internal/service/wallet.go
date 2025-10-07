@@ -437,7 +437,7 @@ func (s *walletService) GetWalletBalance(ctx context.Context, walletID string) (
 	}
 
 	// Determine if we should include usage based on wallet's allowed price types
-	// If wallet has no allowed price types, treat as ALL (include usage)
+	// If wallet has no allowed price types (nil or empty), treat as ALL (include usage)
 	// Otherwise, check if wallet allows USAGE or ALL price types
 	shouldIncludeUsage := len(w.Config.AllowedPriceTypes) == 0 ||
 		lo.Contains(w.Config.AllowedPriceTypes, types.WalletConfigPriceTypeUsage) ||
