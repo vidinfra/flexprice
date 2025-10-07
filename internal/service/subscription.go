@@ -98,6 +98,7 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		plan.ID,
 		types.PRICE_ENTITY_TYPE_PLAN,
 		sub,
+		req.Workflow,
 	)
 	if err != nil {
 		return nil, err
@@ -1912,6 +1913,7 @@ func (s *subscriptionService) ValidateAndFilterPricesForSubscription(
 	entityID string,
 	entityType types.PriceEntityType,
 	subscription *subscription.Subscription,
+	workflowType *types.TemporalWorkflowType,
 ) ([]*dto.PriceResponse, error) {
 	// Get prices for the entity (plan or addon)
 	priceService := NewPriceService(s.ServiceParams)
@@ -1929,34 +1931,54 @@ func (s *subscriptionService) ValidateAndFilterPricesForSubscription(
 		return nil, err
 	}
 
-	// DEVNOTE: Commented out to allow to create a subscription with no prices
+	// Check if empty prices are allowed for this workflow type
+	if !s.allowsEmptyPrices(workflowType) {
+		if len(pricesResponse.Items) == 0 {
+			return nil, ierr.NewError("no prices found for entity").
+				WithHint("The entity must have at least one price to create a subscription").
+				WithReportableDetails(map[string]interface{}{
+					"entity_id":   entityID,
+					"entity_type": entityType,
+				}).
+				Mark(ierr.ErrValidation)
+		}
 
-	// if len(pricesResponse.Items) == 0 {
-	// 	return nil, ierr.NewError("no prices found for entity").
-	// 		WithHint("The entity must have at least one price to create a subscription").
-	// 		WithReportableDetails(map[string]interface{}{
-	// 			"entity_id":   entityID,
-	// 			"entity_type": entityType,
-	// 		}).
-	// 		Mark(ierr.ErrValidation)
-	// }
+		// Filter prices for subscription that are valid for the entity
+		validPrices := filterValidPricesForSubscription(pricesResponse.Items, subscription)
+		if len(validPrices) == 0 {
+			return nil, ierr.NewError("no valid prices found for subscription").
+				WithHint("No prices match the subscription criteria").
+				WithReportableDetails(map[string]interface{}{
+					"entity_id":       entityID,
+					"entity_type":     entityType,
+					"billing_period":  subscription.BillingPeriod,
+					"billing_cadence": subscription.BillingCadence,
+					"currency":        subscription.Currency,
+				}).
+				Mark(ierr.ErrValidation)
+		}
+		return validPrices, nil
+	}
 
-	// Filter prices for subscription that are valid for the entity
+	// For workflows that allow empty prices, filter and return (even if empty)
 	validPrices := filterValidPricesForSubscription(pricesResponse.Items, subscription)
-	// if len(validPrices) == 0 {
-	// 	return nil, ierr.NewError("no valid prices found for subscription").
-	// 		WithHint("No prices match the subscription criteria").
-	// 		WithReportableDetails(map[string]interface{}{
-	// 			"entity_id":       entityID,
-	// 			"entity_type":     entityType,
-	// 			"billing_period":  subscription.BillingPeriod,
-	// 			"billing_cadence": subscription.BillingCadence,
-	// 			"currency":        subscription.Currency,
-	// 		}).
-	// 		Mark(ierr.ErrValidation)
-	// }
 
 	return validPrices, nil
+}
+
+// allowsEmptyPrices checks if the given workflow type allows empty prices
+func (s *subscriptionService) allowsEmptyPrices(workflowType *types.TemporalWorkflowType) bool {
+	if workflowType == nil {
+		return false
+	}
+
+	// Define workflow types that allow empty prices
+	emptyPricesAllowedWorkflows := []types.TemporalWorkflowType{
+		types.TemporalStripeIntegrationWorkflow,
+		// Add more workflow types here as needed
+	}
+
+	return lo.Contains(emptyPricesAllowedWorkflows, *workflowType)
 }
 
 // PauseSubscription pauses a subscription
@@ -3310,6 +3332,7 @@ func (s *subscriptionService) handleSubscriptionAddons(
 			addonReq.AddonID,
 			types.PRICE_ENTITY_TYPE_ADDON,
 			subscription,
+			nil, // No workflow type for addon operations
 		)
 		if err != nil {
 			return ierr.WithError(err).
@@ -3419,7 +3442,7 @@ func (s *subscriptionService) addAddonToSubscription(
 	}
 
 	// Validate and filter prices for the addon using the same pattern as plans
-	validPrices, err := s.ValidateAndFilterPricesForSubscription(ctx, req.AddonID, types.PRICE_ENTITY_TYPE_ADDON, sub)
+	validPrices, err := s.ValidateAndFilterPricesForSubscription(ctx, req.AddonID, types.PRICE_ENTITY_TYPE_ADDON, sub, nil)
 	if err != nil {
 		return nil, err
 	}

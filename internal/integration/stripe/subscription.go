@@ -9,6 +9,7 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
 	"github.com/stripe/stripe-go/v82"
 )
 
@@ -463,6 +464,8 @@ func (s *stripeSubscriptionService) createFlexPriceSubscription(ctx context.Cont
 	// Set start date
 	startDate := time.Unix(stripeSub.StartDate, 0).UTC()
 
+	billingAnchor := time.Unix(stripeSub.BillingCycleAnchor, 0).UTC()
+
 	// Set trial dates if applicable
 	var trialStart, trialEnd *time.Time
 	if stripeSub.TrialStart != 0 {
@@ -493,11 +496,13 @@ func (s *stripeSubscriptionService) createFlexPriceSubscription(ctx context.Cont
 		BillingCadence:     types.BILLING_CADENCE_RECURRING,
 		BillingPeriod:      billingPeriod,
 		BillingCycle:       types.BillingCycleAnniversary,
+		BillingAnchor:      &billingAnchor,
 		BillingPeriodCount: 1,
 		Metadata: map[string]string{
 			"stripe_subscription_id": stripeSub.ID,
 			"source":                 "stripe",
 		},
+		Workflow: lo.ToPtr(types.TemporalStripeIntegrationWorkflow),
 	}
 
 	return subscriptionService.CreateSubscription(ctx, createReq)
@@ -704,7 +709,7 @@ func (s *stripeSubscriptionService) mapStripeStatusToFlexPrice(stripeStatus stri
 	case stripe.SubscriptionStatusCanceled:
 		return types.SubscriptionStatusCancelled
 	case stripe.SubscriptionStatusIncompleteExpired:
-		return types.SubscriptionStatusCancelled
+		return types.SubscriptionStatusIncompleteExpired
 	case stripe.SubscriptionStatusTrialing:
 		return types.SubscriptionStatusActive
 	case stripe.SubscriptionStatusPastDue:
@@ -712,7 +717,7 @@ func (s *stripeSubscriptionService) mapStripeStatusToFlexPrice(stripeStatus stri
 	case stripe.SubscriptionStatusUnpaid:
 		return types.SubscriptionStatusActive // Or create an unpaid status if needed
 	case stripe.SubscriptionStatusIncomplete:
-		return types.SubscriptionStatusActive // Or create an incomplete status if needed
+		return types.SubscriptionStatusIncomplete // Or create an incomplete status if needed
 	case stripe.SubscriptionStatusPaused:
 		return types.SubscriptionStatusPaused
 	default:

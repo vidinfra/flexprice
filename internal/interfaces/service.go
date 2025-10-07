@@ -86,7 +86,7 @@ type SubscriptionService interface {
 	// Coupon-related methods
 	ApplyCouponsToSubscriptionWithLineItems(ctx context.Context, subscriptionID string, subscriptionCoupons []string, lineItemCoupons map[string][]string, lineItems []*subscription.SubscriptionLineItem) error
 
-	ValidateAndFilterPricesForSubscription(ctx context.Context, entityID string, entityType types.PriceEntityType, subscription *subscription.Subscription) ([]*dto.PriceResponse, error)
+	ValidateAndFilterPricesForSubscription(ctx context.Context, entityID string, entityType types.PriceEntityType, subscription *subscription.Subscription, workflowType *types.TemporalWorkflowType) ([]*dto.PriceResponse, error)
 
 	// Addon management for subscriptions
 	AddAddonToSubscription(ctx context.Context, subscriptionID string, req *dto.AddAddonToSubscriptionRequest) (*addonassociation.AddonAssociation, error)
