@@ -66,6 +66,8 @@ func (h *Handler) HandleWebhookEvent(ctx context.Context, event *stripeapi.Event
 	switch string(event.Type) {
 	case string(types.WebhookEventTypeCustomerCreated):
 		return h.handleCustomerCreated(ctx, event, environmentID, services)
+	case string(types.WebhookEventTypeCheckoutSessionCompleted):
+		return h.handleCheckoutSessionCompleted(ctx, event, environmentID, services)
 	case string(types.WebhookEventTypePaymentIntentSucceeded):
 		return h.handlePaymentIntentSucceeded(ctx, event, environmentID, services)
 	case string(types.WebhookEventTypePaymentIntentPaymentFailed):
@@ -190,8 +192,8 @@ func (h *Handler) handlePaymentIntentSucceeded(ctx context.Context, event *strip
 		}
 
 		// Skip card payments - they're handled synchronously by charge API
-		if payment.PaymentMethodType == types.PaymentMethodTypeCard {
-			h.logger.Infow("payment is a card payment, skipping the webhook processing",
+		if payment.PaymentMethodType == types.PaymentMethodTypeCard || payment.PaymentMethodType == types.PaymentMethodTypePaymentLink {
+			h.logger.Infow("payment is a card payment or payment link, skipping the webhook processing",
 				"flexprice_payment_id", flexpricePaymentID,
 				"payment_intent_id", paymentIntent.ID)
 			return nil
@@ -206,21 +208,7 @@ func (h *Handler) handlePaymentIntentSucceeded(ctx context.Context, event *strip
 			return nil
 		}
 
-		// Payment exists but not succeeded - process it
-		h.logger.Infow("FlexPrice payment exists but not succeeded, processing",
-			"flexprice_payment_id", flexpricePaymentID,
-			"payment_intent_id", paymentIntent.ID,
-			"payment_status", payment.PaymentStatus)
-		err = h.paymentSvc.HandleFlexPriceCheckoutPayment(ctx, paymentIntent, payment, services.CustomerService, services.InvoiceService, services.PaymentService)
-		if err != nil {
-			h.logger.Errorw("failed to handle FlexPrice checkout payment, skipping event",
-				"error", err,
-				"flexprice_payment_id", flexpricePaymentID,
-				"payment_intent_id", paymentIntent.ID,
-				"event_id", event.ID)
-			return nil
-		}
-		return nil
+		return nil // no need to process further
 	}
 
 	// No flexprice_payment_id - this is an external Stripe payment
@@ -800,6 +788,62 @@ func (h *Handler) handleSubscriptionCancellation(ctx context.Context, event *str
 	}
 
 	h.logger.Infow("successfully deleted subscription in FlexPrice", "subscription_id", subID)
+
+	return nil
+}
+
+func (h *Handler) handleCheckoutSessionCompleted(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
+	// Parse webhook to get checkout session data
+	var checkoutSession stripeapi.CheckoutSession
+	err := json.Unmarshal(event.Data.Raw, &checkoutSession)
+	if err != nil {
+		h.logger.Errorw("failed to parse checkout session from webhook, skipping event", "error", err, "event_id", event.ID)
+		return nil
+	}
+
+	// get flexprice_payment_id from metadata
+	flexpricePaymentID := checkoutSession.Metadata["flexprice_payment_id"]
+	if flexpricePaymentID == "" {
+		h.logger.Warnw("no flexprice_payment_id found in checkout session metadata", "event_id", event.ID)
+		return nil
+	}
+
+	// get payment from database
+	payment, err := services.PaymentService.GetPayment(ctx, flexpricePaymentID)
+	if err != nil {
+		h.logger.Errorw("failed to get payment from database, skipping event", "error", err, "event_id", event.ID)
+		return nil
+	}
+
+	// check if payment is already succeeded
+	if payment.PaymentStatus == types.PaymentStatusSucceeded {
+		h.logger.Infow("payment already succeeded, skipping event", "event_id", event.ID)
+		return nil
+	}
+
+	// Get payment intent if it exists
+	var paymentIntent *stripeapi.PaymentIntent
+	if checkoutSession.PaymentIntent != nil {
+		paymentIntentID := checkoutSession.PaymentIntent.ID
+		paymentIntent, err = h.paymentSvc.GetPaymentIntent(ctx, paymentIntentID, environmentID)
+		if err != nil {
+			h.logger.Errorw("failed to fetch payment intent, continuing without it",
+				"error", err,
+				"payment_intent_id", paymentIntentID,
+				"event_id", event.ID)
+			paymentIntent = nil
+		}
+	}
+
+	// Call HandleFlexPriceCheckoutPayment with optional payment intent
+	err = h.paymentSvc.HandleFlexPriceCheckoutPayment(ctx, paymentIntent, payment, services.CustomerService, services.InvoiceService, services.PaymentService)
+	if err != nil {
+		h.logger.Errorw("failed to handle FlexPrice checkout payment, skipping event",
+			"error", err,
+			"flexprice_payment_id", flexpricePaymentID,
+			"event_id", event.ID)
+		return nil
+	}
 
 	return nil
 }
