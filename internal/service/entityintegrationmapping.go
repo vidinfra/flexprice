@@ -205,12 +205,11 @@ func (s *entityIntegrationMappingService) DeleteEntityIntegrationMapping(ctx con
 		return err
 	}
 
-	if err := s.EntityIntegrationMappingRepo.Delete(ctx, mapping); err != nil {
-		// No need to wrap the error as the repository already returns properly formatted errors
+	mapping.Status = types.StatusArchived
+
+	if err := s.EntityIntegrationMappingRepo.Update(ctx, mapping); err != nil {
 		return err
 	}
 
 	return nil
 }
-
-// Helper-specific methods removed; use GetEntityIntegrationMappings with filters instead
