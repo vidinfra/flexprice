@@ -1,5 +1,9 @@
 package types
 
+import (
+	ierr "github.com/flexprice/flexprice/internal/errors"
+)
+
 // SyncConfig defines which entities should be synced between FlexPrice and external providers
 type SyncConfig struct {
 	Plan         *EntitySyncConfig `json:"plan,omitempty"`
@@ -20,4 +24,25 @@ func DefaultSyncConfig() *SyncConfig {
 		Subscription: &EntitySyncConfig{Inbound: false, Outbound: false},
 		Invoice:      &EntitySyncConfig{Inbound: false, Outbound: false},
 	}
+}
+
+// Validate validates the SyncConfig
+func (s *SyncConfig) Validate() error {
+	if s == nil {
+		return nil
+	}
+
+	if s.Plan != nil && s.Plan.Outbound {
+		return ierr.NewError("plan outbound sync is not allowed").Mark(ierr.ErrValidation)
+	}
+
+	if s.Subscription != nil && s.Subscription.Outbound {
+		return ierr.NewError("subscription outbound sync is not allowed").Mark(ierr.ErrValidation)
+	}
+
+	if s.Invoice != nil && s.Invoice.Inbound {
+		return ierr.NewError("invoice inbound sync is not allowed").Mark(ierr.ErrValidation)
+	}
+
+	return nil
 }

@@ -147,6 +147,10 @@ func (s *connectionService) CreateConnection(ctx context.Context, req dto.Create
 		return nil, err
 	}
 
+	if err := req.SyncConfig.Validate(); err != nil {
+		return nil, err
+	}
+
 	// Check for existing published connection with same provider, tenant, and environment
 	existingFilter := &types.ConnectionFilter{
 		ProviderType: req.ProviderType,
@@ -248,6 +252,10 @@ func (s *connectionService) GetConnections(ctx context.Context, filter *types.Co
 
 func (s *connectionService) UpdateConnection(ctx context.Context, id string, req dto.UpdateConnectionRequest) (*dto.ConnectionResponse, error) {
 	s.Logger.Debugw("updating connection", "connection_id", id)
+
+	if err := req.SyncConfig.Validate(); err != nil {
+		return nil, err
+	}
 
 	// Get existing connection
 	conn, err := s.ConnectionRepo.Get(ctx, id)
