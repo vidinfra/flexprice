@@ -212,5 +212,3 @@ func (s *entityIntegrationMappingService) DeleteEntityIntegrationMapping(ctx con
 
 	return nil
 }
-
-// Helper-specific methods removed; use GetEntityIntegrationMappings with filters instead
