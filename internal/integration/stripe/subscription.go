@@ -509,7 +509,7 @@ func (s *stripeSubscriptionService) handlePlanChange(ctx context.Context, existi
 	s.logger.Infow("successfully cancelled existing subscription",
 		"subscription_id", existingSubscription.ID)
 
-	// STEP 2: Delete the old mapping	// STEP 3: Update the entity mapping to point to the new subscription
+	// STEP 2: Delete the old mapping
 	entityMappingService := services.EntityIntegrationMappingService
 
 	// Find the existing mapping
