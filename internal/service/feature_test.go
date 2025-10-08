@@ -581,40 +581,58 @@ func (s *FeatureServiceSuite) TestUpdateFeature() {
 			req: dto.UpdateFeatureRequest{
 				Name:        lo.ToPtr("Updated API Calls"),
 				Description: lo.ToPtr("Updated Description"),
-				AlertSettings: &types.FeatureAlertSettings{
-					Upperbound: lo.ToPtr(decimal.NewFromInt(1000)),
-					Lowerbound: lo.ToPtr(decimal.NewFromInt(100)),
+				AlertSettings: &types.AlertSettings{
+					Critical: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(100),
+						Condition: types.AlertConditionBelow,
+					},
+					Warning: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(500),
+						Condition: types.AlertConditionBelow,
+					},
 				},
 			},
 		},
 		{
-			name: "error - invalid alert settings (upperbound < lowerbound)",
+			name: "error - invalid alert settings (warning > critical for below condition)",
 			id:   s.testData.features.apiCalls.ID,
 			req: dto.UpdateFeatureRequest{
-				AlertSettings: &types.FeatureAlertSettings{
-					Upperbound: lo.ToPtr(decimal.NewFromInt(100)),
-					Lowerbound: lo.ToPtr(decimal.NewFromInt(1000)),
+				AlertSettings: &types.AlertSettings{
+					Critical: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(1000),
+						Condition: types.AlertConditionBelow,
+					},
+					Warning: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(100),
+						Condition: types.AlertConditionBelow,
+					},
 				},
 			},
 			wantErr:   true,
-			errString: "upperbound must be greater than or equal to lowerbound",
+			errString: "warning threshold must be greater than critical threshold",
 		},
 		{
-			name: "success - alert settings with only lowerbound (keeps existing upperbound)",
+			name: "success - alert settings with only warning (keeps existing critical)",
 			id:   s.testData.features.apiCalls.ID, // Use apiCalls which has existing alert settings
 			req: dto.UpdateFeatureRequest{
-				AlertSettings: &types.FeatureAlertSettings{
-					Lowerbound: lo.ToPtr(decimal.NewFromInt(200)),
+				AlertSettings: &types.AlertSettings{
+					Warning: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(200),
+						Condition: types.AlertConditionBelow,
+					},
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "success - alert settings with only upperbound (keeps existing lowerbound)",
+			name: "success - alert settings with only critical (keeps existing warning)",
 			id:   s.testData.features.apiCalls.ID, // Use apiCalls which has existing alert settings
 			req: dto.UpdateFeatureRequest{
-				AlertSettings: &types.FeatureAlertSettings{
-					Upperbound: lo.ToPtr(decimal.NewFromInt(2000)),
+				AlertSettings: &types.AlertSettings{
+					Critical: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(50),
+						Condition: types.AlertConditionBelow,
+					},
 				},
 			},
 			wantErr: false,
@@ -623,9 +641,15 @@ func (s *FeatureServiceSuite) TestUpdateFeature() {
 			name: "success - alert settings with alert_enabled explicitly set to false",
 			id:   s.testData.features.apiCalls.ID,
 			req: dto.UpdateFeatureRequest{
-				AlertSettings: &types.FeatureAlertSettings{
-					Upperbound:   lo.ToPtr(decimal.NewFromInt(1000)),
-					Lowerbound:   lo.ToPtr(decimal.NewFromInt(500)),
+				AlertSettings: &types.AlertSettings{
+					Critical: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(100),
+						Condition: types.AlertConditionBelow,
+					},
+					Warning: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(500),
+						Condition: types.AlertConditionBelow,
+					},
 					AlertEnabled: lo.ToPtr(false),
 				},
 			},
@@ -635,9 +659,15 @@ func (s *FeatureServiceSuite) TestUpdateFeature() {
 			name: "success - alert settings without alert_enabled (defaults to false)",
 			id:   s.testData.features.apiCalls.ID,
 			req: dto.UpdateFeatureRequest{
-				AlertSettings: &types.FeatureAlertSettings{
-					Upperbound: lo.ToPtr(decimal.NewFromInt(2000)),
-					Lowerbound: lo.ToPtr(decimal.NewFromInt(1000)),
+				AlertSettings: &types.AlertSettings{
+					Critical: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(100),
+						Condition: types.AlertConditionBelow,
+					},
+					Warning: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(500),
+						Condition: types.AlertConditionBelow,
+					},
 				},
 			},
 			wantErr: false,
@@ -679,11 +709,15 @@ func (s *FeatureServiceSuite) TestUpdateFeature() {
 				s.NotNil(resp.AlertSettings)
 
 				// For partial updates, check that provided values are updated and others remain unchanged
-				if tt.req.AlertSettings.Upperbound != nil {
-					s.Equal(tt.req.AlertSettings.Upperbound, resp.AlertSettings.Upperbound, "upperbound should be updated")
+				if tt.req.AlertSettings.Critical != nil {
+					s.NotNil(resp.AlertSettings.Critical, "critical should be present")
+					s.Equal(tt.req.AlertSettings.Critical.Threshold, resp.AlertSettings.Critical.Threshold, "critical threshold should be updated")
+					s.Equal(tt.req.AlertSettings.Critical.Condition, resp.AlertSettings.Critical.Condition, "critical condition should be updated")
 				}
-				if tt.req.AlertSettings.Lowerbound != nil {
-					s.Equal(tt.req.AlertSettings.Lowerbound, resp.AlertSettings.Lowerbound, "lowerbound should be updated")
+				if tt.req.AlertSettings.Warning != nil {
+					s.NotNil(resp.AlertSettings.Warning, "warning should be present")
+					s.Equal(tt.req.AlertSettings.Warning.Threshold, resp.AlertSettings.Warning.Threshold, "warning threshold should be updated")
+					s.Equal(tt.req.AlertSettings.Warning.Condition, resp.AlertSettings.Warning.Condition, "warning condition should be updated")
 				}
 				if tt.req.AlertSettings.AlertEnabled != nil {
 					s.Equal(tt.req.AlertSettings.AlertEnabled, resp.AlertSettings.AlertEnabled, "alert_enabled should be updated")
