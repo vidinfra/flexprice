@@ -192,15 +192,15 @@ func (fc *FeatureCreate) SetNillableUnitPlural(s *string) *FeatureCreate {
 }
 
 // SetAlertSettings sets the "alert_settings" field.
-func (fc *FeatureCreate) SetAlertSettings(tas types.FeatureAlertSettings) *FeatureCreate {
-	fc.mutation.SetAlertSettings(tas)
+func (fc *FeatureCreate) SetAlertSettings(ts types.AlertSettings) *FeatureCreate {
+	fc.mutation.SetAlertSettings(ts)
 	return fc
 }
 
 // SetNillableAlertSettings sets the "alert_settings" field if the given value is not nil.
-func (fc *FeatureCreate) SetNillableAlertSettings(tas *types.FeatureAlertSettings) *FeatureCreate {
-	if tas != nil {
-		fc.SetAlertSettings(*tas)
+func (fc *FeatureCreate) SetNillableAlertSettings(ts *types.AlertSettings) *FeatureCreate {
+	if ts != nil {
+		fc.SetAlertSettings(*ts)
 	}
 	return fc
 }

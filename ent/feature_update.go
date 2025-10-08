@@ -176,15 +176,15 @@ func (fu *FeatureUpdate) ClearUnitPlural() *FeatureUpdate {
 }
 
 // SetAlertSettings sets the "alert_settings" field.
-func (fu *FeatureUpdate) SetAlertSettings(tas types.FeatureAlertSettings) *FeatureUpdate {
-	fu.mutation.SetAlertSettings(tas)
+func (fu *FeatureUpdate) SetAlertSettings(ts types.AlertSettings) *FeatureUpdate {
+	fu.mutation.SetAlertSettings(ts)
 	return fu
 }
 
 // SetNillableAlertSettings sets the "alert_settings" field if the given value is not nil.
-func (fu *FeatureUpdate) SetNillableAlertSettings(tas *types.FeatureAlertSettings) *FeatureUpdate {
-	if tas != nil {
-		fu.SetAlertSettings(*tas)
+func (fu *FeatureUpdate) SetNillableAlertSettings(ts *types.AlertSettings) *FeatureUpdate {
+	if ts != nil {
+		fu.SetAlertSettings(*ts)
 	}
 	return fu
 }
@@ -487,15 +487,15 @@ func (fuo *FeatureUpdateOne) ClearUnitPlural() *FeatureUpdateOne {
 }
 
 // SetAlertSettings sets the "alert_settings" field.
-func (fuo *FeatureUpdateOne) SetAlertSettings(tas types.FeatureAlertSettings) *FeatureUpdateOne {
-	fuo.mutation.SetAlertSettings(tas)
+func (fuo *FeatureUpdateOne) SetAlertSettings(ts types.AlertSettings) *FeatureUpdateOne {
+	fuo.mutation.SetAlertSettings(ts)
 	return fuo
 }
 
 // SetNillableAlertSettings sets the "alert_settings" field if the given value is not nil.
-func (fuo *FeatureUpdateOne) SetNillableAlertSettings(tas *types.FeatureAlertSettings) *FeatureUpdateOne {
-	if tas != nil {
-		fuo.SetAlertSettings(*tas)
+func (fuo *FeatureUpdateOne) SetNillableAlertSettings(ts *types.AlertSettings) *FeatureUpdateOne {
+	if ts != nil {
+		fuo.SetAlertSettings(*ts)
 	}
 	return fuo
 }

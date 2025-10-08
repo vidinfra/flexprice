@@ -50,7 +50,7 @@ type Feature struct {
 	// UnitPlural holds the value of the "unit_plural" field.
 	UnitPlural *string `json:"unit_plural,omitempty"`
 	// AlertSettings holds the value of the "alert_settings" field.
-	AlertSettings types.FeatureAlertSettings `json:"alert_settings,omitempty"`
+	AlertSettings types.AlertSettings `json:"alert_settings,omitempty"`
 	selectValues  sql.SelectValues
 }
 

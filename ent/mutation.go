@@ -22593,7 +22593,7 @@ type FeatureMutation struct {
 	metadata       *map[string]string
 	unit_singular  *string
 	unit_plural    *string
-	alert_settings *types.FeatureAlertSettings
+	alert_settings *types.AlertSettings
 	clearedFields  map[string]struct{}
 	done           bool
 	oldValue       func(context.Context) (*Feature, error)
@@ -23349,12 +23349,12 @@ func (m *FeatureMutation) ResetUnitPlural() {
 }
 
 // SetAlertSettings sets the "alert_settings" field.
-func (m *FeatureMutation) SetAlertSettings(tas types.FeatureAlertSettings) {
-	m.alert_settings = &tas
+func (m *FeatureMutation) SetAlertSettings(ts types.AlertSettings) {
+	m.alert_settings = &ts
 }
 
 // AlertSettings returns the value of the "alert_settings" field in the mutation.
-func (m *FeatureMutation) AlertSettings() (r types.FeatureAlertSettings, exists bool) {
+func (m *FeatureMutation) AlertSettings() (r types.AlertSettings, exists bool) {
 	v := m.alert_settings
 	if v == nil {
 		return
@@ -23365,7 +23365,7 @@ func (m *FeatureMutation) AlertSettings() (r types.FeatureAlertSettings, exists 
 // OldAlertSettings returns the old "alert_settings" field's value of the Feature entity.
 // If the Feature object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *FeatureMutation) OldAlertSettings(ctx context.Context) (v types.FeatureAlertSettings, err error) {
+func (m *FeatureMutation) OldAlertSettings(ctx context.Context) (v types.AlertSettings, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldAlertSettings is only allowed on UpdateOne operations")
 	}
@@ -23676,7 +23676,7 @@ func (m *FeatureMutation) SetField(name string, value ent.Value) error {
 		m.SetUnitPlural(v)
 		return nil
 	case feature.FieldAlertSettings:
-		v, ok := value.(types.FeatureAlertSettings)
+		v, ok := value.(types.AlertSettings)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}

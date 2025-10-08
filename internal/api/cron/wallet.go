@@ -221,7 +221,7 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 					}
 
 					if req.Threshold == nil {
-						wallet.AlertConfig.Threshold = &types.AlertThreshold{
+						wallet.AlertConfig.Threshold = &types.WalletAlertThreshold{
 							Type:  types.AlertThresholdTypeAmount,
 							Value: decimal.NewFromInt(1),
 						}
@@ -250,15 +250,25 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 				// Process each feature with alert settings enabled for this wallet
 				for _, feature := range featuresWithAlerts {
 					// Determine alert status based on ongoing balance vs alert settings
-					alertStatus := feature.AlertSettings.FeatureAlertStatus(*ongoingBalance)
+					alertStatus, err := feature.AlertSettings.AlertState(*ongoingBalance)
+					if err != nil {
+						h.logger.Errorw("failed to determine alert status",
+							"feature_id", feature.ID,
+							"feature_name", feature.Name,
+							"wallet_id", wallet.ID,
+							"ongoing_balance", ongoingBalance,
+							"error", err,
+						)
+						continue
+					}
 
 					h.logger.Debugw("feature alert status determined",
 						"feature_id", feature.ID,
 						"feature_name", feature.Name,
 						"wallet_id", wallet.ID,
 						"ongoing_balance", ongoingBalance,
-						"upperbound", feature.AlertSettings.Upperbound,
-						"lowerbound", feature.AlertSettings.Lowerbound,
+						"critical", feature.AlertSettings.Critical,
+						"warning", feature.AlertSettings.Warning,
 						"alert_enabled", feature.AlertSettings.AlertEnabled,
 						"alert_status", alertStatus,
 					)
@@ -272,9 +282,9 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 						AlertType:        types.AlertTypeFeatureWalletBalance,
 						AlertStatus:      alertStatus,
 						AlertInfo: types.AlertInfo{
-							FeatureAlertSettings: feature.AlertSettings, // Include full alert settings
-							ValueAtTime:          *ongoingBalance,       // Ongoing balance at time of check
-							Timestamp:            time.Now().UTC(),
+							AlertSettings: feature.AlertSettings, // Include full alert settings
+							ValueAtTime:   *ongoingBalance,       // Ongoing balance at time of check
+							Timestamp:     time.Now().UTC(),
 						},
 					})
 					if err != nil {
@@ -328,15 +338,18 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 				)
 
 				// Use AlertLogsService to handle alert logging and webhook publishing
+				// For wallet alerts, we store the threshold info in AlertSettings format for consistency
 				err = h.alertLogsService.LogAlert(ctx, &service.LogAlertRequest{
 					EntityType:  types.AlertEntityTypeWallet,
 					EntityID:    wallet.ID,
 					AlertType:   types.AlertTypeLowOngoingBalance,
 					AlertStatus: alertStatus,
 					AlertInfo: types.AlertInfo{
-						Threshold: types.AlertThreshold{
-							Type:  types.AlertThresholdTypeAmount,
-							Value: threshold,
+						AlertSettings: &types.AlertSettings{
+							Critical: &types.AlertThreshold{
+								Threshold: wallet.AlertConfig.Threshold.Value,
+								Condition: types.AlertConditionBelow, // Wallet alerts are always "below" threshold
+							},
 						},
 						ValueAtTime: *ongoingBalance,
 						Timestamp:   time.Now().UTC(),

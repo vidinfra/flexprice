@@ -72,7 +72,7 @@ func (Feature) Fields() []ent.Field {
 			}).
 			Optional().
 			Nillable(),
-		field.JSON("alert_settings", types.FeatureAlertSettings{}).
+		field.JSON("alert_settings", types.AlertSettings{}).
 			Optional().
 			SchemaType(map[string]string{
 				"postgres": "jsonb",

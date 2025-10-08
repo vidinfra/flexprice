@@ -11,16 +11,16 @@ import (
 )
 
 type CreateFeatureRequest struct {
-	Name          string                      `json:"name" binding:"required"`
-	Description   string                      `json:"description"`
-	LookupKey     string                      `json:"lookup_key"`
-	Type          types.FeatureType           `json:"type" binding:"required"`
-	MeterID       string                      `json:"meter_id,omitempty"`
-	Meter         *CreateMeterRequest         `json:"meter,omitempty"`
-	Metadata      types.Metadata              `json:"metadata,omitempty"`
-	UnitSingular  string                      `json:"unit_singular,omitempty"`
-	UnitPlural    string                      `json:"unit_plural,omitempty"`
-	AlertSettings *types.FeatureAlertSettings `json:"alert_settings,omitempty"`
+	Name          string               `json:"name" binding:"required"`
+	Description   string               `json:"description"`
+	LookupKey     string               `json:"lookup_key"`
+	Type          types.FeatureType    `json:"type" binding:"required"`
+	MeterID       string               `json:"meter_id,omitempty"`
+	Meter         *CreateMeterRequest  `json:"meter,omitempty"`
+	Metadata      types.Metadata       `json:"metadata,omitempty"`
+	UnitSingular  string               `json:"unit_singular,omitempty"`
+	UnitPlural    string               `json:"unit_plural,omitempty"`
+	AlertSettings *types.AlertSettings `json:"alert_settings,omitempty"`
 }
 
 func (r *CreateFeatureRequest) Validate() error {
@@ -64,53 +64,39 @@ func (r *CreateFeatureRequest) Validate() error {
 }
 
 func (r *CreateFeatureRequest) ToFeature(ctx context.Context) (*feature.Feature, error) {
-	// Normalize alert settings for CREATE (not in validation)
-	var alertSettings *types.FeatureAlertSettings
-	if r.AlertSettings != nil {
-		alertSettings = &types.FeatureAlertSettings{
-			Upperbound:   r.AlertSettings.Upperbound,
-			Lowerbound:   r.AlertSettings.Lowerbound,
-			AlertEnabled: r.AlertSettings.AlertEnabled,
-		}
 
-		// If only upperbound is provided, set lowerbound to the same value
-		if alertSettings.Upperbound != nil && alertSettings.Lowerbound == nil {
-			alertSettings.Lowerbound = alertSettings.Upperbound
-		}
-		// If only lowerbound is provided, set upperbound to the same value
-		if alertSettings.Lowerbound != nil && alertSettings.Upperbound == nil {
-			alertSettings.Upperbound = alertSettings.Lowerbound
-		}
-		// If alert_enabled is not provided, default to false
-		if alertSettings.AlertEnabled == nil {
-			alertSettings.AlertEnabled = lo.ToPtr(false)
-		}
-	}
+	feature := &feature.Feature{
+		ID:           types.GenerateUUIDWithPrefix(types.UUID_PREFIX_FEATURE),
+		Name:         r.Name,
+		Description:  r.Description,
+		LookupKey:    r.LookupKey,
+		Metadata:     r.Metadata,
+		Type:         r.Type,
+		MeterID:      r.MeterID,
+		UnitSingular: r.UnitSingular,
+		UnitPlural:   r.UnitPlural,
 
-	return &feature.Feature{
-		ID:            types.GenerateUUIDWithPrefix(types.UUID_PREFIX_FEATURE),
-		Name:          r.Name,
-		Description:   r.Description,
-		LookupKey:     r.LookupKey,
-		Metadata:      r.Metadata,
-		Type:          r.Type,
-		MeterID:       r.MeterID,
-		UnitSingular:  r.UnitSingular,
-		UnitPlural:    r.UnitPlural,
-		AlertSettings: alertSettings,
 		EnvironmentID: types.GetEnvironmentID(ctx),
 		BaseModel:     types.GetDefaultBaseModel(ctx),
-	}, nil
+	}
+	if r.AlertSettings != nil {
+		// Default alert_enabled to false if not provided
+		if r.AlertSettings.AlertEnabled == nil {
+			r.AlertSettings.AlertEnabled = lo.ToPtr(false)
+		}
+		feature.AlertSettings = r.AlertSettings
+	}
+	return feature, nil
 }
 
 type UpdateFeatureRequest struct {
-	Name          *string                     `json:"name,omitempty"`
-	Description   *string                     `json:"description,omitempty"`
-	Metadata      *types.Metadata             `json:"metadata,omitempty"`
-	UnitSingular  *string                     `json:"unit_singular,omitempty"`
-	UnitPlural    *string                     `json:"unit_plural,omitempty"`
-	Filters       *[]meter.Filter             `json:"filters,omitempty"`
-	AlertSettings *types.FeatureAlertSettings `json:"alert_settings,omitempty"`
+	Name          *string              `json:"name,omitempty"`
+	Description   *string              `json:"description,omitempty"`
+	Metadata      *types.Metadata      `json:"metadata,omitempty"`
+	UnitSingular  *string              `json:"unit_singular,omitempty"`
+	UnitPlural    *string              `json:"unit_plural,omitempty"`
+	Filters       *[]meter.Filter      `json:"filters,omitempty"`
+	AlertSettings *types.AlertSettings `json:"alert_settings,omitempty"`
 }
 
 type FeatureResponse struct {

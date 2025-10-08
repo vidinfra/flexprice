@@ -7,17 +7,17 @@ import (
 )
 
 type Feature struct {
-	ID            string                      `json:"id"`
-	Name          string                      `json:"name"`
-	LookupKey     string                      `json:"lookup_key"`
-	Description   string                      `json:"description"`
-	MeterID       string                      `json:"meter_id"`
-	Metadata      types.Metadata              `json:"metadata"`
-	Type          types.FeatureType           `json:"type"`
-	UnitSingular  string                      `json:"unit_singular"`
-	UnitPlural    string                      `json:"unit_plural"`
-	AlertSettings *types.FeatureAlertSettings `json:"alert_settings,omitempty"`
-	EnvironmentID string                      `json:"environment_id"`
+	ID            string               `json:"id"`
+	Name          string               `json:"name"`
+	LookupKey     string               `json:"lookup_key"`
+	Description   string               `json:"description"`
+	MeterID       string               `json:"meter_id"`
+	Metadata      types.Metadata       `json:"metadata"`
+	Type          types.FeatureType    `json:"type"`
+	UnitSingular  string               `json:"unit_singular"`
+	UnitPlural    string               `json:"unit_plural"`
+	AlertSettings *types.AlertSettings `json:"alert_settings,omitempty"`
+	EnvironmentID string               `json:"environment_id"`
 	types.BaseModel
 }
 
@@ -28,9 +28,9 @@ func FromEnt(f *ent.Feature) *Feature {
 	}
 
 	// Extract alert settings from Ent entity
-	var alertSettings *types.FeatureAlertSettings
-	// Check if alert settings are set (at least one field must be provided)
-	if f.AlertSettings.Upperbound != nil || f.AlertSettings.Lowerbound != nil {
+	var alertSettings *types.AlertSettings
+	// Check if alert settings are set (critical threshold must be provided)
+	if f.AlertSettings.Critical != nil {
 		alertSettings = &f.AlertSettings
 	}
 

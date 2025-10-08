@@ -212,33 +212,30 @@ func (s *featureService) UpdateFeature(ctx context.Context, id string, req dto.U
 
 	// Update alert settings if provided
 	if req.AlertSettings != nil {
-		// Check if at least one field is being updated
-		if req.AlertSettings.Upperbound == nil && req.AlertSettings.Lowerbound == nil && req.AlertSettings.AlertEnabled == nil {
-			return nil, ierr.NewError("at least one alert setting field must be provided").
-				WithHint("Provide at least one of: upperbound, lowerbound, or alert_enabled").
-				Mark(ierr.ErrValidation)
-		}
-
-		// Start with existing settings
-		newAlertSettings := &types.FeatureAlertSettings{}
+		// Start with existing settings (preserve what's not being updated)
+		newAlertSettings := &types.AlertSettings{}
 		if feature.AlertSettings != nil {
-			newAlertSettings.Upperbound = feature.AlertSettings.Upperbound
-			newAlertSettings.Lowerbound = feature.AlertSettings.Lowerbound
+			// Preserve existing critical, warning, and alert_enabled if not being updated
+			newAlertSettings.Critical = feature.AlertSettings.Critical
+			newAlertSettings.Warning = feature.AlertSettings.Warning
 			newAlertSettings.AlertEnabled = feature.AlertSettings.AlertEnabled
 		}
 
-		// Overwrite with request values
-		if req.AlertSettings.Upperbound != nil {
-			newAlertSettings.Upperbound = req.AlertSettings.Upperbound
+		// Overwrite with request values (partial update support)
+		if req.AlertSettings.Critical != nil {
+			newAlertSettings.Critical = req.AlertSettings.Critical
 		}
-		if req.AlertSettings.Lowerbound != nil {
-			newAlertSettings.Lowerbound = req.AlertSettings.Lowerbound
+		if req.AlertSettings.Warning != nil {
+			newAlertSettings.Warning = req.AlertSettings.Warning
 		}
 		if req.AlertSettings.AlertEnabled != nil {
 			newAlertSettings.AlertEnabled = req.AlertSettings.AlertEnabled
+		} else if feature.AlertSettings == nil {
+			// If no previous alert settings exist and alert_enabled not provided, default to false
+			newAlertSettings.AlertEnabled = lo.ToPtr(false)
 		}
 
-		// Validate the final merged state
+		// Validate the FINAL merged state (not the partial request)
 		if err := newAlertSettings.Validate(); err != nil {
 			return nil, err
 		}

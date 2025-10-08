@@ -80,19 +80,18 @@ func (at AlertType) Validate() error {
 }
 
 type AlertInfo struct {
-	Threshold            AlertThreshold        `json:"threshold,omitempty"`              // For wallet alerts
-	FeatureAlertSettings *FeatureAlertSettings `json:"feature_alert_settings,omitempty"` // For feature alerts
-	ValueAtTime          decimal.Decimal       `json:"value_at_time"`
-	Timestamp            time.Time             `json:"timestamp"`
+	AlertSettings *AlertSettings  `json:"alert_settings,omitempty"`
+	ValueAtTime   decimal.Decimal `json:"value_at_time"`
+	Timestamp     time.Time       `json:"timestamp"`
 }
 
 // AlertConfig represents the configuration for wallet alerts
 type AlertConfig struct {
-	Threshold *AlertThreshold `json:"threshold,omitempty"`
+	Threshold *WalletAlertThreshold `json:"threshold,omitempty"`
 }
 
-// AlertThreshold represents the threshold configuration
-type AlertThreshold struct {
+// WalletAlertThreshold represents the threshold configuration for wallet alerts
+type WalletAlertThreshold struct {
 	Type  AlertThresholdType `json:"type"` // amount
 	Value decimal.Decimal    `json:"value"`
 }
@@ -170,58 +169,137 @@ func (f *AlertLogFilter) GetOffset() int {
 	return f.QueryFilter.GetOffset()
 }
 
-type FeatureAlertSettings struct {
-	Upperbound   *decimal.Decimal `json:"upperbound"`
-	Lowerbound   *decimal.Decimal `json:"lowerbound"`
-	AlertEnabled *bool            `json:"alert_enabled"`
+type AlertSettings struct {
+	Critical     *AlertThreshold `json:"critical"`
+	Warning      *AlertThreshold `json:"warning"`
+	AlertEnabled *bool           `json:"alert_enabled"`
 }
 
-// Validate validates the feature alert settings
-// At least one of upperbound or lowerbound must be provided
-// If both are provided, upperbound must be greater than or equal to lowerbound
-func (f *FeatureAlertSettings) Validate() error {
-	// Check if at least one bound is provided
-	if f.Upperbound == nil && f.Lowerbound == nil {
-		return ierr.NewError("upperbound or lowerbound are required").
-			WithHint("Please provide a valid upperbound or lowerbound value").
-			Mark(ierr.ErrValidation)
-	}
-
-	// If both are provided, check if upperbound is greater than or equal to lowerbound
-	if f.Upperbound != nil && f.Lowerbound != nil {
-		if f.Upperbound.LessThan(*f.Lowerbound) {
-			return ierr.NewError("upperbound must be greater than or equal to lowerbound").
-				WithHint("Please provide valid feature alert settings where upperbound >= lowerbound").
+func (at *AlertSettings) Validate() error {
+	// Validate critical threshold if provided
+	if at.Critical != nil {
+		// critical condition must be provided either above or below
+		if at.Critical.Condition != AlertConditionAbove && at.Critical.Condition != AlertConditionBelow {
+			return ierr.NewError("critical threshold condition must be either above or below").
+				WithHint("Please provide a valid critical threshold condition").
 				Mark(ierr.ErrValidation)
 		}
 	}
-
+	if at.Warning != nil {
+		// If warning is provided, critical must also be provided for validation
+		if at.Critical == nil {
+			return ierr.NewError("critical threshold is required when warning threshold is provided").
+				WithHint("Please provide a critical threshold").
+				Mark(ierr.ErrValidation)
+		}
+		switch at.Critical.Condition {
+		case AlertConditionAbove:
+			// warning threshold must be less than critical threshold
+			if at.Warning.Threshold.GreaterThan(at.Critical.Threshold) {
+				return ierr.NewError("warning threshold must be less than critical threshold").
+					WithHint("Please provide a valid warning threshold").
+					Mark(ierr.ErrValidation)
+			}
+			// warning condition must be same as critical condition
+			if at.Warning.Condition != at.Critical.Condition {
+				return ierr.NewError("warning condition must be same as critical condition").
+					WithHint("Please provide a valid warning condition").
+					Mark(ierr.ErrValidation)
+			}
+		case AlertConditionBelow:
+			// warning threshold must be greater than critical threshold
+			if at.Warning.Threshold.LessThan(at.Critical.Threshold) {
+				return ierr.NewError("warning threshold must be greater than critical threshold").
+					WithHint("Please provide a valid warning threshold").
+					Mark(ierr.ErrValidation)
+			}
+			// warning condition must be same as critical condition
+			if at.Warning.Condition != at.Critical.Condition {
+				return ierr.NewError("warning condition must be same as critical condition").
+					WithHint("Please provide a valid warning condition").
+					Mark(ierr.ErrValidation)
+			}
+		}
+	}
 	return nil
 }
 
-// IsAlertEnabled returns true if alerts are enabled for this feature
-func (f *FeatureAlertSettings) IsAlertEnabled() bool {
-	return f.AlertEnabled != nil && *f.AlertEnabled
+type AlertThreshold struct {
+	Threshold decimal.Decimal `json:"threshold"`
+	Condition AlertCondition  `json:"condition"`
 }
 
-// determineFeatureAlertStatus determines the alert status based on ongoing balance vs alert settings
-// if ongoing_balance > upperbound: alert_status: ok
-// if upperbound >= ongoing_balance > lowerbound: alert_status: warning
-// if ongoing_balance <= lowerbound: alert_status: in_alarm
-func (f *FeatureAlertSettings) FeatureAlertStatus(ongoingBalance decimal.Decimal) AlertState {
-	upperbound := lo.FromPtr(f.Upperbound)
-	lowerbound := lo.FromPtr(f.Lowerbound)
+func (at *AlertThreshold) Validate() error {
+	if at.Condition == "" {
+		return ierr.NewError("alert threshold condition is required").
+			WithHint("Please provide a valid alert threshold condition").
+			Mark(ierr.ErrValidation)
+	}
+	if at.Condition != AlertConditionAbove && at.Condition != AlertConditionBelow {
+		return ierr.NewError("alert threshold condition must be either above or below").
+			WithHint("Please provide a valid alert threshold condition").
+			Mark(ierr.ErrValidation)
+	}
+	return nil
+}
 
-	// ongoing_balance > upperbound
-	if ongoingBalance.GreaterThan(upperbound) {
-		return AlertStateOk
+type AlertCondition string
+
+const (
+	AlertConditionAbove AlertCondition = "above"
+	AlertConditionBelow AlertCondition = "below"
+)
+
+func (ac AlertCondition) Validate() error {
+	allowedConditions := []AlertCondition{
+		AlertConditionAbove,
+		AlertConditionBelow,
+	}
+	if !lo.Contains(allowedConditions, ac) {
+		return ierr.NewError("invalid alert condition").
+			WithHint("Please provide a valid alert condition").
+			Mark(ierr.ErrValidation)
+	}
+	return nil
+}
+
+// AlertStatus determines the alert status based on ongoing balance vs alert settings
+// if critical condition is above:
+// if ongoing balance is greater than or equal to critical threshold, return AlertStateInAlarm
+// if ongoing balance is greater than or equal to warning threshold, return AlertStateWarning
+// if ongoing balance is less than warning threshold, return AlertStateOk
+// if critical condition is below:
+// if ongoing balance is less than or equal to critical threshold, return AlertStateInAlarm
+// if ongoing balance is less than or equal to warning threshold, return AlertStateWarning
+// if ongoing balance is greater than warning threshold, return AlertStateOk
+func (At *AlertSettings) AlertState(ongoingBalance decimal.Decimal) (AlertState, error) {
+	criticalThreshold := lo.FromPtr(At.Critical)
+	warningThreshold := lo.FromPtr(At.Warning)
+
+	switch At.Critical.Condition {
+	case AlertConditionAbove:
+		if ongoingBalance.GreaterThanOrEqual(criticalThreshold.Threshold) {
+			return AlertStateInAlarm, nil
+		}
+		if ongoingBalance.GreaterThanOrEqual(warningThreshold.Threshold) {
+			return AlertStateWarning, nil
+		}
+		return AlertStateOk, nil
+	case AlertConditionBelow:
+		if ongoingBalance.LessThanOrEqual(criticalThreshold.Threshold) {
+			return AlertStateInAlarm, nil
+		}
+		if ongoingBalance.LessThanOrEqual(warningThreshold.Threshold) {
+			return AlertStateWarning, nil
+		}
+		return AlertStateOk, nil
 	}
 
-	// upperbound >= ongoing_balance > lowerbound
-	if ongoingBalance.Equal(upperbound) || (ongoingBalance.LessThan(upperbound) && ongoingBalance.GreaterThan(lowerbound)) {
-		return AlertStateWarning
-	}
+	return "", ierr.NewError("Alert State determination failed").
+		WithHint("Please provide a valid alert settings").
+		Mark(ierr.ErrValidation)
+}
 
-	// ongoing_balance <= lowerbound
-	return AlertStateInAlarm
+func (at *AlertSettings) IsAlertEnabled() bool {
+	return at.AlertEnabled != nil && *at.AlertEnabled
 }
