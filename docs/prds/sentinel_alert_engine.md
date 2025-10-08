@@ -83,26 +83,54 @@ ALTER TABLE features
 ADD COLUMN alert_settings JSONB DEFAULT NULL;
 
 -- Example alert_settings structure:
--- threshold {
---   "upperbound": "1000.00",
---   "lowerbound": "100.00"
+-- {
+--   "critical": {
+--     "threshold": "100.00",
+--     "condition": "below"
+--   },
+--   "warning": {
+--     "threshold": "500.00",
+--     "condition": "below"
+--   },
+--   "alert_enabled": false
 -- }
 ```
 
 #### 3.1.2 Alert State Logic
 The system supports three distinct alert states based on ongoing wallet balance comparison with feature thresholds:
 
-- **ok State**: `ongoing_balance >= feature.upperbound` - Balance is at or above the upper threshold (healthy)
-- **warning State**: `feature.upperbound > ongoing_balance && ongoing_balance > feature.lowerbound` - Balance is within the warning range
-- **in_alarm State**: `ongoing_balance <= feature.lowerbound` - Balance is at or below the lower threshold (critical)
+**For "below" condition (most common for wallet balance monitoring):**
+- **in_alarm State**: `ongoing_balance <= critical.threshold` - Balance is at or below the critical threshold
+- **warning State**: `critical.threshold < ongoing_balance <= warning.threshold` - Balance is within the warning range
+- **ok State**: `ongoing_balance > warning.threshold` - Balance is above the warning threshold (healthy)
+
+**For "above" condition (e.g., usage monitoring):**
+- **in_alarm State**: `ongoing_balance >= critical.threshold` - Usage is at or above the critical threshold
+- **warning State**: `warning.threshold <= ongoing_balance < critical.threshold` - Usage is within the warning range
+- **ok State**: `ongoing_balance < warning.threshold` - Usage is below the warning threshold (healthy)
 
 #### 3.1.3 Threshold Configuration
 ```json
 {
-  "upperbound": "1000.00",
-  "lowerbound": "100.00"
+  "critical": {
+    "threshold": "100.00",
+    "condition": "below"
+  },
+  "warning": {
+    "threshold": "500.00",
+    "condition": "below"
+  },
+  "alert_enabled": false
 }
 ```
+
+**Key Rules:**
+- `critical` threshold defines the **in_alarm** boundary
+- `warning` threshold defines the **warning** boundary (optional)
+- Both thresholds must use the same `condition` (either "below" or "above")
+- For "below" condition: `warning.threshold > critical.threshold`
+- For "above" condition: `warning.threshold < critical.threshold`
+- `alert_enabled` defaults to `false` if not provided
 
 ### 3.2 Architecture Integration
 
@@ -127,7 +155,7 @@ The system supports three distinct alert states based on ongoing wallet balance 
 func (Feature) Fields() []ent.Field {
     return []ent.Field{
         // ... existing fields ...
-        field.JSON("alert_settings", FeatureAlertSettings{}).
+        field.JSON("alert_settings", types.AlertSettings{}).
             Optional().
             Nillable().
             SchemaType(map[string]string{
@@ -136,11 +164,23 @@ func (Feature) Fields() []ent.Field {
     }
 }
 
-type FeatureAlertSettings struct {
-    Upperbound   *decimal.Decimal `json:"upperbound"`
-    Lowerbound   *decimal.Decimal `json:"lowerbound"`
-    AlertEnabled *bool            `json:"alert_enabled"` // Defaults to false if not provided
+type AlertSettings struct {
+    Critical     *AlertThreshold `json:"critical"`     // Critical threshold (required for complete settings)
+    Warning      *AlertThreshold `json:"warning"`      // Warning threshold (optional)
+    AlertEnabled *bool           `json:"alert_enabled"` // Defaults to false if not provided
 }
+
+type AlertThreshold struct {
+    Threshold decimal.Decimal `json:"threshold"` // The threshold value
+    Condition AlertCondition  `json:"condition"` // "above" or "below"
+}
+
+type AlertCondition string
+
+const (
+    AlertConditionAbove AlertCondition = "above"
+    AlertConditionBelow AlertCondition = "below"
+)
 ```
 
 #### 4.1.2 Extended Alert Types
@@ -172,10 +212,9 @@ const (
 #### 4.1.3 Alert Info Structure
 ```go
 type AlertInfo struct {
-    Threshold            AlertThreshold        `json:"threshold,omitempty"`              // For wallet alerts
-    FeatureAlertSettings *FeatureAlertSettings `json:"feature_alert_settings,omitempty"` // For feature alerts
-    ValueAtTime          decimal.Decimal       `json:"value_at_time"`
-    Timestamp            time.Time             `json:"timestamp"`
+    AlertSettings *AlertSettings  `json:"alert_settings,omitempty"` // For both wallet and feature alerts
+    ValueAtTime   decimal.Decimal `json:"value_at_time"`
+    Timestamp     time.Time       `json:"timestamp"`
 }
 ```
 
@@ -233,15 +272,35 @@ The system compares wallet balance against feature alert thresholds:
 
 #### 4.3.2 State Determination Algorithm
 ```go
-func DetermineFeatureAlertStatus(ongoingBalance decimal.Decimal, alertSettings *FeatureAlertSettings) AlertState {
-    if ongoingBalance.GreaterThanOrEqual(*alertSettings.Upperbound) {
-        return AlertStateOk
-    } else if ongoingBalance.GreaterThan(*alertSettings.Lowerbound) && 
-              ongoingBalance.LessThan(*alertSettings.Upperbound) {
-        return AlertStateWarning
-    } else { // ongoingBalance <= lowerbound
-        return AlertStateInAlarm
+func (at *AlertSettings) AlertState(ongoingBalance decimal.Decimal) (AlertState, error) {
+    criticalThreshold := lo.FromPtr(at.Critical)
+    warningThreshold := lo.FromPtr(at.Warning)
+
+    switch at.Critical.Condition {
+    case AlertConditionAbove:
+        // For "above" condition (e.g., usage monitoring)
+        if ongoingBalance.GreaterThanOrEqual(criticalThreshold.Threshold) {
+            return AlertStateInAlarm, nil // Usage too high
+        }
+        if warningThreshold != nil && ongoingBalance.GreaterThanOrEqual(warningThreshold.Threshold) {
+            return AlertStateWarning, nil // Usage approaching limit
+        }
+        return AlertStateOk, nil // Usage normal
+        
+    case AlertConditionBelow:
+        // For "below" condition (e.g., balance monitoring)
+        if ongoingBalance.LessThanOrEqual(criticalThreshold.Threshold) {
+            return AlertStateInAlarm, nil // Balance too low (critical)
+        }
+        if warningThreshold != nil && ongoingBalance.LessThanOrEqual(warningThreshold.Threshold) {
+            return AlertStateWarning, nil // Balance low (warning)
+        }
+        return AlertStateOk, nil // Balance healthy
     }
+
+    return "", ierr.NewError("Alert State determination failed").
+        WithHint("Please provide a valid alert settings").
+        Mark(ierr.ErrValidation)
 }
 ```
 
@@ -327,14 +386,25 @@ flowchart TD
 
 6. **Alert State Determination**
    ```
-   if ongoing_balance >= upperbound:
-       alert_status = ok
+   # For "below" condition (wallet balance monitoring):
+   if ongoing_balance <= critical.threshold:
+       alert_status = in_alarm
    
-   if upperbound > ongoing_balance && ongoing_balance > lowerbound:
+   if critical.threshold < ongoing_balance <= warning.threshold:
        alert_status = warning
    
-   if ongoing_balance <= lowerbound:
+   if ongoing_balance > warning.threshold:
+       alert_status = ok
+   
+   # For "above" condition (usage monitoring):
+   if ongoing_balance >= critical.threshold:
        alert_status = in_alarm
+   
+   if warning.threshold <= ongoing_balance < critical.threshold:
+       alert_status = warning
+   
+   if ongoing_balance < warning.threshold:
+       alert_status = ok
    ```
 
 7. **State Transition Check**
@@ -364,10 +434,10 @@ flowchart TD
        - `alert_status` = determined status (ok, warning, in_alarm)
        - `alert_info` = { feature_alert_settings, value_at_time, timestamp }
      - Publish webhook event with payload containing:
-       - Complete feature object (with alert_settings)
+       - Complete feature object (with alert_settings containing critical, warning, alert_enabled)
        - Complete wallet object  
-       - `alert_status`
-       - `alert_type`
+       - `alert_status` (ok, warning, in_alarm)
+       - `alert_type` (feature_wallet_balance)
    - Note: Wallet ID retrieved using `lo.FromPtr(alertLog.ParentEntityID)`
 
 #### 4.3.4 State Transition Logic
@@ -448,14 +518,20 @@ The system implements intelligent state transition logic to prevent alert spam:
          "id": "feat_xxx",
          "name": "API Calls",
          "alert_settings": {
-           "upperbound": "1000",
-           "lowerbound": "100",
+           "critical": {
+             "threshold": "100",
+             "condition": "below"
+           },
+           "warning": {
+             "threshold": "500",
+             "condition": "below"
+           },
            "alert_enabled": true
          }
        },
        "wallet": { 
          "id": "wallet_xxx",
-         "balance": "750",
+         "balance": "250",
          "currency": "usd"
        }
      }
@@ -582,40 +658,53 @@ Alert settings are managed directly through the standard Feature API endpoints:
 ```go
 // POST /api/v1/features - Create Feature with Alert Settings
 type CreateFeatureRequest struct {
-    Name          string                      `json:"name" binding:"required"`
-    Description   string                      `json:"description"`
-    Type          FeatureType                 `json:"type" binding:"required"`
-    MeterID       string                      `json:"meter_id,omitempty"`
-    AlertSettings *FeatureAlertSettings       `json:"alert_settings,omitempty"`
+    Name          string               `json:"name" binding:"required"`
+    Description   string               `json:"description"`
+    Type          FeatureType          `json:"type" binding:"required"`
+    MeterID       string               `json:"meter_id,omitempty"`
+    AlertSettings *types.AlertSettings `json:"alert_settings,omitempty"`
 }
 
 // PUT /api/v1/features/{feature_id} - Update Feature Alert Settings
 type UpdateFeatureRequest struct {
-    Name          *string                     `json:"name,omitempty"`
-    Description   *string                     `json:"description,omitempty"`
-    AlertSettings *FeatureAlertSettings       `json:"alert_settings,omitempty"`
+    Name          *string              `json:"name,omitempty"`
+    Description   *string              `json:"description,omitempty"`
+    AlertSettings *types.AlertSettings `json:"alert_settings,omitempty"`
 }
 ```
 
 **Feature CREATE Behavior:**
-- Normalization happens in `ToFeature()` DTO method (NOT in validation)
-- If only `upperbound` provided → `lowerbound = upperbound`
-- If only `lowerbound` provided → `upperbound = lowerbound`
 - If `alert_enabled` not provided → defaults to `false`
-- Validation: At least one bound required, `upperbound >= lowerbound`
+- `critical` threshold is optional (but typically required for meaningful alerts)
+- `warning` threshold is optional
+- Validation: 
+  - If `warning` provided, `critical` must also be provided
+  - Both thresholds must use the same `condition`
+  - For "below": `warning.threshold > critical.threshold`
+  - For "above": `warning.threshold < critical.threshold`
 
 **Feature UPDATE Behavior:**
-- NO normalization - only update provided fields
-- Validation happens in service layer AFTER merging with existing values
-- If request has empty `alert_settings` object → error (at least one field required)
-- Merge existing values with request values, then validate
-- Validation: `upperbound >= lowerbound` on final merged state
+- **Partial updates fully supported** - only update provided fields
+- Validation happens in service layer **AFTER** merging with existing values
+- Merge logic:
+  1. Get existing feature from DB
+  2. Start with existing alert_settings (preserve all fields)
+  3. Overwrite only fields provided in request
+  4. Validate final merged state
+  5. If valid, assign to feature and save
+- Validation rules apply to final merged state:
+  - If warning exists (old or new), critical must exist
+  - Both thresholds must use same condition
+  - Threshold ordering rules based on condition
 
 ```go
 // Example UPDATE workflow in service layer:
 1. Get existing feature from DB
 2. Start with existing alert_settings
-3. Overwrite only fields provided in request
+3. Overwrite only fields provided in request:
+   - If req.AlertSettings.Critical != nil → update critical
+   - If req.AlertSettings.Warning != nil → update warning
+   - If req.AlertSettings.AlertEnabled != nil → update alert_enabled
 4. Validate final merged state
 5. If valid, assign to feature and save
 ```
@@ -923,8 +1012,12 @@ graph TB
 - **Decision**: Store alert settings as JSONB column in features table
 - **Rationale**: Flexible schema, easy to extend, efficient queries
 - **Fields**:
-  - `upperbound`: *decimal.Decimal (optional pointer)
-  - `lowerbound`: *decimal.Decimal (optional pointer)
+  - `critical`: *AlertThreshold (optional pointer, but typically required)
+    - `threshold`: decimal.Decimal (the threshold value)
+    - `condition`: AlertCondition ("above" or "below")
+  - `warning`: *AlertThreshold (optional pointer)
+    - `threshold`: decimal.Decimal (the threshold value)
+    - `condition`: AlertCondition (must match critical.condition)
   - `alert_enabled`: *bool (defaults to false if not provided)
 
 #### A.1.2 Parent Entity Architecture
@@ -981,36 +1074,34 @@ graph TB
 ### A.2 CREATE vs UPDATE Behavior
 
 #### A.2.1 Feature CREATE
-**Normalization Location**: `ToFeature()` in DTO layer
+**Default Handling Location**: `ToFeature()` in DTO layer
 
 ```go
 func (r *CreateFeatureRequest) ToFeature(ctx context.Context) (*feature.Feature, error) {
-    var alertSettings *types.FeatureAlertSettings
-    if r.AlertSettings != nil {
-        alertSettings = &types.FeatureAlertSettings{
-            Upperbound:   r.AlertSettings.Upperbound,
-            Lowerbound:   r.AlertSettings.Lowerbound,
-            AlertEnabled: r.AlertSettings.AlertEnabled,
-        }
+    feature := &feature.Feature{
+        ID:           types.GenerateUUIDWithPrefix(types.UUID_PREFIX_FEATURE),
+        Name:         r.Name,
+        Description:  r.Description,
+        LookupKey:    r.LookupKey,
+        Metadata:     r.Metadata,
+        Type:         r.Type,
+        MeterID:      r.MeterID,
+        UnitSingular: r.UnitSingular,
+        UnitPlural:   r.UnitPlural,
         
-        // Normalize: If only one bound provided, set the other
-        if alertSettings.Upperbound != nil && alertSettings.Lowerbound == nil {
-            alertSettings.Lowerbound = alertSettings.Upperbound
-        }
-        if alertSettings.Lowerbound != nil && alertSettings.Upperbound == nil {
-            alertSettings.Upperbound = alertSettings.Lowerbound
-        }
-        
-        // Default alert_enabled to false
-        if alertSettings.AlertEnabled == nil {
-            alertSettings.AlertEnabled = lo.ToPtr(false)
-        }
+        EnvironmentID: types.GetEnvironmentID(ctx),
+        BaseModel:     types.GetDefaultBaseModel(ctx),
     }
     
-    return &feature.Feature{
-        // ... other fields ...
-        AlertSettings: alertSettings,
-    }, nil
+    if r.AlertSettings != nil {
+        // Default alert_enabled to false if not provided
+        if r.AlertSettings.AlertEnabled == nil {
+            r.AlertSettings.AlertEnabled = lo.ToPtr(false)
+        }
+        feature.AlertSettings = r.AlertSettings
+    }
+    
+    return feature, nil
 }
 ```
 
@@ -1037,39 +1128,37 @@ func (s *featureService) UpdateFeature(ctx context.Context, id string, req dto.U
         return nil, err
     }
     
+    // Update alert settings if provided
     if req.AlertSettings != nil {
-        // 1. Check if at least one field provided
-        if req.AlertSettings.Upperbound == nil && 
-           req.AlertSettings.Lowerbound == nil && 
-           req.AlertSettings.AlertEnabled == nil {
-            return nil, ierr.NewError("at least one alert setting field must be provided")
-        }
-        
-        // 2. Start with existing settings (or empty)
-        newAlertSettings := &types.FeatureAlertSettings{}
+        // Start with existing settings (preserve what's not being updated)
+        newAlertSettings := &types.AlertSettings{}
         if feature.AlertSettings != nil {
-            newAlertSettings.Upperbound = feature.AlertSettings.Upperbound
-            newAlertSettings.Lowerbound = feature.AlertSettings.Lowerbound
+            // Preserve existing critical, warning, and alert_enabled if not being updated
+            newAlertSettings.Critical = feature.AlertSettings.Critical
+            newAlertSettings.Warning = feature.AlertSettings.Warning
             newAlertSettings.AlertEnabled = feature.AlertSettings.AlertEnabled
         }
-        
-        // 3. Overwrite only fields provided in request
-        if req.AlertSettings.Upperbound != nil {
-            newAlertSettings.Upperbound = req.AlertSettings.Upperbound
+
+        // Overwrite with request values (partial update support)
+        if req.AlertSettings.Critical != nil {
+            newAlertSettings.Critical = req.AlertSettings.Critical
         }
-        if req.AlertSettings.Lowerbound != nil {
-            newAlertSettings.Lowerbound = req.AlertSettings.Lowerbound
+        if req.AlertSettings.Warning != nil {
+            newAlertSettings.Warning = req.AlertSettings.Warning
         }
         if req.AlertSettings.AlertEnabled != nil {
             newAlertSettings.AlertEnabled = req.AlertSettings.AlertEnabled
+        } else if feature.AlertSettings == nil {
+            // If no previous alert settings exist and alert_enabled not provided, default to false
+            newAlertSettings.AlertEnabled = lo.ToPtr(false)
         }
-        
-        // 4. Validate final merged state
+
+        // Validate the FINAL merged state (not the partial request)
         if err := newAlertSettings.Validate(); err != nil {
             return nil, err
         }
-        
-        // 5. Validation passed - assign to feature
+
+        // Validation passed - now assign to feature
         feature.AlertSettings = newAlertSettings
     }
     
@@ -1178,8 +1267,14 @@ CREATE INDEX idx_features_alert_settings ON features(alert_settings) WHERE alert
 
 -- Example alert_settings structure:
 -- {
---   "upperbound": "1000.00",
---   "lowerbound": "100.00",
+--   "critical": {
+--     "threshold": "100.00",
+--     "condition": "below"
+--   },
+--   "warning": {
+--     "threshold": "500.00",
+--     "condition": "below"
+--   },
 --   "alert_enabled": false
 -- }
 ```
@@ -1213,23 +1308,53 @@ curl -X POST /api/v1/features \
     "type": "usage",
     "meter_id": "meter_123",
     "alert_settings": {
-      "upperbound": "1000.00",
-      "lowerbound": "100.00",
+      "critical": {
+        "threshold": "100.00",
+        "condition": "below"
+      },
+      "warning": {
+        "threshold": "500.00",
+        "condition": "below"
+      },
       "alert_enabled": true
     }
   }'
-# Response: lowerbound will equal upperbound if only one provided
-# alert_enabled defaults to false if not provided
+# Response: alert_enabled defaults to false if not provided
+# warning is optional, critical typically required for meaningful alerts
 ```
 
 ### Update Feature Alert Settings
 ```bash
-# Update only upperbound (lowerbound and alert_enabled remain unchanged)
+# Update only critical threshold (warning and alert_enabled remain unchanged)
 curl -X PUT /api/v1/features/feature_123 \
   -H "Content-Type: application/json" \
   -d '{
     "alert_settings": {
-      "upperbound": "1500.00"
+      "critical": {
+        "threshold": "50.00",
+        "condition": "below"
+      }
+    }
+  }'
+
+# Update only warning threshold (critical and alert_enabled remain unchanged)
+curl -X PUT /api/v1/features/feature_123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "alert_settings": {
+      "warning": {
+        "threshold": "200.00",
+        "condition": "below"
+      }
+    }
+  }'
+
+# Update only alert_enabled (thresholds remain unchanged)
+curl -X PUT /api/v1/features/feature_123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "alert_settings": {
+      "alert_enabled": true
     }
   }'
 
@@ -1238,19 +1363,17 @@ curl -X PUT /api/v1/features/feature_123 \
   -H "Content-Type: application/json" \
   -d '{
     "alert_settings": {
-      "upperbound": "2000.00",
-      "lowerbound": "200.00",
+      "critical": {
+        "threshold": "100.00",
+        "condition": "below"
+      },
+      "warning": {
+        "threshold": "500.00",
+        "condition": "below"
+      },
       "alert_enabled": true
     }
   }'
-
-# Error: Empty alert_settings object
-curl -X PUT /api/v1/features/feature_123 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "alert_settings": {}
-  }'
-# Response: 400 Bad Request - "at least one alert setting field must be provided"
 ```
 
 ### Get Feature with Alert Settings
@@ -1277,8 +1400,14 @@ curl -X GET /api/v1/features
     "type": "usage",
     "meter_id": "meter_789",
     "alert_settings": {
-      "upperbound": "1000.00",
-      "lowerbound": "100.00",
+      "critical": {
+        "threshold": "100.00",
+        "condition": "below"
+      },
+      "warning": {
+        "threshold": "500.00",
+        "condition": "below"
+      },
       "alert_enabled": true
     },
     "tenant_id": "tenant_123",
@@ -1286,7 +1415,7 @@ curl -X GET /api/v1/features
   },
   "wallet": {
     "id": "wallet_456",
-    "balance": "750.00",
+    "balance": "250.00",
     "currency": "usd",
     "status": "active",
     "alert_enabled": true
@@ -1324,12 +1453,18 @@ INSERT INTO alert_logs (
     'feature_wallet_balance',
     'warning',
     '{
-        "feature_alert_settings": {
-            "upperbound": "1000.00",
-            "lowerbound": "100.00",
+        "alert_settings": {
+            "critical": {
+                "threshold": "100.00",
+                "condition": "below"
+            },
+            "warning": {
+                "threshold": "500.00",
+                "condition": "below"
+            },
             "alert_enabled": true
         },
-        "value_at_time": "750.00",
+        "value_at_time": "250.00",
         "timestamp": "2024-01-15T10:30:00Z"
     }',
     NOW()
