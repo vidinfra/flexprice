@@ -683,6 +683,8 @@ func (s *subscriptionService) UpdateSubscription(ctx context.Context, subscripti
 
 	logger.Info("successfully updated subscription")
 
+	s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionUpdated, subscription.ID)
+
 	// Return the updated subscription
 	return s.GetSubscription(ctx, subscriptionID)
 }
