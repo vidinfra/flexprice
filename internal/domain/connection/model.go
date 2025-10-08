@@ -133,18 +133,6 @@ func (c *Connection) GetSyncConfig() *types.SyncConfig {
 	return c.SyncConfig
 }
 
-// IsCustomerInboundEnabled checks if customer inbound sync is enabled
-func (c *Connection) IsCustomerInboundEnabled() bool {
-	config := c.GetSyncConfig()
-	return config.Customer != nil && config.Customer.Inbound
-}
-
-// IsCustomerOutboundEnabled checks if customer outbound sync is enabled
-func (c *Connection) IsCustomerOutboundEnabled() bool {
-	config := c.GetSyncConfig()
-	return config.Customer != nil && config.Customer.Outbound
-}
-
 // IsPlanInboundEnabled checks if plan inbound sync is enabled
 func (c *Connection) IsPlanInboundEnabled() bool {
 	config := c.GetSyncConfig()
@@ -153,8 +141,7 @@ func (c *Connection) IsPlanInboundEnabled() bool {
 
 // IsPlanOutboundEnabled checks if plan outbound sync is enabled
 func (c *Connection) IsPlanOutboundEnabled() bool {
-	config := c.GetSyncConfig()
-	return config.Plan != nil && config.Plan.Outbound
+	return false
 }
 
 // IsSubscriptionInboundEnabled checks if subscription inbound sync is enabled
@@ -165,14 +152,12 @@ func (c *Connection) IsSubscriptionInboundEnabled() bool {
 
 // IsSubscriptionOutboundEnabled checks if subscription outbound sync is enabled
 func (c *Connection) IsSubscriptionOutboundEnabled() bool {
-	config := c.GetSyncConfig()
-	return config.Subscription != nil && config.Subscription.Outbound
+	return false
 }
 
 // IsInvoiceInboundEnabled checks if invoice inbound sync is enabled
 func (c *Connection) IsInvoiceInboundEnabled() bool {
-	config := c.GetSyncConfig()
-	return config.Invoice != nil && config.Invoice.Inbound
+	return false
 }
 
 // IsInvoiceOutboundEnabled checks if invoice outbound sync is enabled
