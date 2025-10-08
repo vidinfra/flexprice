@@ -100,26 +100,10 @@ type ServiceDependencies = interfaces.ServiceDependencies
 // handleCustomerCreated handles customer.created webhook
 func (h *Handler) handleCustomerCreated(ctx context.Context, event *stripeapi.Event, environmentID string, services *ServiceDependencies) error {
 	// Check sync config first
-	conn, err := h.getConnection(ctx)
-	if err != nil {
-		h.logger.Errorw("failed to get connection for sync config check, skipping event",
-			"error", err,
-			"environment_id", environmentID,
-			"event_id", event.ID)
-		return nil
-	}
-
-	if !conn.IsCustomerInboundEnabled() {
-		h.logger.Infow("customer inbound sync disabled, skipping event",
-			"event_id", event.ID,
-			"event_type", event.Type,
-			"connection_id", conn.ID)
-		return nil
-	}
 
 	// Parse webhook to get customer data
 	var stripeCustomer stripeapi.Customer
-	err = json.Unmarshal(event.Data.Raw, &stripeCustomer)
+	err := json.Unmarshal(event.Data.Raw, &stripeCustomer)
 	if err != nil {
 		h.logger.Errorw("failed to parse customer from webhook, skipping event", "error", err, "event_id", event.ID)
 		return nil
@@ -444,8 +428,8 @@ func (h *Handler) handleInvoicePaymentPaid(ctx context.Context, event *stripeapi
 		return nil
 	}
 
-	if !conn.IsInvoiceInboundEnabled() {
-		h.logger.Infow("invoice inbound sync disabled, skipping event",
+	if !conn.IsInvoiceOutboundEnabled() {
+		h.logger.Infow("invoice outbound sync disabled, skipping event",
 			"event_id", event.ID,
 			"event_type", event.Type,
 			"connection_id", conn.ID)

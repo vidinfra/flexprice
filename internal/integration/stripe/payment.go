@@ -1501,8 +1501,8 @@ func (s *PaymentService) HandleExternalStripePaymentFromWebhook(ctx context.Cont
 		return nil
 	}
 
-	if !conn.IsInvoiceInboundEnabled() {
-		s.logger.Infow("invoice inbound sync disabled, skipping external payment",
+	if !conn.IsInvoiceOutboundEnabled() {
+		s.logger.Infow("invoice outbound sync disabled, skipping external payment",
 			"payment_intent_id", paymentIntent.ID,
 			"connection_id", conn.ID)
 		return nil
