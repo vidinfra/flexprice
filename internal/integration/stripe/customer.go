@@ -201,26 +201,35 @@ func (s *CustomerService) CreateCustomerInStripe(ctx context.Context, customerID
 
 // CreateCustomerFromStripe creates a customer in our system from Stripe webhook data
 func (s *CustomerService) CreateCustomerFromStripe(ctx context.Context, stripeCustomer *stripe.Customer, environmentID string, customerService interfaces.CustomerService) error {
-	// Check for existing customer by external ID if flexprice_customer_id is present
-	var externalID string
-	if flexpriceID, exists := stripeCustomer.Metadata["flexprice_customer_id"]; exists {
-		externalID = flexpriceID
-		// Check if customer with this external ID already exists
-		existing, err := customerService.GetCustomerByLookupKey(ctx, externalID)
+	// Check for existing customer by Flexprice customer ID if present in metadata
+	if flexpriceID, exists := stripeCustomer.Metadata["flexprice_customer_id"]; exists && flexpriceID != "" {
+		// Try to get customer by Flexprice ID first (this is the actual customer ID, not external_id)
+		existing, err := customerService.GetCustomer(ctx, flexpriceID)
+
+		// Skip if there is existing customer
 		if err == nil && existing != nil {
-			// Customer exists with this external ID, update with Stripe ID
-			updateReq := dto.UpdateCustomerRequest{
-				Metadata: s.mergeCustomerMetadata(existing.Customer.Metadata, map[string]string{
-					"stripe_customer_id": stripeCustomer.ID,
-				}),
-			}
-			_, err = customerService.UpdateCustomer(ctx, existing.Customer.ID, updateReq)
-			return err
+			s.logger.Infow("FlexPrice customer already exists, skipping creation to avoid duplicates",
+				"flexprice_customer_id", flexpriceID,
+				"stripe_customer_id", stripeCustomer.ID)
+			return nil
 		}
-	} else {
-		// When syncing from Stripe webhook, set external_id as stripe_customer_id
-		externalID = stripeCustomer.ID
+
+		// If not found by ID, try by lookup key (external_id)
+		existing, err = customerService.GetCustomerByLookupKey(ctx, flexpriceID)
+		if err == nil && existing != nil {
+			s.logger.Infow("FlexPrice customer already exists, skipping creation to avoid duplicates",
+				"flexprice_customer_id", flexpriceID,
+				"stripe_customer_id", stripeCustomer.ID)
+			return nil
+		}
+		// Don't create a new customer if we have flexprice_customer_id but couldn't find it
+		// This prevents duplicate creation when the customer was created by FlexPrice
+		return nil
 	}
+
+	// No flexprice_customer_id in metadata - this is an external Stripe customer
+	// Use stripe customer ID as external_id
+	externalID := stripeCustomer.ID
 
 	// Create new customer using DTO
 	createReq := dto.CreateCustomerRequest{
