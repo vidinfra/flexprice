@@ -117,6 +117,9 @@ type CancelSubscriptionRequest struct {
 
 	// Reason for cancellation (for audit and business intelligence)
 	Reason string `json:"reason,omitempty"`
+
+	// SuppressWebhook to suppress the webhook events
+	SuppressWebhook bool `json:"_,omitempty"`
 }
 
 // CancelSubscriptionResponse represents the enhanced cancellation response

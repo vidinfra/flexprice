@@ -96,6 +96,7 @@ func (f *Factory) GetStripeIntegration(ctx context.Context) (*StripeIntegration,
 	subSvc := stripe.NewStripeSubscriptionService(
 		stripeClient,
 		f.logger,
+		planSvc,
 	)
 
 	// Create webhook handler
