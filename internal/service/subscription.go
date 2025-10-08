@@ -353,7 +353,6 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 	if invoice != nil {
 		response.LatestInvoice = invoice
 	}
-
 	s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionCreated, sub.ID)
 	return response, nil
 }
@@ -808,8 +807,10 @@ func (s *subscriptionService) CancelSubscription(
 			Mark(ierr.ErrDatabase)
 	}
 
-	// Step 10: Publish events
-	s.publishCancellationEvents(ctx, subscription)
+	if !req.SuppressWebhook {
+		// Step 10: Publish events
+		s.publishCancellationEvents(ctx, subscription)
+	}
 
 	// Step 11: Build response
 	response := &dto.CancelSubscriptionResponse{

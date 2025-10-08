@@ -98,12 +98,7 @@ func (s *stripePlanService) CreatePlan(ctx context.Context, planID string, servi
 			LookupKey:    planID,
 			Prices:       []dto.CreatePlanPriceRequest{},       // Empty prices initially
 			Entitlements: []dto.CreatePlanEntitlementRequest{}, // Empty entitlements initially
-			CreditGrants: []dto.CreateCreditGrantRequest{},     // Empty credit grants initially
-			Metadata: types.Metadata{
-				"source":            "stripe",
-				"stripe_plan_id":    planID,
-				"stripe_product_id": stripeProduct.ID,
-			},
+			CreditGrants: []dto.CreateCreditGrantRequest{},     // Empty credit grants initially,
 		}
 
 		// Validate the request
