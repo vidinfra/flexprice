@@ -150,10 +150,6 @@ func (s *stripeSubscriptionService) CreateSubscription(ctx context.Context, stri
 	})
 
 	if err != nil {
-		s.logger.Errorw("failed to create subscription",
-			"error", err,
-			"subscription_id", subscriptionResp.ID,
-			"stripe_subscription_id", stripeSubscriptionID)
 		return nil, err
 	}
 
@@ -163,7 +159,7 @@ func (s *stripeSubscriptionService) CreateSubscription(ctx context.Context, stri
 func (s *stripeSubscriptionService) UpdateSubscription(ctx context.Context, stripeSubscriptionID string, services *ServiceDependencies) error {
 	err := services.DB.WithTx(ctx, func(txCtx context.Context) error {
 		// Step 1: Fetch Stripe Subscription
-		stripeSubscription, err := s.fetchStripeSubscription(ctx, stripeSubscriptionID)
+		stripeSubscription, err := s.fetchStripeSubscription(txCtx, stripeSubscriptionID)
 		if err != nil {
 			return err
 		}
@@ -174,7 +170,7 @@ func (s *stripeSubscriptionService) UpdateSubscription(ctx context.Context, stri
 			ProviderEntityIDs: []string{stripeSubscriptionID},
 		}
 
-		existingMappings, err := services.EntityIntegrationMappingService.GetEntityIntegrationMappings(ctx, filter)
+		existingMappings, err := services.EntityIntegrationMappingService.GetEntityIntegrationMappings(txCtx, filter)
 		if err != nil {
 			return ierr.WithError(err).
 				WithHint("Failed to check for existing subscription mapping").
@@ -191,12 +187,12 @@ func (s *stripeSubscriptionService) UpdateSubscription(ctx context.Context, stri
 		existingSubscriptionMapping := existingMappings.Items[0]
 
 		// Step 4: Get the exisitng subcription
-		existingSubscription, err := services.SubscriptionService.GetSubscription(ctx, existingSubscriptionMapping.EntityID)
+		existingSubscription, err := services.SubscriptionService.GetSubscription(txCtx, existingSubscriptionMapping.EntityID)
 		if err != nil {
 			return err
 		}
 
-		planChange, err := s.isPlanChange(ctx, existingSubscription, stripeSubscription, services)
+		planChange, err := s.isPlanChange(txCtx, existingSubscription, stripeSubscription, services)
 		if err != nil {
 			return err
 		}
