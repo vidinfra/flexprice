@@ -29,9 +29,6 @@ type OnboardingService interface {
 	RegisterHandler(router *pubsubRouter.Router)
 	OnboardNewUserWithTenant(ctx context.Context, userID, email, tenantName, tenantID string) error
 	SetupSandboxEnvironment(ctx context.Context, tenantID, userID, envID string) error
-	// Testing endpoints for email functionality
-	SendEmail(ctx context.Context, req *dto.SendEmailRequest) (*dto.SendEmailResponse, error)
-	SendEmailWithTemplate(ctx context.Context, req *dto.SendEmailWithTemplateRequest) (*dto.SendEmailWithTemplateResponse, error)
 }
 
 type onboardingService struct {
@@ -816,128 +813,6 @@ func (s *onboardingService) createDefaultSubscriptions(ctx context.Context, cust
 	return nil
 }
 
-// SendEmail sends a plain text email (testing endpoint)
-func (s *onboardingService) SendEmail(ctx context.Context, req *dto.SendEmailRequest) (*dto.SendEmailResponse, error) {
-	s.Logger.Debugw("email config loaded",
-		"enabled", s.Config.Email.Enabled,
-		"from_address", s.Config.Email.FromAddress,
-		"reply_to", s.Config.Email.ReplyTo,
-		"api_key_set", s.Config.Email.ResendAPIKey != "",
-	)
-
-	emailClient := email.NewEmailClient(email.Config{
-		Enabled:     s.Config.Email.Enabled,
-		APIKey:      s.Config.Email.ResendAPIKey,
-		FromAddress: s.Config.Email.FromAddress,
-		ReplyTo:     s.Config.Email.ReplyTo,
-	})
-
-	if !emailClient.IsEnabled() {
-		return &dto.SendEmailResponse{
-			Success: false,
-			Message: "Email service is disabled",
-		}, nil
-	}
-
-	emailSvc := email.NewEmail(emailClient, s.Logger.Desugar())
-	resp, err := emailSvc.SendEmail(ctx, email.SendEmailRequest{
-		FromAddress: s.Config.Email.FromAddress, // Empty will use default from config
-		ToAddress:   req.ToAddress,
-		Subject:     req.Subject,
-		Text:        req.Text,
-	})
-	if err != nil {
-		return &dto.SendEmailResponse{
-			Success: false,
-			Message: "Failed to send email",
-			Error:   err.Error(),
-		}, nil
-	}
-
-	message := "Email sent successfully"
-	if !resp.Success {
-		message = "Failed to send email"
-	}
-
-	return &dto.SendEmailResponse{
-		Success:   resp.Success,
-		MessageID: resp.MessageID,
-		Message:   message,
-		Error:     resp.Error,
-	}, nil
-}
-
-// SendEmailWithTemplate sends an email using a template (testing endpoint)
-func (s *onboardingService) SendEmailWithTemplate(ctx context.Context, req *dto.SendEmailWithTemplateRequest) (*dto.SendEmailWithTemplateResponse, error) {
-	emailClient := email.NewEmailClient(email.Config{
-		Enabled:     s.Config.Email.Enabled,
-		APIKey:      s.Config.Email.ResendAPIKey,
-		FromAddress: s.Config.Email.FromAddress,
-		ReplyTo:     s.Config.Email.ReplyTo,
-	})
-
-	if !emailClient.IsEnabled() {
-		return &dto.SendEmailWithTemplateResponse{
-			Success: false,
-			Message: "Email service is disabled",
-		}, nil
-	}
-
-	emailSvc := email.NewEmail(emailClient, s.Logger.Desugar())
-
-	// Map template name to file and subject
-	var templatePath, subject string
-	switch req.Template {
-	case "welcome":
-		templatePath = "welcome-email.html"
-		subject = "Welcome to Flexprice!"
-	default:
-		return &dto.SendEmailWithTemplateResponse{
-			Success: false,
-			Message: "Invalid template",
-			Error:   "Unknown template: " + req.Template,
-		}, nil
-	}
-
-	// Build template data from config
-	configData := map[string]string{
-		"onboarding_video_url": s.Config.Email.OnboardingVideoURL,
-		"calendar_url":         s.Config.Email.CalendarURL,
-		"dashboard_url":        s.Config.Email.DashboardURL,
-		"support_email":        s.Config.Email.SupportEmail,
-		"community_url":        s.Config.Email.CommunityURL,
-	}
-
-	templateData := email.BuildTemplateData(configData, req.ToAddress)
-
-	resp, err := emailSvc.SendEmailWithTemplate(ctx, email.SendEmailWithTemplateRequest{
-		FromAddress:  "", // Empty will use default from config
-		ToAddress:    req.ToAddress,
-		Subject:      subject,
-		TemplatePath: templatePath,
-		Data:         templateData,
-	})
-	if err != nil {
-		return &dto.SendEmailWithTemplateResponse{
-			Success: false,
-			Message: "Failed to send email",
-			Error:   err.Error(),
-		}, nil
-	}
-
-	message := "Email sent successfully"
-	if !resp.Success {
-		message = "Failed to send email"
-	}
-
-	return &dto.SendEmailWithTemplateResponse{
-		Success:   resp.Success,
-		MessageID: resp.MessageID,
-		Message:   message,
-		Error:     resp.Error,
-	}, nil
-}
-
 // sendOnboardingEmail sends a welcome email to a new user
 func (s *onboardingService) sendOnboardingEmail(ctx context.Context, toEmail, userName string) error {
 	// Create email client
@@ -984,7 +859,7 @@ func (s *onboardingService) sendOnboardingEmail(ctx context.Context, toEmail, us
 	}
 
 	if !resp.Success {
-		s.Logger.Warnw("email send was not successful", "error", resp.Error)
+		s.Logger.Errorw("email send was not successful", "error", resp.Error)
 	}
 
 	return nil
