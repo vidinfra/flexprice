@@ -274,6 +274,9 @@ func (s *connectionService) UpdateConnection(ctx context.Context, id string, req
 		conn.Metadata = req.Metadata
 	}
 
+	if req.SyncConfig != nil {
+		conn.SyncConfig = req.SyncConfig
+	}
 	conn.UpdatedAt = time.Now()
 	conn.UpdatedBy = types.GetUserID(ctx)
 
