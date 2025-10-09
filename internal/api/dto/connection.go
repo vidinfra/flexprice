@@ -155,7 +155,7 @@ func ToConnectionResponse(conn *connection.Connection) *ConnectionResponse {
 		TenantID:      conn.TenantID,
 		Status:        conn.Status,
 		Metadata:      conn.Metadata,
-		SyncConfig:    conn.SyncConfig,
+		SyncConfig:    conn.GetSyncConfig(),
 		CreatedAt:     conn.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:     conn.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		CreatedBy:     conn.CreatedBy,
