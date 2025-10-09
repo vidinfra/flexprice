@@ -436,6 +436,8 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			{
 				onboarding.POST("/events", handlers.Onboarding.GenerateEvents)
 				onboarding.POST("/setup", handlers.Onboarding.SetupDemo)
+				onboarding.POST("/send-email", handlers.Onboarding.SendEmail)
+				onboarding.POST("/send-template-email", handlers.Onboarding.SendEmailWithTemplate)
 			}
 		}
 

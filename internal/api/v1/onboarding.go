@@ -103,3 +103,86 @@ func (h *OnboardingHandler) SetupDemo(c *gin.Context) {
 
 	c.JSON(http.StatusAccepted, gin.H{"message": "Sandbox environment setup successfully"})
 }
+
+// SendEmail sends a plain text email
+func (h *OnboardingHandler) SendEmail(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var req dto.SendEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.log.Errorw("failed to bind JSON", "error", err)
+		c.Error(err)
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		h.log.Errorw("invalid request payload", "error", err)
+		c.Error(err)
+		return
+	}
+
+	h.log.Debugw("sending email via API",
+		"to_address", req.ToAddress,
+		"subject", req.Subject,
+	)
+
+	response, err := h.onboardingService.SendEmail(ctx, &req)
+	if err != nil {
+		h.log.Errorw("failed to send email",
+			"error", err,
+			"to_address", req.ToAddress,
+		)
+		c.Error(err)
+		return
+	}
+
+	// Return appropriate status code based on success
+	statusCode := http.StatusOK
+	if !response.Success {
+		statusCode = http.StatusBadRequest
+	}
+
+	c.JSON(statusCode, response)
+}
+
+// SendEmailWithTemplate sends an email using a template
+func (h *OnboardingHandler) SendEmailWithTemplate(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	var req dto.SendEmailWithTemplateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.log.Errorw("failed to bind JSON", "error", err)
+		c.Error(err)
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		h.log.Errorw("invalid request payload", "error", err)
+		c.Error(err)
+		return
+	}
+
+	h.log.Debugw("sending templated email via API",
+		"to_address", req.ToAddress,
+		"template", req.Template,
+	)
+
+	response, err := h.onboardingService.SendEmailWithTemplate(ctx, &req)
+	if err != nil {
+		h.log.Errorw("failed to send templated email",
+			"error", err,
+			"to_address", req.ToAddress,
+			"template", req.Template,
+		)
+		c.Error(err)
+		return
+	}
+
+	// Return appropriate status code based on success
+	statusCode := http.StatusOK
+	if !response.Success {
+		statusCode = http.StatusBadRequest
+	}
+
+	c.JSON(statusCode, response)
+}
