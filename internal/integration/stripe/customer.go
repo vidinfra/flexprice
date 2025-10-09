@@ -244,14 +244,15 @@ func (s *CustomerService) CreateCustomerFromStripe(ctx context.Context, stripeCu
 					"customer_id", existing.Customer.ID,
 					"stripe_customer_id", stripeCustomer.ID)
 			}
+
 			return nil
 		}
 	}
 
 	// Step 3: Create new customer
 	createReq := dto.CreateCustomerRequest{
-		ExternalID: stripeCustomer.ID,
-		Name:       externalID,
+		ExternalID: externalID,
+		Name:       stripeCustomer.Name,
 		Email:      stripeCustomer.Email,
 		Metadata: map[string]string{
 			"stripe_customer_id": stripeCustomer.ID,
