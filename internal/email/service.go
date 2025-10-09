@@ -1,8 +1,10 @@
 package email
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"html/template"
 	"os"
 	"path/filepath"
 	"strings"
@@ -113,8 +115,18 @@ func (s *Email) SendEmailWithTemplate(ctx context.Context, req SendEmailWithTemp
 		"content_length", len(htmlContent),
 	)
 
-	// Replace placeholders in template with data
-	htmlContent = s.replacePlaceholders(htmlContent, req.Data)
+	// Render template with data using html/template
+	htmlContent, err = s.renderTemplate(htmlContent, req.Data)
+	if err != nil {
+		s.logger.Errorw("failed to render email template",
+			"error", err,
+			"template", req.TemplatePath,
+		)
+		return &SendEmailWithTemplateResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, err
+	}
 
 	messageID, err := s.client.SendEmail(ctx, fromAddress, req.ToAddress, req.Subject, htmlContent, "")
 	if err != nil {
@@ -165,14 +177,21 @@ func (s *Email) readTemplate(templatePath string) (string, error) {
 	return string(content), nil
 }
 
-// replacePlaceholders replaces placeholders in the template with actual data
-func (s *Email) replacePlaceholders(template string, data map[string]interface{}) string {
-	result := template
-	for key, value := range data {
-		placeholder := fmt.Sprintf("{{%s}}", key)
-		result = strings.ReplaceAll(result, placeholder, fmt.Sprintf("%v", value))
+// renderTemplate renders an HTML template using Go's html/template for safe HTML rendering
+func (s *Email) renderTemplate(templateContent string, data map[string]interface{}) (string, error) {
+	// Parse the template
+	tmpl, err := template.New("email").Parse(templateContent)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
 	}
-	return result
+
+	// Execute the template with data
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return buf.String(), nil
 }
 
 // BuildTemplateData builds template data from config values only

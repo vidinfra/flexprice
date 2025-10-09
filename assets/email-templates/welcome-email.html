@@ -13,28 +13,28 @@
                     <tr>
                         <td style="padding: 40px 40px 30px 40px;">
                             <p style="margin: 0 0 20px 0; color: #333333; font-size: 18px; line-height: 1.6;">
-                                Hello {{user_name}},
+                                Hello {{.user_name}},
                             </p>
                             <p style="margin: 0 0 20px 0; color: #333333; font-size: 18px; line-height: 1.6;">
                                 Thanks for signing up for Flexprice, we're excited to have you on board!
                             </p>
                             <p style="margin: 0 0 20px 0; color: #333333; font-size: 18px; line-height: 1.6;">
-                                To get you started, here's a <a href="{{onboarding_video_url}}" style="color: #244BC2; text-decoration: underline;">short onboarding video</a> that walks you through the basics and helps you make the most out of our tool.
+                                To get you started, here's a <a href="{{.onboarding_video_url}}" style="color: #244BC2; text-decoration: underline;">short onboarding video</a> that walks you through the basics and helps you make the most out of our tool.
                             </p>
                             <p style="margin: 0 0 20px 0; color: #333333; font-size: 18px; line-height: 1.6;">
-                                Prefer a more personalized walkthrough? You can <a href="{{calendar_url}}" style="color: #244BC2; text-decoration: underline;">book a call</a> with me directly for a tailored onboarding experience.
+                                Prefer a more personalized walkthrough? You can <a href="{{.calendar_url}}" style="color: #244BC2; text-decoration: underline;">book a call</a> with me directly for a tailored onboarding experience.
                             </p>
                             <p style="margin: 0 0 20px 0; text-align: center;">
-                                <a href="{{dashboard_url}}" style="display: inline-block; padding: 14px 28px; background-color: #244BC2; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Go to Dashboard</a>
+                                <a href="{{.dashboard_url}}" style="display: inline-block; padding: 14px 28px; background-color: #244BC2; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;">Go to Dashboard</a>
                             </p>
                             <p style="margin: 0 0 20px 0; color: #333333; font-size: 18px; line-height: 1.6;">
                                 We hope Flexprice helps you ship billing today, not next quarter.
                             </p>
                             <p style="margin: 0 0 20px 0; color: #333333; font-size: 18px; line-height: 1.6;">
-                                If you have any questions, just reply to this email or reach out to us at <a href="mailto:{{support_email}}" style="color: #333333; text-decoration: underline;">{{support_email}}</a>.
+                                If you have any questions, just reply to this email or reach out to us at <a href="mailto:{{.support_email}}" style="color: #333333; text-decoration: underline;">{{.support_email}}</a>.
                             </p>
                             <p style="margin: 0 0 20px 0; color: #333333; font-size: 18px; line-height: 1.6;">
-                                And hey, you must join our <a href="{{community_url}}" style="color: #244BC2; text-decoration: underline;">community</a> :)
+                                And hey, you must join our <a href="{{.community_url}}" style="color: #244BC2; text-decoration: underline;">community</a> :)
                             </p>
                             <p style="margin: 0 0 0 0; color: #333333; font-size: 18px; line-height: 1.6;">
                                 Best,<br/>
