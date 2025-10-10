@@ -1315,19 +1315,19 @@ func (s *featureUsageTrackingService) calculateBucketedCost(ctx context.Context,
 		// Use points as buckets
 		bucketedValues := make([]decimal.Decimal, len(item.Points))
 		for i, point := range item.Points {
-			bucketedValues[i] = point.Usage
+			bucketedValues[i] = s.getCorrectUsageValueForPoint(point, types.AggregationMax)
 		}
 		cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
 
 		// Calculate cost for each point
 		for i := range item.Points {
-			pointCost := priceService.CalculateCost(ctx, price, item.Points[i].Usage)
+			pointCost := priceService.CalculateCost(ctx, price, s.getCorrectUsageValueForPoint(item.Points[i], types.AggregationMax))
 			item.Points[i].Cost = pointCost
 		}
 	} else {
 		// Treat total usage as single bucket
-		if item.TotalUsage.IsPositive() {
-			bucketedValues := []decimal.Decimal{item.TotalUsage}
+		if item.MaxUsage.IsPositive() {
+			bucketedValues := []decimal.Decimal{item.MaxUsage}
 			cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
 		}
 	}
@@ -1722,7 +1722,7 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			Unit:            analytic.Unit,
 			UnitPlural:      analytic.UnitPlural,
 			AggregationType: analytic.AggregationType,
-			TotalUsage:      analytic.TotalUsage, // This is now set correctly in enrichment
+			TotalUsage:      s.getCorrectUsageValue(analytic, analytic.AggregationType), // This is now set correctly in enrichment
 			TotalCost:       analytic.TotalCost,
 			Currency:        analytic.Currency,
 			EventCount:      analytic.EventCount,
