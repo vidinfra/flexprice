@@ -190,6 +190,8 @@ func main() {
 			service.NewEventPostProcessingService,
 			service.NewEventConsumptionService,
 			service.NewFeatureUsageTrackingService,
+			service.NewEventConsumptionRealtimeService,
+			service.NewFeatureUsageTrackingLazyService,
 			service.NewPriceService,
 			service.NewCustomerService,
 			service.NewPlanService,
@@ -392,7 +394,9 @@ func startServer(
 	log *logger.Logger,
 	eventPostProcessingSvc service.EventPostProcessingService,
 	eventConsumptionSvc service.EventConsumptionService,
+	eventConsumptionLazySvc service.EventConsumptionRealtimeService,
 	featureUsageSvc service.FeatureUsageTrackingService,
+	featureUsageLazySvc service.FeatureUsageTrackingLazyService,
 	params service.ServiceParams,
 ) {
 	mode := cfg.Deployment.Mode
@@ -408,14 +412,14 @@ func startServer(
 		startAPIServer(lc, r, cfg, log)
 
 		// Register all handlers and start router once
-		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, consumer, cfg, true)
+		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, eventConsumptionLazySvc, featureUsageLazySvc, consumer, cfg, true)
 		startRouter(lc, router, log)
 		startTemporalWorker(lc, temporalService, params)
 	case types.ModeAPI:
 		startAPIServer(lc, r, cfg, log)
 
 		// Register all handlers and start router once (no event consumption)
-		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, nil, cfg, false)
+		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, eventConsumptionLazySvc, featureUsageLazySvc, nil, cfg, false)
 		startRouter(lc, router, log)
 
 	case types.ModeTemporalWorker:
@@ -426,13 +430,13 @@ func startServer(
 		}
 
 		// Register all handlers and start router once
-		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, consumer, cfg, true)
+		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, eventConsumptionLazySvc, featureUsageLazySvc, consumer, cfg, true)
 		startRouter(lc, router, log)
 	case types.ModeAWSLambdaAPI:
 		startAWSLambdaAPI(r)
 
 		// Register basic handlers and start router once (no event consumption)
-		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, nil, cfg, false)
+		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, eventConsumptionLazySvc, featureUsageLazySvc, nil, cfg, false)
 		startRouter(lc, router, log)
 	case types.ModeAWSLambdaConsumer:
 		startAWSLambdaConsumer(eventConsumptionSvc, log)
@@ -535,6 +539,8 @@ func registerRouterHandlers(
 	eventPostProcessingSvc service.EventPostProcessingService,
 	eventConsumptionSvc service.EventConsumptionService,
 	featureUsageSvc service.FeatureUsageTrackingService,
+	eventConsumptionLazySvc service.EventConsumptionRealtimeService,
+	featureUsageLazySvc service.FeatureUsageTrackingLazyService,
 	consumer kafka.MessageConsumer,
 	cfg *config.Configuration,
 	includeProcessingHandlers bool,
@@ -545,14 +551,12 @@ func registerRouterHandlers(
 
 	// Only register processing handlers when needed
 	if includeProcessingHandlers {
-		// Register event consumption handler (Kafka -> ClickHouse)
-		if consumer != nil {
-			eventConsumptionSvc.RegisterHandler(router, consumer.Subscriber(), cfg)
-		}
-
 		// Register post-processing handlers
+		eventConsumptionSvc.RegisterHandler(router, cfg)
 		eventPostProcessingSvc.RegisterHandler(router, cfg)
+		eventConsumptionLazySvc.RegisterHandler(router, cfg)
 		featureUsageSvc.RegisterHandler(router, cfg)
+		featureUsageLazySvc.RegisterHandler(router, cfg)
 	}
 }
 

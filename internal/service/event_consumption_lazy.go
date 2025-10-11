@@ -20,7 +20,7 @@ import (
 )
 
 // EventConsumptionService handles consuming raw events from Kafka and inserting them into ClickHouse
-type EventConsumptionService interface {
+type EventConsumptionRealtimeService interface {
 	// Register message handler with the router
 	RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration)
 
@@ -28,7 +28,7 @@ type EventConsumptionService interface {
 	ProcessRawEvent(ctx context.Context, payload []byte) error
 }
 
-type eventConsumptionService struct {
+type eventConsumptionRealtimeService struct {
 	ServiceParams
 	pubSub                 pubsub.PubSub
 	backfillPubSub         pubsub.PubSub
@@ -38,13 +38,13 @@ type eventConsumptionService struct {
 }
 
 // NewEventConsumptionService creates a new event consumption service
-func NewEventConsumptionService(
+func NewEventConsumptionRealtimeService(
 	params ServiceParams,
 	eventRepo events.Repository,
 	sentryService *sentry.Service,
 	eventPostProcessingSvc EventPostProcessingService,
-) EventConsumptionService {
-	ev := &eventConsumptionService{
+) EventConsumptionRealtimeService {
+	ev := &eventConsumptionRealtimeService{
 		ServiceParams:          params,
 		eventRepo:              eventRepo,
 		sentryService:          sentryService,
@@ -54,7 +54,7 @@ func NewEventConsumptionService(
 	pubSub, err := kafka.NewPubSubFromConfig(
 		params.Config,
 		params.Logger,
-		params.Config.EventProcessing.ConsumerGroup,
+		params.Config.EventProcessingLazy.ConsumerGroup,
 	)
 	if err != nil {
 		params.Logger.Fatalw("failed to create pubsub", "error", err)
@@ -65,7 +65,7 @@ func NewEventConsumptionService(
 	backfillPubSub, err := kafka.NewPubSubFromConfig(
 		params.Config,
 		params.Logger,
-		params.Config.EventProcessing.ConsumerGroupBackfill,
+		params.Config.EventProcessingLazy.ConsumerGroupBackfill,
 	)
 	if err != nil {
 		params.Logger.Fatalw("failed to create backfill pubsub", "error", err)
@@ -76,51 +76,51 @@ func NewEventConsumptionService(
 }
 
 // RegisterHandler registers the event consumption handler with the router
-func (s *eventConsumptionService) RegisterHandler(
+func (s *eventConsumptionRealtimeService) RegisterHandler(
 	router *pubsubRouter.Router,
 	cfg *config.Configuration,
 ) {
 	// Add throttle middleware to this specific handler
-	throttle := middleware.NewThrottle(cfg.EventProcessing.RateLimit, time.Second)
+	throttle := middleware.NewThrottle(cfg.EventProcessingLazy.RateLimit, time.Second)
 
 	// Add the handler
 	router.AddNoPublishHandler(
-		"event_consumption_handler",
-		cfg.EventProcessing.Topic,
+		"event_consumption_lazy_handler",
+		cfg.EventProcessingLazy.Topic,
 		s.pubSub,
 		s.processMessage,
 		throttle.Middleware,
 	)
 
-	s.Logger.Infow("registered event consumption handler",
-		"topic", cfg.EventProcessing.Topic,
-		"rate_limit", cfg.EventProcessing.RateLimit,
+	s.Logger.Infow("registered event consumption lazy handler",
+		"topic", cfg.EventProcessingLazy.Topic,
+		"rate_limit", cfg.EventProcessingLazy.RateLimit,
 	)
 
 	// Add backfill handler
-	if cfg.EventProcessing.TopicBackfill == "" {
+	if cfg.EventProcessingLazy.TopicBackfill == "" {
 		s.Logger.Warnw("backfill topic not set, skipping backfill handler")
 		return
 	}
 
-	// backfillThrottle := middleware.NewThrottle(cfg.EventProcessing.RateLimitBackfill, time.Second)
+	// backfillThrottle := middleware.NewThrottle(cfg.EventProcessingLazy.RateLimitBackfill, time.Second)
 	// router.AddNoPublishHandler(
-	// 	"event_consumption_backfill_handler",
-	// 	cfg.EventProcessing.TopicBackfill,
+	// 	"event_consumption_lazy_backfill_handler",
+	// 	cfg.EventProcessingLazy.TopicBackfill,
 	// 	s.backfillPubSub,
 	// 	s.processMessage,
 	// 	backfillThrottle.Middleware,
 	// )
 
-	// s.Logger.Infow("registered event consumption backfill handler",
-	// 	"topic", cfg.EventProcessing.TopicBackfill,
-	// 	"rate_limit", cfg.EventProcessing.RateLimitBackfill,
+	// s.Logger.Infow("registered event consumption lazy backfill handler",
+	// 	"topic", cfg.EventProcessingLazy.TopicBackfill,
+	// 	"rate_limit", cfg.EventProcessingLazy.RateLimitBackfill,
 	// 	"pubsub_type", "kafka",
 	// )
 }
 
 // processMessage processes a single event message from Kafka
-func (s *eventConsumptionService) processMessage(msg *message.Message) error {
+func (s *eventConsumptionRealtimeService) processMessage(msg *message.Message) error {
 
 	partitionKey := msg.Metadata.Get("partition_key")
 	tenantID := msg.Metadata.Get("tenant_id")
@@ -230,7 +230,7 @@ func (s *eventConsumptionService) processMessage(msg *message.Message) error {
 }
 
 // ProcessRawEvent processes a raw event payload (used for AWS Lambda and direct processing)
-func (s *eventConsumptionService) ProcessRawEvent(ctx context.Context, payload []byte) error {
+func (s *eventConsumptionRealtimeService) ProcessRawEvent(ctx context.Context, payload []byte) error {
 	// Start a transaction for this event processing
 	transaction, ctx := s.sentryService.StartTransaction(ctx, "event.process")
 	if transaction != nil {
@@ -310,7 +310,7 @@ func (s *eventConsumptionService) ProcessRawEvent(ctx context.Context, payload [
 }
 
 // shouldRetryError determines if an error should trigger a message retry
-func (s *eventConsumptionService) shouldRetryError(err error) bool {
+func (s *eventConsumptionRealtimeService) shouldRetryError(err error) bool {
 	// Don't retry parsing errors which are not likely to succeed on retry
 	errMsg := err.Error()
 	if strings.Contains(errMsg, "unmarshal") ||
