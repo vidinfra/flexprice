@@ -456,6 +456,7 @@ func (s *stripeSubscriptionService) createFlexPriceSubscription(ctx context.Cont
 		BillingAnchor:      &billingAnchor,
 		BillingPeriodCount: 1,
 		Workflow:           lo.ToPtr(types.TemporalStripeIntegrationWorkflow),
+		SubscriptionStatus: s.mapStripeStatusToFlexPrice(stripeSub.Status),
 	}
 
 	return subscriptionService.CreateSubscription(ctx, createReq)
@@ -517,6 +518,7 @@ func (s *stripeSubscriptionService) createFlexPriceSubscriptionWithoutTx(ctx con
 		BillingAnchor:      &billingAnchor,
 		BillingPeriodCount: 1,
 		Workflow:           lo.ToPtr(types.TemporalStripeIntegrationWorkflow),
+		SubscriptionStatus: s.mapStripeStatusToFlexPrice(stripeSub.Status),
 	}
 
 	// Create subscription using service (this will use the transaction context)
