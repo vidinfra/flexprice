@@ -1109,19 +1109,51 @@ func (s *featureUsageTrackingService) fetchSubscriptions(ctx context.Context, cu
 func (s *featureUsageTrackingService) buildMaxBucketFeatures(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, error) {
 	maxBucketFeatures := make(map[string]*events.MaxBucketFeatureInfo)
 
-	// If no specific feature IDs requested, we can't pre-filter for max bucket features
-	if len(params.FeatureIDs) == 0 {
-		return maxBucketFeatures, nil
-	}
+	// Check if FeatureIDs is empty and fetch all feature IDs from database if needed
+	var features []*feature.Feature
+	var err error
 
-	// Fetch features
-	featureFilter := types.NewNoLimitFeatureFilter()
-	featureFilter.FeatureIDs = params.FeatureIDs
-	features, err := s.FeatureRepo.List(ctx, featureFilter)
-	if err != nil {
-		return nil, ierr.WithError(err).
-			WithHint("Failed to fetch features for max bucket analysis").
-			Mark(ierr.ErrDatabase)
+	if len(params.FeatureIDs) == 0 {
+		s.Logger.Debugw("no feature IDs provided, fetching all features from database",
+			"tenant_id", params.TenantID,
+			"environment_id", params.EnvironmentID,
+		)
+
+		// Create filter to fetch all features for this tenant/environment
+		featureFilter := types.NewNoLimitFeatureFilter()
+		features, err = s.FeatureRepo.List(ctx, featureFilter)
+		if err != nil {
+			s.Logger.Errorw("failed to fetch features from database",
+				"error", err,
+				"tenant_id", params.TenantID,
+				"environment_id", params.EnvironmentID,
+			)
+			return nil, ierr.WithError(err).
+				WithHint("Failed to fetch features for max bucket analysis").
+				Mark(ierr.ErrDatabase)
+		}
+
+		// Extract feature IDs and update params
+		featureIDs := make([]string, len(features))
+		for i, f := range features {
+			featureIDs[i] = f.ID
+		}
+		params.FeatureIDs = featureIDs
+
+		s.Logger.Debugw("fetched feature IDs from database",
+			"count", len(featureIDs),
+			"feature_ids", featureIDs,
+		)
+	} else {
+		// Fetch features using provided feature IDs
+		featureFilter := types.NewNoLimitFeatureFilter()
+		featureFilter.FeatureIDs = params.FeatureIDs
+		features, err = s.FeatureRepo.List(ctx, featureFilter)
+		if err != nil {
+			return nil, ierr.WithError(err).
+				WithHint("Failed to fetch features for max bucket analysis").
+				Mark(ierr.ErrDatabase)
+		}
 	}
 
 	// Extract meter IDs
@@ -1175,7 +1207,7 @@ func (s *featureUsageTrackingService) buildMaxBucketFeatures(ctx context.Context
 
 // fetchAnalytics fetches analytics data from repository
 func (s *featureUsageTrackingService) fetchAnalytics(ctx context.Context, params *events.UsageAnalyticsParams) ([]*events.DetailedUsageAnalytic, error) {
-	// Build max bucket features map
+	// Build max bucket features map (this will handle fetching features if needed)
 	maxBucketFeatures, err := s.buildMaxBucketFeatures(ctx, params)
 	if err != nil {
 		return nil, err
