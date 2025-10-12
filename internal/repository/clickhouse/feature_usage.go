@@ -522,7 +522,7 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 		AND environment_id = ?
 		AND customer_id = ?
 		AND timestamp >= ?
-		AND timestamp <= ?
+		AND timestamp < ?
 		AND sign != 0
 	`, strings.Join(selectColumns, ",\n\t\t\t"))
 
@@ -793,7 +793,7 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 		AND customer_id = ?
 		AND feature_id = ?
 		AND timestamp >= ?
-		AND timestamp <= ?
+		AND timestamp < ?
 		AND sign != 0`, bucketWindowExpr, strings.Join(innerSelectColumns, ", "))
 
 	queryParams := []interface{}{
@@ -949,7 +949,7 @@ func (r *FeatureUsageRepository) getMaxBucketPoints(ctx context.Context, params 
 		AND customer_id = ?
 		AND feature_id = ?
 		AND timestamp >= ?
-		AND timestamp <= ?
+		AND timestamp < ?
 		AND sign != 0`, r.formatWindowSize(featureInfo.BucketSize, nil), windowExpr)
 
 	queryParams := []interface{}{
@@ -1163,7 +1163,7 @@ func (r *FeatureUsageRepository) getAnalyticsPoints(
 		AND environment_id = ?
 		AND customer_id = ?
 		AND timestamp >= ?
-		AND timestamp <= ?
+		AND timestamp < ?
 		AND sign != 0
 	`, strings.Join(selectColumns, ",\n\t\t\t"))
 
