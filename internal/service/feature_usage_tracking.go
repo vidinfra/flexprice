@@ -39,6 +39,9 @@ type FeatureUsageTrackingService interface {
 	// Register message handler with the router
 	RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration)
 
+	// Register message handler with the router
+	RegisterHandlerLazy(router *pubsubRouter.Router, cfg *config.Configuration)
+
 	// Get detailed usage analytics with filtering, grouping, and time-series data
 	GetDetailedUsageAnalytics(ctx context.Context, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error)
 
@@ -183,6 +186,47 @@ func (s *featureUsageTrackingService) RegisterHandler(router *pubsubRouter.Route
 	s.Logger.Infow("registered event feature usage tracking backfill handler",
 		"topic", cfg.FeatureUsageTracking.TopicBackfill,
 		"rate_limit", cfg.FeatureUsageTracking.RateLimitBackfill,
+		"pubsub_type", "kafka",
+	)
+}
+
+// RegisterHandler registers a handler for the feature usage tracking topic with rate limiting
+func (s *featureUsageTrackingService) RegisterHandlerLazy(router *pubsubRouter.Router, cfg *config.Configuration) {
+	// Add throttle middleware to this specific handler
+	throttle := middleware.NewThrottle(cfg.FeatureUsageTrackingLazy.RateLimit, time.Second)
+
+	// Add the handler
+	router.AddNoPublishHandler(
+		"feature_usage_tracking_lazy_handler",
+		cfg.FeatureUsageTrackingLazy.Topic,
+		s.pubSub,
+		s.processMessage,
+		throttle.Middleware,
+	)
+
+	s.Logger.Infow("registered event feature usage tracking lazy handler",
+		"topic", cfg.FeatureUsageTrackingLazy.Topic,
+		"rate_limit", cfg.FeatureUsageTrackingLazy.RateLimit,
+	)
+
+	// Add backfill handler
+	if cfg.FeatureUsageTrackingLazy.TopicBackfill == "" {
+		s.Logger.Warnw("backfill topic not set, skipping backfill handler")
+		return
+	}
+
+	backfillThrottle := middleware.NewThrottle(cfg.FeatureUsageTrackingLazy.RateLimitBackfill, time.Second)
+	router.AddNoPublishHandler(
+		"feature_usage_tracking_lazy_backfill_handler",
+		cfg.FeatureUsageTrackingLazy.TopicBackfill,
+		s.backfillPubSub, // Use the dedicated Kafka backfill PubSub
+		s.processMessage,
+		backfillThrottle.Middleware,
+	)
+
+	s.Logger.Infow("registered event feature usage tracking lazy backfill handler",
+		"topic", cfg.FeatureUsageTrackingLazy.TopicBackfill,
+		"rate_limit", cfg.FeatureUsageTrackingLazy.RateLimitBackfill,
 		"pubsub_type", "kafka",
 	)
 }

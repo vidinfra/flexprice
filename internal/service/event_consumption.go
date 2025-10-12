@@ -24,6 +24,9 @@ type EventConsumptionService interface {
 	// Register message handler with the router
 	RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration)
 
+	// Register message handler with the router
+	RegisterHandlerLazy(router *pubsubRouter.Router, cfg *config.Configuration)
+
 	// Process a raw event payload (used for AWS Lambda and direct processing)
 	ProcessRawEvent(ctx context.Context, payload []byte) error
 }
@@ -115,6 +118,50 @@ func (s *eventConsumptionService) RegisterHandler(
 	// s.Logger.Infow("registered event consumption backfill handler",
 	// 	"topic", cfg.EventProcessing.TopicBackfill,
 	// 	"rate_limit", cfg.EventProcessing.RateLimitBackfill,
+	// 	"pubsub_type", "kafka",
+	// )
+}
+
+// RegisterHandler registers the event consumption handler with the router
+func (s *eventConsumptionService) RegisterHandlerLazy(
+	router *pubsubRouter.Router,
+	cfg *config.Configuration,
+) {
+	// Add throttle middleware to this specific handler
+	throttle := middleware.NewThrottle(cfg.EventProcessingLazy.RateLimit, time.Second)
+
+	// Add the handler
+	router.AddNoPublishHandler(
+		"event_consumption_lazy_handler",
+		cfg.EventProcessingLazy.Topic,
+		s.pubSub,
+		s.processMessage,
+		throttle.Middleware,
+	)
+
+	s.Logger.Infow("registered event consumption lazy handler",
+		"topic", cfg.EventProcessingLazy.Topic,
+		"rate_limit", cfg.EventProcessingLazy.RateLimit,
+	)
+
+	// Add backfill handler
+	if cfg.EventProcessingLazy.TopicBackfill == "" {
+		s.Logger.Warnw("backfill topic not set, skipping backfill handler")
+		return
+	}
+
+	// backfillThrottle := middleware.NewThrottle(cfg.EventProcessingLazy.RateLimitBackfill, time.Second)
+	// router.AddNoPublishHandler(
+	// 	"event_consumption_lazy_backfill_handler",
+	// 	cfg.EventProcessingLazy.TopicBackfill,
+	// 	s.backfillPubSub,
+	// 	s.processMessage,
+	// 	backfillThrottle.Middleware,
+	// )
+
+	// s.Logger.Infow("registered event consumption lazy backfill handler",
+	// 	"topic", cfg.EventProcessingLazy.TopicBackfill,
+	// 	"rate_limit", cfg.EventProcessingLazy.RateLimitBackfill,
 	// 	"pubsub_type", "kafka",
 	// )
 }
