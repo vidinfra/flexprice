@@ -935,7 +935,7 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 // getMaxBucketPointsForGroup calculates time series points for a specific group
 func (r *FeatureUsageRepository) getMaxBucketPointsForGroup(ctx context.Context, params *events.UsageAnalyticsParams, featureInfo *events.MaxBucketFeatureInfo, group *events.DetailedUsageAnalytic) ([]events.UsageAnalyticPoint, error) {
 	// Build window expression based on request window size
-	windowExpr := r.formatWindowSize(params.WindowSize, params.BillingAnchor)
+	windowExpr := r.formatWindowSize(featureInfo.BucketSize, params.BillingAnchor)
 
 	// For MAX with bucket features, we need to first get max within each bucket,
 	// then aggregate those maxes within the request window
