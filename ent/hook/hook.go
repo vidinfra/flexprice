@@ -345,6 +345,18 @@ func (f PriceUnitFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, e
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PriceUnitMutation", m)
 }
 
+// The ScheduledJobFunc type is an adapter to allow the use of ordinary
+// function as ScheduledJob mutator.
+type ScheduledJobFunc func(context.Context, *ent.ScheduledJobMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ScheduledJobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ScheduledJobMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ScheduledJobMutation", m)
+}
+
 // The SecretFunc type is an adapter to allow the use of ordinary
 // function as Secret mutator.
 type SecretFunc func(context.Context, *ent.SecretMutation) (ent.Value, error)

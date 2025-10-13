@@ -84,6 +84,20 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		return types.ConnectionMetadata{
 			Stripe: stripeMetadata,
 		}
+	case types.SecretProviderS3:
+		s3Metadata := &types.S3ConnectionMetadata{}
+		if accessKey, ok := metadata["aws_access_key_id"].(string); ok {
+			s3Metadata.AWSAccessKeyID = accessKey
+		}
+		if secretKey, ok := metadata["aws_secret_access_key"].(string); ok {
+			s3Metadata.AWSSecretAccessKey = secretKey
+		}
+		if sessionToken, ok := metadata["aws_session_token"].(string); ok {
+			s3Metadata.AWSSessionToken = sessionToken
+		}
+		return types.ConnectionMetadata{
+			S3: s3Metadata,
+		}
 	default:
 		// For other providers or unknown types, use generic format
 		return types.ConnectionMetadata{

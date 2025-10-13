@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/flexprice/flexprice/ent/connection"
+	"github.com/flexprice/flexprice/ent/scheduledjob"
 	"github.com/flexprice/flexprice/internal/types"
 )
 
@@ -147,6 +148,21 @@ func (cc *ConnectionCreate) SetID(s string) *ConnectionCreate {
 	return cc
 }
 
+// AddScheduledJobIDs adds the "scheduled_jobs" edge to the ScheduledJob entity by IDs.
+func (cc *ConnectionCreate) AddScheduledJobIDs(ids ...string) *ConnectionCreate {
+	cc.mutation.AddScheduledJobIDs(ids...)
+	return cc
+}
+
+// AddScheduledJobs adds the "scheduled_jobs" edges to the ScheduledJob entity.
+func (cc *ConnectionCreate) AddScheduledJobs(s ...*ScheduledJob) *ConnectionCreate {
+	ids := make([]string, len(s))
+	for i := range s {
+		ids[i] = s[i].ID
+	}
+	return cc.AddScheduledJobIDs(ids...)
+}
+
 // Mutation returns the ConnectionMutation object of the builder.
 func (cc *ConnectionCreate) Mutation() *ConnectionMutation {
 	return cc.mutation
@@ -235,6 +251,11 @@ func (cc *ConnectionCreate) check() error {
 			return &ValidationError{Name: "provider_type", err: fmt.Errorf(`ent: validator failed for field "Connection.provider_type": %w`, err)}
 		}
 	}
+	if v, ok := cc.mutation.SyncConfig(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "sync_config", err: fmt.Errorf(`ent: validator failed for field "Connection.sync_config": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -317,6 +338,22 @@ func (cc *ConnectionCreate) createSpec() (*Connection, *sqlgraph.CreateSpec) {
 	if value, ok := cc.mutation.SyncConfig(); ok {
 		_spec.SetField(connection.FieldSyncConfig, field.TypeJSON, value)
 		_node.SyncConfig = value
+	}
+	if nodes := cc.mutation.ScheduledJobsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   connection.ScheduledJobsTable,
+			Columns: []string{connection.ScheduledJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(scheduledjob.FieldID, field.TypeString),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/flexprice/flexprice/ent/predicate"
 )
 
@@ -702,6 +703,29 @@ func SyncConfigIsNil() predicate.Connection {
 // SyncConfigNotNil applies the NotNil predicate on the "sync_config" field.
 func SyncConfigNotNil() predicate.Connection {
 	return predicate.Connection(sql.FieldNotNull(FieldSyncConfig))
+}
+
+// HasScheduledJobs applies the HasEdge predicate on the "scheduled_jobs" edge.
+func HasScheduledJobs() predicate.Connection {
+	return predicate.Connection(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ScheduledJobsTable, ScheduledJobsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasScheduledJobsWith applies the HasEdge predicate on the "scheduled_jobs" edge with a given conditions (other predicates).
+func HasScheduledJobsWith(preds ...predicate.ScheduledJob) predicate.Connection {
+	return predicate.Connection(func(s *sql.Selector) {
+		step := newScheduledJobsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
 }
 
 // And groups predicates with the AND operator between them.

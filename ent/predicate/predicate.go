@@ -90,6 +90,9 @@ type Price func(*sql.Selector)
 // PriceUnit is the predicate function for priceunit builders.
 type PriceUnit func(*sql.Selector)
 
+// ScheduledJob is the predicate function for scheduledjob builders.
+type ScheduledJob func(*sql.Selector)
+
 // Secret is the predicate function for secret builders.
 type Secret func(*sql.Selector)
 

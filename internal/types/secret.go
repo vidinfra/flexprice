@@ -31,10 +31,24 @@ const (
 	SecretProviderFlexPrice SecretProvider = "flexprice"
 	SecretProviderStripe    SecretProvider = "stripe"
 	SecretProviderRazorpay  SecretProvider = "razorpay"
+	SecretProviderS3        SecretProvider = "s3"
+	SecretProviderAthena    SecretProvider = "athena"
+	SecretProviderBigQuery  SecretProvider = "bigquery"
+	SecretProviderSnowflake SecretProvider = "snowflake"
+	SecretProviderRedshift  SecretProvider = "redshift"
 )
 
 func (p SecretProvider) Validate() error {
-	allowedSecretProviders := []SecretProvider{SecretProviderFlexPrice, SecretProviderStripe, SecretProviderRazorpay}
+	allowedSecretProviders := []SecretProvider{
+		SecretProviderFlexPrice,
+		SecretProviderStripe,
+		SecretProviderRazorpay,
+		SecretProviderS3,
+		SecretProviderAthena,
+		SecretProviderBigQuery,
+		SecretProviderSnowflake,
+		SecretProviderRedshift,
+	}
 	if !lo.Contains(allowedSecretProviders, p) {
 		return ierr.NewError("invalid secret provider").
 			WithHint("Invalid secret provider").

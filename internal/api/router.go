@@ -46,6 +46,9 @@ type Handlers struct {
 	EntityIntegrationMapping *v1.EntityIntegrationMappingHandler
 	Settings                 *v1.SettingsHandler
 	SetupIntent              *v1.SetupIntentHandler
+	TestExport               *v1.TestExportHandler
+	TestUsageExport          *v1.TestUsageExportHandler
+	ScheduledJob             *v1.ScheduledJobHandler
 
 	// Portal handlers
 	Onboarding *v1.OnboardingHandler
@@ -381,6 +384,16 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			connections.POST("/search", handlers.Connection.ListConnectionsByFilter)
 		}
 
+		// Scheduled Job routes
+		scheduledJobs := v1Private.Group("/scheduled-jobs")
+		{
+			scheduledJobs.POST("", handlers.ScheduledJob.CreateScheduledJob)
+			scheduledJobs.GET("", handlers.ScheduledJob.ListScheduledJobs)
+			scheduledJobs.GET("/:id", handlers.ScheduledJob.GetScheduledJob)
+			scheduledJobs.PUT("/:id", handlers.ScheduledJob.UpdateScheduledJob)
+			scheduledJobs.DELETE("/:id", handlers.ScheduledJob.DeleteScheduledJob)
+		}
+
 		// Cost sheet routes
 		costSheet := v1Private.Group("/costs")
 		{
@@ -489,6 +502,13 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 		settings.GET("/:key", handlers.Settings.GetSettingByKey)
 		settings.PUT("/:key", handlers.Settings.UpdateSettingByKey)
 		settings.DELETE("/:key", handlers.Settings.DeleteSettingByKey)
+	}
+
+	// Test export
+	test := v1Private.Group("/test")
+	{
+		test.POST("/export", handlers.TestExport.TestExport)
+		test.POST("/export-usage", handlers.TestUsageExport.TestUsageExport)
 	}
 
 	return router

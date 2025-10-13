@@ -33,6 +33,7 @@ import (
 	"github.com/flexprice/flexprice/ent/plan"
 	"github.com/flexprice/flexprice/ent/price"
 	"github.com/flexprice/flexprice/ent/priceunit"
+	"github.com/flexprice/flexprice/ent/scheduledjob"
 	"github.com/flexprice/flexprice/ent/schema"
 	"github.com/flexprice/flexprice/ent/secret"
 	"github.com/flexprice/flexprice/ent/settings"
@@ -1368,6 +1369,51 @@ func init() {
 			return nil
 		}
 	}()
+	scheduledjobMixin := schema.ScheduledJob{}.Mixin()
+	scheduledjobMixinFields0 := scheduledjobMixin[0].Fields()
+	_ = scheduledjobMixinFields0
+	scheduledjobMixinFields1 := scheduledjobMixin[1].Fields()
+	_ = scheduledjobMixinFields1
+	scheduledjobFields := schema.ScheduledJob{}.Fields()
+	_ = scheduledjobFields
+	// scheduledjobDescTenantID is the schema descriptor for tenant_id field.
+	scheduledjobDescTenantID := scheduledjobMixinFields0[0].Descriptor()
+	// scheduledjob.TenantIDValidator is a validator for the "tenant_id" field. It is called by the builders before save.
+	scheduledjob.TenantIDValidator = scheduledjobDescTenantID.Validators[0].(func(string) error)
+	// scheduledjobDescStatus is the schema descriptor for status field.
+	scheduledjobDescStatus := scheduledjobMixinFields0[1].Descriptor()
+	// scheduledjob.DefaultStatus holds the default value on creation for the status field.
+	scheduledjob.DefaultStatus = scheduledjobDescStatus.Default.(string)
+	// scheduledjobDescCreatedAt is the schema descriptor for created_at field.
+	scheduledjobDescCreatedAt := scheduledjobMixinFields0[2].Descriptor()
+	// scheduledjob.DefaultCreatedAt holds the default value on creation for the created_at field.
+	scheduledjob.DefaultCreatedAt = scheduledjobDescCreatedAt.Default.(func() time.Time)
+	// scheduledjobDescUpdatedAt is the schema descriptor for updated_at field.
+	scheduledjobDescUpdatedAt := scheduledjobMixinFields0[3].Descriptor()
+	// scheduledjob.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	scheduledjob.DefaultUpdatedAt = scheduledjobDescUpdatedAt.Default.(func() time.Time)
+	// scheduledjob.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	scheduledjob.UpdateDefaultUpdatedAt = scheduledjobDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// scheduledjobDescEnvironmentID is the schema descriptor for environment_id field.
+	scheduledjobDescEnvironmentID := scheduledjobMixinFields1[0].Descriptor()
+	// scheduledjob.DefaultEnvironmentID holds the default value on creation for the environment_id field.
+	scheduledjob.DefaultEnvironmentID = scheduledjobDescEnvironmentID.Default.(string)
+	// scheduledjobDescConnectionID is the schema descriptor for connection_id field.
+	scheduledjobDescConnectionID := scheduledjobFields[1].Descriptor()
+	// scheduledjob.ConnectionIDValidator is a validator for the "connection_id" field. It is called by the builders before save.
+	scheduledjob.ConnectionIDValidator = scheduledjobDescConnectionID.Validators[0].(func(string) error)
+	// scheduledjobDescEntityType is the schema descriptor for entity_type field.
+	scheduledjobDescEntityType := scheduledjobFields[2].Descriptor()
+	// scheduledjob.EntityTypeValidator is a validator for the "entity_type" field. It is called by the builders before save.
+	scheduledjob.EntityTypeValidator = scheduledjobDescEntityType.Validators[0].(func(string) error)
+	// scheduledjobDescInterval is the schema descriptor for interval field.
+	scheduledjobDescInterval := scheduledjobFields[3].Descriptor()
+	// scheduledjob.IntervalValidator is a validator for the "interval" field. It is called by the builders before save.
+	scheduledjob.IntervalValidator = scheduledjobDescInterval.Validators[0].(func(string) error)
+	// scheduledjobDescEnabled is the schema descriptor for enabled field.
+	scheduledjobDescEnabled := scheduledjobFields[4].Descriptor()
+	// scheduledjob.DefaultEnabled holds the default value on creation for the enabled field.
+	scheduledjob.DefaultEnabled = scheduledjobDescEnabled.Default.(bool)
 	secretMixin := schema.Secret{}.Mixin()
 	secretMixinFields0 := secretMixin[0].Fields()
 	_ = secretMixinFields0
