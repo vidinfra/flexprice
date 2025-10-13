@@ -39,6 +39,9 @@ type FeatureUsageTrackingService interface {
 	// Register message handler with the router
 	RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration)
 
+	// Register message handler with the router
+	RegisterHandlerLazy(router *pubsubRouter.Router, cfg *config.Configuration)
+
 	// Get detailed usage analytics with filtering, grouping, and time-series data
 	GetDetailedUsageAnalytics(ctx context.Context, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error)
 
@@ -50,6 +53,7 @@ type featureUsageTrackingService struct {
 	ServiceParams
 	pubSub           pubsub.PubSub // Regular PubSub for normal processing
 	backfillPubSub   pubsub.PubSub // Dedicated Kafka PubSub for backfill processing
+	lazyPubSub       pubsub.PubSub // Dedicated Kafka PubSub for lazy processing
 	eventRepo        events.Repository
 	featureUsageRepo events.FeatureUsageRepository
 }
@@ -88,6 +92,19 @@ func NewFeatureUsageTrackingService(
 		return nil
 	}
 	ev.backfillPubSub = backfillPubSub
+
+	lazyPubSub, err := kafka.NewPubSubFromConfig(
+		params.Config,
+		params.Logger,
+		params.Config.FeatureUsageTrackingLazy.ConsumerGroup,
+	)
+
+	if err != nil {
+		params.Logger.Fatalw("failed to create lazy pubsub", "error", err)
+		return nil
+	}
+	ev.lazyPubSub = lazyPubSub
+
 	return ev
 }
 
@@ -184,6 +201,26 @@ func (s *featureUsageTrackingService) RegisterHandler(router *pubsubRouter.Route
 		"topic", cfg.FeatureUsageTracking.TopicBackfill,
 		"rate_limit", cfg.FeatureUsageTracking.RateLimitBackfill,
 		"pubsub_type", "kafka",
+	)
+}
+
+// RegisterHandler registers a handler for the feature usage tracking topic with rate limiting
+func (s *featureUsageTrackingService) RegisterHandlerLazy(router *pubsubRouter.Router, cfg *config.Configuration) {
+	// Add throttle middleware to this specific handler
+	throttle := middleware.NewThrottle(cfg.FeatureUsageTrackingLazy.RateLimit, time.Second)
+
+	// Add the handler
+	router.AddNoPublishHandler(
+		"feature_usage_tracking_lazy_handler",
+		cfg.FeatureUsageTrackingLazy.Topic,
+		s.lazyPubSub,
+		s.processMessage,
+		throttle.Middleware,
+	)
+
+	s.Logger.Infow("registered event feature usage tracking lazy handler",
+		"topic", cfg.FeatureUsageTrackingLazy.Topic,
+		"rate_limit", cfg.FeatureUsageTrackingLazy.RateLimit,
 	)
 }
 
