@@ -1037,7 +1037,7 @@ func (s *featureUsageTrackingService) fetchAnalyticsData(ctx context.Context, re
 func (s *featureUsageTrackingService) buildAnalyticsResponse(ctx context.Context, data *AnalyticsData, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error) {
 	// If no results, return early
 	if len(data.Analytics) == 0 {
-		return s.ToGetUsageAnalyticsResponseDTO(ctx, data.Analytics, nil)
+		return s.ToGetUsageAnalyticsResponseDTO(ctx, data.Analytics, req)
 	}
 
 	// Calculate costs
