@@ -31,8 +31,7 @@ kafka:
   sasl_user: ""
   sasl_password: ""
   client_id: "flexprice-client-local"
-  route_tenants_on_lazy_mode:
-    - "00000000-0000-0000-0000-000000000000"
+  route_tenants_on_lazy_mode: []
 
 
 clickhouse:
