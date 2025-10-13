@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -37,9 +36,6 @@ import (
 	"github.com/flexprice/flexprice/internal/webhook"
 	"go.uber.org/fx"
 
-	lambdaEvents "github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
-	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
 	_ "github.com/flexprice/flexprice/docs/swagger"
 	"github.com/flexprice/flexprice/internal/domain/proration"
 	"github.com/flexprice/flexprice/internal/integration"
@@ -408,14 +404,14 @@ func startServer(
 		startAPIServer(lc, r, cfg, log)
 
 		// Register all handlers and start router once
-		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, consumer, cfg, true)
+		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, cfg, true)
 		startRouter(lc, router, log)
 		startTemporalWorker(lc, temporalService, params)
 	case types.ModeAPI:
 		startAPIServer(lc, r, cfg, log)
 
 		// Register all handlers and start router once (no event consumption)
-		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, nil, cfg, false)
+		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, cfg, false)
 		startRouter(lc, router, log)
 
 	case types.ModeTemporalWorker:
@@ -426,16 +422,8 @@ func startServer(
 		}
 
 		// Register all handlers and start router once
-		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, consumer, cfg, true)
+		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, cfg, true)
 		startRouter(lc, router, log)
-	case types.ModeAWSLambdaAPI:
-		startAWSLambdaAPI(r)
-
-		// Register basic handlers and start router once (no event consumption)
-		registerRouterHandlers(router, webhookService, onboardingService, eventPostProcessingSvc, eventConsumptionSvc, featureUsageSvc, nil, cfg, false)
-		startRouter(lc, router, log)
-	case types.ModeAWSLambdaConsumer:
-		startAWSLambdaConsumer(eventConsumptionSvc, log)
 	default:
 		log.Fatalf("Unknown deployment mode: %s", mode)
 	}
@@ -492,42 +480,6 @@ func startAPIServer(
 	})
 }
 
-func startAWSLambdaAPI(r *gin.Engine) {
-	ginLambda := ginadapter.New(r)
-	lambda.Start(ginLambda.ProxyWithContext)
-}
-
-func startAWSLambdaConsumer(eventConsumptionSvc service.EventConsumptionService, log *logger.Logger) {
-	handler := func(ctx context.Context, kafkaEvent lambdaEvents.KafkaEvent) error {
-		log.Debugf("Received Kafka event: %+v", kafkaEvent)
-
-		for _, record := range kafkaEvent.Records {
-			for _, r := range record {
-				log.Debugf("Processing record: topic=%s, partition=%d, offset=%d",
-					r.Topic, r.Partition, r.Offset)
-
-				// Decode base64 payload first
-				decodedPayload, err := base64.StdEncoding.DecodeString(string(r.Value))
-				if err != nil {
-					log.Errorf("Failed to decode base64 payload: %v", err)
-					continue
-				}
-
-				if err := eventConsumptionSvc.ProcessRawEvent(ctx, decodedPayload); err != nil {
-					log.Errorf("Failed to process event: %v, payload: %s", err, string(decodedPayload))
-					continue
-				}
-
-				log.Infof("Successfully processed event: topic=%s, partition=%d, offset=%d",
-					r.Topic, r.Partition, r.Offset)
-			}
-		}
-		return nil
-	}
-
-	lambda.Start(handler)
-}
-
 func registerRouterHandlers(
 	router *pubsubRouter.Router,
 	webhookService *webhook.WebhookService,
@@ -535,7 +487,6 @@ func registerRouterHandlers(
 	eventPostProcessingSvc service.EventPostProcessingService,
 	eventConsumptionSvc service.EventConsumptionService,
 	featureUsageSvc service.FeatureUsageTrackingService,
-	consumer kafka.MessageConsumer,
 	cfg *config.Configuration,
 	includeProcessingHandlers bool,
 ) {
@@ -547,8 +498,8 @@ func registerRouterHandlers(
 	if includeProcessingHandlers {
 		// Register post-processing handlers
 		eventConsumptionSvc.RegisterHandler(router, cfg)
-		eventPostProcessingSvc.RegisterHandler(router, cfg)
 		eventConsumptionSvc.RegisterHandlerLazy(router, cfg)
+		eventPostProcessingSvc.RegisterHandler(router, cfg)
 		featureUsageSvc.RegisterHandler(router, cfg)
 		featureUsageSvc.RegisterHandlerLazy(router, cfg)
 	}

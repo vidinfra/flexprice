@@ -53,6 +53,7 @@ type featureUsageTrackingService struct {
 	ServiceParams
 	pubSub           pubsub.PubSub // Regular PubSub for normal processing
 	backfillPubSub   pubsub.PubSub // Dedicated Kafka PubSub for backfill processing
+	lazyPubSub       pubsub.PubSub // Dedicated Kafka PubSub for lazy processing
 	eventRepo        events.Repository
 	featureUsageRepo events.FeatureUsageRepository
 }
@@ -91,6 +92,19 @@ func NewFeatureUsageTrackingService(
 		return nil
 	}
 	ev.backfillPubSub = backfillPubSub
+
+	lazyPubSub, err := kafka.NewPubSubFromConfig(
+		params.Config,
+		params.Logger,
+		params.Config.FeatureUsageTrackingLazy.ConsumerGroup,
+	)
+
+	if err != nil {
+		params.Logger.Fatalw("failed to create lazy pubsub", "error", err)
+		return nil
+	}
+	ev.lazyPubSub = lazyPubSub
+
 	return ev
 }
 
@@ -199,7 +213,7 @@ func (s *featureUsageTrackingService) RegisterHandlerLazy(router *pubsubRouter.R
 	router.AddNoPublishHandler(
 		"feature_usage_tracking_lazy_handler",
 		cfg.FeatureUsageTrackingLazy.Topic,
-		s.pubSub,
+		s.lazyPubSub,
 		s.processMessage,
 		throttle.Middleware,
 	)
@@ -207,27 +221,6 @@ func (s *featureUsageTrackingService) RegisterHandlerLazy(router *pubsubRouter.R
 	s.Logger.Infow("registered event feature usage tracking lazy handler",
 		"topic", cfg.FeatureUsageTrackingLazy.Topic,
 		"rate_limit", cfg.FeatureUsageTrackingLazy.RateLimit,
-	)
-
-	// Add backfill handler
-	if cfg.FeatureUsageTrackingLazy.TopicBackfill == "" {
-		s.Logger.Warnw("backfill topic not set, skipping backfill handler")
-		return
-	}
-
-	backfillThrottle := middleware.NewThrottle(cfg.FeatureUsageTrackingLazy.RateLimitBackfill, time.Second)
-	router.AddNoPublishHandler(
-		"feature_usage_tracking_lazy_backfill_handler",
-		cfg.FeatureUsageTrackingLazy.TopicBackfill,
-		s.backfillPubSub, // Use the dedicated Kafka backfill PubSub
-		s.processMessage,
-		backfillThrottle.Middleware,
-	)
-
-	s.Logger.Infow("registered event feature usage tracking lazy backfill handler",
-		"topic", cfg.FeatureUsageTrackingLazy.TopicBackfill,
-		"rate_limit", cfg.FeatureUsageTrackingLazy.RateLimitBackfill,
-		"pubsub_type", "kafka",
 	)
 }
 

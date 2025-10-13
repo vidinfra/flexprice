@@ -58,6 +58,10 @@ func (p *EventPublisher) Publish(ctx context.Context, event *events.Event) error
 	msg.Metadata.Set("tenant_id", event.TenantID)
 	msg.Metadata.Set("environment_id", event.EnvironmentID)
 	msg.Metadata.Set("partition_key", partitionKey)
+	/*
+		TODO: Once we support multiple event import integrations (e.g., S3, Postgres, etc.),
+		route those imported events to the lazy topic.
+	*/
 	if err := p.producer.Publish(p.determineTopic(event), msg); err != nil {
 		return ierr.WithError(err).
 			WithHint("Failed to publish event").

@@ -13,7 +13,6 @@ import (
 
 type MessageConsumer interface {
 	Subscribe(topic string) (<-chan *message.Message, error)
-	Subscriber() message.Subscriber
 	Close() error
 }
 
@@ -59,10 +58,6 @@ func NewConsumer(cfg *config.Configuration) (MessageConsumer, error) {
 
 func (c *Consumer) Subscribe(topic string) (<-chan *message.Message, error) {
 	return c.subscriber.Subscribe(context.Background(), topic)
-}
-
-func (c *Consumer) Subscriber() message.Subscriber {
-	return c.subscriber
 }
 
 func (c *Consumer) Close() error {

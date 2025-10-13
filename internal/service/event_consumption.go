@@ -34,7 +34,7 @@ type EventConsumptionService interface {
 type eventConsumptionService struct {
 	ServiceParams
 	pubSub                 pubsub.PubSub
-	backfillPubSub         pubsub.PubSub
+	lazyPubSub             pubsub.PubSub
 	eventRepo              events.Repository
 	sentryService          *sentry.Service
 	eventPostProcessingSvc EventPostProcessingService
@@ -65,16 +65,16 @@ func NewEventConsumptionService(
 	}
 	ev.pubSub = pubSub
 
-	backfillPubSub, err := kafka.NewPubSubFromConfig(
+	lazyPubSub, err := kafka.NewPubSubFromConfig(
 		params.Config,
 		params.Logger,
-		params.Config.EventProcessing.ConsumerGroupBackfill,
+		params.Config.EventProcessingLazy.ConsumerGroup,
 	)
 	if err != nil {
-		params.Logger.Fatalw("failed to create backfill pubsub", "error", err)
+		params.Logger.Fatalw("failed to create lazy pubsub", "error", err)
 		return nil
 	}
-	ev.backfillPubSub = backfillPubSub
+	ev.lazyPubSub = lazyPubSub
 	return ev
 }
 
@@ -99,27 +99,6 @@ func (s *eventConsumptionService) RegisterHandler(
 		"topic", cfg.EventProcessing.Topic,
 		"rate_limit", cfg.EventProcessing.RateLimit,
 	)
-
-	// Add backfill handler
-	if cfg.EventProcessing.TopicBackfill == "" {
-		s.Logger.Warnw("backfill topic not set, skipping backfill handler")
-		return
-	}
-
-	// backfillThrottle := middleware.NewThrottle(cfg.EventProcessing.RateLimitBackfill, time.Second)
-	// router.AddNoPublishHandler(
-	// 	"event_consumption_backfill_handler",
-	// 	cfg.EventProcessing.TopicBackfill,
-	// 	s.backfillPubSub,
-	// 	s.processMessage,
-	// 	backfillThrottle.Middleware,
-	// )
-
-	// s.Logger.Infow("registered event consumption backfill handler",
-	// 	"topic", cfg.EventProcessing.TopicBackfill,
-	// 	"rate_limit", cfg.EventProcessing.RateLimitBackfill,
-	// 	"pubsub_type", "kafka",
-	// )
 }
 
 // RegisterHandler registers the event consumption handler with the router
@@ -134,7 +113,7 @@ func (s *eventConsumptionService) RegisterHandlerLazy(
 	router.AddNoPublishHandler(
 		"event_consumption_lazy_handler",
 		cfg.EventProcessingLazy.Topic,
-		s.pubSub,
+		s.lazyPubSub,
 		s.processMessage,
 		throttle.Middleware,
 	)
@@ -143,27 +122,6 @@ func (s *eventConsumptionService) RegisterHandlerLazy(
 		"topic", cfg.EventProcessingLazy.Topic,
 		"rate_limit", cfg.EventProcessingLazy.RateLimit,
 	)
-
-	// Add backfill handler
-	if cfg.EventProcessingLazy.TopicBackfill == "" {
-		s.Logger.Warnw("backfill topic not set, skipping backfill handler")
-		return
-	}
-
-	// backfillThrottle := middleware.NewThrottle(cfg.EventProcessingLazy.RateLimitBackfill, time.Second)
-	// router.AddNoPublishHandler(
-	// 	"event_consumption_lazy_backfill_handler",
-	// 	cfg.EventProcessingLazy.TopicBackfill,
-	// 	s.backfillPubSub,
-	// 	s.processMessage,
-	// 	backfillThrottle.Middleware,
-	// )
-
-	// s.Logger.Infow("registered event consumption lazy backfill handler",
-	// 	"topic", cfg.EventProcessingLazy.TopicBackfill,
-	// 	"rate_limit", cfg.EventProcessingLazy.RateLimitBackfill,
-	// 	"pubsub_type", "kafka",
-	// )
 }
 
 // processMessage processes a single event message from Kafka

@@ -147,18 +147,12 @@ cache:
 event_processing:
   topic: "events"
   rate_limit: 12
-  consumer_group: "v1_event_processing"
-  topic_backfill: "event_processing_backfill"
-  rate_limit_backfill: 1
-  consumer_group_backfill: "v1_event_processing_backfill"
+  consumer_group: "flexprice-consumer-local"
 
 event_processing_lazy:
   topic: "events_lazy"
   rate_limit: 12
   consumer_group: "v1_event_processing_lazy"
-  topic_backfill: "event_processing_backfill"
-  rate_limit_backfill: 1
-  consumer_group_backfill: "v1_event_processing_lazy_backfill"
 
 
 event_post_processing:
@@ -181,9 +175,6 @@ feature_usage_tracking_lazy:
   topic: "events_lazy"
   rate_limit: 1
   consumer_group: "v1_feature_tracking_service_lazy"
-  topic_backfill: "events_post_processing_backfill"
-  rate_limit_backfill: 1
-  consumer_group_backfill: "v1_feature_tracking_service_lazy_backfill"
 
 feature_flag:
   # This flag is used to enable/disable feature usage for analytics
