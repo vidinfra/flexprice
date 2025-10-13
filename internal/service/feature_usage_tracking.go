@@ -1005,7 +1005,7 @@ func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Cont
 	}
 
 	// 3. Process and return response
-	return s.buildAnalyticsResponse(ctx, data)
+	return s.buildAnalyticsResponse(ctx, data, req)
 }
 
 // validateAnalyticsRequest validates the analytics request
@@ -1078,10 +1078,10 @@ func (s *featureUsageTrackingService) fetchAnalyticsData(ctx context.Context, re
 }
 
 // buildAnalyticsResponse processes the data and builds the final response
-func (s *featureUsageTrackingService) buildAnalyticsResponse(ctx context.Context, data *AnalyticsData) (*dto.GetUsageAnalyticsResponse, error) {
+func (s *featureUsageTrackingService) buildAnalyticsResponse(ctx context.Context, data *AnalyticsData, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error) {
 	// If no results, return early
 	if len(data.Analytics) == 0 {
-		return s.ToGetUsageAnalyticsResponseDTO(ctx, data.Analytics)
+		return s.ToGetUsageAnalyticsResponseDTO(ctx, data.Analytics, req)
 	}
 
 	// Calculate costs
@@ -1103,7 +1103,7 @@ func (s *featureUsageTrackingService) buildAnalyticsResponse(ctx context.Context
 	// Aggregate results by requested grouping dimensions
 	analytics := s.aggregateAnalyticsByGrouping(data.Analytics, data.Params.GroupBy)
 
-	return s.ToGetUsageAnalyticsResponseDTO(ctx, analytics)
+	return s.ToGetUsageAnalyticsResponseDTO(ctx, analytics, req)
 }
 
 // fetchCustomer fetches customer by external customer ID
@@ -1153,19 +1153,51 @@ func (s *featureUsageTrackingService) fetchSubscriptions(ctx context.Context, cu
 func (s *featureUsageTrackingService) buildMaxBucketFeatures(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, error) {
 	maxBucketFeatures := make(map[string]*events.MaxBucketFeatureInfo)
 
-	// If no specific feature IDs requested, we can't pre-filter for max bucket features
-	if len(params.FeatureIDs) == 0 {
-		return maxBucketFeatures, nil
-	}
+	// Check if FeatureIDs is empty and fetch all feature IDs from database if needed
+	var features []*feature.Feature
+	var err error
 
-	// Fetch features
-	featureFilter := types.NewNoLimitFeatureFilter()
-	featureFilter.FeatureIDs = params.FeatureIDs
-	features, err := s.FeatureRepo.List(ctx, featureFilter)
-	if err != nil {
-		return nil, ierr.WithError(err).
-			WithHint("Failed to fetch features for max bucket analysis").
-			Mark(ierr.ErrDatabase)
+	if len(params.FeatureIDs) == 0 {
+		s.Logger.Debugw("no feature IDs provided, fetching all features from database",
+			"tenant_id", params.TenantID,
+			"environment_id", params.EnvironmentID,
+		)
+
+		// Create filter to fetch all features for this tenant/environment
+		featureFilter := types.NewNoLimitFeatureFilter()
+		features, err = s.FeatureRepo.List(ctx, featureFilter)
+		if err != nil {
+			s.Logger.Errorw("failed to fetch features from database",
+				"error", err,
+				"tenant_id", params.TenantID,
+				"environment_id", params.EnvironmentID,
+			)
+			return nil, ierr.WithError(err).
+				WithHint("Failed to fetch features for max bucket analysis").
+				Mark(ierr.ErrDatabase)
+		}
+
+		// Extract feature IDs and update params
+		featureIDs := make([]string, len(features))
+		for i, f := range features {
+			featureIDs[i] = f.ID
+		}
+		params.FeatureIDs = featureIDs
+
+		s.Logger.Debugw("fetched feature IDs from database",
+			"count", len(featureIDs),
+			"feature_ids", featureIDs,
+		)
+	} else {
+		// Fetch features using provided feature IDs
+		featureFilter := types.NewNoLimitFeatureFilter()
+		featureFilter.FeatureIDs = params.FeatureIDs
+		features, err = s.FeatureRepo.List(ctx, featureFilter)
+		if err != nil {
+			return nil, ierr.WithError(err).
+				WithHint("Failed to fetch features for max bucket analysis").
+				Mark(ierr.ErrDatabase)
+		}
 	}
 
 	// Extract meter IDs
@@ -1219,7 +1251,7 @@ func (s *featureUsageTrackingService) buildMaxBucketFeatures(ctx context.Context
 
 // fetchAnalytics fetches analytics data from repository
 func (s *featureUsageTrackingService) fetchAnalytics(ctx context.Context, params *events.UsageAnalyticsParams) ([]*events.DetailedUsageAnalytic, error) {
-	// Build max bucket features map
+	// Build max bucket features map (this will handle fetching features if needed)
 	maxBucketFeatures, err := s.buildMaxBucketFeatures(ctx, params)
 	if err != nil {
 		return nil, err
@@ -1824,7 +1856,7 @@ func (s *featureUsageTrackingService) isSubscriptionValidForEvent(
 	return true
 }
 
-func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context.Context, analytics []*events.DetailedUsageAnalytic) (*dto.GetUsageAnalyticsResponse, error) {
+func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context.Context, analytics []*events.DetailedUsageAnalytic, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error) {
 	response := &dto.GetUsageAnalyticsResponse{
 		TotalCost: decimal.Zero,
 		Currency:  "",
@@ -1833,6 +1865,14 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 
 	// Convert analytics to response items
 	for _, analytic := range analytics {
+		// For bucketed MAX, use TotalUsage (sum of bucket maxes) not MaxUsage
+		// TotalUsage already contains the sum from getMaxBucketTotals
+		totalUsage := analytic.TotalUsage
+		if analytic.AggregationType != types.AggregationMax || analytic.TotalUsage.IsZero() {
+			// For non-MAX or when TotalUsage is not set, use the aggregation-specific value
+			totalUsage = s.getCorrectUsageValue(analytic, analytic.AggregationType)
+		}
+
 		item := dto.UsageAnalyticItem{
 			FeatureID:       analytic.FeatureID,
 			FeatureName:     analytic.FeatureName,
@@ -1841,7 +1881,7 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			Unit:            analytic.Unit,
 			UnitPlural:      analytic.UnitPlural,
 			AggregationType: analytic.AggregationType,
-			TotalUsage:      s.getCorrectUsageValue(analytic, analytic.AggregationType), // This is now set correctly in enrichment
+			TotalUsage:      totalUsage, // Now correctly uses sum of bucket maxes for bucketed MAX
 			TotalCost:       analytic.TotalCost,
 			Currency:        analytic.Currency,
 			EventCount:      analytic.EventCount,
@@ -1849,15 +1889,17 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			Points:          make([]dto.UsageAnalyticPoint, 0, len(analytic.Points)),
 		}
 		// Map time-series points if available
-		for _, point := range analytic.Points {
-			// Use the correct usage value based on aggregation type
-			correctUsage := s.getCorrectUsageValueForPoint(point, analytic.AggregationType)
-			item.Points = append(item.Points, dto.UsageAnalyticPoint{
-				Timestamp:  point.Timestamp,
-				Usage:      correctUsage,
-				Cost:       point.Cost,
-				EventCount: point.EventCount,
-			})
+		if req.WindowSize != "" {
+			for _, point := range analytic.Points {
+				// Use the correct usage value based on aggregation type
+				correctUsage := s.getCorrectUsageValueForPoint(point, analytic.AggregationType)
+				item.Points = append(item.Points, dto.UsageAnalyticPoint{
+					Timestamp:  point.Timestamp,
+					Usage:      correctUsage,
+					Cost:       point.Cost,
+					EventCount: point.EventCount,
+				})
+			}
 		}
 
 		response.Items = append(response.Items, item)
