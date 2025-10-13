@@ -961,7 +961,7 @@ func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Cont
 	}
 
 	// 3. Process and return response
-	return s.buildAnalyticsResponse(ctx, data)
+	return s.buildAnalyticsResponse(ctx, data, req)
 }
 
 // validateAnalyticsRequest validates the analytics request
@@ -1034,10 +1034,10 @@ func (s *featureUsageTrackingService) fetchAnalyticsData(ctx context.Context, re
 }
 
 // buildAnalyticsResponse processes the data and builds the final response
-func (s *featureUsageTrackingService) buildAnalyticsResponse(ctx context.Context, data *AnalyticsData) (*dto.GetUsageAnalyticsResponse, error) {
+func (s *featureUsageTrackingService) buildAnalyticsResponse(ctx context.Context, data *AnalyticsData, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error) {
 	// If no results, return early
 	if len(data.Analytics) == 0 {
-		return s.ToGetUsageAnalyticsResponseDTO(ctx, data.Analytics)
+		return s.ToGetUsageAnalyticsResponseDTO(ctx, data.Analytics, req)
 	}
 
 	// Calculate costs
@@ -1059,7 +1059,7 @@ func (s *featureUsageTrackingService) buildAnalyticsResponse(ctx context.Context
 	// Aggregate results by requested grouping dimensions
 	analytics := s.aggregateAnalyticsByGrouping(data.Analytics, data.Params.GroupBy)
 
-	return s.ToGetUsageAnalyticsResponseDTO(ctx, analytics)
+	return s.ToGetUsageAnalyticsResponseDTO(ctx, analytics, req)
 }
 
 // fetchCustomer fetches customer by external customer ID
@@ -1812,7 +1812,7 @@ func (s *featureUsageTrackingService) isSubscriptionValidForEvent(
 	return true
 }
 
-func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context.Context, analytics []*events.DetailedUsageAnalytic) (*dto.GetUsageAnalyticsResponse, error) {
+func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context.Context, analytics []*events.DetailedUsageAnalytic, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error) {
 	response := &dto.GetUsageAnalyticsResponse{
 		TotalCost: decimal.Zero,
 		Currency:  "",
@@ -1821,6 +1821,14 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 
 	// Convert analytics to response items
 	for _, analytic := range analytics {
+		// For bucketed MAX, use TotalUsage (sum of bucket maxes) not MaxUsage
+		// TotalUsage already contains the sum from getMaxBucketTotals
+		totalUsage := analytic.TotalUsage
+		if analytic.AggregationType != types.AggregationMax || analytic.TotalUsage.IsZero() {
+			// For non-MAX or when TotalUsage is not set, use the aggregation-specific value
+			totalUsage = s.getCorrectUsageValue(analytic, analytic.AggregationType)
+		}
+
 		item := dto.UsageAnalyticItem{
 			FeatureID:       analytic.FeatureID,
 			FeatureName:     analytic.FeatureName,
@@ -1829,7 +1837,7 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			Unit:            analytic.Unit,
 			UnitPlural:      analytic.UnitPlural,
 			AggregationType: analytic.AggregationType,
-			TotalUsage:      s.getCorrectUsageValue(analytic, analytic.AggregationType), // This is now set correctly in enrichment
+			TotalUsage:      totalUsage, // Now correctly uses sum of bucket maxes for bucketed MAX
 			TotalCost:       analytic.TotalCost,
 			Currency:        analytic.Currency,
 			EventCount:      analytic.EventCount,
@@ -1837,15 +1845,17 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			Points:          make([]dto.UsageAnalyticPoint, 0, len(analytic.Points)),
 		}
 		// Map time-series points if available
-		for _, point := range analytic.Points {
-			// Use the correct usage value based on aggregation type
-			correctUsage := s.getCorrectUsageValueForPoint(point, analytic.AggregationType)
-			item.Points = append(item.Points, dto.UsageAnalyticPoint{
-				Timestamp:  point.Timestamp,
-				Usage:      correctUsage,
-				Cost:       point.Cost,
-				EventCount: point.EventCount,
-			})
+		if req.WindowSize != "" {
+			for _, point := range analytic.Points {
+				// Use the correct usage value based on aggregation type
+				correctUsage := s.getCorrectUsageValueForPoint(point, analytic.AggregationType)
+				item.Points = append(item.Points, dto.UsageAnalyticPoint{
+					Timestamp:  point.Timestamp,
+					Usage:      correctUsage,
+					Cost:       point.Cost,
+					EventCount: point.EventCount,
+				})
+			}
 		}
 
 		response.Items = append(response.Items, item)
