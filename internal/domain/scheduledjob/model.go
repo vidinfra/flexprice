@@ -8,23 +8,24 @@ import (
 
 // ScheduledJob represents a scheduled export job
 type ScheduledJob struct {
-	ID            string
-	TenantID      string
-	EnvironmentID string
-	ConnectionID  string
-	EntityType    string
-	Interval      string
-	Enabled       bool
-	JobConfig     map[string]interface{}
-	LastRunAt     *time.Time
-	NextRunAt     *time.Time
-	LastRunStatus string
-	LastRunError  string
-	Status        string // "published" or "draft"
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	CreatedBy     string
-	UpdatedBy     string
+	ID                 string
+	TenantID           string
+	EnvironmentID      string
+	ConnectionID       string
+	EntityType         string
+	Interval           string
+	Enabled            bool
+	JobConfig          map[string]interface{}
+	LastRunAt          *time.Time
+	NextRunAt          *time.Time
+	LastRunStatus      string
+	LastRunError       string
+	TemporalScheduleID string // Temporal schedule ID
+	Status             string // "published" or "draft"
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+	CreatedBy          string
+	UpdatedBy          string
 }
 
 // IsEnabled returns whether the job is enabled

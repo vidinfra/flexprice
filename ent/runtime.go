@@ -1845,27 +1845,27 @@ func init() {
 	// task.EntityTypeValidator is a validator for the "entity_type" field. It is called by the builders before save.
 	task.EntityTypeValidator = taskDescEntityType.Validators[0].(func(string) error)
 	// taskDescFileURL is the schema descriptor for file_url field.
-	taskDescFileURL := taskFields[3].Descriptor()
-	// task.FileURLValidator is a validator for the "file_url" field. It is called by the builders before save.
-	task.FileURLValidator = taskDescFileURL.Validators[0].(func(string) error)
+	taskDescFileURL := taskFields[4].Descriptor()
+	// task.DefaultFileURL holds the default value on creation for the file_url field.
+	task.DefaultFileURL = taskDescFileURL.Default.(string)
 	// taskDescFileType is the schema descriptor for file_type field.
-	taskDescFileType := taskFields[5].Descriptor()
+	taskDescFileType := taskFields[6].Descriptor()
 	// task.FileTypeValidator is a validator for the "file_type" field. It is called by the builders before save.
 	task.FileTypeValidator = taskDescFileType.Validators[0].(func(string) error)
 	// taskDescTaskStatus is the schema descriptor for task_status field.
-	taskDescTaskStatus := taskFields[6].Descriptor()
+	taskDescTaskStatus := taskFields[7].Descriptor()
 	// task.DefaultTaskStatus holds the default value on creation for the task_status field.
 	task.DefaultTaskStatus = taskDescTaskStatus.Default.(string)
 	// taskDescProcessedRecords is the schema descriptor for processed_records field.
-	taskDescProcessedRecords := taskFields[8].Descriptor()
+	taskDescProcessedRecords := taskFields[9].Descriptor()
 	// task.DefaultProcessedRecords holds the default value on creation for the processed_records field.
 	task.DefaultProcessedRecords = taskDescProcessedRecords.Default.(int)
 	// taskDescSuccessfulRecords is the schema descriptor for successful_records field.
-	taskDescSuccessfulRecords := taskFields[9].Descriptor()
+	taskDescSuccessfulRecords := taskFields[10].Descriptor()
 	// task.DefaultSuccessfulRecords holds the default value on creation for the successful_records field.
 	task.DefaultSuccessfulRecords = taskDescSuccessfulRecords.Default.(int)
 	// taskDescFailedRecords is the schema descriptor for failed_records field.
-	taskDescFailedRecords := taskFields[10].Descriptor()
+	taskDescFailedRecords := taskFields[11].Descriptor()
 	// task.DefaultFailedRecords holds the default value on creation for the failed_records field.
 	task.DefaultFailedRecords = taskDescFailedRecords.Default.(int)
 	taxappliedMixin := schema.TaxApplied{}.Mixin()

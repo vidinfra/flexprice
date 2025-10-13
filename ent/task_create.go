@@ -122,9 +122,31 @@ func (tc *TaskCreate) SetEntityType(s string) *TaskCreate {
 	return tc
 }
 
+// SetScheduledJobID sets the "scheduled_job_id" field.
+func (tc *TaskCreate) SetScheduledJobID(s string) *TaskCreate {
+	tc.mutation.SetScheduledJobID(s)
+	return tc
+}
+
+// SetNillableScheduledJobID sets the "scheduled_job_id" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableScheduledJobID(s *string) *TaskCreate {
+	if s != nil {
+		tc.SetScheduledJobID(*s)
+	}
+	return tc
+}
+
 // SetFileURL sets the "file_url" field.
 func (tc *TaskCreate) SetFileURL(s string) *TaskCreate {
 	tc.mutation.SetFileURL(s)
+	return tc
+}
+
+// SetNillableFileURL sets the "file_url" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableFileURL(s *string) *TaskCreate {
+	if s != nil {
+		tc.SetFileURL(*s)
+	}
 	return tc
 }
 
@@ -337,6 +359,10 @@ func (tc *TaskCreate) defaults() {
 		v := task.DefaultEnvironmentID
 		tc.mutation.SetEnvironmentID(v)
 	}
+	if _, ok := tc.mutation.FileURL(); !ok {
+		v := task.DefaultFileURL
+		tc.mutation.SetFileURL(v)
+	}
 	if _, ok := tc.mutation.TaskStatus(); !ok {
 		v := task.DefaultTaskStatus
 		tc.mutation.SetTaskStatus(v)
@@ -392,11 +418,6 @@ func (tc *TaskCreate) check() error {
 	}
 	if _, ok := tc.mutation.FileURL(); !ok {
 		return &ValidationError{Name: "file_url", err: errors.New(`ent: missing required field "Task.file_url"`)}
-	}
-	if v, ok := tc.mutation.FileURL(); ok {
-		if err := task.FileURLValidator(v); err != nil {
-			return &ValidationError{Name: "file_url", err: fmt.Errorf(`ent: validator failed for field "Task.file_url": %w`, err)}
-		}
 	}
 	if _, ok := tc.mutation.FileType(); !ok {
 		return &ValidationError{Name: "file_type", err: errors.New(`ent: missing required field "Task.file_type"`)}
@@ -488,6 +509,10 @@ func (tc *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := tc.mutation.EntityType(); ok {
 		_spec.SetField(task.FieldEntityType, field.TypeString, value)
 		_node.EntityType = value
+	}
+	if value, ok := tc.mutation.ScheduledJobID(); ok {
+		_spec.SetField(task.FieldScheduledJobID, field.TypeString, value)
+		_node.ScheduledJobID = value
 	}
 	if value, ok := tc.mutation.FileURL(); ok {
 		_spec.SetField(task.FieldFileURL, field.TypeString, value)

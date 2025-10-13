@@ -45,6 +45,8 @@ const (
 	FieldLastRunStatus = "last_run_status"
 	// FieldLastRunError holds the string denoting the last_run_error field in the database.
 	FieldLastRunError = "last_run_error"
+	// FieldTemporalScheduleID holds the string denoting the temporal_schedule_id field in the database.
+	FieldTemporalScheduleID = "temporal_schedule_id"
 	// Table holds the table name of the scheduledjob in the database.
 	Table = "scheduled_jobs"
 )
@@ -68,6 +70,7 @@ var Columns = []string{
 	FieldNextRunAt,
 	FieldLastRunStatus,
 	FieldLastRunError,
+	FieldTemporalScheduleID,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -184,4 +187,9 @@ func ByLastRunStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByLastRunError orders the results by the last_run_error field.
 func ByLastRunError(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastRunError, opts...).ToFunc()
+}
+
+// ByTemporalScheduleID orders the results by the temporal_schedule_id field.
+func ByTemporalScheduleID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporalScheduleID, opts...).ToFunc()
 }

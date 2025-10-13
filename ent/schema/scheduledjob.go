@@ -71,6 +71,12 @@ func (ScheduledJob) Fields() []ent.Field {
 		field.Text("last_run_error").
 			Optional().
 			Comment("Error message from last run if failed"),
+		field.String("temporal_schedule_id").
+			SchemaType(map[string]string{
+				"postgres": "varchar(100)",
+			}).
+			Optional().
+			Comment("Temporal schedule ID for the recurring workflow"),
 	}
 }
 

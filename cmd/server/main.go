@@ -40,6 +40,7 @@ import (
 	"github.com/flexprice/flexprice/internal/typst"
 	"github.com/flexprice/flexprice/internal/validator"
 	"github.com/flexprice/flexprice/internal/webhook"
+	temporalSDK "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 
 	lambdaEvents "github.com/aws/aws-lambda-go/events"
@@ -225,6 +226,7 @@ func main() {
 			service.NewSettingsService,
 			service.NewSubscriptionChangeService,
 			service.NewAlertLogsService,
+			service.NewScheduledJobOrchestrator,
 			service.NewScheduledJobService,
 		),
 	)
@@ -235,6 +237,7 @@ func main() {
 			// Temporal components
 			provideTemporalConfig,
 			provideTemporalClient,
+			provideTemporalSDKClient,
 			provideTemporalWorkerManager,
 			provideTemporalService,
 
@@ -388,6 +391,10 @@ func provideTemporalClient(cfg *config.TemporalConfig, log *logger.Logger) (clie
 
 func provideTemporalWorkerManager(temporalClient client.TemporalClient, log *logger.Logger) worker.TemporalWorkerManager {
 	return worker.NewTemporalWorkerManager(temporalClient, log)
+}
+
+func provideTemporalSDKClient(temporalClient client.TemporalClient) temporalSDK.Client {
+	return temporalClient.GetRawClient()
 }
 
 func provideTemporalService(temporalClient client.TemporalClient, workerManager worker.TemporalWorkerManager, log *logger.Logger) temporalservice.TemporalService {

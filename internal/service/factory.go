@@ -27,6 +27,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/priceunit"
 	"github.com/flexprice/flexprice/internal/domain/proration"
+	"github.com/flexprice/flexprice/internal/domain/scheduledjob"
 	"github.com/flexprice/flexprice/internal/domain/secret"
 	"github.com/flexprice/flexprice/internal/domain/settings"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
@@ -39,6 +40,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/wallet"
 	"github.com/flexprice/flexprice/internal/httpclient"
 	"github.com/flexprice/flexprice/internal/integration"
+	s3Integration "github.com/flexprice/flexprice/internal/integration/s3"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/pdf"
 	"github.com/flexprice/flexprice/internal/postgres"
@@ -96,6 +98,7 @@ type ServiceParams struct {
 	EntityIntegrationMappingRepo entityintegrationmapping.Repository
 	SettingsRepo                 settings.Repository
 	AlertLogsRepo                alertlogs.Repository
+	ScheduledJobRepo             scheduledjob.Repository
 
 	// Publishers
 	EventPublisher   publisher.EventPublisher
@@ -109,6 +112,9 @@ type ServiceParams struct {
 
 	// Integration Factory
 	IntegrationFactory *integration.Factory
+
+	// S3 Client
+	S3Client *s3Integration.Client
 }
 
 // Common service params
@@ -160,8 +166,10 @@ func NewServiceParams(
 	entityIntegrationMappingRepo entityintegrationmapping.Repository,
 	settingsRepo settings.Repository,
 	alertLogsRepo alertlogs.Repository,
+	scheduledJobRepo scheduledjob.Repository,
 	prorationCalculator proration.Calculator,
 	integrationFactory *integration.Factory,
+	s3Client *s3Integration.Client,
 ) ServiceParams {
 	return ServiceParams{
 		Logger:                       logger,
@@ -211,7 +219,9 @@ func NewServiceParams(
 		EntityIntegrationMappingRepo: entityIntegrationMappingRepo,
 		SettingsRepo:                 settingsRepo,
 		AlertLogsRepo:                alertLogsRepo,
+		ScheduledJobRepo:             scheduledJobRepo,
 		ProrationCalculator:          prorationCalculator,
 		IntegrationFactory:           integrationFactory,
+		S3Client:                     s3Client,
 	}
 }

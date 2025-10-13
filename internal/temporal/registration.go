@@ -5,8 +5,10 @@ import (
 
 	"github.com/flexprice/flexprice/internal/service"
 	"github.com/flexprice/flexprice/internal/temporal/activities"
+	exportActivities "github.com/flexprice/flexprice/internal/temporal/activities/export"
 	temporalService "github.com/flexprice/flexprice/internal/temporal/service"
 	"github.com/flexprice/flexprice/internal/temporal/workflows"
+	exportWorkflows "github.com/flexprice/flexprice/internal/temporal/workflows/export"
 	"github.com/flexprice/flexprice/internal/types"
 )
 
@@ -26,9 +28,14 @@ func RegisterWorkflowsAndActivities(temporalService temporalService.TemporalServ
 	taskService := service.NewTaskService(params)
 	taskActivities := activities.NewTaskActivities(taskService)
 
+	// Export activities
+	taskActivity := exportActivities.NewTaskActivity(params.TaskRepo, params.Logger)
+	scheduledJobActivity := exportActivities.NewScheduledJobActivity(params.ScheduledJobRepo, params.TaskRepo, params.Logger)
+	exportActivity := exportActivities.NewExportActivity(params.FeatureUsageRepo, params.S3Client, params.Logger)
+
 	// Get all task queues and register workflows/activities for each
 	for _, taskQueue := range types.GetAllTaskQueues() {
-		config := buildWorkerConfig(taskQueue, planActivities, taskActivities)
+		config := buildWorkerConfig(taskQueue, planActivities, taskActivities, taskActivity, scheduledJobActivity, exportActivity)
 		if err := registerWorker(temporalService, config); err != nil {
 			return fmt.Errorf("failed to register worker for task queue %s: %w", taskQueue, err)
 		}
@@ -38,7 +45,14 @@ func RegisterWorkflowsAndActivities(temporalService temporalService.TemporalServ
 }
 
 // buildWorkerConfig creates a worker configuration for a specific task queue
-func buildWorkerConfig(taskQueue types.TemporalTaskQueue, planActivities *activities.PlanActivities, taskActivities *activities.TaskActivities) WorkerConfig {
+func buildWorkerConfig(
+	taskQueue types.TemporalTaskQueue,
+	planActivities *activities.PlanActivities,
+	taskActivities *activities.TaskActivities,
+	taskActivity *exportActivities.TaskActivity,
+	scheduledJobActivity *exportActivities.ScheduledJobActivity,
+	exportActivity *exportActivities.ExportActivity,
+) WorkerConfig {
 	workflowsList := []interface{}{}
 	activitiesList := []interface{}{}
 
@@ -51,7 +65,21 @@ func buildWorkerConfig(taskQueue types.TemporalTaskQueue, planActivities *activi
 		workflowsList = append(workflowsList, workflows.PriceSyncWorkflow)
 		activitiesList = append(activitiesList, planActivities.SyncPlanPrices)
 
-		// Other task queues will be added when workflows are implemented
+	case types.TemporalTaskQueueExport:
+		// Export workflows
+		workflowsList = append(workflowsList,
+			exportWorkflows.ScheduledExportWorkflow,
+			exportWorkflows.ExecuteExportWorkflow,
+		)
+		// Export activities
+		activitiesList = append(activitiesList,
+			taskActivity.CreateTask,
+			taskActivity.UpdateTaskStatus,
+			taskActivity.CompleteTask,
+			scheduledJobActivity.GetScheduledJobDetails,
+			scheduledJobActivity.UpdateScheduledJobLastRun,
+			exportActivity.ExportData,
+		)
 	}
 
 	return WorkerConfig{

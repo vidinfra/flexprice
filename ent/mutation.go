@@ -39341,29 +39341,30 @@ func (m *PriceUnitMutation) ResetEdge(name string) error {
 // ScheduledJobMutation represents an operation that mutates the ScheduledJob nodes in the graph.
 type ScheduledJobMutation struct {
 	config
-	op              Op
-	typ             string
-	id              *string
-	tenant_id       *string
-	status          *string
-	created_at      *time.Time
-	updated_at      *time.Time
-	created_by      *string
-	updated_by      *string
-	environment_id  *string
-	connection_id   *string
-	entity_type     *string
-	interval        *string
-	enabled         *bool
-	job_config      *map[string]interface{}
-	last_run_at     *time.Time
-	next_run_at     *time.Time
-	last_run_status *string
-	last_run_error  *string
-	clearedFields   map[string]struct{}
-	done            bool
-	oldValue        func(context.Context) (*ScheduledJob, error)
-	predicates      []predicate.ScheduledJob
+	op                   Op
+	typ                  string
+	id                   *string
+	tenant_id            *string
+	status               *string
+	created_at           *time.Time
+	updated_at           *time.Time
+	created_by           *string
+	updated_by           *string
+	environment_id       *string
+	connection_id        *string
+	entity_type          *string
+	interval             *string
+	enabled              *bool
+	job_config           *map[string]interface{}
+	last_run_at          *time.Time
+	next_run_at          *time.Time
+	last_run_status      *string
+	last_run_error       *string
+	temporal_schedule_id *string
+	clearedFields        map[string]struct{}
+	done                 bool
+	oldValue             func(context.Context) (*ScheduledJob, error)
+	predicates           []predicate.ScheduledJob
 }
 
 var _ ent.Mutation = (*ScheduledJobMutation)(nil)
@@ -40150,6 +40151,55 @@ func (m *ScheduledJobMutation) ResetLastRunError() {
 	delete(m.clearedFields, scheduledjob.FieldLastRunError)
 }
 
+// SetTemporalScheduleID sets the "temporal_schedule_id" field.
+func (m *ScheduledJobMutation) SetTemporalScheduleID(s string) {
+	m.temporal_schedule_id = &s
+}
+
+// TemporalScheduleID returns the value of the "temporal_schedule_id" field in the mutation.
+func (m *ScheduledJobMutation) TemporalScheduleID() (r string, exists bool) {
+	v := m.temporal_schedule_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporalScheduleID returns the old "temporal_schedule_id" field's value of the ScheduledJob entity.
+// If the ScheduledJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ScheduledJobMutation) OldTemporalScheduleID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporalScheduleID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporalScheduleID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporalScheduleID: %w", err)
+	}
+	return oldValue.TemporalScheduleID, nil
+}
+
+// ClearTemporalScheduleID clears the value of the "temporal_schedule_id" field.
+func (m *ScheduledJobMutation) ClearTemporalScheduleID() {
+	m.temporal_schedule_id = nil
+	m.clearedFields[scheduledjob.FieldTemporalScheduleID] = struct{}{}
+}
+
+// TemporalScheduleIDCleared returns if the "temporal_schedule_id" field was cleared in this mutation.
+func (m *ScheduledJobMutation) TemporalScheduleIDCleared() bool {
+	_, ok := m.clearedFields[scheduledjob.FieldTemporalScheduleID]
+	return ok
+}
+
+// ResetTemporalScheduleID resets all changes to the "temporal_schedule_id" field.
+func (m *ScheduledJobMutation) ResetTemporalScheduleID() {
+	m.temporal_schedule_id = nil
+	delete(m.clearedFields, scheduledjob.FieldTemporalScheduleID)
+}
+
 // Where appends a list predicates to the ScheduledJobMutation builder.
 func (m *ScheduledJobMutation) Where(ps ...predicate.ScheduledJob) {
 	m.predicates = append(m.predicates, ps...)
@@ -40184,7 +40234,7 @@ func (m *ScheduledJobMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ScheduledJobMutation) Fields() []string {
-	fields := make([]string, 0, 16)
+	fields := make([]string, 0, 17)
 	if m.tenant_id != nil {
 		fields = append(fields, scheduledjob.FieldTenantID)
 	}
@@ -40233,6 +40283,9 @@ func (m *ScheduledJobMutation) Fields() []string {
 	if m.last_run_error != nil {
 		fields = append(fields, scheduledjob.FieldLastRunError)
 	}
+	if m.temporal_schedule_id != nil {
+		fields = append(fields, scheduledjob.FieldTemporalScheduleID)
+	}
 	return fields
 }
 
@@ -40273,6 +40326,8 @@ func (m *ScheduledJobMutation) Field(name string) (ent.Value, bool) {
 		return m.LastRunStatus()
 	case scheduledjob.FieldLastRunError:
 		return m.LastRunError()
+	case scheduledjob.FieldTemporalScheduleID:
+		return m.TemporalScheduleID()
 	}
 	return nil, false
 }
@@ -40314,6 +40369,8 @@ func (m *ScheduledJobMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldLastRunStatus(ctx)
 	case scheduledjob.FieldLastRunError:
 		return m.OldLastRunError(ctx)
+	case scheduledjob.FieldTemporalScheduleID:
+		return m.OldTemporalScheduleID(ctx)
 	}
 	return nil, fmt.Errorf("unknown ScheduledJob field %s", name)
 }
@@ -40435,6 +40492,13 @@ func (m *ScheduledJobMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetLastRunError(v)
 		return nil
+	case scheduledjob.FieldTemporalScheduleID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporalScheduleID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown ScheduledJob field %s", name)
 }
@@ -40489,6 +40553,9 @@ func (m *ScheduledJobMutation) ClearedFields() []string {
 	if m.FieldCleared(scheduledjob.FieldLastRunError) {
 		fields = append(fields, scheduledjob.FieldLastRunError)
 	}
+	if m.FieldCleared(scheduledjob.FieldTemporalScheduleID) {
+		fields = append(fields, scheduledjob.FieldTemporalScheduleID)
+	}
 	return fields
 }
 
@@ -40526,6 +40593,9 @@ func (m *ScheduledJobMutation) ClearField(name string) error {
 		return nil
 	case scheduledjob.FieldLastRunError:
 		m.ClearLastRunError()
+		return nil
+	case scheduledjob.FieldTemporalScheduleID:
+		m.ClearTemporalScheduleID()
 		return nil
 	}
 	return fmt.Errorf("unknown ScheduledJob nullable field %s", name)
@@ -40582,6 +40652,9 @@ func (m *ScheduledJobMutation) ResetField(name string) error {
 		return nil
 	case scheduledjob.FieldLastRunError:
 		m.ResetLastRunError()
+		return nil
+	case scheduledjob.FieldTemporalScheduleID:
+		m.ResetTemporalScheduleID()
 		return nil
 	}
 	return fmt.Errorf("unknown ScheduledJob field %s", name)
@@ -52256,6 +52329,7 @@ type TaskMutation struct {
 	environment_id        *string
 	task_type             *string
 	entity_type           *string
+	scheduled_job_id      *string
 	file_url              *string
 	file_name             *string
 	file_type             *string
@@ -52744,6 +52818,55 @@ func (m *TaskMutation) OldEntityType(ctx context.Context) (v string, err error) 
 // ResetEntityType resets all changes to the "entity_type" field.
 func (m *TaskMutation) ResetEntityType() {
 	m.entity_type = nil
+}
+
+// SetScheduledJobID sets the "scheduled_job_id" field.
+func (m *TaskMutation) SetScheduledJobID(s string) {
+	m.scheduled_job_id = &s
+}
+
+// ScheduledJobID returns the value of the "scheduled_job_id" field in the mutation.
+func (m *TaskMutation) ScheduledJobID() (r string, exists bool) {
+	v := m.scheduled_job_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScheduledJobID returns the old "scheduled_job_id" field's value of the Task entity.
+// If the Task object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskMutation) OldScheduledJobID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScheduledJobID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScheduledJobID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScheduledJobID: %w", err)
+	}
+	return oldValue.ScheduledJobID, nil
+}
+
+// ClearScheduledJobID clears the value of the "scheduled_job_id" field.
+func (m *TaskMutation) ClearScheduledJobID() {
+	m.scheduled_job_id = nil
+	m.clearedFields[task.FieldScheduledJobID] = struct{}{}
+}
+
+// ScheduledJobIDCleared returns if the "scheduled_job_id" field was cleared in this mutation.
+func (m *TaskMutation) ScheduledJobIDCleared() bool {
+	_, ok := m.clearedFields[task.FieldScheduledJobID]
+	return ok
+}
+
+// ResetScheduledJobID resets all changes to the "scheduled_job_id" field.
+func (m *TaskMutation) ResetScheduledJobID() {
+	m.scheduled_job_id = nil
+	delete(m.clearedFields, task.FieldScheduledJobID)
 }
 
 // SetFileURL sets the "file_url" field.
@@ -53420,7 +53543,7 @@ func (m *TaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskMutation) Fields() []string {
-	fields := make([]string, 0, 22)
+	fields := make([]string, 0, 23)
 	if m.tenant_id != nil {
 		fields = append(fields, task.FieldTenantID)
 	}
@@ -53447,6 +53570,9 @@ func (m *TaskMutation) Fields() []string {
 	}
 	if m.entity_type != nil {
 		fields = append(fields, task.FieldEntityType)
+	}
+	if m.scheduled_job_id != nil {
+		fields = append(fields, task.FieldScheduledJobID)
 	}
 	if m.file_url != nil {
 		fields = append(fields, task.FieldFileURL)
@@ -53513,6 +53639,8 @@ func (m *TaskMutation) Field(name string) (ent.Value, bool) {
 		return m.TaskType()
 	case task.FieldEntityType:
 		return m.EntityType()
+	case task.FieldScheduledJobID:
+		return m.ScheduledJobID()
 	case task.FieldFileURL:
 		return m.FileURL()
 	case task.FieldFileName:
@@ -53566,6 +53694,8 @@ func (m *TaskMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldTaskType(ctx)
 	case task.FieldEntityType:
 		return m.OldEntityType(ctx)
+	case task.FieldScheduledJobID:
+		return m.OldScheduledJobID(ctx)
 	case task.FieldFileURL:
 		return m.OldFileURL(ctx)
 	case task.FieldFileName:
@@ -53663,6 +53793,13 @@ func (m *TaskMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEntityType(v)
+		return nil
+	case task.FieldScheduledJobID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScheduledJobID(v)
 		return nil
 	case task.FieldFileURL:
 		v, ok := value.(string)
@@ -53845,6 +53982,9 @@ func (m *TaskMutation) ClearedFields() []string {
 	if m.FieldCleared(task.FieldEnvironmentID) {
 		fields = append(fields, task.FieldEnvironmentID)
 	}
+	if m.FieldCleared(task.FieldScheduledJobID) {
+		fields = append(fields, task.FieldScheduledJobID)
+	}
 	if m.FieldCleared(task.FieldFileName) {
 		fields = append(fields, task.FieldFileName)
 	}
@@ -53888,6 +54028,9 @@ func (m *TaskMutation) ClearField(name string) error {
 		return nil
 	case task.FieldEnvironmentID:
 		m.ClearEnvironmentID()
+		return nil
+	case task.FieldScheduledJobID:
+		m.ClearScheduledJobID()
 		return nil
 	case task.FieldFileName:
 		m.ClearFileName()
@@ -53944,6 +54087,9 @@ func (m *TaskMutation) ResetField(name string) error {
 		return nil
 	case task.FieldEntityType:
 		m.ResetEntityType()
+		return nil
+	case task.FieldScheduledJobID:
+		m.ResetScheduledJobID()
 		return nil
 	case task.FieldFileURL:
 		m.ResetFileURL()

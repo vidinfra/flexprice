@@ -42,12 +42,13 @@ func NewExportService(
 
 // ExportRequest represents an export request
 type ExportRequest struct {
-	EntityType types.ExportEntityType
-	TenantID   string
-	EnvID      string
-	StartTime  time.Time
-	EndTime    time.Time
-	JobConfig  *types.S3JobConfig // S3 job configuration from scheduled_jobs
+	EntityType   types.ExportEntityType
+	ConnectionID string // Connection ID for S3 credentials
+	TenantID     string
+	EnvID        string
+	StartTime    time.Time
+	EndTime      time.Time
+	JobConfig    *types.S3JobConfig // S3 job configuration from scheduled_jobs
 }
 
 // ExportResponse represents the result of an export operation

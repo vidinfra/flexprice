@@ -36,6 +36,8 @@ type Task struct {
 	TaskType string `json:"task_type,omitempty"`
 	// EntityType holds the value of the "entity_type" field.
 	EntityType string `json:"entity_type,omitempty"`
+	// Reference to the scheduled job that created this task (for export tasks)
+	ScheduledJobID string `json:"scheduled_job_id,omitempty"`
 	// FileURL holds the value of the "file_url" field.
 	FileURL string `json:"file_url,omitempty"`
 	// FileName holds the value of the "file_name" field.
@@ -74,7 +76,7 @@ func (*Task) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case task.FieldTotalRecords, task.FieldProcessedRecords, task.FieldSuccessfulRecords, task.FieldFailedRecords:
 			values[i] = new(sql.NullInt64)
-		case task.FieldID, task.FieldTenantID, task.FieldStatus, task.FieldCreatedBy, task.FieldUpdatedBy, task.FieldEnvironmentID, task.FieldTaskType, task.FieldEntityType, task.FieldFileURL, task.FieldFileName, task.FieldFileType, task.FieldTaskStatus, task.FieldErrorSummary:
+		case task.FieldID, task.FieldTenantID, task.FieldStatus, task.FieldCreatedBy, task.FieldUpdatedBy, task.FieldEnvironmentID, task.FieldTaskType, task.FieldEntityType, task.FieldScheduledJobID, task.FieldFileURL, task.FieldFileName, task.FieldFileType, task.FieldTaskStatus, task.FieldErrorSummary:
 			values[i] = new(sql.NullString)
 		case task.FieldCreatedAt, task.FieldUpdatedAt, task.FieldStartedAt, task.FieldCompletedAt, task.FieldFailedAt:
 			values[i] = new(sql.NullTime)
@@ -152,6 +154,12 @@ func (t *Task) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field entity_type", values[i])
 			} else if value.Valid {
 				t.EntityType = value.String
+			}
+		case task.FieldScheduledJobID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field scheduled_job_id", values[i])
+			} else if value.Valid {
+				t.ScheduledJobID = value.String
 			}
 		case task.FieldFileURL:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -301,6 +309,9 @@ func (t *Task) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("entity_type=")
 	builder.WriteString(t.EntityType)
+	builder.WriteString(", ")
+	builder.WriteString("scheduled_job_id=")
+	builder.WriteString(t.ScheduledJobID)
 	builder.WriteString(", ")
 	builder.WriteString("file_url=")
 	builder.WriteString(t.FileURL)

@@ -96,6 +96,26 @@ func (tu *TaskUpdate) SetNillableEntityType(s *string) *TaskUpdate {
 	return tu
 }
 
+// SetScheduledJobID sets the "scheduled_job_id" field.
+func (tu *TaskUpdate) SetScheduledJobID(s string) *TaskUpdate {
+	tu.mutation.SetScheduledJobID(s)
+	return tu
+}
+
+// SetNillableScheduledJobID sets the "scheduled_job_id" field if the given value is not nil.
+func (tu *TaskUpdate) SetNillableScheduledJobID(s *string) *TaskUpdate {
+	if s != nil {
+		tu.SetScheduledJobID(*s)
+	}
+	return tu
+}
+
+// ClearScheduledJobID clears the value of the "scheduled_job_id" field.
+func (tu *TaskUpdate) ClearScheduledJobID() *TaskUpdate {
+	tu.mutation.ClearScheduledJobID()
+	return tu
+}
+
 // SetFileURL sets the "file_url" field.
 func (tu *TaskUpdate) SetFileURL(s string) *TaskUpdate {
 	tu.mutation.SetFileURL(s)
@@ -393,11 +413,6 @@ func (tu *TaskUpdate) check() error {
 			return &ValidationError{Name: "entity_type", err: fmt.Errorf(`ent: validator failed for field "Task.entity_type": %w`, err)}
 		}
 	}
-	if v, ok := tu.mutation.FileURL(); ok {
-		if err := task.FileURLValidator(v); err != nil {
-			return &ValidationError{Name: "file_url", err: fmt.Errorf(`ent: validator failed for field "Task.file_url": %w`, err)}
-		}
-	}
 	if v, ok := tu.mutation.FileType(); ok {
 		if err := task.FileTypeValidator(v); err != nil {
 			return &ValidationError{Name: "file_type", err: fmt.Errorf(`ent: validator failed for field "Task.file_type": %w`, err)}
@@ -441,6 +456,12 @@ func (tu *TaskUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if value, ok := tu.mutation.EntityType(); ok {
 		_spec.SetField(task.FieldEntityType, field.TypeString, value)
+	}
+	if value, ok := tu.mutation.ScheduledJobID(); ok {
+		_spec.SetField(task.FieldScheduledJobID, field.TypeString, value)
+	}
+	if tu.mutation.ScheduledJobIDCleared() {
+		_spec.ClearField(task.FieldScheduledJobID, field.TypeString)
 	}
 	if value, ok := tu.mutation.FileURL(); ok {
 		_spec.SetField(task.FieldFileURL, field.TypeString, value)
@@ -599,6 +620,26 @@ func (tuo *TaskUpdateOne) SetNillableEntityType(s *string) *TaskUpdateOne {
 	if s != nil {
 		tuo.SetEntityType(*s)
 	}
+	return tuo
+}
+
+// SetScheduledJobID sets the "scheduled_job_id" field.
+func (tuo *TaskUpdateOne) SetScheduledJobID(s string) *TaskUpdateOne {
+	tuo.mutation.SetScheduledJobID(s)
+	return tuo
+}
+
+// SetNillableScheduledJobID sets the "scheduled_job_id" field if the given value is not nil.
+func (tuo *TaskUpdateOne) SetNillableScheduledJobID(s *string) *TaskUpdateOne {
+	if s != nil {
+		tuo.SetScheduledJobID(*s)
+	}
+	return tuo
+}
+
+// ClearScheduledJobID clears the value of the "scheduled_job_id" field.
+func (tuo *TaskUpdateOne) ClearScheduledJobID() *TaskUpdateOne {
+	tuo.mutation.ClearScheduledJobID()
 	return tuo
 }
 
@@ -912,11 +953,6 @@ func (tuo *TaskUpdateOne) check() error {
 			return &ValidationError{Name: "entity_type", err: fmt.Errorf(`ent: validator failed for field "Task.entity_type": %w`, err)}
 		}
 	}
-	if v, ok := tuo.mutation.FileURL(); ok {
-		if err := task.FileURLValidator(v); err != nil {
-			return &ValidationError{Name: "file_url", err: fmt.Errorf(`ent: validator failed for field "Task.file_url": %w`, err)}
-		}
-	}
 	if v, ok := tuo.mutation.FileType(); ok {
 		if err := task.FileTypeValidator(v); err != nil {
 			return &ValidationError{Name: "file_type", err: fmt.Errorf(`ent: validator failed for field "Task.file_type": %w`, err)}
@@ -977,6 +1013,12 @@ func (tuo *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) 
 	}
 	if value, ok := tuo.mutation.EntityType(); ok {
 		_spec.SetField(task.FieldEntityType, field.TypeString, value)
+	}
+	if value, ok := tuo.mutation.ScheduledJobID(); ok {
+		_spec.SetField(task.FieldScheduledJobID, field.TypeString, value)
+	}
+	if tuo.mutation.ScheduledJobIDCleared() {
+		_spec.ClearField(task.FieldScheduledJobID, field.TypeString)
 	}
 	if value, ok := tuo.mutation.FileURL(); ok {
 		_spec.SetField(task.FieldFileURL, field.TypeString, value)

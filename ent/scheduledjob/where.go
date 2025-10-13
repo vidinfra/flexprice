@@ -139,6 +139,11 @@ func LastRunError(v string) predicate.ScheduledJob {
 	return predicate.ScheduledJob(sql.FieldEQ(FieldLastRunError, v))
 }
 
+// TemporalScheduleID applies equality check predicate on the "temporal_schedule_id" field. It's identical to TemporalScheduleIDEQ.
+func TemporalScheduleID(v string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldEQ(FieldTemporalScheduleID, v))
+}
+
 // TenantIDEQ applies the EQ predicate on the "tenant_id" field.
 func TenantIDEQ(v string) predicate.ScheduledJob {
 	return predicate.ScheduledJob(sql.FieldEQ(FieldTenantID, v))
@@ -1037,6 +1042,81 @@ func LastRunErrorEqualFold(v string) predicate.ScheduledJob {
 // LastRunErrorContainsFold applies the ContainsFold predicate on the "last_run_error" field.
 func LastRunErrorContainsFold(v string) predicate.ScheduledJob {
 	return predicate.ScheduledJob(sql.FieldContainsFold(FieldLastRunError, v))
+}
+
+// TemporalScheduleIDEQ applies the EQ predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDEQ(v string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldEQ(FieldTemporalScheduleID, v))
+}
+
+// TemporalScheduleIDNEQ applies the NEQ predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDNEQ(v string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldNEQ(FieldTemporalScheduleID, v))
+}
+
+// TemporalScheduleIDIn applies the In predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDIn(vs ...string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldIn(FieldTemporalScheduleID, vs...))
+}
+
+// TemporalScheduleIDNotIn applies the NotIn predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDNotIn(vs ...string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldNotIn(FieldTemporalScheduleID, vs...))
+}
+
+// TemporalScheduleIDGT applies the GT predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDGT(v string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldGT(FieldTemporalScheduleID, v))
+}
+
+// TemporalScheduleIDGTE applies the GTE predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDGTE(v string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldGTE(FieldTemporalScheduleID, v))
+}
+
+// TemporalScheduleIDLT applies the LT predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDLT(v string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldLT(FieldTemporalScheduleID, v))
+}
+
+// TemporalScheduleIDLTE applies the LTE predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDLTE(v string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldLTE(FieldTemporalScheduleID, v))
+}
+
+// TemporalScheduleIDContains applies the Contains predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDContains(v string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldContains(FieldTemporalScheduleID, v))
+}
+
+// TemporalScheduleIDHasPrefix applies the HasPrefix predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDHasPrefix(v string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldHasPrefix(FieldTemporalScheduleID, v))
+}
+
+// TemporalScheduleIDHasSuffix applies the HasSuffix predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDHasSuffix(v string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldHasSuffix(FieldTemporalScheduleID, v))
+}
+
+// TemporalScheduleIDIsNil applies the IsNil predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDIsNil() predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldIsNull(FieldTemporalScheduleID))
+}
+
+// TemporalScheduleIDNotNil applies the NotNil predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDNotNil() predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldNotNull(FieldTemporalScheduleID))
+}
+
+// TemporalScheduleIDEqualFold applies the EqualFold predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDEqualFold(v string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldEqualFold(FieldTemporalScheduleID, v))
+}
+
+// TemporalScheduleIDContainsFold applies the ContainsFold predicate on the "temporal_schedule_id" field.
+func TemporalScheduleIDContainsFold(v string) predicate.ScheduledJob {
+	return predicate.ScheduledJob(sql.FieldContainsFold(FieldTemporalScheduleID, v))
 }
 
 // And groups predicates with the AND operator between them.

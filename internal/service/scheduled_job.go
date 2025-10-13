@@ -20,21 +20,25 @@ type ScheduledJobService interface {
 	UpdateScheduledJob(ctx context.Context, id string, req dto.UpdateScheduledJobRequest) (*dto.ScheduledJobResponse, error)
 	DeleteScheduledJob(ctx context.Context, id string) error
 	GetScheduledJobsByEntityType(ctx context.Context, entityType types.ScheduledJobEntityType) ([]*dto.ScheduledJobResponse, error)
+	TriggerManualSync(ctx context.Context, id string) (string, error)
 }
 
 type scheduledJobService struct {
-	repo   scheduledjob.Repository
-	logger *logger.Logger
+	repo         scheduledjob.Repository
+	orchestrator *ScheduledJobOrchestrator
+	logger       *logger.Logger
 }
 
 // NewScheduledJobService creates a new scheduled job service
 func NewScheduledJobService(
 	repo scheduledjob.Repository,
+	orchestrator *ScheduledJobOrchestrator,
 	logger *logger.Logger,
 ) ScheduledJobService {
 	return &scheduledJobService{
-		repo:   repo,
-		logger: logger,
+		repo:         repo,
+		orchestrator: orchestrator,
+		logger:       logger,
 	}
 }
 
@@ -75,16 +79,26 @@ func (s *scheduledJobService) CreateScheduledJob(ctx context.Context, req dto.Cr
 	// Create scheduled job
 	now := time.Now()
 
+	tenantID := types.GetTenantID(ctx)
+	envID := types.GetEnvironmentID(ctx)
+
+	s.logger.Infow("creating scheduled job",
+		"tenant_id", tenantID,
+		"environment_id", envID,
+		"entity_type", entityType)
+
 	job := &scheduledjob.ScheduledJob{
-		ID:           types.GenerateUUIDWithPrefix("schdjob"),
-		ConnectionID: req.ConnectionID,
-		EntityType:   string(entityType),
-		Interval:     string(interval),
-		Enabled:      req.Enabled,
-		JobConfig:    req.JobConfig,
-		Status:       "published",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:            types.GenerateUUIDWithPrefix("schdjob"),
+		TenantID:      tenantID,
+		EnvironmentID: envID,
+		ConnectionID:  req.ConnectionID,
+		EntityType:    string(entityType),
+		Interval:      string(interval),
+		Enabled:       req.Enabled,
+		JobConfig:     req.JobConfig,
+		Status:        "published",
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 
 	// Calculate next run time
@@ -104,6 +118,15 @@ func (s *scheduledJobService) CreateScheduledJob(ctx context.Context, req dto.Cr
 		"id", job.ID,
 		"entity_type", job.EntityType,
 		"interval", job.Interval)
+
+	// Start Temporal schedule if enabled
+	if job.Enabled && s.orchestrator != nil {
+		err = s.orchestrator.StartScheduledJob(ctx, job.ID)
+		if err != nil {
+			s.logger.Errorw("failed to start temporal schedule", "error", err)
+			// Don't fail the creation - job is created, schedule can be started later
+		}
+	}
 
 	return dto.ToScheduledJobResponse(job), nil
 }
@@ -158,6 +181,9 @@ func (s *scheduledJobService) UpdateScheduledJob(ctx context.Context, id string,
 			Mark(ierr.ErrNotFound)
 	}
 
+	// Track if enabled status changed
+	wasEnabled := job.Enabled
+
 	// Update fields if provided
 	if req.Interval != nil {
 		interval := types.ScheduledJobInterval(*req.Interval)
@@ -209,6 +235,23 @@ func (s *scheduledJobService) UpdateScheduledJob(ctx context.Context, id string,
 			Mark(ierr.ErrDatabase)
 	}
 
+	// Handle Temporal schedule enable/disable
+	if s.orchestrator != nil && wasEnabled != job.Enabled {
+		if job.Enabled {
+			// Start/Unpause the schedule
+			err = s.orchestrator.StartScheduledJob(ctx, job.ID)
+			if err != nil {
+				s.logger.Errorw("failed to start temporal schedule", "error", err)
+			}
+		} else {
+			// Pause the schedule
+			err = s.orchestrator.StopScheduledJob(ctx, job.ID)
+			if err != nil {
+				s.logger.Errorw("failed to stop temporal schedule", "error", err)
+			}
+		}
+	}
+
 	s.logger.Infow("scheduled job updated successfully", "id", job.ID)
 
 	return dto.ToScheduledJobResponse(job), nil
@@ -226,6 +269,24 @@ func (s *scheduledJobService) DeleteScheduledJob(ctx context.Context, id string)
 
 	s.logger.Infow("scheduled job deleted successfully", "id", id)
 	return nil
+}
+
+// TriggerManualSync triggers a manual export immediately
+func (s *scheduledJobService) TriggerManualSync(ctx context.Context, id string) (string, error) {
+	if s.orchestrator == nil {
+		return "", ierr.NewError("orchestrator not configured").
+			WithHint("Temporal orchestrator is not available").
+			Mark(ierr.ErrInternal)
+	}
+
+	workflowID, err := s.orchestrator.TriggerManualSync(ctx, id)
+	if err != nil {
+		s.logger.Errorw("failed to trigger manual sync", "id", id, "error", err)
+		return "", err
+	}
+
+	s.logger.Infow("manual sync triggered", "id", id, "workflow_id", workflowID)
+	return workflowID, nil
 }
 
 // GetScheduledJobsByEntityType retrieves scheduled jobs by entity type

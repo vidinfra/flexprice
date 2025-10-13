@@ -216,6 +216,26 @@ func (sju *ScheduledJobUpdate) ClearLastRunError() *ScheduledJobUpdate {
 	return sju
 }
 
+// SetTemporalScheduleID sets the "temporal_schedule_id" field.
+func (sju *ScheduledJobUpdate) SetTemporalScheduleID(s string) *ScheduledJobUpdate {
+	sju.mutation.SetTemporalScheduleID(s)
+	return sju
+}
+
+// SetNillableTemporalScheduleID sets the "temporal_schedule_id" field if the given value is not nil.
+func (sju *ScheduledJobUpdate) SetNillableTemporalScheduleID(s *string) *ScheduledJobUpdate {
+	if s != nil {
+		sju.SetTemporalScheduleID(*s)
+	}
+	return sju
+}
+
+// ClearTemporalScheduleID clears the value of the "temporal_schedule_id" field.
+func (sju *ScheduledJobUpdate) ClearTemporalScheduleID() *ScheduledJobUpdate {
+	sju.mutation.ClearTemporalScheduleID()
+	return sju
+}
+
 // Mutation returns the ScheduledJobMutation object of the builder.
 func (sju *ScheduledJobUpdate) Mutation() *ScheduledJobMutation {
 	return sju.mutation
@@ -348,6 +368,12 @@ func (sju *ScheduledJobUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if sju.mutation.LastRunErrorCleared() {
 		_spec.ClearField(scheduledjob.FieldLastRunError, field.TypeString)
+	}
+	if value, ok := sju.mutation.TemporalScheduleID(); ok {
+		_spec.SetField(scheduledjob.FieldTemporalScheduleID, field.TypeString, value)
+	}
+	if sju.mutation.TemporalScheduleIDCleared() {
+		_spec.ClearField(scheduledjob.FieldTemporalScheduleID, field.TypeString)
 	}
 	if n, err = sqlgraph.UpdateNodes(ctx, sju.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -557,6 +583,26 @@ func (sjuo *ScheduledJobUpdateOne) ClearLastRunError() *ScheduledJobUpdateOne {
 	return sjuo
 }
 
+// SetTemporalScheduleID sets the "temporal_schedule_id" field.
+func (sjuo *ScheduledJobUpdateOne) SetTemporalScheduleID(s string) *ScheduledJobUpdateOne {
+	sjuo.mutation.SetTemporalScheduleID(s)
+	return sjuo
+}
+
+// SetNillableTemporalScheduleID sets the "temporal_schedule_id" field if the given value is not nil.
+func (sjuo *ScheduledJobUpdateOne) SetNillableTemporalScheduleID(s *string) *ScheduledJobUpdateOne {
+	if s != nil {
+		sjuo.SetTemporalScheduleID(*s)
+	}
+	return sjuo
+}
+
+// ClearTemporalScheduleID clears the value of the "temporal_schedule_id" field.
+func (sjuo *ScheduledJobUpdateOne) ClearTemporalScheduleID() *ScheduledJobUpdateOne {
+	sjuo.mutation.ClearTemporalScheduleID()
+	return sjuo
+}
+
 // Mutation returns the ScheduledJobMutation object of the builder.
 func (sjuo *ScheduledJobUpdateOne) Mutation() *ScheduledJobMutation {
 	return sjuo.mutation
@@ -719,6 +765,12 @@ func (sjuo *ScheduledJobUpdateOne) sqlSave(ctx context.Context) (_node *Schedule
 	}
 	if sjuo.mutation.LastRunErrorCleared() {
 		_spec.ClearField(scheduledjob.FieldLastRunError, field.TypeString)
+	}
+	if value, ok := sjuo.mutation.TemporalScheduleID(); ok {
+		_spec.SetField(scheduledjob.FieldTemporalScheduleID, field.TypeString, value)
+	}
+	if sjuo.mutation.TemporalScheduleIDCleared() {
+		_spec.ClearField(scheduledjob.FieldTemporalScheduleID, field.TypeString)
 	}
 	_node = &ScheduledJob{config: sjuo.config}
 	_spec.Assign = _node.assignValues

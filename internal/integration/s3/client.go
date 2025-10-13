@@ -51,14 +51,27 @@ type S3Config struct {
 	EntityTypes        []types.ExportEntityType
 }
 
-// GetS3Client returns a configured S3 client with the provided job config
-func (c *Client) GetS3Client(ctx context.Context, jobConfig *types.S3JobConfig) (*s3Client, *S3Config, error) {
-	// Get S3 connection for this environment
-	conn, err := c.connectionRepo.GetByProvider(ctx, types.SecretProviderS3)
-	if err != nil {
-		return nil, nil, ierr.NewError("failed to get S3 connection").
-			WithHint("S3 connection not configured for this environment").
-			Mark(ierr.ErrNotFound)
+// GetS3Client returns a configured S3 client with the provided job config and connection ID
+func (c *Client) GetS3Client(ctx context.Context, jobConfig *types.S3JobConfig, connectionID ...string) (*s3Client, *S3Config, error) {
+	var conn *connection.Connection
+	var err error
+
+	// If connection ID is provided, use it directly. Otherwise, query by provider
+	if len(connectionID) > 0 && connectionID[0] != "" {
+		conn, err = c.connectionRepo.Get(ctx, connectionID[0])
+		if err != nil {
+			return nil, nil, ierr.NewError("failed to get S3 connection by ID").
+				WithHintf("Connection ID '%s' not found", connectionID[0]).
+				Mark(ierr.ErrNotFound)
+		}
+	} else {
+		// Fallback to provider-based lookup (for backward compatibility)
+		conn, err = c.connectionRepo.GetByProvider(ctx, types.SecretProviderS3)
+		if err != nil {
+			return nil, nil, ierr.NewError("failed to get S3 connection").
+				WithHint("S3 connection not configured for this environment").
+				Mark(ierr.ErrNotFound)
+		}
 	}
 
 	s3Config, err := c.GetDecryptedS3Config(conn, jobConfig)

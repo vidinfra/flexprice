@@ -392,6 +392,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			scheduledJobs.GET("/:id", handlers.ScheduledJob.GetScheduledJob)
 			scheduledJobs.PUT("/:id", handlers.ScheduledJob.UpdateScheduledJob)
 			scheduledJobs.DELETE("/:id", handlers.ScheduledJob.DeleteScheduledJob)
+			scheduledJobs.POST("/:id/sync", handlers.ScheduledJob.TriggerManualSync)
 		}
 
 		// Cost sheet routes

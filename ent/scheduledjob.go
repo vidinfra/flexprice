@@ -50,7 +50,9 @@ type ScheduledJob struct {
 	LastRunStatus string `json:"last_run_status,omitempty"`
 	// Error message from last run if failed
 	LastRunError string `json:"last_run_error,omitempty"`
-	selectValues sql.SelectValues
+	// Temporal schedule ID for the recurring workflow
+	TemporalScheduleID string `json:"temporal_schedule_id,omitempty"`
+	selectValues       sql.SelectValues
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -62,7 +64,7 @@ func (*ScheduledJob) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case scheduledjob.FieldEnabled:
 			values[i] = new(sql.NullBool)
-		case scheduledjob.FieldID, scheduledjob.FieldTenantID, scheduledjob.FieldStatus, scheduledjob.FieldCreatedBy, scheduledjob.FieldUpdatedBy, scheduledjob.FieldEnvironmentID, scheduledjob.FieldConnectionID, scheduledjob.FieldEntityType, scheduledjob.FieldInterval, scheduledjob.FieldLastRunStatus, scheduledjob.FieldLastRunError:
+		case scheduledjob.FieldID, scheduledjob.FieldTenantID, scheduledjob.FieldStatus, scheduledjob.FieldCreatedBy, scheduledjob.FieldUpdatedBy, scheduledjob.FieldEnvironmentID, scheduledjob.FieldConnectionID, scheduledjob.FieldEntityType, scheduledjob.FieldInterval, scheduledjob.FieldLastRunStatus, scheduledjob.FieldLastRunError, scheduledjob.FieldTemporalScheduleID:
 			values[i] = new(sql.NullString)
 		case scheduledjob.FieldCreatedAt, scheduledjob.FieldUpdatedAt, scheduledjob.FieldLastRunAt, scheduledjob.FieldNextRunAt:
 			values[i] = new(sql.NullTime)
@@ -187,6 +189,12 @@ func (sj *ScheduledJob) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				sj.LastRunError = value.String
 			}
+		case scheduledjob.FieldTemporalScheduleID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field temporal_schedule_id", values[i])
+			} else if value.Valid {
+				sj.TemporalScheduleID = value.String
+			}
 		default:
 			sj.selectValues.Set(columns[i], values[i])
 		}
@@ -274,6 +282,9 @@ func (sj *ScheduledJob) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("last_run_error=")
 	builder.WriteString(sj.LastRunError)
+	builder.WriteString(", ")
+	builder.WriteString("temporal_schedule_id=")
+	builder.WriteString(sj.TemporalScheduleID)
 	builder.WriteByte(')')
 	return builder.String()
 }

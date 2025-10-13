@@ -61,6 +61,9 @@ func (r *ScheduledJobRepository) Create(ctx context.Context, job *domainsj.Sched
 	if job.LastRunError != "" {
 		create = create.SetLastRunError(job.LastRunError)
 	}
+	if job.TemporalScheduleID != "" {
+		create = create.SetTemporalScheduleID(job.TemporalScheduleID)
+	}
 
 	_, err := create.Save(ctx)
 
@@ -125,6 +128,9 @@ func (r *ScheduledJobRepository) Update(ctx context.Context, job *domainsj.Sched
 	}
 	if job.LastRunError != "" {
 		update = update.SetLastRunError(job.LastRunError)
+	}
+	if job.TemporalScheduleID != "" {
+		update = update.SetTemporalScheduleID(job.TemporalScheduleID)
 	}
 
 	err := update.Exec(ctx)

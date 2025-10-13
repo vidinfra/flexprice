@@ -177,3 +177,35 @@ func (h *ScheduledJobHandler) DeleteScheduledJob(c *gin.Context) {
 
 	c.Status(http.StatusNoContent)
 }
+
+// @Summary Trigger manual sync
+// @Description Trigger a manual export sync immediately for a scheduled job
+// @Tags ScheduledJobs
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Scheduled Job ID"
+// @Success 200 {object} map[string]string "Returns workflow_id"
+// @Failure 404 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /scheduled-jobs/{id}/sync [post]
+func (h *ScheduledJobHandler) TriggerManualSync(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.Error(ierr.NewError("id is required").
+			WithHint("Scheduled job ID must be provided").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	workflowID, err := h.service.TriggerManualSync(c.Request.Context(), id)
+	if err != nil {
+		h.logger.Errorw("failed to trigger manual sync", "id", id, "error", err)
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"workflow_id": workflowID,
+		"message":     "Manual sync triggered successfully",
+	})
+}

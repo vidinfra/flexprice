@@ -204,6 +204,20 @@ func (sjc *ScheduledJobCreate) SetNillableLastRunError(s *string) *ScheduledJobC
 	return sjc
 }
 
+// SetTemporalScheduleID sets the "temporal_schedule_id" field.
+func (sjc *ScheduledJobCreate) SetTemporalScheduleID(s string) *ScheduledJobCreate {
+	sjc.mutation.SetTemporalScheduleID(s)
+	return sjc
+}
+
+// SetNillableTemporalScheduleID sets the "temporal_schedule_id" field if the given value is not nil.
+func (sjc *ScheduledJobCreate) SetNillableTemporalScheduleID(s *string) *ScheduledJobCreate {
+	if s != nil {
+		sjc.SetTemporalScheduleID(*s)
+	}
+	return sjc
+}
+
 // SetID sets the "id" field.
 func (sjc *ScheduledJobCreate) SetID(s string) *ScheduledJobCreate {
 	sjc.mutation.SetID(s)
@@ -411,6 +425,10 @@ func (sjc *ScheduledJobCreate) createSpec() (*ScheduledJob, *sqlgraph.CreateSpec
 	if value, ok := sjc.mutation.LastRunError(); ok {
 		_spec.SetField(scheduledjob.FieldLastRunError, field.TypeString, value)
 		_node.LastRunError = value
+	}
+	if value, ok := sjc.mutation.TemporalScheduleID(); ok {
+		_spec.SetField(scheduledjob.FieldTemporalScheduleID, field.TypeString, value)
+		_node.TemporalScheduleID = value
 	}
 	return _node, _spec
 }

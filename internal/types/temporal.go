@@ -13,8 +13,9 @@ type TemporalTaskQueue string
 
 const (
 	// Task Queues - logical groupings to limit worker count
-	TemporalTaskQueueTask  TemporalTaskQueue = "task"
-	TemporalTaskQueuePrice TemporalTaskQueue = "price"
+	TemporalTaskQueueTask   TemporalTaskQueue = "task"
+	TemporalTaskQueuePrice  TemporalTaskQueue = "price"
+	TemporalTaskQueueExport TemporalTaskQueue = "export"
 )
 
 // String returns the string representation of the task queue
@@ -27,6 +28,7 @@ func (tq TemporalTaskQueue) Validate() error {
 	allowedQueues := []TemporalTaskQueue{
 		TemporalTaskQueueTask,
 		TemporalTaskQueuePrice,
+		TemporalTaskQueueExport,
 	}
 	if lo.Contains(allowedQueues, tq) {
 		return nil
@@ -46,6 +48,7 @@ const (
 	TemporalSubscriptionChangeWorkflow   TemporalWorkflowType = "SubscriptionChangeWorkflow"
 	TemporalSubscriptionCreationWorkflow TemporalWorkflowType = "SubscriptionCreationWorkflow"
 	TemporalStripeIntegrationWorkflow    TemporalWorkflowType = "StripeIntegrationWorkflow"
+	TemporalScheduledExportWorkflow      TemporalWorkflowType = "ScheduledExportWorkflow"
 )
 
 // String returns the string representation of the workflow type
@@ -60,6 +63,7 @@ func (w TemporalWorkflowType) Validate() error {
 		TemporalTaskProcessingWorkflow,       // "TaskProcessingWorkflow"
 		TemporalSubscriptionChangeWorkflow,   // "SubscriptionChangeWorkflow"
 		TemporalSubscriptionCreationWorkflow, // "SubscriptionCreationWorkflow"
+		TemporalScheduledExportWorkflow,      // "ScheduledExportWorkflow"
 	}
 	if lo.Contains(allowedWorkflows, w) {
 		return nil
@@ -77,6 +81,8 @@ func (w TemporalWorkflowType) TaskQueue() TemporalTaskQueue {
 		return TemporalTaskQueueTask
 	case TemporalPriceSyncWorkflow:
 		return TemporalTaskQueuePrice
+	case TemporalScheduledExportWorkflow:
+		return TemporalTaskQueueExport
 	default:
 		return TemporalTaskQueueTask // Default fallback
 	}
@@ -103,6 +109,10 @@ func GetWorkflowsForTaskQueue(taskQueue TemporalTaskQueue) []TemporalWorkflowTyp
 		return []TemporalWorkflowType{
 			TemporalPriceSyncWorkflow,
 		}
+	case TemporalTaskQueueExport:
+		return []TemporalWorkflowType{
+			TemporalScheduledExportWorkflow,
+		}
 	default:
 		return []TemporalWorkflowType{}
 	}
@@ -113,5 +123,6 @@ func GetAllTaskQueues() []TemporalTaskQueue {
 	return []TemporalTaskQueue{
 		TemporalTaskQueueTask,
 		TemporalTaskQueuePrice,
+		TemporalTaskQueueExport,
 	}
 }

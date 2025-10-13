@@ -12,6 +12,7 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	s3Integration "github.com/flexprice/flexprice/internal/integration/s3"
 	"github.com/flexprice/flexprice/internal/logger"
+	"github.com/flexprice/flexprice/internal/types"
 )
 
 // UsageExporter handles feature usage export operations
@@ -204,10 +205,15 @@ func (e *UsageExporter) Export(ctx context.Context, request *ExportRequest) (*Ex
 
 	// Step 2: Upload to S3 with job config
 	e.logger.Infow("obtaining S3 client for upload",
+		"connection_id", request.ConnectionID,
 		"bucket", request.JobConfig.Bucket,
 		"region", request.JobConfig.Region)
 
-	s3Client, _, err := e.s3Client.GetS3Client(ctx, request.JobConfig)
+	// Add tenant and environment to context for connection lookup
+	ctx = types.SetTenantID(ctx, request.TenantID)
+	ctx = types.SetEnvironmentID(ctx, request.EnvID)
+
+	s3Client, _, err := e.s3Client.GetS3Client(ctx, request.JobConfig, request.ConnectionID)
 	if err != nil {
 		return nil, ierr.WithError(err).
 			WithHint("Failed to get S3 client").
