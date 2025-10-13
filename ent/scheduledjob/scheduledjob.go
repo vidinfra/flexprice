@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
-	"entgo.io/ent/dialect/sql/sqlgraph"
 )
 
 const (
@@ -46,17 +45,8 @@ const (
 	FieldLastRunStatus = "last_run_status"
 	// FieldLastRunError holds the string denoting the last_run_error field in the database.
 	FieldLastRunError = "last_run_error"
-	// EdgeConnection holds the string denoting the connection edge name in mutations.
-	EdgeConnection = "connection"
 	// Table holds the table name of the scheduledjob in the database.
 	Table = "scheduled_jobs"
-	// ConnectionTable is the table that holds the connection relation/edge.
-	ConnectionTable = "scheduled_jobs"
-	// ConnectionInverseTable is the table name for the Connection entity.
-	// It exists in this package in order to avoid circular dependency with the "connection" package.
-	ConnectionInverseTable = "connections"
-	// ConnectionColumn is the table column denoting the connection relation/edge.
-	ConnectionColumn = "connection_id"
 )
 
 // Columns holds all SQL columns for scheduledjob fields.
@@ -194,18 +184,4 @@ func ByLastRunStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByLastRunError orders the results by the last_run_error field.
 func ByLastRunError(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLastRunError, opts...).ToFunc()
-}
-
-// ByConnectionField orders the results by connection field.
-func ByConnectionField(field string, opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newConnectionStep(), sql.OrderByField(field, opts...))
-	}
-}
-func newConnectionStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(ConnectionInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.M2O, true, ConnectionTable, ConnectionColumn),
-	)
 }

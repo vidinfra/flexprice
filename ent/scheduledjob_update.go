@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/flexprice/flexprice/ent/connection"
 	"github.com/flexprice/flexprice/ent/predicate"
 	"github.com/flexprice/flexprice/ent/scheduledjob"
 )
@@ -217,20 +216,9 @@ func (sju *ScheduledJobUpdate) ClearLastRunError() *ScheduledJobUpdate {
 	return sju
 }
 
-// SetConnection sets the "connection" edge to the Connection entity.
-func (sju *ScheduledJobUpdate) SetConnection(c *Connection) *ScheduledJobUpdate {
-	return sju.SetConnectionID(c.ID)
-}
-
 // Mutation returns the ScheduledJobMutation object of the builder.
 func (sju *ScheduledJobUpdate) Mutation() *ScheduledJobMutation {
 	return sju.mutation
-}
-
-// ClearConnection clears the "connection" edge to the Connection entity.
-func (sju *ScheduledJobUpdate) ClearConnection() *ScheduledJobUpdate {
-	sju.mutation.ClearConnection()
-	return sju
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -286,9 +274,6 @@ func (sju *ScheduledJobUpdate) check() error {
 			return &ValidationError{Name: "interval", err: fmt.Errorf(`ent: validator failed for field "ScheduledJob.interval": %w`, err)}
 		}
 	}
-	if sju.mutation.ConnectionCleared() && len(sju.mutation.ConnectionIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "ScheduledJob.connection"`)
-	}
 	return nil
 }
 
@@ -321,6 +306,9 @@ func (sju *ScheduledJobUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if sju.mutation.EnvironmentIDCleared() {
 		_spec.ClearField(scheduledjob.FieldEnvironmentID, field.TypeString)
+	}
+	if value, ok := sju.mutation.ConnectionID(); ok {
+		_spec.SetField(scheduledjob.FieldConnectionID, field.TypeString, value)
 	}
 	if value, ok := sju.mutation.EntityType(); ok {
 		_spec.SetField(scheduledjob.FieldEntityType, field.TypeString, value)
@@ -360,35 +348,6 @@ func (sju *ScheduledJobUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if sju.mutation.LastRunErrorCleared() {
 		_spec.ClearField(scheduledjob.FieldLastRunError, field.TypeString)
-	}
-	if sju.mutation.ConnectionCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   scheduledjob.ConnectionTable,
-			Columns: []string{scheduledjob.ConnectionColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(connection.FieldID, field.TypeString),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := sju.mutation.ConnectionIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   scheduledjob.ConnectionTable,
-			Columns: []string{scheduledjob.ConnectionColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(connection.FieldID, field.TypeString),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if n, err = sqlgraph.UpdateNodes(ctx, sju.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -598,20 +557,9 @@ func (sjuo *ScheduledJobUpdateOne) ClearLastRunError() *ScheduledJobUpdateOne {
 	return sjuo
 }
 
-// SetConnection sets the "connection" edge to the Connection entity.
-func (sjuo *ScheduledJobUpdateOne) SetConnection(c *Connection) *ScheduledJobUpdateOne {
-	return sjuo.SetConnectionID(c.ID)
-}
-
 // Mutation returns the ScheduledJobMutation object of the builder.
 func (sjuo *ScheduledJobUpdateOne) Mutation() *ScheduledJobMutation {
 	return sjuo.mutation
-}
-
-// ClearConnection clears the "connection" edge to the Connection entity.
-func (sjuo *ScheduledJobUpdateOne) ClearConnection() *ScheduledJobUpdateOne {
-	sjuo.mutation.ClearConnection()
-	return sjuo
 }
 
 // Where appends a list predicates to the ScheduledJobUpdate builder.
@@ -680,9 +628,6 @@ func (sjuo *ScheduledJobUpdateOne) check() error {
 			return &ValidationError{Name: "interval", err: fmt.Errorf(`ent: validator failed for field "ScheduledJob.interval": %w`, err)}
 		}
 	}
-	if sjuo.mutation.ConnectionCleared() && len(sjuo.mutation.ConnectionIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "ScheduledJob.connection"`)
-	}
 	return nil
 }
 
@@ -733,6 +678,9 @@ func (sjuo *ScheduledJobUpdateOne) sqlSave(ctx context.Context) (_node *Schedule
 	if sjuo.mutation.EnvironmentIDCleared() {
 		_spec.ClearField(scheduledjob.FieldEnvironmentID, field.TypeString)
 	}
+	if value, ok := sjuo.mutation.ConnectionID(); ok {
+		_spec.SetField(scheduledjob.FieldConnectionID, field.TypeString, value)
+	}
 	if value, ok := sjuo.mutation.EntityType(); ok {
 		_spec.SetField(scheduledjob.FieldEntityType, field.TypeString, value)
 	}
@@ -771,35 +719,6 @@ func (sjuo *ScheduledJobUpdateOne) sqlSave(ctx context.Context) (_node *Schedule
 	}
 	if sjuo.mutation.LastRunErrorCleared() {
 		_spec.ClearField(scheduledjob.FieldLastRunError, field.TypeString)
-	}
-	if sjuo.mutation.ConnectionCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   scheduledjob.ConnectionTable,
-			Columns: []string{scheduledjob.ConnectionColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(connection.FieldID, field.TypeString),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := sjuo.mutation.ConnectionIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   scheduledjob.ConnectionTable,
-			Columns: []string{scheduledjob.ConnectionColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(connection.FieldID, field.TypeString),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &ScheduledJob{config: sjuo.config}
 	_spec.Assign = _node.assignValues

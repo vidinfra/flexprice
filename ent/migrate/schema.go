@@ -1381,6 +1381,7 @@ var (
 		{Name: "created_by", Type: field.TypeString, Nullable: true},
 		{Name: "updated_by", Type: field.TypeString, Nullable: true},
 		{Name: "environment_id", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "connection_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "entity_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "interval", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(20)"}},
 		{Name: "enabled", Type: field.TypeBool, Default: true},
@@ -1389,46 +1390,37 @@ var (
 		{Name: "next_run_at", Type: field.TypeTime, Nullable: true},
 		{Name: "last_run_status", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(20)"}},
 		{Name: "last_run_error", Type: field.TypeString, Nullable: true, Size: 2147483647},
-		{Name: "connection_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 	}
 	// ScheduledJobsTable holds the schema information for the "scheduled_jobs" table.
 	ScheduledJobsTable = &schema.Table{
 		Name:       "scheduled_jobs",
 		Columns:    ScheduledJobsColumns,
 		PrimaryKey: []*schema.Column{ScheduledJobsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "scheduled_jobs_connections_scheduled_jobs",
-				Columns:    []*schema.Column{ScheduledJobsColumns[16]},
-				RefColumns: []*schema.Column{ConnectionsColumns[0]},
-				OnDelete:   schema.NoAction,
-			},
-		},
 		Indexes: []*schema.Index{
 			{
 				Name:    "scheduledjob_tenant_id_environment_id_enabled",
 				Unique:  false,
-				Columns: []*schema.Column{ScheduledJobsColumns[1], ScheduledJobsColumns[7], ScheduledJobsColumns[10]},
+				Columns: []*schema.Column{ScheduledJobsColumns[1], ScheduledJobsColumns[7], ScheduledJobsColumns[11]},
 			},
 			{
 				Name:    "scheduledjob_connection_id_enabled",
 				Unique:  false,
-				Columns: []*schema.Column{ScheduledJobsColumns[16], ScheduledJobsColumns[10]},
+				Columns: []*schema.Column{ScheduledJobsColumns[8], ScheduledJobsColumns[11]},
 			},
 			{
 				Name:    "scheduledjob_entity_type_interval_enabled",
 				Unique:  false,
-				Columns: []*schema.Column{ScheduledJobsColumns[8], ScheduledJobsColumns[9], ScheduledJobsColumns[10]},
+				Columns: []*schema.Column{ScheduledJobsColumns[9], ScheduledJobsColumns[10], ScheduledJobsColumns[11]},
 			},
 			{
 				Name:    "scheduledjob_enabled_next_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{ScheduledJobsColumns[10], ScheduledJobsColumns[13]},
+				Columns: []*schema.Column{ScheduledJobsColumns[11], ScheduledJobsColumns[14]},
 			},
 			{
 				Name:    "scheduledjob_connection_id_entity_type",
 				Unique:  true,
-				Columns: []*schema.Column{ScheduledJobsColumns[16], ScheduledJobsColumns[8]},
+				Columns: []*schema.Column{ScheduledJobsColumns[8], ScheduledJobsColumns[9]},
 			},
 		},
 	}
@@ -2256,7 +2248,6 @@ func init() {
 	PriceUnitTable.Annotation = &entsql.Annotation{
 		Table: "price_unit",
 	}
-	ScheduledJobsTable.ForeignKeys[0].RefTable = ConnectionsTable
 	SubscriptionLineItemsTable.ForeignKeys[0].RefTable = SubscriptionsTable
 	SubscriptionPausesTable.ForeignKeys[0].RefTable = SubscriptionsTable
 	SubscriptionSchedulesTable.ForeignKeys[0].RefTable = SubscriptionsTable

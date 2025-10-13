@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
-	"entgo.io/ent/dialect/sql/sqlgraph"
 )
 
 const (
@@ -38,17 +37,8 @@ const (
 	FieldMetadata = "metadata"
 	// FieldSyncConfig holds the string denoting the sync_config field in the database.
 	FieldSyncConfig = "sync_config"
-	// EdgeScheduledJobs holds the string denoting the scheduled_jobs edge name in mutations.
-	EdgeScheduledJobs = "scheduled_jobs"
 	// Table holds the table name of the connection in the database.
 	Table = "connections"
-	// ScheduledJobsTable is the table that holds the scheduled_jobs relation/edge.
-	ScheduledJobsTable = "scheduled_jobs"
-	// ScheduledJobsInverseTable is the table name for the ScheduledJob entity.
-	// It exists in this package in order to avoid circular dependency with the "scheduledjob" package.
-	ScheduledJobsInverseTable = "scheduled_jobs"
-	// ScheduledJobsColumn is the table column denoting the scheduled_jobs relation/edge.
-	ScheduledJobsColumn = "connection_id"
 )
 
 // Columns holds all SQL columns for connection fields.
@@ -148,25 +138,4 @@ func ByName(opts ...sql.OrderTermOption) OrderOption {
 // ByProviderType orders the results by the provider_type field.
 func ByProviderType(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProviderType, opts...).ToFunc()
-}
-
-// ByScheduledJobsCount orders the results by scheduled_jobs count.
-func ByScheduledJobsCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newScheduledJobsStep(), opts...)
-	}
-}
-
-// ByScheduledJobs orders the results by scheduled_jobs terms.
-func ByScheduledJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newScheduledJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-func newScheduledJobsStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(ScheduledJobsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, ScheduledJobsTable, ScheduledJobsColumn),
-	)
 }

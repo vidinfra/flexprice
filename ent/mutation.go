@@ -4792,9 +4792,6 @@ type ConnectionMutation struct {
 	metadata              *map[string]interface{}
 	sync_config           **types.SyncConfig
 	clearedFields         map[string]struct{}
-	scheduled_jobs        map[string]struct{}
-	removedscheduled_jobs map[string]struct{}
-	clearedscheduled_jobs bool
 	done                  bool
 	oldValue              func(context.Context) (*Connection, error)
 	predicates            []predicate.Connection
@@ -5414,60 +5411,6 @@ func (m *ConnectionMutation) ResetSyncConfig() {
 	delete(m.clearedFields, connection.FieldSyncConfig)
 }
 
-// AddScheduledJobIDs adds the "scheduled_jobs" edge to the ScheduledJob entity by ids.
-func (m *ConnectionMutation) AddScheduledJobIDs(ids ...string) {
-	if m.scheduled_jobs == nil {
-		m.scheduled_jobs = make(map[string]struct{})
-	}
-	for i := range ids {
-		m.scheduled_jobs[ids[i]] = struct{}{}
-	}
-}
-
-// ClearScheduledJobs clears the "scheduled_jobs" edge to the ScheduledJob entity.
-func (m *ConnectionMutation) ClearScheduledJobs() {
-	m.clearedscheduled_jobs = true
-}
-
-// ScheduledJobsCleared reports if the "scheduled_jobs" edge to the ScheduledJob entity was cleared.
-func (m *ConnectionMutation) ScheduledJobsCleared() bool {
-	return m.clearedscheduled_jobs
-}
-
-// RemoveScheduledJobIDs removes the "scheduled_jobs" edge to the ScheduledJob entity by IDs.
-func (m *ConnectionMutation) RemoveScheduledJobIDs(ids ...string) {
-	if m.removedscheduled_jobs == nil {
-		m.removedscheduled_jobs = make(map[string]struct{})
-	}
-	for i := range ids {
-		delete(m.scheduled_jobs, ids[i])
-		m.removedscheduled_jobs[ids[i]] = struct{}{}
-	}
-}
-
-// RemovedScheduledJobs returns the removed IDs of the "scheduled_jobs" edge to the ScheduledJob entity.
-func (m *ConnectionMutation) RemovedScheduledJobsIDs() (ids []string) {
-	for id := range m.removedscheduled_jobs {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// ScheduledJobsIDs returns the "scheduled_jobs" edge IDs in the mutation.
-func (m *ConnectionMutation) ScheduledJobsIDs() (ids []string) {
-	for id := range m.scheduled_jobs {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// ResetScheduledJobs resets all changes to the "scheduled_jobs" edge.
-func (m *ConnectionMutation) ResetScheduledJobs() {
-	m.scheduled_jobs = nil
-	m.clearedscheduled_jobs = false
-	m.removedscheduled_jobs = nil
-}
-
 // Where appends a list predicates to the ConnectionMutation builder.
 func (m *ConnectionMutation) Where(ps ...predicate.Connection) {
 	m.predicates = append(m.predicates, ps...)
@@ -5827,85 +5770,49 @@ func (m *ConnectionMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *ConnectionMutation) AddedEdges() []string {
-	edges := make([]string, 0, 1)
-	if m.scheduled_jobs != nil {
-		edges = append(edges, connection.EdgeScheduledJobs)
-	}
+	edges := make([]string, 0, 0)
 	return edges
 }
 
 // AddedIDs returns all IDs (to other nodes) that were added for the given edge
 // name in this mutation.
 func (m *ConnectionMutation) AddedIDs(name string) []ent.Value {
-	switch name {
-	case connection.EdgeScheduledJobs:
-		ids := make([]ent.Value, 0, len(m.scheduled_jobs))
-		for id := range m.scheduled_jobs {
-			ids = append(ids, id)
-		}
-		return ids
-	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *ConnectionMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 1)
-	if m.removedscheduled_jobs != nil {
-		edges = append(edges, connection.EdgeScheduledJobs)
-	}
+	edges := make([]string, 0, 0)
 	return edges
 }
 
 // RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
 // the given name in this mutation.
 func (m *ConnectionMutation) RemovedIDs(name string) []ent.Value {
-	switch name {
-	case connection.EdgeScheduledJobs:
-		ids := make([]ent.Value, 0, len(m.removedscheduled_jobs))
-		for id := range m.removedscheduled_jobs {
-			ids = append(ids, id)
-		}
-		return ids
-	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *ConnectionMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 1)
-	if m.clearedscheduled_jobs {
-		edges = append(edges, connection.EdgeScheduledJobs)
-	}
+	edges := make([]string, 0, 0)
 	return edges
 }
 
 // EdgeCleared returns a boolean which indicates if the edge with the given name
 // was cleared in this mutation.
 func (m *ConnectionMutation) EdgeCleared(name string) bool {
-	switch name {
-	case connection.EdgeScheduledJobs:
-		return m.clearedscheduled_jobs
-	}
 	return false
 }
 
 // ClearEdge clears the value of the edge with the given name. It returns an error
 // if that edge is not defined in the schema.
 func (m *ConnectionMutation) ClearEdge(name string) error {
-	switch name {
-	}
 	return fmt.Errorf("unknown Connection unique edge %s", name)
 }
 
 // ResetEdge resets all changes to the edge with the given name in this mutation.
 // It returns an error if the edge is not defined in the schema.
 func (m *ConnectionMutation) ResetEdge(name string) error {
-	switch name {
-	case connection.EdgeScheduledJobs:
-		m.ResetScheduledJobs()
-		return nil
-	}
 	return fmt.Errorf("unknown Connection edge %s", name)
 }
 
@@ -39434,30 +39341,29 @@ func (m *PriceUnitMutation) ResetEdge(name string) error {
 // ScheduledJobMutation represents an operation that mutates the ScheduledJob nodes in the graph.
 type ScheduledJobMutation struct {
 	config
-	op                Op
-	typ               string
-	id                *string
-	tenant_id         *string
-	status            *string
-	created_at        *time.Time
-	updated_at        *time.Time
-	created_by        *string
-	updated_by        *string
-	environment_id    *string
-	entity_type       *string
-	interval          *string
-	enabled           *bool
-	job_config        *map[string]interface{}
-	last_run_at       *time.Time
-	next_run_at       *time.Time
-	last_run_status   *string
-	last_run_error    *string
-	clearedFields     map[string]struct{}
-	connection        *string
-	clearedconnection bool
-	done              bool
-	oldValue          func(context.Context) (*ScheduledJob, error)
-	predicates        []predicate.ScheduledJob
+	op              Op
+	typ             string
+	id              *string
+	tenant_id       *string
+	status          *string
+	created_at      *time.Time
+	updated_at      *time.Time
+	created_by      *string
+	updated_by      *string
+	environment_id  *string
+	connection_id   *string
+	entity_type     *string
+	interval        *string
+	enabled         *bool
+	job_config      *map[string]interface{}
+	last_run_at     *time.Time
+	next_run_at     *time.Time
+	last_run_status *string
+	last_run_error  *string
+	clearedFields   map[string]struct{}
+	done            bool
+	oldValue        func(context.Context) (*ScheduledJob, error)
+	predicates      []predicate.ScheduledJob
 }
 
 var _ ent.Mutation = (*ScheduledJobMutation)(nil)
@@ -39857,12 +39763,12 @@ func (m *ScheduledJobMutation) ResetEnvironmentID() {
 
 // SetConnectionID sets the "connection_id" field.
 func (m *ScheduledJobMutation) SetConnectionID(s string) {
-	m.connection = &s
+	m.connection_id = &s
 }
 
 // ConnectionID returns the value of the "connection_id" field in the mutation.
 func (m *ScheduledJobMutation) ConnectionID() (r string, exists bool) {
-	v := m.connection
+	v := m.connection_id
 	if v == nil {
 		return
 	}
@@ -39888,7 +39794,7 @@ func (m *ScheduledJobMutation) OldConnectionID(ctx context.Context) (v string, e
 
 // ResetConnectionID resets all changes to the "connection_id" field.
 func (m *ScheduledJobMutation) ResetConnectionID() {
-	m.connection = nil
+	m.connection_id = nil
 }
 
 // SetEntityType sets the "entity_type" field.
@@ -40244,33 +40150,6 @@ func (m *ScheduledJobMutation) ResetLastRunError() {
 	delete(m.clearedFields, scheduledjob.FieldLastRunError)
 }
 
-// ClearConnection clears the "connection" edge to the Connection entity.
-func (m *ScheduledJobMutation) ClearConnection() {
-	m.clearedconnection = true
-	m.clearedFields[scheduledjob.FieldConnectionID] = struct{}{}
-}
-
-// ConnectionCleared reports if the "connection" edge to the Connection entity was cleared.
-func (m *ScheduledJobMutation) ConnectionCleared() bool {
-	return m.clearedconnection
-}
-
-// ConnectionIDs returns the "connection" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// ConnectionID instead. It exists only for internal usage by the builders.
-func (m *ScheduledJobMutation) ConnectionIDs() (ids []string) {
-	if id := m.connection; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetConnection resets all changes to the "connection" edge.
-func (m *ScheduledJobMutation) ResetConnection() {
-	m.connection = nil
-	m.clearedconnection = false
-}
-
 // Where appends a list predicates to the ScheduledJobMutation builder.
 func (m *ScheduledJobMutation) Where(ps ...predicate.ScheduledJob) {
 	m.predicates = append(m.predicates, ps...)
@@ -40327,7 +40206,7 @@ func (m *ScheduledJobMutation) Fields() []string {
 	if m.environment_id != nil {
 		fields = append(fields, scheduledjob.FieldEnvironmentID)
 	}
-	if m.connection != nil {
+	if m.connection_id != nil {
 		fields = append(fields, scheduledjob.FieldConnectionID)
 	}
 	if m.entity_type != nil {
@@ -40710,28 +40589,19 @@ func (m *ScheduledJobMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *ScheduledJobMutation) AddedEdges() []string {
-	edges := make([]string, 0, 1)
-	if m.connection != nil {
-		edges = append(edges, scheduledjob.EdgeConnection)
-	}
+	edges := make([]string, 0, 0)
 	return edges
 }
 
 // AddedIDs returns all IDs (to other nodes) that were added for the given edge
 // name in this mutation.
 func (m *ScheduledJobMutation) AddedIDs(name string) []ent.Value {
-	switch name {
-	case scheduledjob.EdgeConnection:
-		if id := m.connection; id != nil {
-			return []ent.Value{*id}
-		}
-	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *ScheduledJobMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 1)
+	edges := make([]string, 0, 0)
 	return edges
 }
 
@@ -40743,42 +40613,25 @@ func (m *ScheduledJobMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *ScheduledJobMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 1)
-	if m.clearedconnection {
-		edges = append(edges, scheduledjob.EdgeConnection)
-	}
+	edges := make([]string, 0, 0)
 	return edges
 }
 
 // EdgeCleared returns a boolean which indicates if the edge with the given name
 // was cleared in this mutation.
 func (m *ScheduledJobMutation) EdgeCleared(name string) bool {
-	switch name {
-	case scheduledjob.EdgeConnection:
-		return m.clearedconnection
-	}
 	return false
 }
 
 // ClearEdge clears the value of the edge with the given name. It returns an error
 // if that edge is not defined in the schema.
 func (m *ScheduledJobMutation) ClearEdge(name string) error {
-	switch name {
-	case scheduledjob.EdgeConnection:
-		m.ClearConnection()
-		return nil
-	}
 	return fmt.Errorf("unknown ScheduledJob unique edge %s", name)
 }
 
 // ResetEdge resets all changes to the edge with the given name in this mutation.
 // It returns an error if the edge is not defined in the schema.
 func (m *ScheduledJobMutation) ResetEdge(name string) error {
-	switch name {
-	case scheduledjob.EdgeConnection:
-		m.ResetConnection()
-		return nil
-	}
 	return fmt.Errorf("unknown ScheduledJob edge %s", name)
 }
 

@@ -42,29 +42,8 @@ type Connection struct {
 	// Metadata holds the value of the "metadata" field.
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 	// SyncConfig holds the value of the "sync_config" field.
-	SyncConfig *types.SyncConfig `json:"sync_config,omitempty"`
-	// Edges holds the relations/edges for other nodes in the graph.
-	// The values are being populated by the ConnectionQuery when eager-loading is set.
-	Edges        ConnectionEdges `json:"edges"`
+	SyncConfig   *types.SyncConfig `json:"sync_config,omitempty"`
 	selectValues sql.SelectValues
-}
-
-// ConnectionEdges holds the relations/edges for other nodes in the graph.
-type ConnectionEdges struct {
-	// ScheduledJobs holds the value of the scheduled_jobs edge.
-	ScheduledJobs []*ScheduledJob `json:"scheduled_jobs,omitempty"`
-	// loadedTypes holds the information for reporting if a
-	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [1]bool
-}
-
-// ScheduledJobsOrErr returns the ScheduledJobs value or an error if the edge
-// was not loaded in eager-loading.
-func (e ConnectionEdges) ScheduledJobsOrErr() ([]*ScheduledJob, error) {
-	if e.loadedTypes[0] {
-		return e.ScheduledJobs, nil
-	}
-	return nil, &NotLoadedError{edge: "scheduled_jobs"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -188,11 +167,6 @@ func (c *Connection) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (c *Connection) Value(name string) (ent.Value, error) {
 	return c.selectValues.Get(name)
-}
-
-// QueryScheduledJobs queries the "scheduled_jobs" edge of the Connection entity.
-func (c *Connection) QueryScheduledJobs() *ScheduledJobQuery {
-	return NewConnectionClient(c.config).QueryScheduledJobs(c)
 }
 
 // Update returns a builder for updating this Connection.

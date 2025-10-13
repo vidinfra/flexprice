@@ -4,7 +4,6 @@ package ent
 
 import (
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -14,17 +13,15 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/flexprice/flexprice/ent/connection"
 	"github.com/flexprice/flexprice/ent/predicate"
-	"github.com/flexprice/flexprice/ent/scheduledjob"
 )
 
 // ConnectionQuery is the builder for querying Connection entities.
 type ConnectionQuery struct {
 	config
-	ctx               *QueryContext
-	order             []connection.OrderOption
-	inters            []Interceptor
-	predicates        []predicate.Connection
-	withScheduledJobs *ScheduledJobQuery
+	ctx        *QueryContext
+	order      []connection.OrderOption
+	inters     []Interceptor
+	predicates []predicate.Connection
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -59,28 +56,6 @@ func (cq *ConnectionQuery) Unique(unique bool) *ConnectionQuery {
 func (cq *ConnectionQuery) Order(o ...connection.OrderOption) *ConnectionQuery {
 	cq.order = append(cq.order, o...)
 	return cq
-}
-
-// QueryScheduledJobs chains the current query on the "scheduled_jobs" edge.
-func (cq *ConnectionQuery) QueryScheduledJobs() *ScheduledJobQuery {
-	query := (&ScheduledJobClient{config: cq.config}).Query()
-	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := cq.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		selector := cq.sqlQuery(ctx)
-		if err := selector.Err(); err != nil {
-			return nil, err
-		}
-		step := sqlgraph.NewStep(
-			sqlgraph.From(connection.Table, connection.FieldID, selector),
-			sqlgraph.To(scheduledjob.Table, scheduledjob.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, connection.ScheduledJobsTable, connection.ScheduledJobsColumn),
-		)
-		fromU = sqlgraph.SetNeighbors(cq.driver.Dialect(), step)
-		return fromU, nil
-	}
-	return query
 }
 
 // First returns the first Connection entity from the query.
@@ -270,27 +245,15 @@ func (cq *ConnectionQuery) Clone() *ConnectionQuery {
 		return nil
 	}
 	return &ConnectionQuery{
-		config:            cq.config,
-		ctx:               cq.ctx.Clone(),
-		order:             append([]connection.OrderOption{}, cq.order...),
-		inters:            append([]Interceptor{}, cq.inters...),
-		predicates:        append([]predicate.Connection{}, cq.predicates...),
-		withScheduledJobs: cq.withScheduledJobs.Clone(),
+		config:     cq.config,
+		ctx:        cq.ctx.Clone(),
+		order:      append([]connection.OrderOption{}, cq.order...),
+		inters:     append([]Interceptor{}, cq.inters...),
+		predicates: append([]predicate.Connection{}, cq.predicates...),
 		// clone intermediate query.
 		sql:  cq.sql.Clone(),
 		path: cq.path,
 	}
-}
-
-// WithScheduledJobs tells the query-builder to eager-load the nodes that are connected to
-// the "scheduled_jobs" edge. The optional arguments are used to configure the query builder of the edge.
-func (cq *ConnectionQuery) WithScheduledJobs(opts ...func(*ScheduledJobQuery)) *ConnectionQuery {
-	query := (&ScheduledJobClient{config: cq.config}).Query()
-	for _, opt := range opts {
-		opt(query)
-	}
-	cq.withScheduledJobs = query
-	return cq
 }
 
 // GroupBy is used to group vertices by one or more fields/columns.
@@ -369,11 +332,8 @@ func (cq *ConnectionQuery) prepareQuery(ctx context.Context) error {
 
 func (cq *ConnectionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Connection, error) {
 	var (
-		nodes       = []*Connection{}
-		_spec       = cq.querySpec()
-		loadedTypes = [1]bool{
-			cq.withScheduledJobs != nil,
-		}
+		nodes = []*Connection{}
+		_spec = cq.querySpec()
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*Connection).scanValues(nil, columns)
@@ -381,7 +341,6 @@ func (cq *ConnectionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*C
 	_spec.Assign = func(columns []string, values []any) error {
 		node := &Connection{config: cq.config}
 		nodes = append(nodes, node)
-		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
 	}
 	for i := range hooks {
@@ -393,45 +352,7 @@ func (cq *ConnectionQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*C
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
-	if query := cq.withScheduledJobs; query != nil {
-		if err := cq.loadScheduledJobs(ctx, query, nodes,
-			func(n *Connection) { n.Edges.ScheduledJobs = []*ScheduledJob{} },
-			func(n *Connection, e *ScheduledJob) { n.Edges.ScheduledJobs = append(n.Edges.ScheduledJobs, e) }); err != nil {
-			return nil, err
-		}
-	}
 	return nodes, nil
-}
-
-func (cq *ConnectionQuery) loadScheduledJobs(ctx context.Context, query *ScheduledJobQuery, nodes []*Connection, init func(*Connection), assign func(*Connection, *ScheduledJob)) error {
-	fks := make([]driver.Value, 0, len(nodes))
-	nodeids := make(map[string]*Connection)
-	for i := range nodes {
-		fks = append(fks, nodes[i].ID)
-		nodeids[nodes[i].ID] = nodes[i]
-		if init != nil {
-			init(nodes[i])
-		}
-	}
-	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(scheduledjob.FieldConnectionID)
-	}
-	query.Where(predicate.ScheduledJob(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(connection.ScheduledJobsColumn), fks...))
-	}))
-	neighbors, err := query.All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, n := range neighbors {
-		fk := n.ConnectionID
-		node, ok := nodeids[fk]
-		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "connection_id" returned %v for node %v`, fk, n.ID)
-		}
-		assign(node, n)
-	}
-	return nil
 }
 
 func (cq *ConnectionQuery) sqlCount(ctx context.Context) (int, error) {

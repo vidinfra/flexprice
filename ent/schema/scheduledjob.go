@@ -2,7 +2,6 @@ package schema
 
 import (
 	"entgo.io/ent"
-	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 	baseMixin "github.com/flexprice/flexprice/ent/schema/mixin"
@@ -72,18 +71,6 @@ func (ScheduledJob) Fields() []ent.Field {
 		field.Text("last_run_error").
 			Optional().
 			Comment("Error message from last run if failed"),
-	}
-}
-
-// Edges of the ScheduledJob.
-func (ScheduledJob) Edges() []ent.Edge {
-	return []ent.Edge{
-		// Many scheduled jobs can belong to one connection
-		edge.From("connection", Connection.Type).
-			Ref("scheduled_jobs").
-			Field("connection_id").
-			Unique().
-			Required(),
 	}
 }
 

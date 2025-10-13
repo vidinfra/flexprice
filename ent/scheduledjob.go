@@ -10,7 +10,6 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/flexprice/flexprice/ent/connection"
 	"github.com/flexprice/flexprice/ent/scheduledjob"
 )
 
@@ -51,30 +50,7 @@ type ScheduledJob struct {
 	LastRunStatus string `json:"last_run_status,omitempty"`
 	// Error message from last run if failed
 	LastRunError string `json:"last_run_error,omitempty"`
-	// Edges holds the relations/edges for other nodes in the graph.
-	// The values are being populated by the ScheduledJobQuery when eager-loading is set.
-	Edges        ScheduledJobEdges `json:"edges"`
 	selectValues sql.SelectValues
-}
-
-// ScheduledJobEdges holds the relations/edges for other nodes in the graph.
-type ScheduledJobEdges struct {
-	// Connection holds the value of the connection edge.
-	Connection *Connection `json:"connection,omitempty"`
-	// loadedTypes holds the information for reporting if a
-	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [1]bool
-}
-
-// ConnectionOrErr returns the Connection value or an error if the edge
-// was not loaded in eager-loading, or loaded but was not found.
-func (e ScheduledJobEdges) ConnectionOrErr() (*Connection, error) {
-	if e.Connection != nil {
-		return e.Connection, nil
-	} else if e.loadedTypes[0] {
-		return nil, &NotFoundError{label: connection.Label}
-	}
-	return nil, &NotLoadedError{edge: "connection"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -222,11 +198,6 @@ func (sj *ScheduledJob) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (sj *ScheduledJob) Value(name string) (ent.Value, error) {
 	return sj.selectValues.Get(name)
-}
-
-// QueryConnection queries the "connection" edge of the ScheduledJob entity.
-func (sj *ScheduledJob) QueryConnection() *ConnectionQuery {
-	return NewScheduledJobClient(sj.config).QueryConnection(sj)
 }
 
 // Update returns a builder for updating this ScheduledJob.

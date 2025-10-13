@@ -10,7 +10,6 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/flexprice/flexprice/ent/connection"
 	"github.com/flexprice/flexprice/ent/scheduledjob"
 )
 
@@ -211,11 +210,6 @@ func (sjc *ScheduledJobCreate) SetID(s string) *ScheduledJobCreate {
 	return sjc
 }
 
-// SetConnection sets the "connection" edge to the Connection entity.
-func (sjc *ScheduledJobCreate) SetConnection(c *Connection) *ScheduledJobCreate {
-	return sjc.SetConnectionID(c.ID)
-}
-
 // Mutation returns the ScheduledJobMutation object of the builder.
 func (sjc *ScheduledJobCreate) Mutation() *ScheduledJobMutation {
 	return sjc.mutation
@@ -319,9 +313,6 @@ func (sjc *ScheduledJobCreate) check() error {
 	if _, ok := sjc.mutation.Enabled(); !ok {
 		return &ValidationError{Name: "enabled", err: errors.New(`ent: missing required field "ScheduledJob.enabled"`)}
 	}
-	if len(sjc.mutation.ConnectionIDs()) == 0 {
-		return &ValidationError{Name: "connection", err: errors.New(`ent: missing required edge "ScheduledJob.connection"`)}
-	}
 	return nil
 }
 
@@ -385,6 +376,10 @@ func (sjc *ScheduledJobCreate) createSpec() (*ScheduledJob, *sqlgraph.CreateSpec
 		_spec.SetField(scheduledjob.FieldEnvironmentID, field.TypeString, value)
 		_node.EnvironmentID = value
 	}
+	if value, ok := sjc.mutation.ConnectionID(); ok {
+		_spec.SetField(scheduledjob.FieldConnectionID, field.TypeString, value)
+		_node.ConnectionID = value
+	}
 	if value, ok := sjc.mutation.EntityType(); ok {
 		_spec.SetField(scheduledjob.FieldEntityType, field.TypeString, value)
 		_node.EntityType = value
@@ -416,23 +411,6 @@ func (sjc *ScheduledJobCreate) createSpec() (*ScheduledJob, *sqlgraph.CreateSpec
 	if value, ok := sjc.mutation.LastRunError(); ok {
 		_spec.SetField(scheduledjob.FieldLastRunError, field.TypeString, value)
 		_node.LastRunError = value
-	}
-	if nodes := sjc.mutation.ConnectionIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   scheduledjob.ConnectionTable,
-			Columns: []string{scheduledjob.ConnectionColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(connection.FieldID, field.TypeString),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_node.ConnectionID = nodes[0]
-		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
 }

@@ -1372,22 +1372,6 @@ func (c *ConnectionClient) GetX(ctx context.Context, id string) *Connection {
 	return obj
 }
 
-// QueryScheduledJobs queries the scheduled_jobs edge of a Connection.
-func (c *ConnectionClient) QueryScheduledJobs(co *Connection) *ScheduledJobQuery {
-	query := (&ScheduledJobClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := co.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(connection.Table, connection.FieldID, id),
-			sqlgraph.To(scheduledjob.Table, scheduledjob.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, connection.ScheduledJobsTable, connection.ScheduledJobsColumn),
-		)
-		fromV = sqlgraph.Neighbors(co.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
 // Hooks returns the client hooks.
 func (c *ConnectionClient) Hooks() []Hook {
 	return c.hooks.Connection
@@ -4893,22 +4877,6 @@ func (c *ScheduledJobClient) GetX(ctx context.Context, id string) *ScheduledJob 
 		panic(err)
 	}
 	return obj
-}
-
-// QueryConnection queries the connection edge of a ScheduledJob.
-func (c *ScheduledJobClient) QueryConnection(sj *ScheduledJob) *ConnectionQuery {
-	query := (&ConnectionClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := sj.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(scheduledjob.Table, scheduledjob.FieldID, id),
-			sqlgraph.To(connection.Table, connection.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, scheduledjob.ConnectionTable, scheduledjob.ConnectionColumn),
-		)
-		fromV = sqlgraph.Neighbors(sj.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
 }
 
 // Hooks returns the client hooks.

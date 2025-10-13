@@ -13,7 +13,6 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/flexprice/flexprice/ent/connection"
 	"github.com/flexprice/flexprice/ent/predicate"
-	"github.com/flexprice/flexprice/ent/scheduledjob"
 	"github.com/flexprice/flexprice/internal/types"
 )
 
@@ -134,45 +133,9 @@ func (cu *ConnectionUpdate) ClearSyncConfig() *ConnectionUpdate {
 	return cu
 }
 
-// AddScheduledJobIDs adds the "scheduled_jobs" edge to the ScheduledJob entity by IDs.
-func (cu *ConnectionUpdate) AddScheduledJobIDs(ids ...string) *ConnectionUpdate {
-	cu.mutation.AddScheduledJobIDs(ids...)
-	return cu
-}
-
-// AddScheduledJobs adds the "scheduled_jobs" edges to the ScheduledJob entity.
-func (cu *ConnectionUpdate) AddScheduledJobs(s ...*ScheduledJob) *ConnectionUpdate {
-	ids := make([]string, len(s))
-	for i := range s {
-		ids[i] = s[i].ID
-	}
-	return cu.AddScheduledJobIDs(ids...)
-}
-
 // Mutation returns the ConnectionMutation object of the builder.
 func (cu *ConnectionUpdate) Mutation() *ConnectionMutation {
 	return cu.mutation
-}
-
-// ClearScheduledJobs clears all "scheduled_jobs" edges to the ScheduledJob entity.
-func (cu *ConnectionUpdate) ClearScheduledJobs() *ConnectionUpdate {
-	cu.mutation.ClearScheduledJobs()
-	return cu
-}
-
-// RemoveScheduledJobIDs removes the "scheduled_jobs" edge to ScheduledJob entities by IDs.
-func (cu *ConnectionUpdate) RemoveScheduledJobIDs(ids ...string) *ConnectionUpdate {
-	cu.mutation.RemoveScheduledJobIDs(ids...)
-	return cu
-}
-
-// RemoveScheduledJobs removes "scheduled_jobs" edges to ScheduledJob entities.
-func (cu *ConnectionUpdate) RemoveScheduledJobs(s ...*ScheduledJob) *ConnectionUpdate {
-	ids := make([]string, len(s))
-	for i := range s {
-		ids[i] = s[i].ID
-	}
-	return cu.RemoveScheduledJobIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -284,51 +247,6 @@ func (cu *ConnectionUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if cu.mutation.SyncConfigCleared() {
 		_spec.ClearField(connection.FieldSyncConfig, field.TypeJSON)
-	}
-	if cu.mutation.ScheduledJobsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   connection.ScheduledJobsTable,
-			Columns: []string{connection.ScheduledJobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(scheduledjob.FieldID, field.TypeString),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := cu.mutation.RemovedScheduledJobsIDs(); len(nodes) > 0 && !cu.mutation.ScheduledJobsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   connection.ScheduledJobsTable,
-			Columns: []string{connection.ScheduledJobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(scheduledjob.FieldID, field.TypeString),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := cu.mutation.ScheduledJobsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   connection.ScheduledJobsTable,
-			Columns: []string{connection.ScheduledJobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(scheduledjob.FieldID, field.TypeString),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if n, err = sqlgraph.UpdateNodes(ctx, cu.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -454,45 +372,9 @@ func (cuo *ConnectionUpdateOne) ClearSyncConfig() *ConnectionUpdateOne {
 	return cuo
 }
 
-// AddScheduledJobIDs adds the "scheduled_jobs" edge to the ScheduledJob entity by IDs.
-func (cuo *ConnectionUpdateOne) AddScheduledJobIDs(ids ...string) *ConnectionUpdateOne {
-	cuo.mutation.AddScheduledJobIDs(ids...)
-	return cuo
-}
-
-// AddScheduledJobs adds the "scheduled_jobs" edges to the ScheduledJob entity.
-func (cuo *ConnectionUpdateOne) AddScheduledJobs(s ...*ScheduledJob) *ConnectionUpdateOne {
-	ids := make([]string, len(s))
-	for i := range s {
-		ids[i] = s[i].ID
-	}
-	return cuo.AddScheduledJobIDs(ids...)
-}
-
 // Mutation returns the ConnectionMutation object of the builder.
 func (cuo *ConnectionUpdateOne) Mutation() *ConnectionMutation {
 	return cuo.mutation
-}
-
-// ClearScheduledJobs clears all "scheduled_jobs" edges to the ScheduledJob entity.
-func (cuo *ConnectionUpdateOne) ClearScheduledJobs() *ConnectionUpdateOne {
-	cuo.mutation.ClearScheduledJobs()
-	return cuo
-}
-
-// RemoveScheduledJobIDs removes the "scheduled_jobs" edge to ScheduledJob entities by IDs.
-func (cuo *ConnectionUpdateOne) RemoveScheduledJobIDs(ids ...string) *ConnectionUpdateOne {
-	cuo.mutation.RemoveScheduledJobIDs(ids...)
-	return cuo
-}
-
-// RemoveScheduledJobs removes "scheduled_jobs" edges to ScheduledJob entities.
-func (cuo *ConnectionUpdateOne) RemoveScheduledJobs(s ...*ScheduledJob) *ConnectionUpdateOne {
-	ids := make([]string, len(s))
-	for i := range s {
-		ids[i] = s[i].ID
-	}
-	return cuo.RemoveScheduledJobIDs(ids...)
 }
 
 // Where appends a list predicates to the ConnectionUpdate builder.
@@ -634,51 +516,6 @@ func (cuo *ConnectionUpdateOne) sqlSave(ctx context.Context) (_node *Connection,
 	}
 	if cuo.mutation.SyncConfigCleared() {
 		_spec.ClearField(connection.FieldSyncConfig, field.TypeJSON)
-	}
-	if cuo.mutation.ScheduledJobsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   connection.ScheduledJobsTable,
-			Columns: []string{connection.ScheduledJobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(scheduledjob.FieldID, field.TypeString),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := cuo.mutation.RemovedScheduledJobsIDs(); len(nodes) > 0 && !cuo.mutation.ScheduledJobsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   connection.ScheduledJobsTable,
-			Columns: []string{connection.ScheduledJobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(scheduledjob.FieldID, field.TypeString),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := cuo.mutation.ScheduledJobsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   connection.ScheduledJobsTable,
-			Columns: []string{connection.ScheduledJobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(scheduledjob.FieldID, field.TypeString),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	_node = &Connection{config: cuo.config}
 	_spec.Assign = _node.assignValues

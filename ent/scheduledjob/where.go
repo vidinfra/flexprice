@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
-	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/flexprice/flexprice/ent/predicate"
 )
 
@@ -1038,29 +1037,6 @@ func LastRunErrorEqualFold(v string) predicate.ScheduledJob {
 // LastRunErrorContainsFold applies the ContainsFold predicate on the "last_run_error" field.
 func LastRunErrorContainsFold(v string) predicate.ScheduledJob {
 	return predicate.ScheduledJob(sql.FieldContainsFold(FieldLastRunError, v))
-}
-
-// HasConnection applies the HasEdge predicate on the "connection" edge.
-func HasConnection() predicate.ScheduledJob {
-	return predicate.ScheduledJob(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, ConnectionTable, ConnectionColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasConnectionWith applies the HasEdge predicate on the "connection" edge with a given conditions (other predicates).
-func HasConnectionWith(preds ...predicate.Connection) predicate.ScheduledJob {
-	return predicate.ScheduledJob(func(s *sql.Selector) {
-		step := newConnectionStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
 }
 
 // And groups predicates with the AND operator between them.
