@@ -937,14 +937,16 @@ func (s *featureUsageTrackingService) convertValueToString(val interface{}) stri
 
 // AnalyticsData holds all data required for analytics processing
 type AnalyticsData struct {
-	Customer      *customer.Customer
-	Subscriptions []*subscription.Subscription
-	Analytics     []*events.DetailedUsageAnalytic
-	Features      map[string]*feature.Feature
-	Meters        map[string]*meter.Meter
-	Prices        map[string]*price.Price
-	Currency      string
-	Params        *events.UsageAnalyticsParams
+	Customer              *customer.Customer
+	Subscriptions         []*subscription.Subscription
+	SubscriptionLineItems map[string]*subscription.SubscriptionLineItem // Map of line item ID -> line item
+	SubscriptionsMap      map[string]*subscription.Subscription         // Map of subscription ID -> subscription
+	Analytics             []*events.DetailedUsageAnalytic
+	Features              map[string]*feature.Feature
+	Meters                map[string]*meter.Meter
+	Prices                map[string]*price.Price
+	Currency              string
+	Params                *events.UsageAnalyticsParams
 }
 
 // GetDetailedUsageAnalytics provides detailed usage analytics with filtering, grouping, and time-series data
@@ -1009,14 +1011,24 @@ func (s *featureUsageTrackingService) fetchAnalyticsData(ctx context.Context, re
 
 	// 5. Build data structure
 	data := &AnalyticsData{
-		Customer:      customer,
-		Subscriptions: subscriptions,
-		Analytics:     analytics,
-		Currency:      currency,
-		Params:        params,
-		Features:      make(map[string]*feature.Feature),
-		Meters:        make(map[string]*meter.Meter),
-		Prices:        make(map[string]*price.Price),
+		Customer:              customer,
+		Subscriptions:         subscriptions,
+		SubscriptionLineItems: make(map[string]*subscription.SubscriptionLineItem),
+		SubscriptionsMap:      make(map[string]*subscription.Subscription),
+		Analytics:             analytics,
+		Currency:              currency,
+		Params:                params,
+		Features:              make(map[string]*feature.Feature),
+		Meters:                make(map[string]*meter.Meter),
+		Prices:                make(map[string]*price.Price),
+	}
+
+	// Build subscription maps
+	for _, sub := range subscriptions {
+		data.SubscriptionsMap[sub.ID] = sub
+		for _, lineItem := range sub.LineItems {
+			data.SubscriptionLineItems[lineItem.ID] = lineItem
+		}
 	}
 
 	// 6. Enrich with metadata if we have analytics data
@@ -1037,7 +1049,7 @@ func (s *featureUsageTrackingService) fetchAnalyticsData(ctx context.Context, re
 func (s *featureUsageTrackingService) buildAnalyticsResponse(ctx context.Context, data *AnalyticsData, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error) {
 	// If no results, return early
 	if len(data.Analytics) == 0 {
-		return s.ToGetUsageAnalyticsResponseDTO(ctx, data.Analytics, req)
+		return s.ToGetUsageAnalyticsResponseDTO(ctx, data, req)
 	}
 
 	// Calculate costs
@@ -1057,9 +1069,9 @@ func (s *featureUsageTrackingService) buildAnalyticsResponse(ctx context.Context
 	}
 
 	// Aggregate results by requested grouping dimensions
-	analytics := s.aggregateAnalyticsByGrouping(data.Analytics, data.Params.GroupBy)
+	data.Analytics = s.aggregateAnalyticsByGrouping(data.Analytics, data.Params.GroupBy)
 
-	return s.ToGetUsageAnalyticsResponseDTO(ctx, analytics, req)
+	return s.ToGetUsageAnalyticsResponseDTO(ctx, data, req)
 }
 
 // fetchCustomer fetches customer by external customer ID
@@ -1085,6 +1097,8 @@ func (s *featureUsageTrackingService) fetchSubscriptions(ctx context.Context, cu
 	filter.SubscriptionStatus = []types.SubscriptionStatus{
 		types.SubscriptionStatusActive,
 		types.SubscriptionStatusTrialing,
+		types.SubscriptionStatusPaused,
+		types.SubscriptionStatusCancelled,
 	}
 
 	subscriptionsList, err := subscriptionService.ListSubscriptions(ctx, filter)
@@ -1364,11 +1378,10 @@ func (s *featureUsageTrackingService) fetchSubscriptionPrices(ctx context.Contex
 				Mark(ierr.ErrDatabase)
 		}
 
-		// Create price map by meter ID
+		// Create price map by price ID - this ensures different prices for the same meter
+		// (e.g., from cancelled and new subscriptions) are tracked separately
 		for _, p := range prices {
-			if p.MeterID != "" {
-				data.Prices[p.MeterID] = p
-			}
+			data.Prices[p.ID] = p
 		}
 	}
 
@@ -1399,7 +1412,9 @@ func (s *featureUsageTrackingService) calculateCosts(ctx context.Context, data *
 	for _, item := range data.Analytics {
 		if feature, ok := data.Features[item.FeatureID]; ok {
 			if meter, ok := data.Meters[feature.MeterID]; ok {
-				if price, hasPricing := data.Prices[meter.ID]; hasPricing {
+				// Use price_id from the analytics item - this ensures we use the correct price
+				// that was active when the usage was recorded (important for cancelled/new subscriptions)
+				if price, hasPricing := data.Prices[item.PriceID]; hasPricing {
 					// Calculate cost based on meter type
 					if meter.IsBucketedMaxMeter() {
 						s.calculateBucketedCost(ctx, priceService, item, price)
@@ -1490,7 +1505,11 @@ func (s *featureUsageTrackingService) aggregateAnalyticsByGrouping(analytics []*
 		} else {
 			// Create a new aggregated item
 			aggregated := &events.DetailedUsageAnalytic{
-				FeatureID:        "", // Will be set based on grouping
+				FeatureID:        item.FeatureID,
+				PriceID:          item.PriceID,
+				MeterID:          item.MeterID,
+				SubLineItemID:    item.SubLineItemID,
+				SubscriptionID:   item.SubscriptionID,
 				FeatureName:      item.FeatureName,
 				EventName:        item.EventName,
 				Source:           item.Source,
@@ -1534,12 +1553,16 @@ func (s *featureUsageTrackingService) aggregateAnalyticsByGrouping(analytics []*
 
 // createGroupingKey creates a unique key for grouping based on the requested dimensions
 func (s *featureUsageTrackingService) createGroupingKey(item *events.DetailedUsageAnalytic, groupBy []string) string {
-	keyParts := make([]string, 0, len(groupBy))
+	// Always include feature_id, price_id, meter_id, sub_line_item_id for granular tracking
+	// Note: subscription_id is NOT included in grouping but kept for reference
+	keyParts := make([]string, 0, len(groupBy)+4)
+	keyParts = append(keyParts, item.FeatureID, item.PriceID, item.MeterID, item.SubLineItemID)
 
 	for _, group := range groupBy {
 		switch group {
 		case "feature_id":
-			keyParts = append(keyParts, item.FeatureID)
+			// Already included above
+			continue
 		case "source":
 			keyParts = append(keyParts, item.Source)
 		default:
@@ -1812,15 +1835,23 @@ func (s *featureUsageTrackingService) isSubscriptionValidForEvent(
 	return true
 }
 
-func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context.Context, analytics []*events.DetailedUsageAnalytic, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error) {
+func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context.Context, data *AnalyticsData, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error) {
 	response := &dto.GetUsageAnalyticsResponse{
 		TotalCost: decimal.Zero,
 		Currency:  "",
-		Items:     make([]dto.UsageAnalyticItem, 0, len(analytics)),
+		Items:     make([]dto.UsageAnalyticItem, 0, len(data.Analytics)),
+	}
+
+	// Check which fields should be expanded
+	expandMap := make(map[string]bool)
+	if req.Expand != nil {
+		for _, expand := range req.Expand {
+			expandMap[expand] = true
+		}
 	}
 
 	// Convert analytics to response items
-	for _, analytic := range analytics {
+	for _, analytic := range data.Analytics {
 		// For bucketed MAX, use TotalUsage (sum of bucket maxes) not MaxUsage
 		// TotalUsage already contains the sum from getMaxBucketTotals
 		totalUsage := analytic.TotalUsage
@@ -1831,6 +1862,10 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 
 		item := dto.UsageAnalyticItem{
 			FeatureID:       analytic.FeatureID,
+			PriceID:         analytic.PriceID,
+			MeterID:         analytic.MeterID,
+			SubLineItemID:   analytic.SubLineItemID,
+			SubscriptionID:  analytic.SubscriptionID,
 			FeatureName:     analytic.FeatureName,
 			EventName:       analytic.EventName,
 			Source:          analytic.Source,
@@ -1844,6 +1879,32 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			Properties:      analytic.Properties,
 			Points:          make([]dto.UsageAnalyticPoint, 0, len(analytic.Points)),
 		}
+
+		// Populate expanded objects based on expand request
+		if expandMap["price"] && analytic.PriceID != "" {
+			if price, ok := data.Prices[analytic.PriceID]; ok {
+				item.Price = price
+			}
+		}
+
+		if expandMap["meter"] && analytic.MeterID != "" {
+			if meter, ok := data.Meters[analytic.MeterID]; ok {
+				item.Meter = meter
+			}
+		}
+
+		if expandMap["feature"] && analytic.FeatureID != "" {
+			if feature, ok := data.Features[analytic.FeatureID]; ok {
+				item.Feature = feature
+			}
+		}
+
+		if expandMap["subscription_line_item"] && analytic.SubLineItemID != "" {
+			if lineItem, ok := data.SubscriptionLineItems[analytic.SubLineItemID]; ok {
+				item.SubscriptionLineItem = lineItem
+			}
+		}
+
 		// Map time-series points if available
 		if req.WindowSize != "" {
 			for _, point := range analytic.Points {

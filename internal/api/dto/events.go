@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/flexprice/flexprice/internal/domain/events"
+	"github.com/flexprice/flexprice/internal/domain/feature"
 	"github.com/flexprice/flexprice/internal/domain/meter"
+	"github.com/flexprice/flexprice/internal/domain/price"
+	"github.com/flexprice/flexprice/internal/domain/subscription"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/flexprice/flexprice/internal/validator"
@@ -279,6 +282,7 @@ type GetUsageAnalyticsRequest struct {
 	EndTime            time.Time        `json:"end_time,omitempty"`
 	GroupBy            []string         `json:"group_by,omitempty"` // allowed values: "source", "feature_id", "properties.<field_name>"
 	WindowSize         types.WindowSize `json:"window_size,omitempty"`
+	Expand             []string         `json:"expand,omitempty"` // allowed values: "price", "meter", "feature", "subscription_line_item"
 	// Property filters to filter the events by the keys in `properties` field of the event
 	PropertyFilters map[string][]string `json:"property_filters,omitempty"`
 }
@@ -292,19 +296,27 @@ type GetUsageAnalyticsResponse struct {
 
 // UsageAnalyticItem represents a single analytic item in the response
 type UsageAnalyticItem struct {
-	FeatureID       string                `json:"feature_id"`
-	FeatureName     string                `json:"name,omitempty"`
-	EventName       string                `json:"event_name,omitempty"`
-	Source          string                `json:"source,omitempty"`
-	Unit            string                `json:"unit,omitempty"`
-	UnitPlural      string                `json:"unit_plural,omitempty"`
-	AggregationType types.AggregationType `json:"aggregation_type,omitempty"`
-	TotalUsage      decimal.Decimal       `json:"total_usage"`
-	TotalCost       decimal.Decimal       `json:"total_cost"`
-	Currency        string                `json:"currency,omitempty"`
-	EventCount      uint64                `json:"event_count"`          // Number of events that contributed to this aggregation
-	Properties      map[string]string     `json:"properties,omitempty"` // Stores property values for flexible grouping (e.g., org_id -> "org123")
-	Points          []UsageAnalyticPoint  `json:"points,omitempty"`
+	FeatureID            string                             `json:"feature_id"`
+	PriceID              string                             `json:"price_id,omitempty"`               // Price ID used for this usage
+	MeterID              string                             `json:"meter_id,omitempty"`               // Meter ID
+	SubLineItemID        string                             `json:"sub_line_item_id,omitempty"`       // Subscription line item ID
+	SubscriptionID       string                             `json:"subscription_id,omitempty"`        // Subscription ID
+	Price                *price.Price                       `json:"price,omitempty"`                  // Full price object (only if expand includes "price")
+	Meter                *meter.Meter                       `json:"meter,omitempty"`                  // Full meter object (only if expand includes "meter")
+	Feature              *feature.Feature                   `json:"feature,omitempty"`                // Full feature object (only if expand includes "feature")
+	SubscriptionLineItem *subscription.SubscriptionLineItem `json:"subscription_line_item,omitempty"` // Full line item (only if expand includes "subscription_line_item")
+	FeatureName          string                             `json:"name,omitempty"`
+	EventName            string                             `json:"event_name,omitempty"`
+	Source               string                             `json:"source,omitempty"`
+	Unit                 string                             `json:"unit,omitempty"`
+	UnitPlural           string                             `json:"unit_plural,omitempty"`
+	AggregationType      types.AggregationType              `json:"aggregation_type,omitempty"`
+	TotalUsage           decimal.Decimal                    `json:"total_usage"`
+	TotalCost            decimal.Decimal                    `json:"total_cost"`
+	Currency             string                             `json:"currency,omitempty"`
+	EventCount           uint64                             `json:"event_count"`          // Number of events that contributed to this aggregation
+	Properties           map[string]string                  `json:"properties,omitempty"` // Stores property values for flexible grouping (e.g., org_id -> "org123")
+	Points               []UsageAnalyticPoint               `json:"points,omitempty"`
 }
 
 // UsageAnalyticPoint represents a point in the time series data
