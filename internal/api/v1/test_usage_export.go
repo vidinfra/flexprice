@@ -75,22 +75,22 @@ func (h *TestUsageExportHandler) TestUsageExport(c *gin.Context) {
 		"tenant_id", tenantID,
 		"environment_id", envID)
 
-	// Get scheduled job for feature_usage entity type
+	// Get scheduled job for events entity type
 	// This will fetch the S3 configuration from the scheduled_jobs table
-	scheduledJobs, err := h.scheduledJobRepo.GetByEntityType(ctx, string(types.ScheduledJobEntityTypeFeatureUsage))
+	scheduledJobs, err := h.scheduledJobRepo.GetByEntityType(ctx, string(types.ScheduledJobEntityTypeEvents))
 	if err != nil {
-		h.logger.Errorw("failed to get scheduled job for feature usage", "error", err)
+		h.logger.Errorw("failed to get scheduled job for events", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "No scheduled job configured for feature usage export",
+			"error":   "No scheduled job configured for events export",
 			"details": err.Error(),
 		})
 		return
 	}
 
 	if len(scheduledJobs) == 0 {
-		h.logger.Warnw("no scheduled job found for feature usage export")
+		h.logger.Warnw("no scheduled job found for events export")
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "No scheduled job configured for feature usage export. Please create a scheduled job first.",
+			"error": "No scheduled job configured for events export. Please create a scheduled job first.",
 		})
 		return
 	}
@@ -126,7 +126,7 @@ func (h *TestUsageExportHandler) TestUsageExport(c *gin.Context) {
 	startTime := endTime.Add(-24 * time.Hour)
 
 	request := &export.ExportRequest{
-		EntityType: types.ExportEntityTypeFeatureUsage,
+		EntityType: types.ExportEntityTypeEvents,
 		TenantID:   tenantID,
 		EnvID:      envID,
 		StartTime:  startTime,

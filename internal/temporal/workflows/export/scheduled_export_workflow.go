@@ -13,13 +13,18 @@ import (
 // ScheduledExportWorkflowInput represents input for the scheduled workflow
 type ScheduledExportWorkflowInput struct {
 	ScheduledJobID string
+	TenantID       string
+	EnvID          string
 }
 
 // ScheduledExportWorkflow is the lightweight cron wrapper
 // It fetches the scheduled job config and triggers the actual export workflow
 func ScheduledExportWorkflow(ctx workflow.Context, input ScheduledExportWorkflowInput) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting scheduled export workflow", "scheduled_job_id", input.ScheduledJobID)
+	logger.Info("Starting scheduled export workflow",
+		"scheduled_job_id", input.ScheduledJobID,
+		"tenant_id", input.TenantID,
+		"env_id", input.EnvID)
 
 	// Activity options for lightweight operations
 	activityOptions := workflow.ActivityOptions{
@@ -34,7 +39,11 @@ func ScheduledExportWorkflow(ctx workflow.Context, input ScheduledExportWorkflow
 	var scheduledJobActivity export.ScheduledJobActivity
 
 	var jobDetails export.ScheduledJobDetails
-	err := workflow.ExecuteActivity(ctx, scheduledJobActivity.GetScheduledJobDetails, input.ScheduledJobID).Get(ctx, &jobDetails)
+	err := workflow.ExecuteActivity(ctx, scheduledJobActivity.GetScheduledJobDetails, export.GetScheduledJobDetailsInput{
+		ScheduledJobID: input.ScheduledJobID,
+		TenantID:       input.TenantID,
+		EnvID:          input.EnvID,
+	}).Get(ctx, &jobDetails)
 	if err != nil {
 		logger.Error("Failed to get scheduled job details", "error", err)
 		return fmt.Errorf("failed to get scheduled job: %w", err)
@@ -51,15 +60,27 @@ func ScheduledExportWorkflow(ctx workflow.Context, input ScheduledExportWorkflow
 		"start_time", jobDetails.StartTime,
 		"end_time", jobDetails.EndTime)
 
+	// Generate task ID and use it as workflow ID
+	// Format: {task_id}-export
+	var taskID string
+	workflow.SideEffect(ctx, func(ctx workflow.Context) interface{} {
+		return types.GenerateUUIDWithPrefix("task")
+	}).Get(&taskID)
+	workflowID := fmt.Sprintf("%s-export", taskID)
+
+	logger.Info("Generated task ID for workflow", "task_id", taskID, "workflow_id", workflowID)
+
 	// Execute the actual export workflow
 	childWorkflowOptions := workflow.ChildWorkflowOptions{
-		WorkflowID: fmt.Sprintf("export-%s-%d", input.ScheduledJobID, time.Now().Unix()),
+		WorkflowID: workflowID,
 	}
 	childCtx := workflow.WithChildOptions(ctx, childWorkflowOptions)
 
 	exportInput := ExecuteExportWorkflowInput{
+		TaskID:         taskID,
 		ScheduledJobID: input.ScheduledJobID,
 		EntityType:     types.ExportEntityType(jobDetails.EntityType),
+		ConnectionID:   jobDetails.ConnectionID,
 		TenantID:       jobDetails.TenantID,
 		EnvID:          jobDetails.EnvID,
 		StartTime:      jobDetails.StartTime,
@@ -81,6 +102,8 @@ func ScheduledExportWorkflow(ctx workflow.Context, input ScheduledExportWorkflow
 	// Update scheduled job's last_run_at
 	updateInput := export.UpdateScheduledJobInput{
 		ScheduledJobID: input.ScheduledJobID,
+		TenantID:       input.TenantID,
+		EnvID:          input.EnvID,
 		LastRunAt:      time.Now(),
 		LastRunStatus:  "success",
 	}

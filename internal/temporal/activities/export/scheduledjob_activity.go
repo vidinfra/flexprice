@@ -31,6 +31,13 @@ func NewScheduledJobActivity(
 	}
 }
 
+// GetScheduledJobDetailsInput represents input for getting job details
+type GetScheduledJobDetailsInput struct {
+	ScheduledJobID string
+	TenantID       string
+	EnvID          string
+}
+
 // ScheduledJobDetails contains job details needed for export
 type ScheduledJobDetails struct {
 	ScheduledJobID string
@@ -38,17 +45,25 @@ type ScheduledJobDetails struct {
 	EnvID          string
 	EntityType     string
 	Enabled        bool
+	ConnectionID   string
 	StartTime      time.Time
 	EndTime        time.Time
 	JobConfig      *types.S3JobConfig
 }
 
 // GetScheduledJobDetails fetches scheduled job and calculates time range
-func (a *ScheduledJobActivity) GetScheduledJobDetails(ctx context.Context, scheduledJobID string) (*ScheduledJobDetails, error) {
-	a.logger.Infow("fetching scheduled job details", "scheduled_job_id", scheduledJobID)
+func (a *ScheduledJobActivity) GetScheduledJobDetails(ctx context.Context, input GetScheduledJobDetailsInput) (*ScheduledJobDetails, error) {
+	a.logger.Infow("fetching scheduled job details",
+		"scheduled_job_id", input.ScheduledJobID,
+		"tenant_id", input.TenantID,
+		"env_id", input.EnvID)
+
+	// Add tenant and env to context for repository query
+	ctx = types.SetTenantID(ctx, input.TenantID)
+	ctx = types.SetEnvironmentID(ctx, input.EnvID)
 
 	// Get scheduled job
-	job, err := a.scheduledJobRepo.Get(ctx, scheduledJobID)
+	job, err := a.scheduledJobRepo.Get(ctx, input.ScheduledJobID)
 	if err != nil {
 		a.logger.Errorw("failed to get scheduled job", "error", err)
 		return nil, ierr.WithError(err).
@@ -70,7 +85,7 @@ func (a *ScheduledJobActivity) GetScheduledJobDetails(ctx context.Context, sched
 	startTime := a.calculateStartTime(ctx, job, endTime)
 
 	a.logger.Infow("scheduled job details retrieved",
-		"scheduled_job_id", scheduledJobID,
+		"scheduled_job_id", input.ScheduledJobID,
 		"entity_type", job.EntityType,
 		"interval", job.Interval,
 		"start_time", startTime,
@@ -82,6 +97,7 @@ func (a *ScheduledJobActivity) GetScheduledJobDetails(ctx context.Context, sched
 		EnvID:          job.EnvironmentID,
 		EntityType:     job.EntityType,
 		Enabled:        job.Enabled,
+		ConnectionID:   job.ConnectionID,
 		StartTime:      startTime,
 		EndTime:        endTime,
 		JobConfig:      jobConfig,
@@ -89,31 +105,79 @@ func (a *ScheduledJobActivity) GetScheduledJobDetails(ctx context.Context, sched
 }
 
 // calculateStartTime determines the start time for the export
+// Implements incremental sync: uses last successful export's end_time as new start_time
 func (a *ScheduledJobActivity) calculateStartTime(ctx context.Context, job *scheduledjob.ScheduledJob, endTime time.Time) time.Time {
-	// TODO: Query task table to get last completed task's end_time
-	// For now, use simple logic based on interval
+	a.logger.Infow("calculating start time for export",
+		"scheduled_job_id", job.ID,
+		"interval", job.Interval,
+		"end_time", endTime)
 
-	// If this is the first run OR we can't find last task, use interval-based logic
+	// Try to get last successful export task for incremental sync
+	lastTask, err := a.taskRepo.GetLastSuccessfulExportTask(ctx, job.ID)
+	if err != nil {
+		// Log error but continue with interval-based logic
+		a.logger.Warnw("error getting last successful export, falling back to interval-based logic",
+			"scheduled_job_id", job.ID,
+			"error", err)
+	}
+
+	// If we found a previous successful export, use its end_time as our start_time (incremental sync)
+	if lastTask != nil && lastTask.Metadata != nil {
+		if endTimeStr, ok := lastTask.Metadata["end_time"].(string); ok {
+			lastEndTime, err := time.Parse(time.RFC3339, endTimeStr)
+			if err != nil {
+				a.logger.Warnw("failed to parse last task end_time, falling back to interval-based logic",
+					"scheduled_job_id", job.ID,
+					"end_time_str", endTimeStr,
+					"error", err)
+			} else {
+				a.logger.Infow("using incremental sync - starting from last export's end_time",
+					"scheduled_job_id", job.ID,
+					"last_export_end_time", lastEndTime,
+					"new_start_time", lastEndTime,
+					"new_end_time", endTime,
+					"duration", endTime.Sub(lastEndTime))
+				return lastEndTime
+			}
+		} else {
+			a.logger.Warnw("last task metadata missing end_time, falling back to interval-based logic",
+				"scheduled_job_id", job.ID)
+		}
+	}
+
+	// First run OR no previous task found - use interval-based logic
 	interval := types.ScheduledJobInterval(job.Interval)
+	var startTime time.Time
 
 	switch interval {
 	case types.ScheduledJobIntervalHourly:
-		return endTime.Add(-1 * time.Hour)
+		startTime = endTime.Add(-1 * time.Hour)
 	case types.ScheduledJobIntervalDaily:
-		return endTime.Add(-24 * time.Hour)
+		startTime = endTime.Add(-24 * time.Hour)
 	case types.ScheduledJobIntervalWeekly:
-		return endTime.Add(-7 * 24 * time.Hour)
+		startTime = endTime.Add(-7 * 24 * time.Hour)
 	case types.ScheduledJobIntervalMonthly:
-		return endTime.AddDate(0, -1, 0)
+		startTime = endTime.AddDate(0, -1, 0)
 	default:
 		// Default to daily
-		return endTime.Add(-24 * time.Hour)
+		startTime = endTime.Add(-24 * time.Hour)
 	}
+
+	a.logger.Infow("no previous export found - using interval-based logic (first run)",
+		"scheduled_job_id", job.ID,
+		"interval", interval,
+		"start_time", startTime,
+		"end_time", endTime,
+		"duration", endTime.Sub(startTime))
+
+	return startTime
 }
 
 // UpdateScheduledJobInput represents input for updating scheduled job
 type UpdateScheduledJobInput struct {
 	ScheduledJobID string
+	TenantID       string
+	EnvID          string
 	LastRunAt      time.Time
 	LastRunStatus  string
 }
@@ -122,8 +186,14 @@ type UpdateScheduledJobInput struct {
 func (a *ScheduledJobActivity) UpdateScheduledJobLastRun(ctx context.Context, input UpdateScheduledJobInput) error {
 	a.logger.Infow("updating scheduled job last run",
 		"scheduled_job_id", input.ScheduledJobID,
+		"tenant_id", input.TenantID,
+		"env_id", input.EnvID,
 		"last_run_at", input.LastRunAt,
 		"status", input.LastRunStatus)
+
+	// Add tenant and env to context for repository query
+	ctx = types.SetTenantID(ctx, input.TenantID)
+	ctx = types.SetEnvironmentID(ctx, input.EnvID)
 
 	job, err := a.scheduledJobRepo.Get(ctx, input.ScheduledJobID)
 	if err != nil {

@@ -26,6 +26,8 @@ func NewTaskActivity(taskRepo task.Repository, logger *logger.Logger) *TaskActiv
 
 // CreateTaskInput represents input for creating a task
 type CreateTaskInput struct {
+	TaskID         string // Pre-generated task ID
+	WorkflowID     string // Temporal workflow ID
 	ScheduledJobID string
 	TenantID       string
 	EnvID          string
@@ -42,15 +44,18 @@ type CreateTaskOutput struct {
 // CreateTask creates a new export task
 func (a *TaskActivity) CreateTask(ctx context.Context, input CreateTaskInput) (*CreateTaskOutput, error) {
 	a.logger.Infow("creating export task",
+		"task_id", input.TaskID,
+		"workflow_id", input.WorkflowID,
 		"scheduled_job_id", input.ScheduledJobID,
 		"entity_type", input.EntityType,
 		"start_time", input.StartTime,
 		"end_time", input.EndTime)
 
-	// Create task
+	// Create task with pre-generated ID
 	now := time.Now()
 	newTask := &task.Task{
-		ID:             types.GenerateUUIDWithPrefix("task"),
+		ID:             input.TaskID,      // Use pre-generated ID
+		WorkflowID:     &input.WorkflowID, // Store Temporal workflow ID
 		EnvironmentID:  input.EnvID,
 		TaskType:       types.TaskTypeExport,
 		EntityType:     types.EntityType(input.EntityType),
@@ -89,6 +94,8 @@ func (a *TaskActivity) CreateTask(ctx context.Context, input CreateTaskInput) (*
 // UpdateTaskStatusInput represents input for updating task status
 type UpdateTaskStatusInput struct {
 	TaskID     string
+	TenantID   string
+	EnvID      string
 	Status     types.TaskStatus
 	RecordInfo *RecordInfo // Optional: for tracking progress
 	Error      string      // Optional: for failures
@@ -107,6 +114,10 @@ func (a *TaskActivity) UpdateTaskStatus(ctx context.Context, input UpdateTaskSta
 	a.logger.Infow("updating task status",
 		"task_id", input.TaskID,
 		"status", input.Status)
+
+	// Set tenant and env context for repository queries
+	ctx = types.SetTenantID(ctx, input.TenantID)
+	ctx = types.SetEnvironmentID(ctx, input.EnvID)
 
 	existingTask, err := a.taskRepo.Get(ctx, input.TaskID)
 	if err != nil {
@@ -157,6 +168,8 @@ func (a *TaskActivity) UpdateTaskStatus(ctx context.Context, input UpdateTaskSta
 // CompleteTaskInput represents input for completing a task
 type CompleteTaskInput struct {
 	TaskID      string
+	TenantID    string
+	EnvID       string
 	FileURL     string
 	RecordCount int
 	FileSize    int64
@@ -168,6 +181,10 @@ func (a *TaskActivity) CompleteTask(ctx context.Context, input CompleteTaskInput
 		"task_id", input.TaskID,
 		"file_url", input.FileURL,
 		"record_count", input.RecordCount)
+
+	// Set tenant and env context for repository queries
+	ctx = types.SetTenantID(ctx, input.TenantID)
+	ctx = types.SetEnvironmentID(ctx, input.EnvID)
 
 	existingTask, err := a.taskRepo.Get(ctx, input.TaskID)
 	if err != nil {

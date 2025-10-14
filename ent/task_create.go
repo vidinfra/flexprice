@@ -136,6 +136,20 @@ func (tc *TaskCreate) SetNillableScheduledJobID(s *string) *TaskCreate {
 	return tc
 }
 
+// SetWorkflowID sets the "workflow_id" field.
+func (tc *TaskCreate) SetWorkflowID(s string) *TaskCreate {
+	tc.mutation.SetWorkflowID(s)
+	return tc
+}
+
+// SetNillableWorkflowID sets the "workflow_id" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableWorkflowID(s *string) *TaskCreate {
+	if s != nil {
+		tc.SetWorkflowID(*s)
+	}
+	return tc
+}
+
 // SetFileURL sets the "file_url" field.
 func (tc *TaskCreate) SetFileURL(s string) *TaskCreate {
 	tc.mutation.SetFileURL(s)
@@ -513,6 +527,10 @@ func (tc *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := tc.mutation.ScheduledJobID(); ok {
 		_spec.SetField(task.FieldScheduledJobID, field.TypeString, value)
 		_node.ScheduledJobID = value
+	}
+	if value, ok := tc.mutation.WorkflowID(); ok {
+		_spec.SetField(task.FieldWorkflowID, field.TypeString, value)
+		_node.WorkflowID = &value
 	}
 	if value, ok := tc.mutation.FileURL(); ok {
 		_spec.SetField(task.FieldFileURL, field.TypeString, value)

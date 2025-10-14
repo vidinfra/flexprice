@@ -41,7 +41,7 @@ func (s ScheduledJobInterval) Validate() error {
 type ScheduledJobEntityType string
 
 const (
-	ScheduledJobEntityTypeFeatureUsage ScheduledJobEntityType = "feature_usage"
+	ScheduledJobEntityTypeEvents       ScheduledJobEntityType = "events"
 	ScheduledJobEntityTypeCustomer     ScheduledJobEntityType = "customer"
 	ScheduledJobEntityTypeInvoice      ScheduledJobEntityType = "invoice"
 	ScheduledJobEntityTypePrice        ScheduledJobEntityType = "price"
@@ -52,7 +52,7 @@ const (
 // Validate validates the entity type
 func (e ScheduledJobEntityType) Validate() error {
 	allowedTypes := []ScheduledJobEntityType{
-		ScheduledJobEntityTypeFeatureUsage,
+		ScheduledJobEntityTypeEvents,
 		ScheduledJobEntityTypeCustomer,
 		ScheduledJobEntityTypeInvoice,
 		ScheduledJobEntityTypePrice,
@@ -70,7 +70,7 @@ func (e ScheduledJobEntityType) Validate() error {
 		}
 	}
 	return ierr.NewError("invalid entity type").
-		WithHint("Entity type must be one of: feature_usage, customer, invoice, price, subscription, credit_note").
+		WithHint("Entity type must be one of: events, customer, invoice, price, subscription, credit_note").
 		Mark(ierr.ErrValidation)
 }
 

@@ -12,6 +12,7 @@ import (
 
 // ExecuteExportWorkflowInput represents input for the export workflow
 type ExecuteExportWorkflowInput struct {
+	TaskID         string // Pre-generated task ID (used as workflow ID)
 	ScheduledJobID string
 	EntityType     types.ExportEntityType
 	ConnectionID   string
@@ -53,8 +54,15 @@ func ExecuteExportWorkflow(ctx workflow.Context, input ExecuteExportWorkflowInpu
 	var exportActivity export.ExportActivity
 
 	// Step 1: Create task
-	logger.Info("Step 1: Creating task")
+	// Use pre-generated task ID from input
+	taskID := input.TaskID
+	workflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
+	logger.Info("Starting export workflow", "task_id", taskID, "workflow_id", workflowID)
+
+	logger.Info("Step 1: Creating task in database")
 	createTaskInput := export.CreateTaskInput{
+		TaskID:         taskID, // Use pre-generated ID
+		WorkflowID:     workflowID,
 		ScheduledJobID: input.ScheduledJobID,
 		TenantID:       input.TenantID,
 		EnvID:          input.EnvID,
@@ -70,14 +78,15 @@ func ExecuteExportWorkflow(ctx workflow.Context, input ExecuteExportWorkflowInpu
 		return nil, fmt.Errorf("failed to create task: %w", err)
 	}
 
-	taskID := createTaskOutput.TaskID
-	logger.Info("Task created", "task_id", taskID)
+	logger.Info("Task created in database", "task_id", taskID)
 
 	// Step 2: Update task to processing
 	logger.Info("Step 2: Updating task to processing")
 	updateStatusInput := export.UpdateTaskStatusInput{
-		TaskID: taskID,
-		Status: types.TaskStatusProcessing,
+		TaskID:   taskID,
+		TenantID: input.TenantID,
+		EnvID:    input.EnvID,
+		Status:   types.TaskStatusProcessing,
 	}
 	err = workflow.ExecuteActivity(ctx, taskActivity.UpdateTaskStatus, updateStatusInput).Get(ctx, nil)
 	if err != nil {
@@ -104,9 +113,11 @@ func ExecuteExportWorkflow(ctx workflow.Context, input ExecuteExportWorkflowInpu
 
 		// Mark task as failed
 		failInput := export.UpdateTaskStatusInput{
-			TaskID: taskID,
-			Status: types.TaskStatusFailed,
-			Error:  err.Error(),
+			TaskID:   taskID,
+			TenantID: input.TenantID,
+			EnvID:    input.EnvID,
+			Status:   types.TaskStatusFailed,
+			Error:    err.Error(),
 		}
 		_ = workflow.ExecuteActivity(ctx, taskActivity.UpdateTaskStatus, failInput).Get(ctx, nil)
 
@@ -124,6 +135,8 @@ func ExecuteExportWorkflow(ctx workflow.Context, input ExecuteExportWorkflowInpu
 	logger.Info("Step 4: Completing task")
 	completeInput := export.CompleteTaskInput{
 		TaskID:      taskID,
+		TenantID:    input.TenantID,
+		EnvID:       input.EnvID,
 		FileURL:     exportOutput.FileURL,
 		RecordCount: exportOutput.RecordCount,
 		FileSize:    exportOutput.FileSizeBytes,

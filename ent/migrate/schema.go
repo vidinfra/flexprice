@@ -1826,6 +1826,7 @@ var (
 		{Name: "task_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "entity_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "scheduled_job_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "workflow_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
 		{Name: "file_url", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "varchar(255)"}},
 		{Name: "file_name", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
 		{Name: "file_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(10)"}},
@@ -1859,7 +1860,7 @@ var (
 			{
 				Name:    "idx_tasks_tenant_env_task_status",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[1], TasksColumns[7], TasksColumns[14], TasksColumns[2]},
+				Columns: []*schema.Column{TasksColumns[1], TasksColumns[7], TasksColumns[15], TasksColumns[2]},
 			},
 		},
 	}

@@ -30,6 +30,7 @@ func copyTask(t *task.Task) *task.Task {
 		ID:                t.ID,
 		TaskType:          t.TaskType,
 		EntityType:        t.EntityType,
+		ScheduledJobID:    t.ScheduledJobID,
 		FileURL:           t.FileURL,
 		FileType:          t.FileType,
 		TaskStatus:        t.TaskStatus,
@@ -94,6 +95,33 @@ func (s *InMemoryTaskStore) List(ctx context.Context, filter *types.TaskFilter) 
 
 func (s *InMemoryTaskStore) Count(ctx context.Context, filter *types.TaskFilter) (int, error) {
 	return s.InMemoryStore.Count(ctx, filter, taskFilterFn)
+}
+
+// GetLastSuccessfulExportTask gets the last completed export task for a scheduled job
+func (s *InMemoryTaskStore) GetLastSuccessfulExportTask(ctx context.Context, scheduledJobID string) (*task.Task, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var lastTask *task.Task
+	for _, t := range s.items {
+		if t.ScheduledJobID == scheduledJobID &&
+			t.TaskType == types.TaskTypeExport &&
+			t.TaskStatus == types.TaskStatusCompleted &&
+			t.Status == types.StatusPublished &&
+			CheckEnvironmentFilter(ctx, t.EnvironmentID) &&
+			t.TenantID == types.GetTenantID(ctx) {
+
+			if lastTask == nil || (t.CompletedAt != nil && lastTask.CompletedAt != nil && t.CompletedAt.After(*lastTask.CompletedAt)) {
+				lastTask = t
+			}
+		}
+	}
+
+	if lastTask == nil {
+		return nil, nil // No previous task found - not an error
+	}
+
+	return copyTask(lastTask), nil
 }
 
 // taskFilterFn implements filtering logic for tasks

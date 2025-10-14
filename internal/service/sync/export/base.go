@@ -84,7 +84,7 @@ func (s *ExportService) Export(ctx context.Context, request *ExportRequest) (*Ex
 // getExporter returns the appropriate exporter for the given entity type
 func (s *ExportService) getExporter(entityType types.ExportEntityType) Exporter {
 	switch entityType {
-	case types.ExportEntityTypeFeatureUsage:
+	case types.ExportEntityTypeEvents:
 		return NewUsageExporter(s.featureUsageRepo, s.s3Client, s.logger)
 	case types.ExportEntityTypeCustomer:
 		// return NewCustomerExporter(...) // TODO: Implement

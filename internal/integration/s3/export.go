@@ -186,12 +186,7 @@ func (c *s3Client) validateExportRequest(request *ExportRequest) error {
 
 // generateObjectKey generates the S3 object key for the export
 func (c *s3Client) generateObjectKey(request *ExportRequest) string {
-	// Format: {key_prefix}/{entity_type}/{year}/{month}/{day}/{timestamp}_{filename}.{extension}
-	timestamp := request.Timestamp.Format("20060102_150405")
-	year := request.Timestamp.Format("2006")
-	month := request.Timestamp.Format("01")
-	day := request.Timestamp.Format("02")
-
+	// Format: {key_prefix}/{entity_type}/{filename}.{extension}
 	extension := string(request.Format)
 	if request.Compress && c.config.Compression == "gzip" {
 		extension = extension + ".gz"
@@ -199,15 +194,14 @@ func (c *s3Client) generateObjectKey(request *ExportRequest) string {
 
 	fileName := request.FileName
 	if fileName == "" {
+		// Fallback if filename not provided (shouldn't happen normally)
+		timestamp := request.Timestamp.Format("20060102_150405")
 		fileName = fmt.Sprintf("%s_%s", request.EntityType, timestamp)
 	}
 
-	key := fmt.Sprintf("%s/%s/%s/%s/%s/%s.%s",
+	key := fmt.Sprintf("%s/%s/%s.%s",
 		c.config.KeyPrefix,
 		request.EntityType,
-		year,
-		month,
-		day,
 		fileName,
 		extension,
 	)

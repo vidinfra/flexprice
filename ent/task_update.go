@@ -116,6 +116,26 @@ func (tu *TaskUpdate) ClearScheduledJobID() *TaskUpdate {
 	return tu
 }
 
+// SetWorkflowID sets the "workflow_id" field.
+func (tu *TaskUpdate) SetWorkflowID(s string) *TaskUpdate {
+	tu.mutation.SetWorkflowID(s)
+	return tu
+}
+
+// SetNillableWorkflowID sets the "workflow_id" field if the given value is not nil.
+func (tu *TaskUpdate) SetNillableWorkflowID(s *string) *TaskUpdate {
+	if s != nil {
+		tu.SetWorkflowID(*s)
+	}
+	return tu
+}
+
+// ClearWorkflowID clears the value of the "workflow_id" field.
+func (tu *TaskUpdate) ClearWorkflowID() *TaskUpdate {
+	tu.mutation.ClearWorkflowID()
+	return tu
+}
+
 // SetFileURL sets the "file_url" field.
 func (tu *TaskUpdate) SetFileURL(s string) *TaskUpdate {
 	tu.mutation.SetFileURL(s)
@@ -463,6 +483,12 @@ func (tu *TaskUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	if tu.mutation.ScheduledJobIDCleared() {
 		_spec.ClearField(task.FieldScheduledJobID, field.TypeString)
 	}
+	if value, ok := tu.mutation.WorkflowID(); ok {
+		_spec.SetField(task.FieldWorkflowID, field.TypeString, value)
+	}
+	if tu.mutation.WorkflowIDCleared() {
+		_spec.ClearField(task.FieldWorkflowID, field.TypeString)
+	}
 	if value, ok := tu.mutation.FileURL(); ok {
 		_spec.SetField(task.FieldFileURL, field.TypeString, value)
 	}
@@ -640,6 +666,26 @@ func (tuo *TaskUpdateOne) SetNillableScheduledJobID(s *string) *TaskUpdateOne {
 // ClearScheduledJobID clears the value of the "scheduled_job_id" field.
 func (tuo *TaskUpdateOne) ClearScheduledJobID() *TaskUpdateOne {
 	tuo.mutation.ClearScheduledJobID()
+	return tuo
+}
+
+// SetWorkflowID sets the "workflow_id" field.
+func (tuo *TaskUpdateOne) SetWorkflowID(s string) *TaskUpdateOne {
+	tuo.mutation.SetWorkflowID(s)
+	return tuo
+}
+
+// SetNillableWorkflowID sets the "workflow_id" field if the given value is not nil.
+func (tuo *TaskUpdateOne) SetNillableWorkflowID(s *string) *TaskUpdateOne {
+	if s != nil {
+		tuo.SetWorkflowID(*s)
+	}
+	return tuo
+}
+
+// ClearWorkflowID clears the value of the "workflow_id" field.
+func (tuo *TaskUpdateOne) ClearWorkflowID() *TaskUpdateOne {
+	tuo.mutation.ClearWorkflowID()
 	return tuo
 }
 
@@ -1019,6 +1065,12 @@ func (tuo *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) 
 	}
 	if tuo.mutation.ScheduledJobIDCleared() {
 		_spec.ClearField(task.FieldScheduledJobID, field.TypeString)
+	}
+	if value, ok := tuo.mutation.WorkflowID(); ok {
+		_spec.SetField(task.FieldWorkflowID, field.TypeString, value)
+	}
+	if tuo.mutation.WorkflowIDCleared() {
+		_spec.ClearField(task.FieldWorkflowID, field.TypeString)
 	}
 	if value, ok := tuo.mutation.FileURL(); ok {
 		_spec.SetField(task.FieldFileURL, field.TypeString, value)

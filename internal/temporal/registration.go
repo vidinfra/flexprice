@@ -31,7 +31,7 @@ func RegisterWorkflowsAndActivities(temporalService temporalService.TemporalServ
 	// Export activities
 	taskActivity := exportActivities.NewTaskActivity(params.TaskRepo, params.Logger)
 	scheduledJobActivity := exportActivities.NewScheduledJobActivity(params.ScheduledJobRepo, params.TaskRepo, params.Logger)
-	exportActivity := exportActivities.NewExportActivity(params.FeatureUsageRepo, params.S3Client, params.Logger)
+	exportActivity := exportActivities.NewExportActivity(params.FeatureUsageRepo, params.IntegrationFactory, params.Logger)
 
 	// Get all task queues and register workflows/activities for each
 	for _, taskQueue := range types.GetAllTaskQueues() {

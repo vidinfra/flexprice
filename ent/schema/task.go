@@ -45,6 +45,13 @@ func (Task) Fields() []ent.Field {
 			}).
 			Optional().
 			Comment("Reference to the scheduled job that created this task (for export tasks)"),
+		field.String("workflow_id").
+			SchemaType(map[string]string{
+				"postgres": "varchar(255)",
+			}).
+			Optional().
+			Nillable().
+			Comment("Temporal workflow ID (wrapper workflow) for tracking the execution"),
 		field.String("file_url").
 			SchemaType(map[string]string{
 				"postgres": "varchar(255)",

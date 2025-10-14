@@ -220,10 +220,13 @@ func (e *UsageExporter) Export(ctx context.Context, request *ExportRequest) (*Ex
 			Mark(ierr.ErrHTTPClient)
 	}
 
-	// Generate filename with timestamp
-	filename := fmt.Sprintf("feature_usage_%s", time.Now().Format("20060102_150405"))
+	// Generate filename with start and end times
+	// Format: events-start_time_{YYMMDDHHMMSS}-end_time_{YYMMDDHHMMSS}.csv
+	startTimeStr := request.StartTime.Format("060102150405") // YYMMDDHHMMSS
+	endTimeStr := request.EndTime.Format("060102150405")     // YYMMDDHHMMSS
+	filename := fmt.Sprintf("events-start_time_%s-end_time_%s", startTimeStr, endTimeStr)
 
-	uploadResponse, err := s3Client.UploadCSV(ctx, filename, csvBytes, "feature_usage")
+	uploadResponse, err := s3Client.UploadCSV(ctx, filename, csvBytes, "events")
 	if err != nil {
 		return nil, ierr.WithError(err).
 			WithHint("Failed to upload CSV to S3").

@@ -33,6 +33,8 @@ const (
 	FieldEntityType = "entity_type"
 	// FieldScheduledJobID holds the string denoting the scheduled_job_id field in the database.
 	FieldScheduledJobID = "scheduled_job_id"
+	// FieldWorkflowID holds the string denoting the workflow_id field in the database.
+	FieldWorkflowID = "workflow_id"
 	// FieldFileURL holds the string denoting the file_url field in the database.
 	FieldFileURL = "file_url"
 	// FieldFileName holds the string denoting the file_name field in the database.
@@ -76,6 +78,7 @@ var Columns = []string{
 	FieldTaskType,
 	FieldEntityType,
 	FieldScheduledJobID,
+	FieldWorkflowID,
 	FieldFileURL,
 	FieldFileName,
 	FieldFileType,
@@ -188,6 +191,11 @@ func ByEntityType(opts ...sql.OrderTermOption) OrderOption {
 // ByScheduledJobID orders the results by the scheduled_job_id field.
 func ByScheduledJobID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldScheduledJobID, opts...).ToFunc()
+}
+
+// ByWorkflowID orders the results by the workflow_id field.
+func ByWorkflowID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWorkflowID, opts...).ToFunc()
 }
 
 // ByFileURL orders the results by the file_url field.

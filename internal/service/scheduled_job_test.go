@@ -61,7 +61,7 @@ func TestCreateScheduledJob(t *testing.T) {
 
 	req := dto.CreateScheduledJobRequest{
 		ConnectionID: "conn-123",
-		EntityType:   string(types.ScheduledJobEntityTypeFeatureUsage),
+		EntityType:   string(types.ScheduledJobEntityTypeEvents),
 		Interval:     string(types.ScheduledJobIntervalDaily),
 		Enabled:      true,
 		JobConfig:    jobConfig,
@@ -173,7 +173,7 @@ func TestScheduledJobEntityType(t *testing.T) {
 		entityType types.ScheduledJobEntityType
 		wantErr    bool
 	}{
-		{"FeatureUsage", types.ScheduledJobEntityTypeFeatureUsage, false},
+		{"FeatureUsage", types.ScheduledJobEntityTypeEvents, false},
 		{"Invalid", types.ScheduledJobEntityType("invalid"), true},
 	}
 

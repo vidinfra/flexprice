@@ -6,7 +6,7 @@ import (
 
 	"github.com/flexprice/flexprice/internal/domain/events"
 	ierr "github.com/flexprice/flexprice/internal/errors"
-	s3Integration "github.com/flexprice/flexprice/internal/integration/s3"
+	"github.com/flexprice/flexprice/internal/integration"
 	"github.com/flexprice/flexprice/internal/logger"
 	syncExport "github.com/flexprice/flexprice/internal/service/sync/export"
 	"github.com/flexprice/flexprice/internal/types"
@@ -14,21 +14,21 @@ import (
 
 // ExportActivity handles the actual export operations
 type ExportActivity struct {
-	featureUsageRepo events.FeatureUsageRepository
-	s3Client         *s3Integration.Client
-	logger           *logger.Logger
+	featureUsageRepo   events.FeatureUsageRepository
+	integrationFactory *integration.Factory
+	logger             *logger.Logger
 }
 
 // NewExportActivity creates a new export activity
 func NewExportActivity(
 	featureUsageRepo events.FeatureUsageRepository,
-	s3Client *s3Integration.Client,
+	integrationFactory *integration.Factory,
 	logger *logger.Logger,
 ) *ExportActivity {
 	return &ExportActivity{
-		featureUsageRepo: featureUsageRepo,
-		s3Client:         s3Client,
-		logger:           logger,
+		featureUsageRepo:   featureUsageRepo,
+		integrationFactory: integrationFactory,
+		logger:             logger,
 	}
 }
 
@@ -59,6 +59,10 @@ func (a *ExportActivity) ExportData(ctx context.Context, input ExportDataInput) 
 		"start_time", input.StartTime,
 		"end_time", input.EndTime)
 
+	// Add tenant and environment to context for repository queries
+	ctx = types.SetTenantID(ctx, input.TenantID)
+	ctx = types.SetEnvironmentID(ctx, input.EnvID)
+
 	// Create export request
 	request := &syncExport.ExportRequest{
 		EntityType:   input.EntityType,
@@ -75,11 +79,21 @@ func (a *ExportActivity) ExportData(ctx context.Context, input ExportDataInput) 
 	var err error
 
 	switch input.EntityType {
-	case types.ExportEntityTypeFeatureUsage:
-		exporter := syncExport.NewUsageExporter(a.featureUsageRepo, a.s3Client, a.logger)
+	case types.ExportEntityTypeEvents:
+		// Get storage provider from factory (currently returns S3 client)
+		s3Client, storageErr := a.integrationFactory.GetStorageProvider(ctx, input.ConnectionID)
+		if storageErr != nil {
+			return nil, ierr.WithError(storageErr).
+				WithHint("Failed to get storage provider from factory").
+				Mark(ierr.ErrInternal)
+		}
+
+		exporter := syncExport.NewUsageExporter(a.featureUsageRepo, s3Client, a.logger)
 		response, err = exporter.Export(ctx, request)
 	// Add more entity types as needed
 	// case types.ExportEntityTypeCustomer:
+	//     s3Client, err := a.integrationFactory.GetStorageProvider(ctx, input.ConnectionID)
+	//     if err != nil { ... }
 	//     exporter := syncExport.NewCustomerExporter(...)
 	//     response, err = exporter.Export(ctx, request)
 	default:

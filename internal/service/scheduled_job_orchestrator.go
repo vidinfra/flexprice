@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/flexprice/flexprice/internal/domain/scheduledjob"
+	"github.com/flexprice/flexprice/internal/domain/task"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/logger"
 	exportWorkflows "github.com/flexprice/flexprice/internal/temporal/workflows/export"
@@ -16,6 +17,7 @@ import (
 // ScheduledJobOrchestrator manages Temporal schedules for scheduled jobs
 type ScheduledJobOrchestrator struct {
 	scheduledJobRepo scheduledjob.Repository
+	taskRepo         task.Repository
 	temporalClient   client.Client
 	logger           *logger.Logger
 }
@@ -23,11 +25,13 @@ type ScheduledJobOrchestrator struct {
 // NewScheduledJobOrchestrator creates a new orchestrator
 func NewScheduledJobOrchestrator(
 	scheduledJobRepo scheduledjob.Repository,
+	taskRepo task.Repository,
 	temporalClient client.Client,
 	logger *logger.Logger,
 ) *ScheduledJobOrchestrator {
 	return &ScheduledJobOrchestrator{
 		scheduledJobRepo: scheduledJobRepo,
+		taskRepo:         taskRepo,
 		temporalClient:   temporalClient,
 		logger:           logger,
 	}
@@ -62,7 +66,8 @@ func (o *ScheduledJobOrchestrator) StartScheduledJob(ctx context.Context, jobID 
 	}
 
 	// Create new Temporal schedule
-	scheduleID := fmt.Sprintf("schdjob_%s", job.ID)
+	// Use the scheduled job ID directly (already has schdjob_ prefix)
+	scheduleID := job.ID
 	cronExpr := o.getCronExpression(types.ScheduledJobInterval(job.Interval))
 
 	scheduleSpec := client.ScheduleSpec{
@@ -70,11 +75,14 @@ func (o *ScheduledJobOrchestrator) StartScheduledJob(ctx context.Context, jobID 
 	}
 
 	action := &client.ScheduleWorkflowAction{
-		ID:       scheduleID + "-workflow",
+		// Don't set ID here - let Temporal auto-generate for the wrapper workflow
+		// The child workflow (ExecuteExportWorkflow) will use task_id-export format
 		Workflow: exportWorkflows.ScheduledExportWorkflow,
 		Args: []interface{}{
 			exportWorkflows.ScheduledExportWorkflowInput{
 				ScheduledJobID: job.ID,
+				TenantID:       job.TenantID,
+				EnvID:          job.EnvironmentID,
 			},
 		},
 		TaskQueue: string(types.TemporalTaskQueueExport),
@@ -166,10 +174,17 @@ func (o *ScheduledJobOrchestrator) TriggerManualSync(ctx context.Context, jobID 
 
 	// Calculate time range
 	endTime := time.Now()
-	startTime := o.calculateManualSyncStartTime(job, endTime)
+	startTime := o.calculateManualSyncStartTime(ctx, job, endTime)
 
-	// Execute workflow directly (not through schedule)
-	workflowID := fmt.Sprintf("manual-export-%s-%d", jobID, time.Now().Unix())
+	// Generate task ID and use it as workflow ID
+	// Format: {task_id}-export
+	taskID := types.GenerateUUIDWithPrefix("task")
+	workflowID := fmt.Sprintf("%s-export", taskID)
+
+	o.logger.Infow("triggering manual export",
+		"task_id", taskID,
+		"workflow_id", workflowID,
+		"job_id", jobID)
 
 	workflowOptions := client.StartWorkflowOptions{
 		ID:        workflowID,
@@ -177,6 +192,7 @@ func (o *ScheduledJobOrchestrator) TriggerManualSync(ctx context.Context, jobID 
 	}
 
 	input := exportWorkflows.ExecuteExportWorkflowInput{
+		TaskID:         taskID,
 		ScheduledJobID: job.ID,
 		EntityType:     types.ExportEntityType(job.EntityType),
 		ConnectionID:   job.ConnectionID,
@@ -205,35 +221,88 @@ func (o *ScheduledJobOrchestrator) TriggerManualSync(ctx context.Context, jobID 
 
 // getCronExpression converts interval to cron expression
 func (o *ScheduledJobOrchestrator) getCronExpression(interval types.ScheduledJobInterval) string {
-	switch interval {
-	case types.ScheduledJobIntervalHourly:
-		return "0 * * * *" // Every hour
-	case types.ScheduledJobIntervalDaily:
-		return "0 0 * * *" // Every day at midnight
-	case types.ScheduledJobIntervalWeekly:
-		return "0 0 * * 0" // Every Sunday at midnight
-	case types.ScheduledJobIntervalMonthly:
-		return "0 0 1 * *" // First day of every month at midnight
-	default:
-		return "0 0 * * *" // Default to daily
-	}
+	// HARDCODED FOR TESTING: Run every 3 minutes
+	return "*/3 * * * *" // Every 3 minutes
+
+	// Original logic (commented out for testing)
+	// switch interval {
+	// case types.ScheduledJobIntervalHourly:
+	// 	return "0 * * * *" // Every hour
+	// case types.ScheduledJobIntervalDaily:
+	// 	return "0 0 * * *" // Every day at midnight
+	// case types.ScheduledJobIntervalWeekly:
+	// 	return "0 0 * * 0" // Every Sunday at midnight
+	// case types.ScheduledJobIntervalMonthly:
+	// 	return "0 0 1 * *" // First day of every month at midnight
+	// default:
+	// 	return "0 0 * * *" // Default to daily
+	// }
 }
 
 // calculateManualSyncStartTime determines start time for manual sync
-func (o *ScheduledJobOrchestrator) calculateManualSyncStartTime(job *scheduledjob.ScheduledJob, endTime time.Time) time.Time {
-	// Use the same logic as scheduled runs
+// Implements incremental sync: uses last successful export's end_time as new start_time
+func (o *ScheduledJobOrchestrator) calculateManualSyncStartTime(ctx context.Context, job *scheduledjob.ScheduledJob, endTime time.Time) time.Time {
+	o.logger.Infow("calculating start time for manual sync",
+		"scheduled_job_id", job.ID,
+		"interval", job.Interval,
+		"end_time", endTime)
+
+	// Try to get last successful export task for incremental sync
+	lastTask, err := o.taskRepo.GetLastSuccessfulExportTask(ctx, job.ID)
+	if err != nil {
+		// Log error but continue with interval-based logic
+		o.logger.Warnw("error getting last successful export, falling back to interval-based logic",
+			"scheduled_job_id", job.ID,
+			"error", err)
+	}
+
+	// If we found a previous successful export, use its end_time as our start_time (incremental sync)
+	if lastTask != nil && lastTask.Metadata != nil {
+		if endTimeStr, ok := lastTask.Metadata["end_time"].(string); ok {
+			lastEndTime, err := time.Parse(time.RFC3339, endTimeStr)
+			if err != nil {
+				o.logger.Warnw("failed to parse last task end_time, falling back to interval-based logic",
+					"scheduled_job_id", job.ID,
+					"end_time_str", endTimeStr,
+					"error", err)
+			} else {
+				o.logger.Infow("using incremental sync for manual sync - starting from last export's end_time",
+					"scheduled_job_id", job.ID,
+					"last_export_end_time", lastEndTime,
+					"new_start_time", lastEndTime,
+					"new_end_time", endTime,
+					"duration", endTime.Sub(lastEndTime))
+				return lastEndTime
+			}
+		} else {
+			o.logger.Warnw("last task metadata missing end_time, falling back to interval-based logic",
+				"scheduled_job_id", job.ID)
+		}
+	}
+
+	// First run OR no previous task found - use interval-based logic
 	interval := types.ScheduledJobInterval(job.Interval)
+	var startTime time.Time
 
 	switch interval {
 	case types.ScheduledJobIntervalHourly:
-		return endTime.Add(-1 * time.Hour)
+		startTime = endTime.Add(-1 * time.Hour)
 	case types.ScheduledJobIntervalDaily:
-		return endTime.Add(-24 * time.Hour)
+		startTime = endTime.Add(-24 * time.Hour)
 	case types.ScheduledJobIntervalWeekly:
-		return endTime.Add(-7 * 24 * time.Hour)
+		startTime = endTime.Add(-7 * 24 * time.Hour)
 	case types.ScheduledJobIntervalMonthly:
-		return endTime.AddDate(0, -1, 0)
+		startTime = endTime.AddDate(0, -1, 0)
 	default:
-		return endTime.Add(-24 * time.Hour)
+		startTime = endTime.Add(-24 * time.Hour)
 	}
+
+	o.logger.Infow("no previous export found - using interval-based logic for manual sync (first run)",
+		"scheduled_job_id", job.ID,
+		"interval", interval,
+		"start_time", startTime,
+		"end_time", endTime,
+		"duration", endTime.Sub(startTime))
+
+	return startTime
 }

@@ -37,7 +37,7 @@ func (s SyncInterval) Validate() error {
 type ExportEntityType string
 
 const (
-	ExportEntityTypeFeatureUsage ExportEntityType = "feature_usage"
+	ExportEntityTypeEvents       ExportEntityType = "events"
 	ExportEntityTypeCustomer     ExportEntityType = "customer"
 	ExportEntityTypeInvoice      ExportEntityType = "invoice"
 	ExportEntityTypePrice        ExportEntityType = "price"
@@ -48,7 +48,7 @@ const (
 // Validate validates the entity type
 func (e ExportEntityType) Validate() error {
 	allowedTypes := []ExportEntityType{
-		ExportEntityTypeFeatureUsage,
+		ExportEntityTypeEvents,
 		ExportEntityTypeCustomer,
 		ExportEntityTypeInvoice,
 		ExportEntityTypePrice,
@@ -64,7 +64,7 @@ func (e ExportEntityType) Validate() error {
 		}
 	}
 	return ierr.NewError("invalid entity type").
-		WithHint("Entity type must be one of: feature_usage, customer, invoice, price, subscription, credit_note").
+		WithHint("Entity type must be one of: events, customer, invoice, price, subscription, credit_note").
 		Mark(ierr.ErrValidation)
 }
 

@@ -52330,6 +52330,7 @@ type TaskMutation struct {
 	task_type             *string
 	entity_type           *string
 	scheduled_job_id      *string
+	workflow_id           *string
 	file_url              *string
 	file_name             *string
 	file_type             *string
@@ -52867,6 +52868,55 @@ func (m *TaskMutation) ScheduledJobIDCleared() bool {
 func (m *TaskMutation) ResetScheduledJobID() {
 	m.scheduled_job_id = nil
 	delete(m.clearedFields, task.FieldScheduledJobID)
+}
+
+// SetWorkflowID sets the "workflow_id" field.
+func (m *TaskMutation) SetWorkflowID(s string) {
+	m.workflow_id = &s
+}
+
+// WorkflowID returns the value of the "workflow_id" field in the mutation.
+func (m *TaskMutation) WorkflowID() (r string, exists bool) {
+	v := m.workflow_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWorkflowID returns the old "workflow_id" field's value of the Task entity.
+// If the Task object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TaskMutation) OldWorkflowID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWorkflowID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWorkflowID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWorkflowID: %w", err)
+	}
+	return oldValue.WorkflowID, nil
+}
+
+// ClearWorkflowID clears the value of the "workflow_id" field.
+func (m *TaskMutation) ClearWorkflowID() {
+	m.workflow_id = nil
+	m.clearedFields[task.FieldWorkflowID] = struct{}{}
+}
+
+// WorkflowIDCleared returns if the "workflow_id" field was cleared in this mutation.
+func (m *TaskMutation) WorkflowIDCleared() bool {
+	_, ok := m.clearedFields[task.FieldWorkflowID]
+	return ok
+}
+
+// ResetWorkflowID resets all changes to the "workflow_id" field.
+func (m *TaskMutation) ResetWorkflowID() {
+	m.workflow_id = nil
+	delete(m.clearedFields, task.FieldWorkflowID)
 }
 
 // SetFileURL sets the "file_url" field.
@@ -53543,7 +53593,7 @@ func (m *TaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TaskMutation) Fields() []string {
-	fields := make([]string, 0, 23)
+	fields := make([]string, 0, 24)
 	if m.tenant_id != nil {
 		fields = append(fields, task.FieldTenantID)
 	}
@@ -53573,6 +53623,9 @@ func (m *TaskMutation) Fields() []string {
 	}
 	if m.scheduled_job_id != nil {
 		fields = append(fields, task.FieldScheduledJobID)
+	}
+	if m.workflow_id != nil {
+		fields = append(fields, task.FieldWorkflowID)
 	}
 	if m.file_url != nil {
 		fields = append(fields, task.FieldFileURL)
@@ -53641,6 +53694,8 @@ func (m *TaskMutation) Field(name string) (ent.Value, bool) {
 		return m.EntityType()
 	case task.FieldScheduledJobID:
 		return m.ScheduledJobID()
+	case task.FieldWorkflowID:
+		return m.WorkflowID()
 	case task.FieldFileURL:
 		return m.FileURL()
 	case task.FieldFileName:
@@ -53696,6 +53751,8 @@ func (m *TaskMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldEntityType(ctx)
 	case task.FieldScheduledJobID:
 		return m.OldScheduledJobID(ctx)
+	case task.FieldWorkflowID:
+		return m.OldWorkflowID(ctx)
 	case task.FieldFileURL:
 		return m.OldFileURL(ctx)
 	case task.FieldFileName:
@@ -53800,6 +53857,13 @@ func (m *TaskMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetScheduledJobID(v)
+		return nil
+	case task.FieldWorkflowID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWorkflowID(v)
 		return nil
 	case task.FieldFileURL:
 		v, ok := value.(string)
@@ -53985,6 +54049,9 @@ func (m *TaskMutation) ClearedFields() []string {
 	if m.FieldCleared(task.FieldScheduledJobID) {
 		fields = append(fields, task.FieldScheduledJobID)
 	}
+	if m.FieldCleared(task.FieldWorkflowID) {
+		fields = append(fields, task.FieldWorkflowID)
+	}
 	if m.FieldCleared(task.FieldFileName) {
 		fields = append(fields, task.FieldFileName)
 	}
@@ -54031,6 +54098,9 @@ func (m *TaskMutation) ClearField(name string) error {
 		return nil
 	case task.FieldScheduledJobID:
 		m.ClearScheduledJobID()
+		return nil
+	case task.FieldWorkflowID:
+		m.ClearWorkflowID()
 		return nil
 	case task.FieldFileName:
 		m.ClearFileName()
@@ -54090,6 +54160,9 @@ func (m *TaskMutation) ResetField(name string) error {
 		return nil
 	case task.FieldScheduledJobID:
 		m.ResetScheduledJobID()
+		return nil
+	case task.FieldWorkflowID:
+		m.ResetWorkflowID()
 		return nil
 	case task.FieldFileURL:
 		m.ResetFileURL()
