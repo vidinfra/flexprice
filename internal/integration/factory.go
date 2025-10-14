@@ -10,6 +10,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/invoice"
 	"github.com/flexprice/flexprice/internal/domain/payment"
 	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/integration/s3"
 	"github.com/flexprice/flexprice/internal/integration/stripe"
 	"github.com/flexprice/flexprice/internal/integration/stripe/webhook"
 	"github.com/flexprice/flexprice/internal/logger"
@@ -17,7 +18,7 @@ import (
 	"github.com/flexprice/flexprice/internal/types"
 )
 
-// Factory manages different payment integration providers
+// Factory manages different payment integration providers and storage providers
 type Factory struct {
 	config                       *config.Configuration
 	logger                       *logger.Logger
@@ -27,6 +28,9 @@ type Factory struct {
 	paymentRepo                  payment.Repository
 	entityIntegrationMappingRepo entityintegrationmapping.Repository
 	encryptionService            security.EncryptionService
+
+	// Storage clients (cached for reuse)
+	s3Client *s3.Client
 }
 
 // NewFactory creates a new integration factory
@@ -207,4 +211,32 @@ func (f *Factory) GetAvailableProviders(ctx context.Context) ([]IntegrationProvi
 	// }
 
 	return providers, nil
+}
+
+// GetStorageProvider returns an S3 storage client for the given connection
+// Currently only S3 is supported. In the future, Azure Blob Storage, Google Cloud Storage,
+// and other providers can be added by checking the connection's provider type.
+func (f *Factory) GetStorageProvider(ctx context.Context, connectionID string) (*s3.Client, error) {
+	if f.s3Client == nil {
+		f.s3Client = s3.NewClient(
+			f.connectionRepo,
+			f.encryptionService,
+			f.logger,
+		)
+	}
+
+	return f.s3Client, nil
+}
+
+// GetS3Client returns the S3 client directly (for backward compatibility)
+// Deprecated: Use GetStorageProvider instead for future-proof code
+func (f *Factory) GetS3Client(ctx context.Context) (*s3.Client, error) {
+	if f.s3Client == nil {
+		f.s3Client = s3.NewClient(
+			f.connectionRepo,
+			f.encryptionService,
+			f.logger,
+		)
+	}
+	return f.s3Client, nil
 }
