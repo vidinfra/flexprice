@@ -43,7 +43,7 @@ import (
 	"github.com/flexprice/flexprice/ent/plan"
 	"github.com/flexprice/flexprice/ent/price"
 	"github.com/flexprice/flexprice/ent/priceunit"
-	"github.com/flexprice/flexprice/ent/scheduledjob"
+	"github.com/flexprice/flexprice/ent/scheduledtask"
 	"github.com/flexprice/flexprice/ent/secret"
 	"github.com/flexprice/flexprice/ent/settings"
 	"github.com/flexprice/flexprice/ent/subscription"
@@ -124,8 +124,8 @@ type Client struct {
 	Price *PriceClient
 	// PriceUnit is the client for interacting with the PriceUnit builders.
 	PriceUnit *PriceUnitClient
-	// ScheduledJob is the client for interacting with the ScheduledJob builders.
-	ScheduledJob *ScheduledJobClient
+	// ScheduledTask is the client for interacting with the ScheduledTask builders.
+	ScheduledTask *ScheduledTaskClient
 	// Secret is the client for interacting with the Secret builders.
 	Secret *SecretClient
 	// Settings is the client for interacting with the Settings builders.
@@ -195,7 +195,7 @@ func (c *Client) init() {
 	c.Plan = NewPlanClient(c.config)
 	c.Price = NewPriceClient(c.config)
 	c.PriceUnit = NewPriceUnitClient(c.config)
-	c.ScheduledJob = NewScheduledJobClient(c.config)
+	c.ScheduledTask = NewScheduledTaskClient(c.config)
 	c.Secret = NewSecretClient(c.config)
 	c.Settings = NewSettingsClient(c.config)
 	c.Subscription = NewSubscriptionClient(c.config)
@@ -331,7 +331,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Plan:                      NewPlanClient(cfg),
 		Price:                     NewPriceClient(cfg),
 		PriceUnit:                 NewPriceUnitClient(cfg),
-		ScheduledJob:              NewScheduledJobClient(cfg),
+		ScheduledTask:             NewScheduledTaskClient(cfg),
 		Secret:                    NewSecretClient(cfg),
 		Settings:                  NewSettingsClient(cfg),
 		Subscription:              NewSubscriptionClient(cfg),
@@ -394,7 +394,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Plan:                      NewPlanClient(cfg),
 		Price:                     NewPriceClient(cfg),
 		PriceUnit:                 NewPriceUnitClient(cfg),
-		ScheduledJob:              NewScheduledJobClient(cfg),
+		ScheduledTask:             NewScheduledTaskClient(cfg),
 		Secret:                    NewSecretClient(cfg),
 		Settings:                  NewSettingsClient(cfg),
 		Subscription:              NewSubscriptionClient(cfg),
@@ -444,7 +444,7 @@ func (c *Client) Use(hooks ...Hook) {
 		c.CreditGrant, c.CreditGrantApplication, c.CreditNote, c.CreditNoteLineItem,
 		c.Customer, c.Entitlement, c.EntityIntegrationMapping, c.Environment,
 		c.Feature, c.Invoice, c.InvoiceLineItem, c.InvoiceSequence, c.Meter, c.Payment,
-		c.PaymentAttempt, c.Plan, c.Price, c.PriceUnit, c.ScheduledJob, c.Secret,
+		c.PaymentAttempt, c.Plan, c.Price, c.PriceUnit, c.ScheduledTask, c.Secret,
 		c.Settings, c.Subscription, c.SubscriptionLineItem, c.SubscriptionPause,
 		c.SubscriptionSchedule, c.SubscriptionSchedulePhase, c.Task, c.TaxApplied,
 		c.TaxAssociation, c.TaxRate, c.Tenant, c.User, c.Wallet, c.WalletTransaction,
@@ -462,7 +462,7 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.CreditGrant, c.CreditGrantApplication, c.CreditNote, c.CreditNoteLineItem,
 		c.Customer, c.Entitlement, c.EntityIntegrationMapping, c.Environment,
 		c.Feature, c.Invoice, c.InvoiceLineItem, c.InvoiceSequence, c.Meter, c.Payment,
-		c.PaymentAttempt, c.Plan, c.Price, c.PriceUnit, c.ScheduledJob, c.Secret,
+		c.PaymentAttempt, c.Plan, c.Price, c.PriceUnit, c.ScheduledTask, c.Secret,
 		c.Settings, c.Subscription, c.SubscriptionLineItem, c.SubscriptionPause,
 		c.SubscriptionSchedule, c.SubscriptionSchedulePhase, c.Task, c.TaxApplied,
 		c.TaxAssociation, c.TaxRate, c.Tenant, c.User, c.Wallet, c.WalletTransaction,
@@ -530,8 +530,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Price.mutate(ctx, m)
 	case *PriceUnitMutation:
 		return c.PriceUnit.mutate(ctx, m)
-	case *ScheduledJobMutation:
-		return c.ScheduledJob.mutate(ctx, m)
+	case *ScheduledTaskMutation:
+		return c.ScheduledTask.mutate(ctx, m)
 	case *SecretMutation:
 		return c.Secret.mutate(ctx, m)
 	case *SettingsMutation:
@@ -4771,107 +4771,107 @@ func (c *PriceUnitClient) mutate(ctx context.Context, m *PriceUnitMutation) (Val
 	}
 }
 
-// ScheduledJobClient is a client for the ScheduledJob schema.
-type ScheduledJobClient struct {
+// ScheduledTaskClient is a client for the ScheduledTask schema.
+type ScheduledTaskClient struct {
 	config
 }
 
-// NewScheduledJobClient returns a client for the ScheduledJob from the given config.
-func NewScheduledJobClient(c config) *ScheduledJobClient {
-	return &ScheduledJobClient{config: c}
+// NewScheduledTaskClient returns a client for the ScheduledTask from the given config.
+func NewScheduledTaskClient(c config) *ScheduledTaskClient {
+	return &ScheduledTaskClient{config: c}
 }
 
 // Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `scheduledjob.Hooks(f(g(h())))`.
-func (c *ScheduledJobClient) Use(hooks ...Hook) {
-	c.hooks.ScheduledJob = append(c.hooks.ScheduledJob, hooks...)
+// A call to `Use(f, g, h)` equals to `scheduledtask.Hooks(f(g(h())))`.
+func (c *ScheduledTaskClient) Use(hooks ...Hook) {
+	c.hooks.ScheduledTask = append(c.hooks.ScheduledTask, hooks...)
 }
 
 // Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `scheduledjob.Intercept(f(g(h())))`.
-func (c *ScheduledJobClient) Intercept(interceptors ...Interceptor) {
-	c.inters.ScheduledJob = append(c.inters.ScheduledJob, interceptors...)
+// A call to `Intercept(f, g, h)` equals to `scheduledtask.Intercept(f(g(h())))`.
+func (c *ScheduledTaskClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ScheduledTask = append(c.inters.ScheduledTask, interceptors...)
 }
 
-// Create returns a builder for creating a ScheduledJob entity.
-func (c *ScheduledJobClient) Create() *ScheduledJobCreate {
-	mutation := newScheduledJobMutation(c.config, OpCreate)
-	return &ScheduledJobCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Create returns a builder for creating a ScheduledTask entity.
+func (c *ScheduledTaskClient) Create() *ScheduledTaskCreate {
+	mutation := newScheduledTaskMutation(c.config, OpCreate)
+	return &ScheduledTaskCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// CreateBulk returns a builder for creating a bulk of ScheduledJob entities.
-func (c *ScheduledJobClient) CreateBulk(builders ...*ScheduledJobCreate) *ScheduledJobCreateBulk {
-	return &ScheduledJobCreateBulk{config: c.config, builders: builders}
+// CreateBulk returns a builder for creating a bulk of ScheduledTask entities.
+func (c *ScheduledTaskClient) CreateBulk(builders ...*ScheduledTaskCreate) *ScheduledTaskCreateBulk {
+	return &ScheduledTaskCreateBulk{config: c.config, builders: builders}
 }
 
 // MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
 // a builder and applies setFunc on it.
-func (c *ScheduledJobClient) MapCreateBulk(slice any, setFunc func(*ScheduledJobCreate, int)) *ScheduledJobCreateBulk {
+func (c *ScheduledTaskClient) MapCreateBulk(slice any, setFunc func(*ScheduledTaskCreate, int)) *ScheduledTaskCreateBulk {
 	rv := reflect.ValueOf(slice)
 	if rv.Kind() != reflect.Slice {
-		return &ScheduledJobCreateBulk{err: fmt.Errorf("calling to ScheduledJobClient.MapCreateBulk with wrong type %T, need slice", slice)}
+		return &ScheduledTaskCreateBulk{err: fmt.Errorf("calling to ScheduledTaskClient.MapCreateBulk with wrong type %T, need slice", slice)}
 	}
-	builders := make([]*ScheduledJobCreate, rv.Len())
+	builders := make([]*ScheduledTaskCreate, rv.Len())
 	for i := 0; i < rv.Len(); i++ {
 		builders[i] = c.Create()
 		setFunc(builders[i], i)
 	}
-	return &ScheduledJobCreateBulk{config: c.config, builders: builders}
+	return &ScheduledTaskCreateBulk{config: c.config, builders: builders}
 }
 
-// Update returns an update builder for ScheduledJob.
-func (c *ScheduledJobClient) Update() *ScheduledJobUpdate {
-	mutation := newScheduledJobMutation(c.config, OpUpdate)
-	return &ScheduledJobUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Update returns an update builder for ScheduledTask.
+func (c *ScheduledTaskClient) Update() *ScheduledTaskUpdate {
+	mutation := newScheduledTaskMutation(c.config, OpUpdate)
+	return &ScheduledTaskUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // UpdateOne returns an update builder for the given entity.
-func (c *ScheduledJobClient) UpdateOne(sj *ScheduledJob) *ScheduledJobUpdateOne {
-	mutation := newScheduledJobMutation(c.config, OpUpdateOne, withScheduledJob(sj))
-	return &ScheduledJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+func (c *ScheduledTaskClient) UpdateOne(st *ScheduledTask) *ScheduledTaskUpdateOne {
+	mutation := newScheduledTaskMutation(c.config, OpUpdateOne, withScheduledTask(st))
+	return &ScheduledTaskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // UpdateOneID returns an update builder for the given id.
-func (c *ScheduledJobClient) UpdateOneID(id string) *ScheduledJobUpdateOne {
-	mutation := newScheduledJobMutation(c.config, OpUpdateOne, withScheduledJobID(id))
-	return &ScheduledJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+func (c *ScheduledTaskClient) UpdateOneID(id string) *ScheduledTaskUpdateOne {
+	mutation := newScheduledTaskMutation(c.config, OpUpdateOne, withScheduledTaskID(id))
+	return &ScheduledTaskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// Delete returns a delete builder for ScheduledJob.
-func (c *ScheduledJobClient) Delete() *ScheduledJobDelete {
-	mutation := newScheduledJobMutation(c.config, OpDelete)
-	return &ScheduledJobDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Delete returns a delete builder for ScheduledTask.
+func (c *ScheduledTaskClient) Delete() *ScheduledTaskDelete {
+	mutation := newScheduledTaskMutation(c.config, OpDelete)
+	return &ScheduledTaskDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // DeleteOne returns a builder for deleting the given entity.
-func (c *ScheduledJobClient) DeleteOne(sj *ScheduledJob) *ScheduledJobDeleteOne {
-	return c.DeleteOneID(sj.ID)
+func (c *ScheduledTaskClient) DeleteOne(st *ScheduledTask) *ScheduledTaskDeleteOne {
+	return c.DeleteOneID(st.ID)
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *ScheduledJobClient) DeleteOneID(id string) *ScheduledJobDeleteOne {
-	builder := c.Delete().Where(scheduledjob.ID(id))
+func (c *ScheduledTaskClient) DeleteOneID(id string) *ScheduledTaskDeleteOne {
+	builder := c.Delete().Where(scheduledtask.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
-	return &ScheduledJobDeleteOne{builder}
+	return &ScheduledTaskDeleteOne{builder}
 }
 
-// Query returns a query builder for ScheduledJob.
-func (c *ScheduledJobClient) Query() *ScheduledJobQuery {
-	return &ScheduledJobQuery{
+// Query returns a query builder for ScheduledTask.
+func (c *ScheduledTaskClient) Query() *ScheduledTaskQuery {
+	return &ScheduledTaskQuery{
 		config: c.config,
-		ctx:    &QueryContext{Type: TypeScheduledJob},
+		ctx:    &QueryContext{Type: TypeScheduledTask},
 		inters: c.Interceptors(),
 	}
 }
 
-// Get returns a ScheduledJob entity by its id.
-func (c *ScheduledJobClient) Get(ctx context.Context, id string) (*ScheduledJob, error) {
-	return c.Query().Where(scheduledjob.ID(id)).Only(ctx)
+// Get returns a ScheduledTask entity by its id.
+func (c *ScheduledTaskClient) Get(ctx context.Context, id string) (*ScheduledTask, error) {
+	return c.Query().Where(scheduledtask.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.
-func (c *ScheduledJobClient) GetX(ctx context.Context, id string) *ScheduledJob {
+func (c *ScheduledTaskClient) GetX(ctx context.Context, id string) *ScheduledTask {
 	obj, err := c.Get(ctx, id)
 	if err != nil {
 		panic(err)
@@ -4880,27 +4880,27 @@ func (c *ScheduledJobClient) GetX(ctx context.Context, id string) *ScheduledJob 
 }
 
 // Hooks returns the client hooks.
-func (c *ScheduledJobClient) Hooks() []Hook {
-	return c.hooks.ScheduledJob
+func (c *ScheduledTaskClient) Hooks() []Hook {
+	return c.hooks.ScheduledTask
 }
 
 // Interceptors returns the client interceptors.
-func (c *ScheduledJobClient) Interceptors() []Interceptor {
-	return c.inters.ScheduledJob
+func (c *ScheduledTaskClient) Interceptors() []Interceptor {
+	return c.inters.ScheduledTask
 }
 
-func (c *ScheduledJobClient) mutate(ctx context.Context, m *ScheduledJobMutation) (Value, error) {
+func (c *ScheduledTaskClient) mutate(ctx context.Context, m *ScheduledTaskMutation) (Value, error) {
 	switch m.Op() {
 	case OpCreate:
-		return (&ScheduledJobCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&ScheduledTaskCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpUpdate:
-		return (&ScheduledJobUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&ScheduledTaskUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpUpdateOne:
-		return (&ScheduledJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&ScheduledTaskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpDelete, OpDeleteOne:
-		return (&ScheduledJobDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+		return (&ScheduledTaskDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
-		return nil, fmt.Errorf("ent: unknown ScheduledJob mutation op: %q", m.Op())
+		return nil, fmt.Errorf("ent: unknown ScheduledTask mutation op: %q", m.Op())
 	}
 }
 
@@ -7099,7 +7099,7 @@ type (
 		CreditGrantApplication, CreditNote, CreditNoteLineItem, Customer, Entitlement,
 		EntityIntegrationMapping, Environment, Feature, Invoice, InvoiceLineItem,
 		InvoiceSequence, Meter, Payment, PaymentAttempt, Plan, Price, PriceUnit,
-		ScheduledJob, Secret, Settings, Subscription, SubscriptionLineItem,
+		ScheduledTask, Secret, Settings, Subscription, SubscriptionLineItem,
 		SubscriptionPause, SubscriptionSchedule, SubscriptionSchedulePhase, Task,
 		TaxApplied, TaxAssociation, TaxRate, Tenant, User, Wallet,
 		WalletTransaction []ent.Hook
@@ -7110,7 +7110,7 @@ type (
 		CreditGrantApplication, CreditNote, CreditNoteLineItem, Customer, Entitlement,
 		EntityIntegrationMapping, Environment, Feature, Invoice, InvoiceLineItem,
 		InvoiceSequence, Meter, Payment, PaymentAttempt, Plan, Price, PriceUnit,
-		ScheduledJob, Secret, Settings, Subscription, SubscriptionLineItem,
+		ScheduledTask, Secret, Settings, Subscription, SubscriptionLineItem,
 		SubscriptionPause, SubscriptionSchedule, SubscriptionSchedulePhase, Task,
 		TaxApplied, TaxAssociation, TaxRate, Tenant, User, Wallet,
 		WalletTransaction []ent.Interceptor

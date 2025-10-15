@@ -109,9 +109,9 @@ func EntityType(v string) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldEntityType, v))
 }
 
-// ScheduledJobID applies equality check predicate on the "scheduled_job_id" field. It's identical to ScheduledJobIDEQ.
-func ScheduledJobID(v string) predicate.Task {
-	return predicate.Task(sql.FieldEQ(FieldScheduledJobID, v))
+// ScheduledTaskID applies equality check predicate on the "scheduled_task_id" field. It's identical to ScheduledTaskIDEQ.
+func ScheduledTaskID(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldScheduledTaskID, v))
 }
 
 // WorkflowID applies equality check predicate on the "workflow_id" field. It's identical to WorkflowIDEQ.
@@ -744,79 +744,79 @@ func EntityTypeContainsFold(v string) predicate.Task {
 	return predicate.Task(sql.FieldContainsFold(FieldEntityType, v))
 }
 
-// ScheduledJobIDEQ applies the EQ predicate on the "scheduled_job_id" field.
-func ScheduledJobIDEQ(v string) predicate.Task {
-	return predicate.Task(sql.FieldEQ(FieldScheduledJobID, v))
+// ScheduledTaskIDEQ applies the EQ predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldScheduledTaskID, v))
 }
 
-// ScheduledJobIDNEQ applies the NEQ predicate on the "scheduled_job_id" field.
-func ScheduledJobIDNEQ(v string) predicate.Task {
-	return predicate.Task(sql.FieldNEQ(FieldScheduledJobID, v))
+// ScheduledTaskIDNEQ applies the NEQ predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDNEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldScheduledTaskID, v))
 }
 
-// ScheduledJobIDIn applies the In predicate on the "scheduled_job_id" field.
-func ScheduledJobIDIn(vs ...string) predicate.Task {
-	return predicate.Task(sql.FieldIn(FieldScheduledJobID, vs...))
+// ScheduledTaskIDIn applies the In predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldScheduledTaskID, vs...))
 }
 
-// ScheduledJobIDNotIn applies the NotIn predicate on the "scheduled_job_id" field.
-func ScheduledJobIDNotIn(vs ...string) predicate.Task {
-	return predicate.Task(sql.FieldNotIn(FieldScheduledJobID, vs...))
+// ScheduledTaskIDNotIn applies the NotIn predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDNotIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldScheduledTaskID, vs...))
 }
 
-// ScheduledJobIDGT applies the GT predicate on the "scheduled_job_id" field.
-func ScheduledJobIDGT(v string) predicate.Task {
-	return predicate.Task(sql.FieldGT(FieldScheduledJobID, v))
+// ScheduledTaskIDGT applies the GT predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDGT(v string) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldScheduledTaskID, v))
 }
 
-// ScheduledJobIDGTE applies the GTE predicate on the "scheduled_job_id" field.
-func ScheduledJobIDGTE(v string) predicate.Task {
-	return predicate.Task(sql.FieldGTE(FieldScheduledJobID, v))
+// ScheduledTaskIDGTE applies the GTE predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDGTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldScheduledTaskID, v))
 }
 
-// ScheduledJobIDLT applies the LT predicate on the "scheduled_job_id" field.
-func ScheduledJobIDLT(v string) predicate.Task {
-	return predicate.Task(sql.FieldLT(FieldScheduledJobID, v))
+// ScheduledTaskIDLT applies the LT predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDLT(v string) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldScheduledTaskID, v))
 }
 
-// ScheduledJobIDLTE applies the LTE predicate on the "scheduled_job_id" field.
-func ScheduledJobIDLTE(v string) predicate.Task {
-	return predicate.Task(sql.FieldLTE(FieldScheduledJobID, v))
+// ScheduledTaskIDLTE applies the LTE predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDLTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldScheduledTaskID, v))
 }
 
-// ScheduledJobIDContains applies the Contains predicate on the "scheduled_job_id" field.
-func ScheduledJobIDContains(v string) predicate.Task {
-	return predicate.Task(sql.FieldContains(FieldScheduledJobID, v))
+// ScheduledTaskIDContains applies the Contains predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDContains(v string) predicate.Task {
+	return predicate.Task(sql.FieldContains(FieldScheduledTaskID, v))
 }
 
-// ScheduledJobIDHasPrefix applies the HasPrefix predicate on the "scheduled_job_id" field.
-func ScheduledJobIDHasPrefix(v string) predicate.Task {
-	return predicate.Task(sql.FieldHasPrefix(FieldScheduledJobID, v))
+// ScheduledTaskIDHasPrefix applies the HasPrefix predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDHasPrefix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasPrefix(FieldScheduledTaskID, v))
 }
 
-// ScheduledJobIDHasSuffix applies the HasSuffix predicate on the "scheduled_job_id" field.
-func ScheduledJobIDHasSuffix(v string) predicate.Task {
-	return predicate.Task(sql.FieldHasSuffix(FieldScheduledJobID, v))
+// ScheduledTaskIDHasSuffix applies the HasSuffix predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDHasSuffix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasSuffix(FieldScheduledTaskID, v))
 }
 
-// ScheduledJobIDIsNil applies the IsNil predicate on the "scheduled_job_id" field.
-func ScheduledJobIDIsNil() predicate.Task {
-	return predicate.Task(sql.FieldIsNull(FieldScheduledJobID))
+// ScheduledTaskIDIsNil applies the IsNil predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDIsNil() predicate.Task {
+	return predicate.Task(sql.FieldIsNull(FieldScheduledTaskID))
 }
 
-// ScheduledJobIDNotNil applies the NotNil predicate on the "scheduled_job_id" field.
-func ScheduledJobIDNotNil() predicate.Task {
-	return predicate.Task(sql.FieldNotNull(FieldScheduledJobID))
+// ScheduledTaskIDNotNil applies the NotNil predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDNotNil() predicate.Task {
+	return predicate.Task(sql.FieldNotNull(FieldScheduledTaskID))
 }
 
-// ScheduledJobIDEqualFold applies the EqualFold predicate on the "scheduled_job_id" field.
-func ScheduledJobIDEqualFold(v string) predicate.Task {
-	return predicate.Task(sql.FieldEqualFold(FieldScheduledJobID, v))
+// ScheduledTaskIDEqualFold applies the EqualFold predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDEqualFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldEqualFold(FieldScheduledTaskID, v))
 }
 
-// ScheduledJobIDContainsFold applies the ContainsFold predicate on the "scheduled_job_id" field.
-func ScheduledJobIDContainsFold(v string) predicate.Task {
-	return predicate.Task(sql.FieldContainsFold(FieldScheduledJobID, v))
+// ScheduledTaskIDContainsFold applies the ContainsFold predicate on the "scheduled_task_id" field.
+func ScheduledTaskIDContainsFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldContainsFold(FieldScheduledTaskID, v))
 }
 
 // WorkflowIDEQ applies the EQ predicate on the "workflow_id" field.

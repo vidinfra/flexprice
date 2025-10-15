@@ -1371,8 +1371,8 @@ var (
 			},
 		},
 	}
-	// ScheduledJobsColumns holds the columns for the "scheduled_jobs" table.
-	ScheduledJobsColumns = []*schema.Column{
+	// ScheduledTasksColumns holds the columns for the "scheduled_tasks" table.
+	ScheduledTasksColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString, Unique: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "tenant_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "status", Type: field.TypeString, Default: "published", SchemaType: map[string]string{"postgres": "varchar(20)"}},
@@ -1392,36 +1392,36 @@ var (
 		{Name: "last_run_error", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "temporal_schedule_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(100)"}},
 	}
-	// ScheduledJobsTable holds the schema information for the "scheduled_jobs" table.
-	ScheduledJobsTable = &schema.Table{
-		Name:       "scheduled_jobs",
-		Columns:    ScheduledJobsColumns,
-		PrimaryKey: []*schema.Column{ScheduledJobsColumns[0]},
+	// ScheduledTasksTable holds the schema information for the "scheduled_tasks" table.
+	ScheduledTasksTable = &schema.Table{
+		Name:       "scheduled_tasks",
+		Columns:    ScheduledTasksColumns,
+		PrimaryKey: []*schema.Column{ScheduledTasksColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "scheduledjob_tenant_id_environment_id_enabled",
+				Name:    "scheduledtask_tenant_id_environment_id_enabled",
 				Unique:  false,
-				Columns: []*schema.Column{ScheduledJobsColumns[1], ScheduledJobsColumns[7], ScheduledJobsColumns[11]},
+				Columns: []*schema.Column{ScheduledTasksColumns[1], ScheduledTasksColumns[7], ScheduledTasksColumns[11]},
 			},
 			{
-				Name:    "scheduledjob_connection_id_enabled",
+				Name:    "scheduledtask_connection_id_enabled",
 				Unique:  false,
-				Columns: []*schema.Column{ScheduledJobsColumns[8], ScheduledJobsColumns[11]},
+				Columns: []*schema.Column{ScheduledTasksColumns[8], ScheduledTasksColumns[11]},
 			},
 			{
-				Name:    "scheduledjob_entity_type_interval_enabled",
+				Name:    "scheduledtask_entity_type_interval_enabled",
 				Unique:  false,
-				Columns: []*schema.Column{ScheduledJobsColumns[9], ScheduledJobsColumns[10], ScheduledJobsColumns[11]},
+				Columns: []*schema.Column{ScheduledTasksColumns[9], ScheduledTasksColumns[10], ScheduledTasksColumns[11]},
 			},
 			{
-				Name:    "scheduledjob_enabled_next_run_at",
+				Name:    "scheduledtask_enabled_next_run_at",
 				Unique:  false,
-				Columns: []*schema.Column{ScheduledJobsColumns[11], ScheduledJobsColumns[14]},
+				Columns: []*schema.Column{ScheduledTasksColumns[11], ScheduledTasksColumns[14]},
 			},
 			{
-				Name:    "scheduledjob_connection_id_entity_type",
+				Name:    "scheduledtask_connection_id_entity_type",
 				Unique:  true,
-				Columns: []*schema.Column{ScheduledJobsColumns[8], ScheduledJobsColumns[9]},
+				Columns: []*schema.Column{ScheduledTasksColumns[8], ScheduledTasksColumns[9]},
 			},
 		},
 	}
@@ -1825,7 +1825,7 @@ var (
 		{Name: "environment_id", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "task_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "entity_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
-		{Name: "scheduled_job_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "scheduled_task_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "workflow_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
 		{Name: "file_url", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "varchar(255)"}},
 		{Name: "file_name", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
@@ -2207,7 +2207,7 @@ var (
 		PlansTable,
 		PricesTable,
 		PriceUnitTable,
-		ScheduledJobsTable,
+		ScheduledTasksTable,
 		SecretsTable,
 		SettingsTable,
 		SubscriptionsTable,

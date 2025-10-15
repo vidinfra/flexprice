@@ -10,11 +10,11 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/flexprice/flexprice/ent/scheduledjob"
+	"github.com/flexprice/flexprice/ent/scheduledtask"
 )
 
-// ScheduledJob is the model entity for the ScheduledJob schema.
-type ScheduledJob struct {
+// ScheduledTask is the model entity for the ScheduledTask schema.
+type ScheduledTask struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID string `json:"id,omitempty"`
@@ -56,17 +56,17 @@ type ScheduledJob struct {
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
-func (*ScheduledJob) scanValues(columns []string) ([]any, error) {
+func (*ScheduledTask) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case scheduledjob.FieldJobConfig:
+		case scheduledtask.FieldJobConfig:
 			values[i] = new([]byte)
-		case scheduledjob.FieldEnabled:
+		case scheduledtask.FieldEnabled:
 			values[i] = new(sql.NullBool)
-		case scheduledjob.FieldID, scheduledjob.FieldTenantID, scheduledjob.FieldStatus, scheduledjob.FieldCreatedBy, scheduledjob.FieldUpdatedBy, scheduledjob.FieldEnvironmentID, scheduledjob.FieldConnectionID, scheduledjob.FieldEntityType, scheduledjob.FieldInterval, scheduledjob.FieldLastRunStatus, scheduledjob.FieldLastRunError, scheduledjob.FieldTemporalScheduleID:
+		case scheduledtask.FieldID, scheduledtask.FieldTenantID, scheduledtask.FieldStatus, scheduledtask.FieldCreatedBy, scheduledtask.FieldUpdatedBy, scheduledtask.FieldEnvironmentID, scheduledtask.FieldConnectionID, scheduledtask.FieldEntityType, scheduledtask.FieldInterval, scheduledtask.FieldLastRunStatus, scheduledtask.FieldLastRunError, scheduledtask.FieldTemporalScheduleID:
 			values[i] = new(sql.NullString)
-		case scheduledjob.FieldCreatedAt, scheduledjob.FieldUpdatedAt, scheduledjob.FieldLastRunAt, scheduledjob.FieldNextRunAt:
+		case scheduledtask.FieldCreatedAt, scheduledtask.FieldUpdatedAt, scheduledtask.FieldLastRunAt, scheduledtask.FieldNextRunAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -76,218 +76,218 @@ func (*ScheduledJob) scanValues(columns []string) ([]any, error) {
 }
 
 // assignValues assigns the values that were returned from sql.Rows (after scanning)
-// to the ScheduledJob fields.
-func (sj *ScheduledJob) assignValues(columns []string, values []any) error {
+// to the ScheduledTask fields.
+func (st *ScheduledTask) assignValues(columns []string, values []any) error {
 	if m, n := len(values), len(columns); m < n {
 		return fmt.Errorf("mismatch number of scan values: %d != %d", m, n)
 	}
 	for i := range columns {
 		switch columns[i] {
-		case scheduledjob.FieldID:
+		case scheduledtask.FieldID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field id", values[i])
 			} else if value.Valid {
-				sj.ID = value.String
+				st.ID = value.String
 			}
-		case scheduledjob.FieldTenantID:
+		case scheduledtask.FieldTenantID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field tenant_id", values[i])
 			} else if value.Valid {
-				sj.TenantID = value.String
+				st.TenantID = value.String
 			}
-		case scheduledjob.FieldStatus:
+		case scheduledtask.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
-				sj.Status = value.String
+				st.Status = value.String
 			}
-		case scheduledjob.FieldCreatedAt:
+		case scheduledtask.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
 			} else if value.Valid {
-				sj.CreatedAt = value.Time
+				st.CreatedAt = value.Time
 			}
-		case scheduledjob.FieldUpdatedAt:
+		case scheduledtask.FieldUpdatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
-				sj.UpdatedAt = value.Time
+				st.UpdatedAt = value.Time
 			}
-		case scheduledjob.FieldCreatedBy:
+		case scheduledtask.FieldCreatedBy:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field created_by", values[i])
 			} else if value.Valid {
-				sj.CreatedBy = value.String
+				st.CreatedBy = value.String
 			}
-		case scheduledjob.FieldUpdatedBy:
+		case scheduledtask.FieldUpdatedBy:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field updated_by", values[i])
 			} else if value.Valid {
-				sj.UpdatedBy = value.String
+				st.UpdatedBy = value.String
 			}
-		case scheduledjob.FieldEnvironmentID:
+		case scheduledtask.FieldEnvironmentID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field environment_id", values[i])
 			} else if value.Valid {
-				sj.EnvironmentID = value.String
+				st.EnvironmentID = value.String
 			}
-		case scheduledjob.FieldConnectionID:
+		case scheduledtask.FieldConnectionID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field connection_id", values[i])
 			} else if value.Valid {
-				sj.ConnectionID = value.String
+				st.ConnectionID = value.String
 			}
-		case scheduledjob.FieldEntityType:
+		case scheduledtask.FieldEntityType:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field entity_type", values[i])
 			} else if value.Valid {
-				sj.EntityType = value.String
+				st.EntityType = value.String
 			}
-		case scheduledjob.FieldInterval:
+		case scheduledtask.FieldInterval:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field interval", values[i])
 			} else if value.Valid {
-				sj.Interval = value.String
+				st.Interval = value.String
 			}
-		case scheduledjob.FieldEnabled:
+		case scheduledtask.FieldEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
 				return fmt.Errorf("unexpected type %T for field enabled", values[i])
 			} else if value.Valid {
-				sj.Enabled = value.Bool
+				st.Enabled = value.Bool
 			}
-		case scheduledjob.FieldJobConfig:
+		case scheduledtask.FieldJobConfig:
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field job_config", values[i])
 			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &sj.JobConfig); err != nil {
+				if err := json.Unmarshal(*value, &st.JobConfig); err != nil {
 					return fmt.Errorf("unmarshal field job_config: %w", err)
 				}
 			}
-		case scheduledjob.FieldLastRunAt:
+		case scheduledtask.FieldLastRunAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field last_run_at", values[i])
 			} else if value.Valid {
-				sj.LastRunAt = new(time.Time)
-				*sj.LastRunAt = value.Time
+				st.LastRunAt = new(time.Time)
+				*st.LastRunAt = value.Time
 			}
-		case scheduledjob.FieldNextRunAt:
+		case scheduledtask.FieldNextRunAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field next_run_at", values[i])
 			} else if value.Valid {
-				sj.NextRunAt = new(time.Time)
-				*sj.NextRunAt = value.Time
+				st.NextRunAt = new(time.Time)
+				*st.NextRunAt = value.Time
 			}
-		case scheduledjob.FieldLastRunStatus:
+		case scheduledtask.FieldLastRunStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field last_run_status", values[i])
 			} else if value.Valid {
-				sj.LastRunStatus = value.String
+				st.LastRunStatus = value.String
 			}
-		case scheduledjob.FieldLastRunError:
+		case scheduledtask.FieldLastRunError:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field last_run_error", values[i])
 			} else if value.Valid {
-				sj.LastRunError = value.String
+				st.LastRunError = value.String
 			}
-		case scheduledjob.FieldTemporalScheduleID:
+		case scheduledtask.FieldTemporalScheduleID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field temporal_schedule_id", values[i])
 			} else if value.Valid {
-				sj.TemporalScheduleID = value.String
+				st.TemporalScheduleID = value.String
 			}
 		default:
-			sj.selectValues.Set(columns[i], values[i])
+			st.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
 }
 
-// Value returns the ent.Value that was dynamically selected and assigned to the ScheduledJob.
+// Value returns the ent.Value that was dynamically selected and assigned to the ScheduledTask.
 // This includes values selected through modifiers, order, etc.
-func (sj *ScheduledJob) Value(name string) (ent.Value, error) {
-	return sj.selectValues.Get(name)
+func (st *ScheduledTask) Value(name string) (ent.Value, error) {
+	return st.selectValues.Get(name)
 }
 
-// Update returns a builder for updating this ScheduledJob.
-// Note that you need to call ScheduledJob.Unwrap() before calling this method if this ScheduledJob
+// Update returns a builder for updating this ScheduledTask.
+// Note that you need to call ScheduledTask.Unwrap() before calling this method if this ScheduledTask
 // was returned from a transaction, and the transaction was committed or rolled back.
-func (sj *ScheduledJob) Update() *ScheduledJobUpdateOne {
-	return NewScheduledJobClient(sj.config).UpdateOne(sj)
+func (st *ScheduledTask) Update() *ScheduledTaskUpdateOne {
+	return NewScheduledTaskClient(st.config).UpdateOne(st)
 }
 
-// Unwrap unwraps the ScheduledJob entity that was returned from a transaction after it was closed,
+// Unwrap unwraps the ScheduledTask entity that was returned from a transaction after it was closed,
 // so that all future queries will be executed through the driver which created the transaction.
-func (sj *ScheduledJob) Unwrap() *ScheduledJob {
-	_tx, ok := sj.config.driver.(*txDriver)
+func (st *ScheduledTask) Unwrap() *ScheduledTask {
+	_tx, ok := st.config.driver.(*txDriver)
 	if !ok {
-		panic("ent: ScheduledJob is not a transactional entity")
+		panic("ent: ScheduledTask is not a transactional entity")
 	}
-	sj.config.driver = _tx.drv
-	return sj
+	st.config.driver = _tx.drv
+	return st
 }
 
 // String implements the fmt.Stringer.
-func (sj *ScheduledJob) String() string {
+func (st *ScheduledTask) String() string {
 	var builder strings.Builder
-	builder.WriteString("ScheduledJob(")
-	builder.WriteString(fmt.Sprintf("id=%v, ", sj.ID))
+	builder.WriteString("ScheduledTask(")
+	builder.WriteString(fmt.Sprintf("id=%v, ", st.ID))
 	builder.WriteString("tenant_id=")
-	builder.WriteString(sj.TenantID)
+	builder.WriteString(st.TenantID)
 	builder.WriteString(", ")
 	builder.WriteString("status=")
-	builder.WriteString(sj.Status)
+	builder.WriteString(st.Status)
 	builder.WriteString(", ")
 	builder.WriteString("created_at=")
-	builder.WriteString(sj.CreatedAt.Format(time.ANSIC))
+	builder.WriteString(st.CreatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
 	builder.WriteString("updated_at=")
-	builder.WriteString(sj.UpdatedAt.Format(time.ANSIC))
+	builder.WriteString(st.UpdatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
 	builder.WriteString("created_by=")
-	builder.WriteString(sj.CreatedBy)
+	builder.WriteString(st.CreatedBy)
 	builder.WriteString(", ")
 	builder.WriteString("updated_by=")
-	builder.WriteString(sj.UpdatedBy)
+	builder.WriteString(st.UpdatedBy)
 	builder.WriteString(", ")
 	builder.WriteString("environment_id=")
-	builder.WriteString(sj.EnvironmentID)
+	builder.WriteString(st.EnvironmentID)
 	builder.WriteString(", ")
 	builder.WriteString("connection_id=")
-	builder.WriteString(sj.ConnectionID)
+	builder.WriteString(st.ConnectionID)
 	builder.WriteString(", ")
 	builder.WriteString("entity_type=")
-	builder.WriteString(sj.EntityType)
+	builder.WriteString(st.EntityType)
 	builder.WriteString(", ")
 	builder.WriteString("interval=")
-	builder.WriteString(sj.Interval)
+	builder.WriteString(st.Interval)
 	builder.WriteString(", ")
 	builder.WriteString("enabled=")
-	builder.WriteString(fmt.Sprintf("%v", sj.Enabled))
+	builder.WriteString(fmt.Sprintf("%v", st.Enabled))
 	builder.WriteString(", ")
 	builder.WriteString("job_config=")
-	builder.WriteString(fmt.Sprintf("%v", sj.JobConfig))
+	builder.WriteString(fmt.Sprintf("%v", st.JobConfig))
 	builder.WriteString(", ")
-	if v := sj.LastRunAt; v != nil {
+	if v := st.LastRunAt; v != nil {
 		builder.WriteString("last_run_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
-	if v := sj.NextRunAt; v != nil {
+	if v := st.NextRunAt; v != nil {
 		builder.WriteString("next_run_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("last_run_status=")
-	builder.WriteString(sj.LastRunStatus)
+	builder.WriteString(st.LastRunStatus)
 	builder.WriteString(", ")
 	builder.WriteString("last_run_error=")
-	builder.WriteString(sj.LastRunError)
+	builder.WriteString(st.LastRunError)
 	builder.WriteString(", ")
 	builder.WriteString("temporal_schedule_id=")
-	builder.WriteString(sj.TemporalScheduleID)
+	builder.WriteString(st.TemporalScheduleID)
 	builder.WriteByte(')')
 	return builder.String()
 }
 
-// ScheduledJobs is a parsable slice of ScheduledJob.
-type ScheduledJobs []*ScheduledJob
+// ScheduledTasks is a parsable slice of ScheduledTask.
+type ScheduledTasks []*ScheduledTask

@@ -12,9 +12,9 @@ import (
 
 // ScheduledExportWorkflowInput represents input for the scheduled workflow
 type ScheduledExportWorkflowInput struct {
-	ScheduledJobID string
-	TenantID       string
-	EnvID          string
+	ScheduledTaskID string
+	TenantID        string
+	EnvID           string
 }
 
 // ScheduledExportWorkflow is the lightweight cron wrapper
@@ -22,7 +22,7 @@ type ScheduledExportWorkflowInput struct {
 func ScheduledExportWorkflow(ctx workflow.Context, input ScheduledExportWorkflowInput) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting scheduled export workflow",
-		"scheduled_job_id", input.ScheduledJobID,
+		"scheduled_task_id", input.ScheduledTaskID,
 		"tenant_id", input.TenantID,
 		"env_id", input.EnvID)
 
@@ -35,30 +35,30 @@ func ScheduledExportWorkflow(ctx workflow.Context, input ScheduledExportWorkflow
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	// Activity to fetch scheduled job and calculate time range
-	var scheduledJobActivity export.ScheduledJobActivity
+	// Activity to fetch scheduled task and calculate time range
+	var scheduledTaskActivity export.ScheduledTaskActivity
 
-	var jobDetails export.ScheduledJobDetails
-	err := workflow.ExecuteActivity(ctx, scheduledJobActivity.GetScheduledJobDetails, export.GetScheduledJobDetailsInput{
-		ScheduledJobID: input.ScheduledJobID,
-		TenantID:       input.TenantID,
-		EnvID:          input.EnvID,
-	}).Get(ctx, &jobDetails)
+	var taskDetails export.ScheduledTaskDetails
+	err := workflow.ExecuteActivity(ctx, scheduledTaskActivity.GetScheduledTaskDetails, export.GetScheduledTaskDetailsInput{
+		ScheduledTaskID: input.ScheduledTaskID,
+		TenantID:        input.TenantID,
+		EnvID:           input.EnvID,
+	}).Get(ctx, &taskDetails)
 	if err != nil {
-		logger.Error("Failed to get scheduled job details", "error", err)
-		return fmt.Errorf("failed to get scheduled job: %w", err)
+		logger.Error("Failed to get scheduled task details", "error", err)
+		return fmt.Errorf("failed to get scheduled task: %w", err)
 	}
 
-	// Check if job is enabled
-	if !jobDetails.Enabled {
-		logger.Info("Scheduled job is disabled, skipping execution")
+	// Check if task is enabled
+	if !taskDetails.Enabled {
+		logger.Info("Scheduled task is disabled, skipping execution")
 		return nil
 	}
 
-	logger.Info("Scheduled job details retrieved",
-		"entity_type", jobDetails.EntityType,
-		"start_time", jobDetails.StartTime,
-		"end_time", jobDetails.EndTime)
+	logger.Info("Scheduled task details retrieved",
+		"entity_type", taskDetails.EntityType,
+		"start_time", taskDetails.StartTime,
+		"end_time", taskDetails.EndTime)
 
 	// Generate task ID and use it as workflow ID
 	// Format: {task_id}-export
@@ -77,40 +77,55 @@ func ScheduledExportWorkflow(ctx workflow.Context, input ScheduledExportWorkflow
 	childCtx := workflow.WithChildOptions(ctx, childWorkflowOptions)
 
 	exportInput := ExecuteExportWorkflowInput{
-		TaskID:         taskID,
-		ScheduledJobID: input.ScheduledJobID,
-		EntityType:     types.ExportEntityType(jobDetails.EntityType),
-		ConnectionID:   jobDetails.ConnectionID,
-		TenantID:       jobDetails.TenantID,
-		EnvID:          jobDetails.EnvID,
-		StartTime:      jobDetails.StartTime,
-		EndTime:        jobDetails.EndTime,
-		JobConfig:      jobDetails.JobConfig,
+		TaskID:          taskID,
+		ScheduledTaskID: input.ScheduledTaskID,
+		EntityType:      types.ExportEntityType(taskDetails.EntityType),
+		ConnectionID:    taskDetails.ConnectionID,
+		TenantID:        taskDetails.TenantID,
+		EnvID:           taskDetails.EnvID,
+		StartTime:       taskDetails.StartTime,
+		EndTime:         taskDetails.EndTime,
+		JobConfig:       taskDetails.JobConfig,
 	}
 
 	var exportOutput ExecuteExportWorkflowOutput
 	err = workflow.ExecuteChildWorkflow(childCtx, ExecuteExportWorkflow, exportInput).Get(ctx, &exportOutput)
+
+	// Always update scheduled task's last run fields regardless of success/failure
+	now := time.Now()
+	var lastRunStatus string
+	var lastRunError string
+
 	if err != nil {
 		logger.Error("Export workflow failed", "error", err)
-		return fmt.Errorf("export workflow failed: %w", err)
+		lastRunStatus = "failed"
+		lastRunError = err.Error()
+	} else {
+		logger.Info("Scheduled export completed successfully",
+			"task_id", exportOutput.TaskID,
+			"record_count", exportOutput.RecordCount)
+		lastRunStatus = "success"
+		lastRunError = ""
 	}
 
-	logger.Info("Scheduled export completed successfully",
-		"task_id", exportOutput.TaskID,
-		"record_count", exportOutput.RecordCount)
-
-	// Update scheduled job's last_run_at
-	updateInput := export.UpdateScheduledJobInput{
-		ScheduledJobID: input.ScheduledJobID,
-		TenantID:       input.TenantID,
-		EnvID:          input.EnvID,
-		LastRunAt:      time.Now(),
-		LastRunStatus:  "success",
+	// Update scheduled task's last run fields
+	updateInput := export.UpdateScheduledTaskInput{
+		ScheduledTaskID: input.ScheduledTaskID,
+		TenantID:        input.TenantID,
+		EnvID:           input.EnvID,
+		LastRunAt:       now,
+		LastRunStatus:   lastRunStatus,
+		LastRunError:    lastRunError,
 	}
-	err = workflow.ExecuteActivity(ctx, scheduledJobActivity.UpdateScheduledJobLastRun, updateInput).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, scheduledTaskActivity.UpdateScheduledTaskLastRun, updateInput).Get(ctx, nil)
 	if err != nil {
-		logger.Error("Failed to update scheduled job last run", "error", err)
+		logger.Error("Failed to update scheduled task last run", "error", err)
 		// Continue anyway
+	}
+
+	// Return the original error if the export failed
+	if lastRunStatus == "failed" {
+		return fmt.Errorf("export workflow failed: %w", err)
 	}
 
 	return nil

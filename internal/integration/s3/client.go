@@ -81,14 +81,32 @@ func (c *Client) GetS3Client(ctx context.Context, jobConfig *types.S3JobConfig, 
 			Mark(ierr.ErrValidation)
 	}
 
-	// Create AWS config with explicit credentials (including session token for temporary credentials)
-	awsCfg, err := awsConfig.LoadDefaultConfig(ctx,
-		awsConfig.WithRegion(s3Config.Region),
-		awsConfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+	// Create AWS config with explicit credentials
+	// Supports both:
+	// 1. Temporary credentials (ASIA keys) with session token
+	// 2. Permanent credentials (AKIA keys) with access key + secret key only
+	var credProvider aws.CredentialsProvider
+	if s3Config.AWSSessionToken != "" {
+		// Use temporary credentials with session token
+		c.logger.Infow("using temporary AWS credentials with session token")
+		credProvider = credentials.NewStaticCredentialsProvider(
 			s3Config.AWSAccessKeyID,
 			s3Config.AWSSecretAccessKey,
-			s3Config.AWSSessionToken, // session token for temporary credentials (ASIA keys)
-		)),
+			s3Config.AWSSessionToken,
+		)
+	} else {
+		// Use permanent credentials (access key + secret key only)
+		c.logger.Infow("using permanent AWS credentials (access key + secret key)")
+		credProvider = credentials.NewStaticCredentialsProvider(
+			s3Config.AWSAccessKeyID,
+			s3Config.AWSSecretAccessKey,
+			"", // empty session token for permanent credentials
+		)
+	}
+
+	awsCfg, err := awsConfig.LoadDefaultConfig(ctx,
+		awsConfig.WithRegion(s3Config.Region),
+		awsConfig.WithCredentialsProvider(credProvider),
 	)
 	if err != nil {
 		return nil, nil, ierr.WithError(err).
@@ -118,6 +136,7 @@ func (c *Client) GetS3Client(ctx context.Context, jobConfig *types.S3JobConfig, 
 		"bucket", s3Config.Bucket,
 		"region", s3Config.Region,
 		"key_prefix", s3Config.KeyPrefix,
+		"credential_type", map[bool]string{true: "temporary", false: "permanent"}[s3Config.AWSSessionToken != ""],
 	)
 
 	return &s3Client{

@@ -4,27 +4,29 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 )
 
-// ScheduledJobInterval represents the interval for scheduled jobs
-type ScheduledJobInterval string
+// ScheduledTaskInterval represents the interval for scheduled tasks
+type ScheduledTaskInterval string
 
 const (
-	ScheduledJobIntervalHourly  ScheduledJobInterval = "hourly"
-	ScheduledJobIntervalDaily   ScheduledJobInterval = "daily"
-	ScheduledJobIntervalWeekly  ScheduledJobInterval = "weekly"
-	ScheduledJobIntervalMonthly ScheduledJobInterval = "monthly"
+	ScheduledTaskIntervalTesting ScheduledTaskInterval = "testing" // 10 minutes for testing
+	ScheduledTaskIntervalHourly  ScheduledTaskInterval = "hourly"
+	ScheduledTaskIntervalDaily   ScheduledTaskInterval = "daily"
+	ScheduledTaskIntervalWeekly  ScheduledTaskInterval = "weekly"
+	ScheduledTaskIntervalMonthly ScheduledTaskInterval = "monthly"
 )
 
-// Validate validates the scheduled job interval
-func (s ScheduledJobInterval) Validate() error {
-	allowedIntervals := []ScheduledJobInterval{
-		ScheduledJobIntervalHourly,
-		ScheduledJobIntervalDaily,
-		ScheduledJobIntervalWeekly,
-		ScheduledJobIntervalMonthly,
+// Validate validates the scheduled task interval
+func (s ScheduledTaskInterval) Validate() error {
+	allowedIntervals := []ScheduledTaskInterval{
+		ScheduledTaskIntervalTesting,
+		ScheduledTaskIntervalHourly,
+		ScheduledTaskIntervalDaily,
+		ScheduledTaskIntervalWeekly,
+		ScheduledTaskIntervalMonthly,
 	}
 	if s == "" {
 		return ierr.NewError("interval is required").
-			WithHint("Scheduled job interval must be specified").
+			WithHint("Scheduled task interval must be specified").
 			Mark(ierr.ErrValidation)
 	}
 	for _, interval := range allowedIntervals {
@@ -32,36 +34,36 @@ func (s ScheduledJobInterval) Validate() error {
 			return nil
 		}
 	}
-	return ierr.NewError("invalid scheduled job interval").
-		WithHint("Interval must be one of: hourly, daily, weekly, monthly").
+	return ierr.NewError("invalid scheduled task interval").
+		WithHint("Interval must be one of: testing, hourly, daily, weekly, monthly").
 		Mark(ierr.ErrValidation)
 }
 
-// ScheduledJobEntityType represents the entity type for scheduled jobs
-type ScheduledJobEntityType string
+// ScheduledTaskEntityType represents the entity type for scheduled tasks
+type ScheduledTaskEntityType string
 
 const (
-	ScheduledJobEntityTypeEvents       ScheduledJobEntityType = "events"
-	ScheduledJobEntityTypeCustomer     ScheduledJobEntityType = "customer"
-	ScheduledJobEntityTypeInvoice      ScheduledJobEntityType = "invoice"
-	ScheduledJobEntityTypePrice        ScheduledJobEntityType = "price"
-	ScheduledJobEntityTypeSubscription ScheduledJobEntityType = "subscription"
-	ScheduledJobEntityTypeCreditNote   ScheduledJobEntityType = "credit_note"
+	ScheduledTaskEntityTypeEvents       ScheduledTaskEntityType = "events"
+	ScheduledTaskEntityTypeCustomer     ScheduledTaskEntityType = "customer"
+	ScheduledTaskEntityTypeInvoice      ScheduledTaskEntityType = "invoice"
+	ScheduledTaskEntityTypePrice        ScheduledTaskEntityType = "price"
+	ScheduledTaskEntityTypeSubscription ScheduledTaskEntityType = "subscription"
+	ScheduledTaskEntityTypeCreditNote   ScheduledTaskEntityType = "credit_note"
 )
 
 // Validate validates the entity type
-func (e ScheduledJobEntityType) Validate() error {
-	allowedTypes := []ScheduledJobEntityType{
-		ScheduledJobEntityTypeEvents,
-		ScheduledJobEntityTypeCustomer,
-		ScheduledJobEntityTypeInvoice,
-		ScheduledJobEntityTypePrice,
-		ScheduledJobEntityTypeSubscription,
-		ScheduledJobEntityTypeCreditNote,
+func (e ScheduledTaskEntityType) Validate() error {
+	allowedTypes := []ScheduledTaskEntityType{
+		ScheduledTaskEntityTypeEvents,
+		ScheduledTaskEntityTypeCustomer,
+		ScheduledTaskEntityTypeInvoice,
+		ScheduledTaskEntityTypePrice,
+		ScheduledTaskEntityTypeSubscription,
+		ScheduledTaskEntityTypeCreditNote,
 	}
 	if e == "" {
 		return ierr.NewError("entity type is required").
-			WithHint("Scheduled job entity type must be specified").
+			WithHint("Scheduled task entity type must be specified").
 			Mark(ierr.ErrValidation)
 	}
 	for _, entityType := range allowedTypes {
@@ -74,17 +76,17 @@ func (e ScheduledJobEntityType) Validate() error {
 		Mark(ierr.ErrValidation)
 }
 
-// ScheduledJobStatus represents the status of a scheduled job run
-type ScheduledJobStatus string
+// ScheduledTaskStatus represents the status of a scheduled task run
+type ScheduledTaskStatus string
 
 const (
-	ScheduledJobStatusSuccess ScheduledJobStatus = "success"
-	ScheduledJobStatusFailed  ScheduledJobStatus = "failed"
-	ScheduledJobStatusRunning ScheduledJobStatus = "running"
+	ScheduledTaskStatusSuccess ScheduledTaskStatus = "success"
+	ScheduledTaskStatusFailed  ScheduledTaskStatus = "failed"
+	ScheduledTaskStatusRunning ScheduledTaskStatus = "running"
 )
 
 // S3JobConfig represents the configuration for an S3 export job
-// This is stored in the job_config JSON field of scheduled_jobs table
+// This is stored in the job_config JSON field of scheduled_tasks table
 type S3JobConfig struct {
 	Bucket           string `json:"bucket"`                       // S3 bucket name
 	Region           string `json:"region"`                       // AWS region (e.g., "us-west-2")
@@ -156,18 +158,18 @@ func (s *S3JobConfig) SetDefaults() {
 	}
 }
 
-// CreateScheduledJobInput represents the input for creating a scheduled job
-type CreateScheduledJobInput struct {
+// CreateScheduledTaskInput represents the input for creating a scheduled task
+type CreateScheduledTaskInput struct {
 	ConnectionID string
-	EntityType   ScheduledJobEntityType
-	Interval     ScheduledJobInterval
+	EntityType   ScheduledTaskEntityType
+	Interval     ScheduledTaskInterval
 	Enabled      bool
 	JobConfig    map[string]interface{}
 }
 
-// UpdateScheduledJobInput represents the input for updating a scheduled job
-type UpdateScheduledJobInput struct {
-	Interval  *ScheduledJobInterval
+// UpdateScheduledTaskInput represents the input for updating a scheduled task
+type UpdateScheduledTaskInput struct {
+	Interval  *ScheduledTaskInterval
 	Enabled   *bool
 	JobConfig *map[string]interface{}
 }

@@ -96,23 +96,23 @@ func (tu *TaskUpdate) SetNillableEntityType(s *string) *TaskUpdate {
 	return tu
 }
 
-// SetScheduledJobID sets the "scheduled_job_id" field.
-func (tu *TaskUpdate) SetScheduledJobID(s string) *TaskUpdate {
-	tu.mutation.SetScheduledJobID(s)
+// SetScheduledTaskID sets the "scheduled_task_id" field.
+func (tu *TaskUpdate) SetScheduledTaskID(s string) *TaskUpdate {
+	tu.mutation.SetScheduledTaskID(s)
 	return tu
 }
 
-// SetNillableScheduledJobID sets the "scheduled_job_id" field if the given value is not nil.
-func (tu *TaskUpdate) SetNillableScheduledJobID(s *string) *TaskUpdate {
+// SetNillableScheduledTaskID sets the "scheduled_task_id" field if the given value is not nil.
+func (tu *TaskUpdate) SetNillableScheduledTaskID(s *string) *TaskUpdate {
 	if s != nil {
-		tu.SetScheduledJobID(*s)
+		tu.SetScheduledTaskID(*s)
 	}
 	return tu
 }
 
-// ClearScheduledJobID clears the value of the "scheduled_job_id" field.
-func (tu *TaskUpdate) ClearScheduledJobID() *TaskUpdate {
-	tu.mutation.ClearScheduledJobID()
+// ClearScheduledTaskID clears the value of the "scheduled_task_id" field.
+func (tu *TaskUpdate) ClearScheduledTaskID() *TaskUpdate {
+	tu.mutation.ClearScheduledTaskID()
 	return tu
 }
 
@@ -477,11 +477,11 @@ func (tu *TaskUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	if value, ok := tu.mutation.EntityType(); ok {
 		_spec.SetField(task.FieldEntityType, field.TypeString, value)
 	}
-	if value, ok := tu.mutation.ScheduledJobID(); ok {
-		_spec.SetField(task.FieldScheduledJobID, field.TypeString, value)
+	if value, ok := tu.mutation.ScheduledTaskID(); ok {
+		_spec.SetField(task.FieldScheduledTaskID, field.TypeString, value)
 	}
-	if tu.mutation.ScheduledJobIDCleared() {
-		_spec.ClearField(task.FieldScheduledJobID, field.TypeString)
+	if tu.mutation.ScheduledTaskIDCleared() {
+		_spec.ClearField(task.FieldScheduledTaskID, field.TypeString)
 	}
 	if value, ok := tu.mutation.WorkflowID(); ok {
 		_spec.SetField(task.FieldWorkflowID, field.TypeString, value)
@@ -649,23 +649,23 @@ func (tuo *TaskUpdateOne) SetNillableEntityType(s *string) *TaskUpdateOne {
 	return tuo
 }
 
-// SetScheduledJobID sets the "scheduled_job_id" field.
-func (tuo *TaskUpdateOne) SetScheduledJobID(s string) *TaskUpdateOne {
-	tuo.mutation.SetScheduledJobID(s)
+// SetScheduledTaskID sets the "scheduled_task_id" field.
+func (tuo *TaskUpdateOne) SetScheduledTaskID(s string) *TaskUpdateOne {
+	tuo.mutation.SetScheduledTaskID(s)
 	return tuo
 }
 
-// SetNillableScheduledJobID sets the "scheduled_job_id" field if the given value is not nil.
-func (tuo *TaskUpdateOne) SetNillableScheduledJobID(s *string) *TaskUpdateOne {
+// SetNillableScheduledTaskID sets the "scheduled_task_id" field if the given value is not nil.
+func (tuo *TaskUpdateOne) SetNillableScheduledTaskID(s *string) *TaskUpdateOne {
 	if s != nil {
-		tuo.SetScheduledJobID(*s)
+		tuo.SetScheduledTaskID(*s)
 	}
 	return tuo
 }
 
-// ClearScheduledJobID clears the value of the "scheduled_job_id" field.
-func (tuo *TaskUpdateOne) ClearScheduledJobID() *TaskUpdateOne {
-	tuo.mutation.ClearScheduledJobID()
+// ClearScheduledTaskID clears the value of the "scheduled_task_id" field.
+func (tuo *TaskUpdateOne) ClearScheduledTaskID() *TaskUpdateOne {
+	tuo.mutation.ClearScheduledTaskID()
 	return tuo
 }
 
@@ -1060,11 +1060,11 @@ func (tuo *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) 
 	if value, ok := tuo.mutation.EntityType(); ok {
 		_spec.SetField(task.FieldEntityType, field.TypeString, value)
 	}
-	if value, ok := tuo.mutation.ScheduledJobID(); ok {
-		_spec.SetField(task.FieldScheduledJobID, field.TypeString, value)
+	if value, ok := tuo.mutation.ScheduledTaskID(); ok {
+		_spec.SetField(task.FieldScheduledTaskID, field.TypeString, value)
 	}
-	if tuo.mutation.ScheduledJobIDCleared() {
-		_spec.ClearField(task.FieldScheduledJobID, field.TypeString)
+	if tuo.mutation.ScheduledTaskIDCleared() {
+		_spec.ClearField(task.FieldScheduledTaskID, field.TypeString)
 	}
 	if value, ok := tuo.mutation.WorkflowID(); ok {
 		_spec.SetField(task.FieldWorkflowID, field.TypeString, value)

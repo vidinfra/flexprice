@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/flexprice/flexprice/internal/domain/scheduledjob"
+	"github.com/flexprice/flexprice/internal/domain/scheduledtask"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/service/sync/export"
 	"github.com/flexprice/flexprice/internal/types"
@@ -12,20 +12,20 @@ import (
 )
 
 type TestUsageExportHandler struct {
-	exportService    *export.ExportService
-	scheduledJobRepo scheduledjob.Repository
-	logger           *logger.Logger
+	exportService     *export.ExportService
+	scheduledTaskRepo scheduledtask.Repository
+	logger            *logger.Logger
 }
 
 func NewTestUsageExportHandler(
 	exportService *export.ExportService,
-	scheduledJobRepo scheduledjob.Repository,
+	scheduledTaskRepo scheduledtask.Repository,
 	logger *logger.Logger,
 ) *TestUsageExportHandler {
 	return &TestUsageExportHandler{
-		exportService:    exportService,
-		scheduledJobRepo: scheduledJobRepo,
-		logger:           logger,
+		exportService:     exportService,
+		scheduledTaskRepo: scheduledTaskRepo,
+		logger:            logger,
 	}
 }
 
@@ -75,36 +75,36 @@ func (h *TestUsageExportHandler) TestUsageExport(c *gin.Context) {
 		"tenant_id", tenantID,
 		"environment_id", envID)
 
-	// Get scheduled job for events entity type
-	// This will fetch the S3 configuration from the scheduled_jobs table
-	scheduledJobs, err := h.scheduledJobRepo.GetByEntityType(ctx, string(types.ScheduledJobEntityTypeEvents))
+	// Get scheduled task for events entity type
+	// This will fetch the S3 configuration from the scheduled_tasks table
+	scheduledTasks, err := h.scheduledTaskRepo.GetByEntityType(ctx, string(types.ScheduledTaskEntityTypeEvents))
 	if err != nil {
-		h.logger.Errorw("failed to get scheduled job for events", "error", err)
+		h.logger.Errorw("failed to get scheduled task for events", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "No scheduled job configured for events export",
+			"error":   "No scheduled task configured for events export",
 			"details": err.Error(),
 		})
 		return
 	}
 
-	if len(scheduledJobs) == 0 {
-		h.logger.Warnw("no scheduled job found for events export")
+	if len(scheduledTasks) == 0 {
+		h.logger.Warnw("no scheduled task found for events export")
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "No scheduled job configured for events export. Please create a scheduled job first.",
+			"error": "No scheduled task configured for events export. Please create a scheduled task first.",
 		})
 		return
 	}
 
-	// Use the first enabled job
+	// Use the first enabled task
 	var jobConfig *types.S3JobConfig
 	var configErr error
-	for _, job := range scheduledJobs {
-		if job.Enabled {
-			jobConfig, configErr = job.GetS3JobConfig()
+	for _, task := range scheduledTasks {
+		if task.Enabled {
+			jobConfig, configErr = task.GetS3JobConfig()
 			if configErr != nil {
-				h.logger.Errorw("failed to get job config", "job_id", job.ID, "error", configErr)
+				h.logger.Errorw("failed to get task config", "task_id", task.ID, "error", configErr)
 				c.JSON(http.StatusInternalServerError, gin.H{
-					"error":   "Invalid job configuration",
+					"error":   "Invalid task configuration",
 					"details": configErr.Error(),
 				})
 				return
@@ -114,9 +114,9 @@ func (h *TestUsageExportHandler) TestUsageExport(c *gin.Context) {
 	}
 
 	if jobConfig == nil {
-		h.logger.Warnw("no enabled scheduled job found for feature usage export")
+		h.logger.Warnw("no enabled scheduled task found for feature usage export")
 		c.JSON(http.StatusNotFound, gin.H{
-			"error": "No enabled scheduled job found for feature usage export. Please enable a scheduled job.",
+			"error": "No enabled scheduled task found for feature usage export. Please enable a scheduled task.",
 		})
 		return
 	}

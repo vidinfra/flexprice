@@ -48,7 +48,7 @@ type ExportRequest struct {
 	EnvID        string
 	StartTime    time.Time
 	EndTime      time.Time
-	JobConfig    *types.S3JobConfig // S3 job configuration from scheduled_jobs
+	JobConfig    *types.S3JobConfig // S3 job configuration from scheduled_tasks
 }
 
 // ExportResponse represents the result of an export operation

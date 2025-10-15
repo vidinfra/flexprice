@@ -70,8 +70,8 @@ type Tx struct {
 	Price *PriceClient
 	// PriceUnit is the client for interacting with the PriceUnit builders.
 	PriceUnit *PriceUnitClient
-	// ScheduledJob is the client for interacting with the ScheduledJob builders.
-	ScheduledJob *ScheduledJobClient
+	// ScheduledTask is the client for interacting with the ScheduledTask builders.
+	ScheduledTask *ScheduledTaskClient
 	// Secret is the client for interacting with the Secret builders.
 	Secret *SecretClient
 	// Settings is the client for interacting with the Settings builders.
@@ -261,7 +261,7 @@ func (tx *Tx) init() {
 	tx.Plan = NewPlanClient(tx.config)
 	tx.Price = NewPriceClient(tx.config)
 	tx.PriceUnit = NewPriceUnitClient(tx.config)
-	tx.ScheduledJob = NewScheduledJobClient(tx.config)
+	tx.ScheduledTask = NewScheduledTaskClient(tx.config)
 	tx.Secret = NewSecretClient(tx.config)
 	tx.Settings = NewSettingsClient(tx.config)
 	tx.Subscription = NewSubscriptionClient(tx.config)

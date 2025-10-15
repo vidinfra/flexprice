@@ -7,22 +7,22 @@ import (
 	baseMixin "github.com/flexprice/flexprice/ent/schema/mixin"
 )
 
-// ScheduledJob holds the schema definition for the ScheduledJob entity.
-// This entity manages scheduled export jobs for various entity types to external destinations (S3, etc.)
-type ScheduledJob struct {
+// ScheduledTask holds the schema definition for the ScheduledTask entity.
+// This entity manages scheduled export tasks for various entity types to external destinations (S3, etc.)
+type ScheduledTask struct {
 	ent.Schema
 }
 
-// Mixin of the ScheduledJob.
-func (ScheduledJob) Mixin() []ent.Mixin {
+// Mixin of the ScheduledTask.
+func (ScheduledTask) Mixin() []ent.Mixin {
 	return []ent.Mixin{
 		baseMixin.BaseMixin{},
 		baseMixin.EnvironmentMixin{},
 	}
 }
 
-// Fields of the ScheduledJob.
-func (ScheduledJob) Fields() []ent.Field {
+// Fields of the ScheduledTask.
+func (ScheduledTask) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("id").
 			SchemaType(map[string]string{
@@ -80,8 +80,8 @@ func (ScheduledJob) Fields() []ent.Field {
 	}
 }
 
-// Indexes of the ScheduledJob.
-func (ScheduledJob) Indexes() []ent.Index {
+// Indexes of the ScheduledTask.
+func (ScheduledTask) Indexes() []ent.Index {
 	return []ent.Index{
 		// Index for finding jobs by tenant and environment
 		index.Fields("tenant_id", "environment_id", "enabled"),

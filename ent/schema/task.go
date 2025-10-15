@@ -39,12 +39,12 @@ func (Task) Fields() []ent.Field {
 				"postgres": "varchar(50)",
 			}).
 			NotEmpty(),
-		field.String("scheduled_job_id").
+		field.String("scheduled_task_id").
 			SchemaType(map[string]string{
 				"postgres": "varchar(50)",
 			}).
 			Optional().
-			Comment("Reference to the scheduled job that created this task (for export tasks)"),
+			Comment("Reference to the scheduled task that created this task (for export tasks)"),
 		field.String("workflow_id").
 			SchemaType(map[string]string{
 				"postgres": "varchar(255)",

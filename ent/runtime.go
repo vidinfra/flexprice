@@ -33,7 +33,7 @@ import (
 	"github.com/flexprice/flexprice/ent/plan"
 	"github.com/flexprice/flexprice/ent/price"
 	"github.com/flexprice/flexprice/ent/priceunit"
-	"github.com/flexprice/flexprice/ent/scheduledjob"
+	"github.com/flexprice/flexprice/ent/scheduledtask"
 	"github.com/flexprice/flexprice/ent/schema"
 	"github.com/flexprice/flexprice/ent/secret"
 	"github.com/flexprice/flexprice/ent/settings"
@@ -1369,51 +1369,51 @@ func init() {
 			return nil
 		}
 	}()
-	scheduledjobMixin := schema.ScheduledJob{}.Mixin()
-	scheduledjobMixinFields0 := scheduledjobMixin[0].Fields()
-	_ = scheduledjobMixinFields0
-	scheduledjobMixinFields1 := scheduledjobMixin[1].Fields()
-	_ = scheduledjobMixinFields1
-	scheduledjobFields := schema.ScheduledJob{}.Fields()
-	_ = scheduledjobFields
-	// scheduledjobDescTenantID is the schema descriptor for tenant_id field.
-	scheduledjobDescTenantID := scheduledjobMixinFields0[0].Descriptor()
-	// scheduledjob.TenantIDValidator is a validator for the "tenant_id" field. It is called by the builders before save.
-	scheduledjob.TenantIDValidator = scheduledjobDescTenantID.Validators[0].(func(string) error)
-	// scheduledjobDescStatus is the schema descriptor for status field.
-	scheduledjobDescStatus := scheduledjobMixinFields0[1].Descriptor()
-	// scheduledjob.DefaultStatus holds the default value on creation for the status field.
-	scheduledjob.DefaultStatus = scheduledjobDescStatus.Default.(string)
-	// scheduledjobDescCreatedAt is the schema descriptor for created_at field.
-	scheduledjobDescCreatedAt := scheduledjobMixinFields0[2].Descriptor()
-	// scheduledjob.DefaultCreatedAt holds the default value on creation for the created_at field.
-	scheduledjob.DefaultCreatedAt = scheduledjobDescCreatedAt.Default.(func() time.Time)
-	// scheduledjobDescUpdatedAt is the schema descriptor for updated_at field.
-	scheduledjobDescUpdatedAt := scheduledjobMixinFields0[3].Descriptor()
-	// scheduledjob.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	scheduledjob.DefaultUpdatedAt = scheduledjobDescUpdatedAt.Default.(func() time.Time)
-	// scheduledjob.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	scheduledjob.UpdateDefaultUpdatedAt = scheduledjobDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// scheduledjobDescEnvironmentID is the schema descriptor for environment_id field.
-	scheduledjobDescEnvironmentID := scheduledjobMixinFields1[0].Descriptor()
-	// scheduledjob.DefaultEnvironmentID holds the default value on creation for the environment_id field.
-	scheduledjob.DefaultEnvironmentID = scheduledjobDescEnvironmentID.Default.(string)
-	// scheduledjobDescConnectionID is the schema descriptor for connection_id field.
-	scheduledjobDescConnectionID := scheduledjobFields[1].Descriptor()
-	// scheduledjob.ConnectionIDValidator is a validator for the "connection_id" field. It is called by the builders before save.
-	scheduledjob.ConnectionIDValidator = scheduledjobDescConnectionID.Validators[0].(func(string) error)
-	// scheduledjobDescEntityType is the schema descriptor for entity_type field.
-	scheduledjobDescEntityType := scheduledjobFields[2].Descriptor()
-	// scheduledjob.EntityTypeValidator is a validator for the "entity_type" field. It is called by the builders before save.
-	scheduledjob.EntityTypeValidator = scheduledjobDescEntityType.Validators[0].(func(string) error)
-	// scheduledjobDescInterval is the schema descriptor for interval field.
-	scheduledjobDescInterval := scheduledjobFields[3].Descriptor()
-	// scheduledjob.IntervalValidator is a validator for the "interval" field. It is called by the builders before save.
-	scheduledjob.IntervalValidator = scheduledjobDescInterval.Validators[0].(func(string) error)
-	// scheduledjobDescEnabled is the schema descriptor for enabled field.
-	scheduledjobDescEnabled := scheduledjobFields[4].Descriptor()
-	// scheduledjob.DefaultEnabled holds the default value on creation for the enabled field.
-	scheduledjob.DefaultEnabled = scheduledjobDescEnabled.Default.(bool)
+	scheduledtaskMixin := schema.ScheduledTask{}.Mixin()
+	scheduledtaskMixinFields0 := scheduledtaskMixin[0].Fields()
+	_ = scheduledtaskMixinFields0
+	scheduledtaskMixinFields1 := scheduledtaskMixin[1].Fields()
+	_ = scheduledtaskMixinFields1
+	scheduledtaskFields := schema.ScheduledTask{}.Fields()
+	_ = scheduledtaskFields
+	// scheduledtaskDescTenantID is the schema descriptor for tenant_id field.
+	scheduledtaskDescTenantID := scheduledtaskMixinFields0[0].Descriptor()
+	// scheduledtask.TenantIDValidator is a validator for the "tenant_id" field. It is called by the builders before save.
+	scheduledtask.TenantIDValidator = scheduledtaskDescTenantID.Validators[0].(func(string) error)
+	// scheduledtaskDescStatus is the schema descriptor for status field.
+	scheduledtaskDescStatus := scheduledtaskMixinFields0[1].Descriptor()
+	// scheduledtask.DefaultStatus holds the default value on creation for the status field.
+	scheduledtask.DefaultStatus = scheduledtaskDescStatus.Default.(string)
+	// scheduledtaskDescCreatedAt is the schema descriptor for created_at field.
+	scheduledtaskDescCreatedAt := scheduledtaskMixinFields0[2].Descriptor()
+	// scheduledtask.DefaultCreatedAt holds the default value on creation for the created_at field.
+	scheduledtask.DefaultCreatedAt = scheduledtaskDescCreatedAt.Default.(func() time.Time)
+	// scheduledtaskDescUpdatedAt is the schema descriptor for updated_at field.
+	scheduledtaskDescUpdatedAt := scheduledtaskMixinFields0[3].Descriptor()
+	// scheduledtask.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	scheduledtask.DefaultUpdatedAt = scheduledtaskDescUpdatedAt.Default.(func() time.Time)
+	// scheduledtask.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	scheduledtask.UpdateDefaultUpdatedAt = scheduledtaskDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// scheduledtaskDescEnvironmentID is the schema descriptor for environment_id field.
+	scheduledtaskDescEnvironmentID := scheduledtaskMixinFields1[0].Descriptor()
+	// scheduledtask.DefaultEnvironmentID holds the default value on creation for the environment_id field.
+	scheduledtask.DefaultEnvironmentID = scheduledtaskDescEnvironmentID.Default.(string)
+	// scheduledtaskDescConnectionID is the schema descriptor for connection_id field.
+	scheduledtaskDescConnectionID := scheduledtaskFields[1].Descriptor()
+	// scheduledtask.ConnectionIDValidator is a validator for the "connection_id" field. It is called by the builders before save.
+	scheduledtask.ConnectionIDValidator = scheduledtaskDescConnectionID.Validators[0].(func(string) error)
+	// scheduledtaskDescEntityType is the schema descriptor for entity_type field.
+	scheduledtaskDescEntityType := scheduledtaskFields[2].Descriptor()
+	// scheduledtask.EntityTypeValidator is a validator for the "entity_type" field. It is called by the builders before save.
+	scheduledtask.EntityTypeValidator = scheduledtaskDescEntityType.Validators[0].(func(string) error)
+	// scheduledtaskDescInterval is the schema descriptor for interval field.
+	scheduledtaskDescInterval := scheduledtaskFields[3].Descriptor()
+	// scheduledtask.IntervalValidator is a validator for the "interval" field. It is called by the builders before save.
+	scheduledtask.IntervalValidator = scheduledtaskDescInterval.Validators[0].(func(string) error)
+	// scheduledtaskDescEnabled is the schema descriptor for enabled field.
+	scheduledtaskDescEnabled := scheduledtaskFields[4].Descriptor()
+	// scheduledtask.DefaultEnabled holds the default value on creation for the enabled field.
+	scheduledtask.DefaultEnabled = scheduledtaskDescEnabled.Default.(bool)
 	secretMixin := schema.Secret{}.Mixin()
 	secretMixinFields0 := secretMixin[0].Fields()
 	_ = secretMixinFields0

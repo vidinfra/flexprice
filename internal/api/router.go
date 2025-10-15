@@ -48,7 +48,7 @@ type Handlers struct {
 	SetupIntent              *v1.SetupIntentHandler
 	TestExport               *v1.TestExportHandler
 	TestUsageExport          *v1.TestUsageExportHandler
-	ScheduledJob             *v1.ScheduledJobHandler
+	ScheduledTask            *v1.ScheduledTaskHandler
 
 	// Portal handlers
 	Onboarding *v1.OnboardingHandler
@@ -330,6 +330,17 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			tasks.GET("", handlers.Task.ListTasks)
 			tasks.GET("/:id", handlers.Task.GetTask)
 			tasks.PUT("/:id/status", handlers.Task.UpdateTaskStatus)
+
+			// Scheduled tasks routes under /tasks/scheduled
+			scheduledTasks := tasks.Group("/scheduled")
+			{
+				scheduledTasks.POST("", handlers.ScheduledTask.CreateScheduledTask)
+				scheduledTasks.GET("", handlers.ScheduledTask.ListScheduledTasks)
+				scheduledTasks.GET("/:id", handlers.ScheduledTask.GetScheduledTask)
+				scheduledTasks.PUT("/:id", handlers.ScheduledTask.UpdateScheduledTask)
+				scheduledTasks.DELETE("/:id", handlers.ScheduledTask.DeleteScheduledTask)
+				scheduledTasks.POST("/:id/sync", handlers.ScheduledTask.TriggerManualSync)
+			}
 		}
 
 		// Tax rate routes
@@ -382,17 +393,6 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			connections.PUT("/:id", handlers.Connection.UpdateConnection)
 			connections.DELETE("/:id", handlers.Connection.DeleteConnection)
 			connections.POST("/search", handlers.Connection.ListConnectionsByFilter)
-		}
-
-		// Scheduled Job routes
-		scheduledJobs := v1Private.Group("/scheduled-jobs")
-		{
-			scheduledJobs.POST("", handlers.ScheduledJob.CreateScheduledJob)
-			scheduledJobs.GET("", handlers.ScheduledJob.ListScheduledJobs)
-			scheduledJobs.GET("/:id", handlers.ScheduledJob.GetScheduledJob)
-			scheduledJobs.PUT("/:id", handlers.ScheduledJob.UpdateScheduledJob)
-			scheduledJobs.DELETE("/:id", handlers.ScheduledJob.DeleteScheduledJob)
-			scheduledJobs.POST("/:id/sync", handlers.ScheduledJob.TriggerManualSync)
 		}
 
 		// Cost sheet routes

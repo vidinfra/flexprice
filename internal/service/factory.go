@@ -27,7 +27,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/priceunit"
 	"github.com/flexprice/flexprice/internal/domain/proration"
-	"github.com/flexprice/flexprice/internal/domain/scheduledjob"
+	"github.com/flexprice/flexprice/internal/domain/scheduledtask"
 	"github.com/flexprice/flexprice/internal/domain/secret"
 	"github.com/flexprice/flexprice/internal/domain/settings"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
@@ -98,7 +98,7 @@ type ServiceParams struct {
 	EntityIntegrationMappingRepo entityintegrationmapping.Repository
 	SettingsRepo                 settings.Repository
 	AlertLogsRepo                alertlogs.Repository
-	ScheduledJobRepo             scheduledjob.Repository
+	ScheduledTaskRepo            scheduledtask.Repository
 
 	// Publishers
 	EventPublisher   publisher.EventPublisher
@@ -166,7 +166,7 @@ func NewServiceParams(
 	entityIntegrationMappingRepo entityintegrationmapping.Repository,
 	settingsRepo settings.Repository,
 	alertLogsRepo alertlogs.Repository,
-	scheduledJobRepo scheduledjob.Repository,
+	scheduledTaskRepo scheduledtask.Repository,
 	prorationCalculator proration.Calculator,
 	integrationFactory *integration.Factory,
 	s3Client *s3Integration.Client,
@@ -219,7 +219,7 @@ func NewServiceParams(
 		EntityIntegrationMappingRepo: entityIntegrationMappingRepo,
 		SettingsRepo:                 settingsRepo,
 		AlertLogsRepo:                alertLogsRepo,
-		ScheduledJobRepo:             scheduledJobRepo,
+		ScheduledTaskRepo:            scheduledTaskRepo,
 		ProrationCalculator:          prorationCalculator,
 		IntegrationFactory:           integrationFactory,
 		S3Client:                     s3Client,

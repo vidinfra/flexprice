@@ -122,16 +122,16 @@ func (tc *TaskCreate) SetEntityType(s string) *TaskCreate {
 	return tc
 }
 
-// SetScheduledJobID sets the "scheduled_job_id" field.
-func (tc *TaskCreate) SetScheduledJobID(s string) *TaskCreate {
-	tc.mutation.SetScheduledJobID(s)
+// SetScheduledTaskID sets the "scheduled_task_id" field.
+func (tc *TaskCreate) SetScheduledTaskID(s string) *TaskCreate {
+	tc.mutation.SetScheduledTaskID(s)
 	return tc
 }
 
-// SetNillableScheduledJobID sets the "scheduled_job_id" field if the given value is not nil.
-func (tc *TaskCreate) SetNillableScheduledJobID(s *string) *TaskCreate {
+// SetNillableScheduledTaskID sets the "scheduled_task_id" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableScheduledTaskID(s *string) *TaskCreate {
 	if s != nil {
-		tc.SetScheduledJobID(*s)
+		tc.SetScheduledTaskID(*s)
 	}
 	return tc
 }
@@ -524,9 +524,9 @@ func (tc *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 		_spec.SetField(task.FieldEntityType, field.TypeString, value)
 		_node.EntityType = value
 	}
-	if value, ok := tc.mutation.ScheduledJobID(); ok {
-		_spec.SetField(task.FieldScheduledJobID, field.TypeString, value)
-		_node.ScheduledJobID = value
+	if value, ok := tc.mutation.ScheduledTaskID(); ok {
+		_spec.SetField(task.FieldScheduledTaskID, field.TypeString, value)
+		_node.ScheduledTaskID = value
 	}
 	if value, ok := tc.mutation.WorkflowID(); ok {
 		_spec.SetField(task.FieldWorkflowID, field.TypeString, value)

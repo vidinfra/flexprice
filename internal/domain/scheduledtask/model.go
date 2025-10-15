@@ -1,4 +1,4 @@
-package scheduledjob
+package scheduledtask
 
 import (
 	"time"
@@ -6,8 +6,8 @@ import (
 	"github.com/flexprice/flexprice/internal/types"
 )
 
-// ScheduledJob represents a scheduled export job
-type ScheduledJob struct {
+// ScheduledTask represents a scheduled export task
+type ScheduledTask struct {
 	ID                 string
 	TenantID           string
 	EnvironmentID      string
@@ -28,13 +28,13 @@ type ScheduledJob struct {
 	UpdatedBy          string
 }
 
-// IsEnabled returns whether the job is enabled
-func (j *ScheduledJob) IsEnabled() bool {
+// IsEnabled returns whether the task is enabled
+func (j *ScheduledTask) IsEnabled() bool {
 	return j.Enabled && j.Status == "published"
 }
 
-// IsDue checks if the job is due for execution
-func (j *ScheduledJob) IsDue(currentTime time.Time) bool {
+// IsDue checks if the task is due for execution
+func (j *ScheduledTask) IsDue(currentTime time.Time) bool {
 	if !j.IsEnabled() {
 		return false
 	}
@@ -49,24 +49,26 @@ func (j *ScheduledJob) IsDue(currentTime time.Time) bool {
 }
 
 // CalculateNextRunTime calculates the next run time based on the interval
-func (j *ScheduledJob) CalculateNextRunTime(fromTime time.Time) time.Time {
-	switch types.ScheduledJobInterval(j.Interval) {
-	case types.ScheduledJobIntervalHourly:
+func (j *ScheduledTask) CalculateNextRunTime(fromTime time.Time) time.Time {
+	switch types.ScheduledTaskInterval(j.Interval) {
+	case types.ScheduledTaskIntervalHourly:
 		return fromTime.Add(1 * time.Hour)
-	case types.ScheduledJobIntervalDaily:
+	case types.ScheduledTaskIntervalDaily:
 		return fromTime.Add(24 * time.Hour)
-	case types.ScheduledJobIntervalWeekly:
+	case types.ScheduledTaskIntervalWeekly:
 		return fromTime.Add(7 * 24 * time.Hour)
-	case types.ScheduledJobIntervalMonthly:
+	case types.ScheduledTaskIntervalMonthly:
 		return fromTime.AddDate(0, 1, 0)
+	case types.ScheduledTaskIntervalTesting:
+		return fromTime.Add(10 * time.Minute)
 	default:
 		// Default to daily
 		return fromTime.Add(24 * time.Hour)
 	}
 }
 
-// GetS3JobConfig parses the job config as S3JobConfig
-func (j *ScheduledJob) GetS3JobConfig() (*types.S3JobConfig, error) {
+// GetS3JobConfig parses the task config as S3JobConfig
+func (j *ScheduledTask) GetS3JobConfig() (*types.S3JobConfig, error) {
 	if j.JobConfig == nil {
 		return nil, nil
 	}

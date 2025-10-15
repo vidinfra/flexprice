@@ -12,15 +12,15 @@ import (
 
 // ExecuteExportWorkflowInput represents input for the export workflow
 type ExecuteExportWorkflowInput struct {
-	TaskID         string // Pre-generated task ID (used as workflow ID)
-	ScheduledJobID string
-	EntityType     types.ExportEntityType
-	ConnectionID   string
-	TenantID       string
-	EnvID          string
-	StartTime      time.Time
-	EndTime        time.Time
-	JobConfig      *types.S3JobConfig
+	TaskID          string // Pre-generated task ID (used as workflow ID)
+	ScheduledTaskID string
+	EntityType      types.ExportEntityType
+	ConnectionID    string
+	TenantID        string
+	EnvID           string
+	StartTime       time.Time
+	EndTime         time.Time
+	JobConfig       *types.S3JobConfig
 }
 
 // ExecuteExportWorkflowOutput represents output from the export workflow
@@ -36,7 +36,7 @@ type ExecuteExportWorkflowOutput struct {
 func ExecuteExportWorkflow(ctx workflow.Context, input ExecuteExportWorkflowInput) (*ExecuteExportWorkflowOutput, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting export workflow",
-		"scheduled_job_id", input.ScheduledJobID,
+		"scheduled_task_id", input.ScheduledTaskID,
 		"entity_type", input.EntityType,
 		"start_time", input.StartTime,
 		"end_time", input.EndTime)
@@ -61,14 +61,14 @@ func ExecuteExportWorkflow(ctx workflow.Context, input ExecuteExportWorkflowInpu
 
 	logger.Info("Step 1: Creating task in database")
 	createTaskInput := export.CreateTaskInput{
-		TaskID:         taskID, // Use pre-generated ID
-		WorkflowID:     workflowID,
-		ScheduledJobID: input.ScheduledJobID,
-		TenantID:       input.TenantID,
-		EnvID:          input.EnvID,
-		EntityType:     string(input.EntityType),
-		StartTime:      input.StartTime,
-		EndTime:        input.EndTime,
+		TaskID:          taskID, // Use pre-generated ID
+		WorkflowID:      workflowID,
+		ScheduledTaskID: input.ScheduledTaskID,
+		TenantID:        input.TenantID,
+		EnvID:           input.EnvID,
+		EntityType:      string(input.EntityType),
+		StartTime:       input.StartTime,
+		EndTime:         input.EndTime,
 	}
 
 	var createTaskOutput export.CreateTaskOutput

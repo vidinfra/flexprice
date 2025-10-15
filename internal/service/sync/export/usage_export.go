@@ -163,15 +163,8 @@ func (e *UsageExporter) PrepareData(ctx context.Context, request *ExportRequest)
 		}
 	}
 
-	if totalRecords == 0 {
-		e.logger.Warnw("no feature usage data found for export",
-			"tenant_id", request.TenantID,
-			"env_id", request.EnvID)
-		return nil, 0, ierr.NewError("no data found for export").
-			WithHint("No feature usage data found for the specified time range").
-			Mark(ierr.ErrNotFound)
-	}
-
+	// Always flush the writer, even if no data records were found
+	// This ensures we upload a CSV with headers but no data rows
 	writer.Flush()
 	if err := writer.Error(); err != nil {
 		return nil, 0, ierr.WithError(err).
@@ -181,9 +174,16 @@ func (e *UsageExporter) PrepareData(ctx context.Context, request *ExportRequest)
 
 	csvBytes := buf.Bytes()
 
-	e.logger.Infow("completed batched data fetch and CSV conversion",
-		"total_records", totalRecords,
-		"csv_size_bytes", len(csvBytes))
+	if totalRecords == 0 {
+		e.logger.Infow("no feature usage data found for export - will upload empty CSV with headers only",
+			"tenant_id", request.TenantID,
+			"env_id", request.EnvID,
+			"csv_size_bytes", len(csvBytes))
+	} else {
+		e.logger.Infow("completed batched data fetch and CSV conversion",
+			"total_records", totalRecords,
+			"csv_size_bytes", len(csvBytes))
+	}
 
 	return csvBytes, totalRecords, nil
 }

@@ -48,7 +48,7 @@ func (r *taskRepository) Create(ctx context.Context, t *domainTask.Task) error {
 		SetTenantID(t.TenantID).
 		SetTaskType(string(t.TaskType)).
 		SetEntityType(string(t.EntityType)).
-		SetNillableScheduledJobID(&t.ScheduledJobID).
+		SetNillableScheduledTaskID(&t.ScheduledTaskID).
 		SetNillableWorkflowID(t.WorkflowID).
 		SetFileURL(t.FileURL).
 		SetNillableFileName(t.FileName).
@@ -198,7 +198,7 @@ func (r *taskRepository) Update(ctx context.Context, t *domainTask.Task) error {
 	query.
 		SetTaskType(string(t.TaskType)).
 		SetEntityType(string(t.EntityType)).
-		SetNillableScheduledJobID(&t.ScheduledJobID).
+		SetNillableScheduledTaskID(&t.ScheduledTaskID).
 		SetFileURL(t.FileURL).
 		SetNillableFileName(t.FileName).
 		SetFileType(string(t.FileType)).
@@ -360,15 +360,15 @@ func (o TaskQueryOptions) applyEntityQueryOptions(_ context.Context, f *types.Ta
 
 // GetLastSuccessfulExportTask gets the last completed export task for a scheduled job
 // Returns nil if no previous successful export exists (first run scenario)
-func (r *taskRepository) GetLastSuccessfulExportTask(ctx context.Context, scheduledJobID string) (*domainTask.Task, error) {
+func (r *taskRepository) GetLastSuccessfulExportTask(ctx context.Context, scheduledTaskID string) (*domainTask.Task, error) {
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "task", "get_last_successful_export", map[string]interface{}{
-		"scheduled_job_id": scheduledJobID,
+		"scheduled_task_id": scheduledTaskID,
 	})
 	defer FinishSpan(span)
 
 	r.logger.Infow("querying for last successful export task",
-		"scheduled_job_id", scheduledJobID,
+		"scheduled_task_id", scheduledTaskID,
 		"tenant_id", types.GetTenantID(ctx),
 		"env_id", types.GetEnvironmentID(ctx))
 
@@ -376,7 +376,7 @@ func (r *taskRepository) GetLastSuccessfulExportTask(ctx context.Context, schedu
 	// Order by completed_at DESC to get the most recent one
 	taskEntity, err := r.client.Querier(ctx).Task.Query().
 		Where(
-			task.ScheduledJobID(scheduledJobID),
+			task.ScheduledTaskID(scheduledTaskID),
 			task.TenantID(types.GetTenantID(ctx)),
 			task.EnvironmentID(types.GetEnvironmentID(ctx)),
 			task.TaskType(string(types.TaskTypeExport)),
@@ -390,23 +390,23 @@ func (r *taskRepository) GetLastSuccessfulExportTask(ctx context.Context, schedu
 		if ent.IsNotFound(err) {
 			// No previous successful export found - this is not an error (first run)
 			r.logger.Infow("no previous successful export found - first run",
-				"scheduled_job_id", scheduledJobID)
+				"scheduled_task_id", scheduledTaskID)
 			return nil, nil
 		}
 		SetSpanError(span, err)
 		r.logger.Errorw("failed to query last successful export task",
-			"scheduled_job_id", scheduledJobID,
+			"scheduled_task_id", scheduledTaskID,
 			"error", err)
 		return nil, ierr.WithError(err).
 			WithHint("Failed to query last successful export task").
 			WithReportableDetails(map[string]interface{}{
-				"scheduled_job_id": scheduledJobID,
+				"scheduled_task_id": scheduledTaskID,
 			}).
 			Mark(ierr.ErrDatabase)
 	}
 
 	r.logger.Infow("found last successful export task",
-		"scheduled_job_id", scheduledJobID,
+		"scheduled_task_id", scheduledTaskID,
 		"task_id", taskEntity.ID,
 		"completed_at", taskEntity.CompletedAt)
 

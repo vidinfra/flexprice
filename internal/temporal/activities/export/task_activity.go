@@ -26,14 +26,14 @@ func NewTaskActivity(taskRepo task.Repository, logger *logger.Logger) *TaskActiv
 
 // CreateTaskInput represents input for creating a task
 type CreateTaskInput struct {
-	TaskID         string // Pre-generated task ID
-	WorkflowID     string // Temporal workflow ID
-	ScheduledJobID string
-	TenantID       string
-	EnvID          string
-	EntityType     string
-	StartTime      time.Time
-	EndTime        time.Time
+	TaskID          string // Pre-generated task ID
+	WorkflowID      string // Temporal workflow ID
+	ScheduledTaskID string
+	TenantID        string
+	EnvID           string
+	EntityType      string
+	StartTime       time.Time
+	EndTime         time.Time
 }
 
 // CreateTaskOutput represents output from creating a task
@@ -46,7 +46,7 @@ func (a *TaskActivity) CreateTask(ctx context.Context, input CreateTaskInput) (*
 	a.logger.Infow("creating export task",
 		"task_id", input.TaskID,
 		"workflow_id", input.WorkflowID,
-		"scheduled_job_id", input.ScheduledJobID,
+		"scheduled_task_id", input.ScheduledTaskID,
 		"entity_type", input.EntityType,
 		"start_time", input.StartTime,
 		"end_time", input.EndTime)
@@ -54,15 +54,15 @@ func (a *TaskActivity) CreateTask(ctx context.Context, input CreateTaskInput) (*
 	// Create task with pre-generated ID
 	now := time.Now()
 	newTask := &task.Task{
-		ID:             input.TaskID,      // Use pre-generated ID
-		WorkflowID:     &input.WorkflowID, // Store Temporal workflow ID
-		EnvironmentID:  input.EnvID,
-		TaskType:       types.TaskTypeExport,
-		EntityType:     types.EntityType(input.EntityType),
-		ScheduledJobID: input.ScheduledJobID,
-		FileURL:        "", // Will be set after upload
-		FileType:       types.FileTypeCSV,
-		TaskStatus:     types.TaskStatusPending,
+		ID:              input.TaskID,      // Use pre-generated ID
+		WorkflowID:      &input.WorkflowID, // Store Temporal workflow ID
+		EnvironmentID:   input.EnvID,
+		TaskType:        types.TaskTypeExport,
+		EntityType:      types.EntityType(input.EntityType),
+		ScheduledTaskID: input.ScheduledTaskID,
+		FileURL:         "", // Will be set after upload
+		FileType:        types.FileTypeCSV,
+		TaskStatus:      types.TaskStatusPending,
 		Metadata: map[string]interface{}{
 			"start_time": input.StartTime.Format(time.RFC3339),
 			"end_time":   input.EndTime.Format(time.RFC3339),
@@ -73,6 +73,8 @@ func (a *TaskActivity) CreateTask(ctx context.Context, input CreateTaskInput) (*
 			Status:    types.StatusPublished,
 			CreatedAt: now,
 			UpdatedAt: now,
+			CreatedBy: types.GetUserID(ctx),
+			UpdatedBy: types.GetUserID(ctx),
 		},
 	}
 
@@ -139,6 +141,9 @@ func (a *TaskActivity) UpdateTaskStatus(ctx context.Context, input UpdateTaskSta
 
 	// Update timestamps based on status
 	now := time.Now()
+	existingTask.UpdatedAt = now
+	existingTask.UpdatedBy = types.GetUserID(ctx)
+
 	switch input.Status {
 	case types.TaskStatusProcessing:
 		if existingTask.StartedAt == nil {
@@ -202,6 +207,8 @@ func (a *TaskActivity) CompleteTask(ctx context.Context, input CompleteTaskInput
 
 	now := time.Now()
 	existingTask.CompletedAt = &now
+	existingTask.UpdatedAt = now
+	existingTask.UpdatedBy = types.GetUserID(ctx)
 
 	// Add file details to metadata
 	if existingTask.Metadata == nil {

@@ -15,7 +15,7 @@ import (
 	"github.com/flexprice/flexprice/internal/clickhouse"
 	"github.com/flexprice/flexprice/internal/config"
 	"github.com/flexprice/flexprice/internal/domain/connection"
-	"github.com/flexprice/flexprice/internal/domain/scheduledjob"
+	"github.com/flexprice/flexprice/internal/domain/scheduledtask"
 	"github.com/flexprice/flexprice/internal/dynamodb"
 	"github.com/flexprice/flexprice/internal/httpclient"
 	s3Integration "github.com/flexprice/flexprice/internal/integration/s3"
@@ -169,7 +169,7 @@ func main() {
 			repository.NewSubscriptionLineItemRepository,
 			repository.NewSettingsRepository,
 			repository.NewAlertLogsRepository,
-			repository.NewScheduledJobRepository,
+			repository.NewScheduledTaskRepository,
 
 			// PubSub
 			pubsubRouter.NewRouter,
@@ -226,8 +226,8 @@ func main() {
 			service.NewSettingsService,
 			service.NewSubscriptionChangeService,
 			service.NewAlertLogsService,
-			service.NewScheduledJobOrchestrator,
-			service.NewScheduledJobService,
+			service.NewScheduledTaskService,
+			service.NewScheduledTaskOrchestrator,
 		),
 	)
 
@@ -299,8 +299,8 @@ func provideHandlers(
 	db postgres.IClient,
 	s3Client *s3Integration.Client,
 	exportService *syncExport.ExportService,
-	scheduledJobRepo scheduledjob.Repository,
-	scheduledJobService service.ScheduledJobService,
+	scheduledTaskRepo scheduledtask.Repository,
+	scheduledTaskService service.ScheduledTaskService,
 ) api.Handlers {
 	return api.Handlers{
 		Events:                   v1.NewEventsHandler(eventService, eventPostProcessingService, featureUsageTrackingService, cfg, logger),
@@ -341,8 +341,8 @@ func provideHandlers(
 		Settings:                 v1.NewSettingsHandler(settingsService, logger),
 		SetupIntent:              v1.NewSetupIntentHandler(integrationFactory, customerService, logger),
 		TestExport:               v1.NewTestExportHandler(s3Client, logger),
-		TestUsageExport:          v1.NewTestUsageExportHandler(exportService, scheduledJobRepo, logger),
-		ScheduledJob:             v1.NewScheduledJobHandler(scheduledJobService, logger),
+		TestUsageExport:          v1.NewTestUsageExportHandler(exportService, scheduledTaskRepo, logger),
+		ScheduledTask:            v1.NewScheduledTaskHandler(scheduledTaskService, logger),
 	}
 }
 

@@ -345,16 +345,16 @@ func (f PriceUnitFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, e
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PriceUnitMutation", m)
 }
 
-// The ScheduledJobFunc type is an adapter to allow the use of ordinary
-// function as ScheduledJob mutator.
-type ScheduledJobFunc func(context.Context, *ent.ScheduledJobMutation) (ent.Value, error)
+// The ScheduledTaskFunc type is an adapter to allow the use of ordinary
+// function as ScheduledTask mutator.
+type ScheduledTaskFunc func(context.Context, *ent.ScheduledTaskMutation) (ent.Value, error)
 
 // Mutate calls f(ctx, m).
-func (f ScheduledJobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.ScheduledJobMutation); ok {
+func (f ScheduledTaskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ScheduledTaskMutation); ok {
 		return f(ctx, mv)
 	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ScheduledJobMutation", m)
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ScheduledTaskMutation", m)
 }
 
 // The SecretFunc type is an adapter to allow the use of ordinary

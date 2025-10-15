@@ -30,12 +30,12 @@ func RegisterWorkflowsAndActivities(temporalService temporalService.TemporalServ
 
 	// Export activities
 	taskActivity := exportActivities.NewTaskActivity(params.TaskRepo, params.Logger)
-	scheduledJobActivity := exportActivities.NewScheduledJobActivity(params.ScheduledJobRepo, params.TaskRepo, params.Logger)
+	scheduledTaskActivity := exportActivities.NewScheduledTaskActivity(params.ScheduledTaskRepo, params.TaskRepo, params.Logger)
 	exportActivity := exportActivities.NewExportActivity(params.FeatureUsageRepo, params.IntegrationFactory, params.Logger)
 
 	// Get all task queues and register workflows/activities for each
 	for _, taskQueue := range types.GetAllTaskQueues() {
-		config := buildWorkerConfig(taskQueue, planActivities, taskActivities, taskActivity, scheduledJobActivity, exportActivity)
+		config := buildWorkerConfig(taskQueue, planActivities, taskActivities, taskActivity, scheduledTaskActivity, exportActivity)
 		if err := registerWorker(temporalService, config); err != nil {
 			return fmt.Errorf("failed to register worker for task queue %s: %w", taskQueue, err)
 		}
@@ -50,7 +50,7 @@ func buildWorkerConfig(
 	planActivities *activities.PlanActivities,
 	taskActivities *activities.TaskActivities,
 	taskActivity *exportActivities.TaskActivity,
-	scheduledJobActivity *exportActivities.ScheduledJobActivity,
+	scheduledTaskActivity *exportActivities.ScheduledTaskActivity,
 	exportActivity *exportActivities.ExportActivity,
 ) WorkerConfig {
 	workflowsList := []interface{}{}
@@ -76,8 +76,8 @@ func buildWorkerConfig(
 			taskActivity.CreateTask,
 			taskActivity.UpdateTaskStatus,
 			taskActivity.CompleteTask,
-			scheduledJobActivity.GetScheduledJobDetails,
-			scheduledJobActivity.UpdateScheduledJobLastRun,
+			scheduledTaskActivity.GetScheduledTaskDetails,
+			scheduledTaskActivity.UpdateScheduledTaskLastRun,
 			exportActivity.ExportData,
 		)
 	}

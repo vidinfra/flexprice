@@ -30,7 +30,7 @@ func copyTask(t *task.Task) *task.Task {
 		ID:                t.ID,
 		TaskType:          t.TaskType,
 		EntityType:        t.EntityType,
-		ScheduledJobID:    t.ScheduledJobID,
+		ScheduledTaskID:   t.ScheduledTaskID,
 		FileURL:           t.FileURL,
 		FileType:          t.FileType,
 		TaskStatus:        t.TaskStatus,
@@ -104,7 +104,7 @@ func (s *InMemoryTaskStore) GetLastSuccessfulExportTask(ctx context.Context, sch
 
 	var lastTask *task.Task
 	for _, t := range s.items {
-		if t.ScheduledJobID == scheduledJobID &&
+		if t.ScheduledTaskID == scheduledJobID &&
 			t.TaskType == types.TaskTypeExport &&
 			t.TaskStatus == types.TaskStatusCompleted &&
 			t.Status == types.StatusPublished &&
