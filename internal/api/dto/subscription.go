@@ -84,7 +84,8 @@ type CreateSubscriptionRequest struct {
 	BillingAnchor *time.Time `json:"-"`
 
 	// Workflow
-	Workflow *types.TemporalWorkflowType `json:"-"`
+	Workflow           *types.TemporalWorkflowType `json:"-"`
+	SubscriptionStatus types.SubscriptionStatus    `json:"-,omitempty"`
 }
 
 // AddAddonRequest is used by body-based endpoint /subscriptions/addon
@@ -161,12 +162,7 @@ func (r *CancelSubscriptionRequest) Validate() error {
 	}
 	// Set default proration behavior if not provided
 	if r.ProrationBehavior == "" {
-		r.ProrationBehavior = types.ProrationBehaviorCreateProrations
-	}
-
-	// Validate proration behavior
-	if err := r.ProrationBehavior.Validate(); err != nil {
-		return err
+		r.ProrationBehavior = types.ProrationBehaviorNone
 	}
 
 	return nil
