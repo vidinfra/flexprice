@@ -7,7 +7,6 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"go.uber.org/zap"
 )
@@ -39,10 +38,10 @@ func (s *Email) SendEmail(ctx context.Context, req SendEmailRequest) (*SendEmail
 		}, nil
 	}
 
-	// Use default from address if not provided
-	fromAddress := req.FromAddress
+	// Prioritize env var from address over request from address
+	fromAddress := s.client.GetFromAddress()
 	if fromAddress == "" {
-		fromAddress = s.client.GetFromAddress()
+		fromAddress = req.FromAddress
 	}
 
 	messageID, err := s.client.SendEmail(ctx, fromAddress, req.ToAddress, req.Subject, "", req.Text)
@@ -84,10 +83,10 @@ func (s *Email) SendEmailWithTemplate(ctx context.Context, req SendEmailWithTemp
 		}, nil
 	}
 
-	// Use default from address if not provided
-	fromAddress := req.FromAddress
+	// Prioritize env var from address over request from address
+	fromAddress := s.client.GetFromAddress()
 	if fromAddress == "" {
-		fromAddress = s.client.GetFromAddress()
+		fromAddress = req.FromAddress
 	}
 
 	s.logger.Debugw("preparing to send templated email",
@@ -203,18 +202,5 @@ func BuildTemplateData(configData map[string]string, toAddress string) map[strin
 		data[key] = value
 	}
 
-	// Auto-extract user_name from email
-	data["user_name"] = ExtractNameFromEmail(toAddress)
-
 	return data
-}
-
-// ExtractNameFromEmail extracts the name part from an email address
-// e.g., "john.doe@example.com" -> "john.doe"
-func ExtractNameFromEmail(email string) string {
-	parts := strings.Split(email, "@")
-	if len(parts) > 0 && parts[0] != "" {
-		return parts[0]
-	}
-	return "there"
 }

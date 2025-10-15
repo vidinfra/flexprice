@@ -441,8 +441,8 @@ func (s *onboardingService) OnboardNewUserWithTenant(ctx context.Context, userID
 		}
 	}
 
-	// Send onboarding email with user info
-	if err := s.sendOnboardingEmail(ctx, email, tenantName); err != nil {
+	// Send onboarding email
+	if err := s.sendOnboardingEmail(ctx, email, ""); err != nil {
 		// Log error but don't fail the onboarding process
 		s.Logger.Errorw("failed to send onboarding email",
 			"error", err,
@@ -814,7 +814,7 @@ func (s *onboardingService) createDefaultSubscriptions(ctx context.Context, cust
 }
 
 // sendOnboardingEmail sends a welcome email to a new user
-func (s *onboardingService) sendOnboardingEmail(ctx context.Context, toEmail, userName string) error {
+func (s *onboardingService) sendOnboardingEmail(ctx context.Context, toEmail, fromEmail string) error {
 	// Create email client
 	emailClient := email.NewEmailClient(email.Config{
 		Enabled:     s.Config.Email.Enabled,
@@ -833,22 +833,14 @@ func (s *onboardingService) sendOnboardingEmail(ctx context.Context, toEmail, us
 
 	// Build template data from config
 	configData := map[string]string{
-		"onboarding_video_url": s.Config.Email.OnboardingVideoURL,
-		"calendar_url":         s.Config.Email.CalendarURL,
-		"dashboard_url":        s.Config.Email.DashboardURL,
-		"support_email":        s.Config.Email.SupportEmail,
-		"community_url":        s.Config.Email.CommunityURL,
+		"calendar_url": s.Config.Email.CalendarURL,
 	}
 
 	templateData := email.BuildTemplateData(configData, toEmail)
 
-	// Override user_name if provided
-	if userName != "" {
-		templateData["user_name"] = userName
-	}
-
 	// Send email using template
 	resp, err := emailSvc.SendEmailWithTemplate(ctx, email.SendEmailWithTemplateRequest{
+		FromAddress:  fromEmail,
 		ToAddress:    toEmail,
 		Subject:      "Welcome to Flexprice!",
 		TemplatePath: "welcome-email.html",

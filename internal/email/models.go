@@ -5,7 +5,7 @@ package email
 //
 //	{
 //		"from_address": "subrat@flexprice.io",
-//		"to_address": "tenant@example.com",
+//		"to_address": "client@example.com",
 //		"subject": "Welcome to Flexprice",
 //		"text": "Hello, welcome to our platform!"
 //	}
@@ -29,16 +29,11 @@ type SendEmailResponse struct {
 //
 //	{
 //		"from_address": "subrat@flexprice.io",
-//		"to_address": "tenant@example.com",
-//		"subject": "Welcome to Flexprice",
+//		"to_address": "client@example.com",
+//		"subject": "Welcome to Flexprice!",
 //		"template_path": "welcome-email.html",
 //		"data": {
-//			"user_name": "John Doe",
-//			"onboarding_video_url": "https://flexprice.io/onboarding-video",
-//			"calendar_url": "https://cal.com/manish-choudhary/flexprice-onboarding",
-//			"dashboard_url": "https://flexprice.io",
-//			"support_email": "support@flexprice.io",
-//			"community_url": "https://discord.gg/flexprice",
+//			"calendar_url": "https://calendly.com/flexprice-30mins-chat/manish?month=2025-03"
 //		}
 //	}
 type SendEmailWithTemplateRequest struct {
