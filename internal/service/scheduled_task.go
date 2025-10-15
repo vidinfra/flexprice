@@ -20,7 +20,7 @@ type ScheduledTaskService interface {
 	UpdateScheduledTask(ctx context.Context, id string, req dto.UpdateScheduledTaskRequest) (*dto.ScheduledTaskResponse, error)
 	DeleteScheduledTask(ctx context.Context, id string) error
 	GetScheduledTasksByEntityType(ctx context.Context, entityType types.ScheduledTaskEntityType) ([]*dto.ScheduledTaskResponse, error)
-	TriggerManualSync(ctx context.Context, id string) (string, error)
+	TriggerManualSync(ctx context.Context, id string, req dto.TriggerManualSyncRequest) (*dto.TriggerManualSyncResponse, error)
 }
 
 type scheduledTaskService struct {
@@ -172,8 +172,13 @@ func (s *scheduledTaskService) ListScheduledTasks(ctx context.Context, filter *t
 	return dto.ToScheduledTaskListResponse(tasks, totalCount), nil
 }
 
-// UpdateScheduledTask updates a scheduled task
+// UpdateScheduledTask updates a scheduled task (only enabled field can be changed)
 func (s *scheduledTaskService) UpdateScheduledTask(ctx context.Context, id string, req dto.UpdateScheduledTaskRequest) (*dto.ScheduledTaskResponse, error) {
+	// Validate request
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+
 	// Get existing task
 	task, err := s.repo.Get(ctx, id)
 	if err != nil {
@@ -183,49 +188,29 @@ func (s *scheduledTaskService) UpdateScheduledTask(ctx context.Context, id strin
 			Mark(ierr.ErrNotFound)
 	}
 
+	// Check if task is archived
+	if task.Status == string(types.StatusArchived) {
+		return nil, ierr.NewError("cannot update archived scheduled task").
+			WithHint("This scheduled task has been archived and cannot be modified").
+			WithReportableDetails(map[string]interface{}{
+				"task_id": id,
+				"status":  task.Status,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
 	// Track if enabled status changed
 	wasEnabled := task.Enabled
+	newEnabled := *req.Enabled
 
-	// Update fields if provided
-	if req.Interval != nil {
-		interval := types.ScheduledTaskInterval(*req.Interval)
-		if err := interval.Validate(); err != nil {
-			return nil, err
-		}
-		task.Interval = string(interval)
-		// Recalculate next run time
-		now := time.Now()
-		nextRun := task.CalculateNextRunTime(now)
-		task.NextRunAt = &nextRun
+	// Check if there's actually a change
+	if wasEnabled == newEnabled {
+		s.logger.Infow("no change in enabled status", "id", id, "enabled", newEnabled)
+		return dto.ToScheduledTaskResponse(task), nil
 	}
 
-	if req.Enabled != nil {
-		task.Enabled = *req.Enabled
-	}
-
-	if req.JobConfig != nil {
-		// Validate new job config
-		jobConfigBytes, err := json.Marshal(*req.JobConfig)
-		if err != nil {
-			return nil, ierr.WithError(err).
-				WithHint("Invalid job configuration format").
-				Mark(ierr.ErrValidation)
-		}
-
-		var s3Config types.S3JobConfig
-		if err := json.Unmarshal(jobConfigBytes, &s3Config); err != nil {
-			return nil, ierr.WithError(err).
-				WithHint("Invalid S3 job configuration format").
-				Mark(ierr.ErrValidation)
-		}
-
-		if err := s3Config.Validate(); err != nil {
-			return nil, err
-		}
-
-		task.JobConfig = *req.JobConfig
-	}
-
+	// Update enabled status
+	task.Enabled = newEnabled
 	task.UpdatedAt = time.Now()
 	task.UpdatedBy = types.GetUserID(ctx)
 
@@ -238,58 +223,139 @@ func (s *scheduledTaskService) UpdateScheduledTask(ctx context.Context, id strin
 			Mark(ierr.ErrDatabase)
 	}
 
-	// Handle Temporal schedule enable/disable
-	if s.orchestrator != nil && wasEnabled != task.Enabled {
-		if task.Enabled {
-			// Start/Unpause the schedule
+	// Handle Temporal schedule pause/resume
+	if s.orchestrator != nil {
+		if newEnabled {
+			// Resume/Start the schedule
+			s.logger.Infow("resuming temporal schedule", "task_id", id)
 			err = s.orchestrator.StartScheduledTask(ctx, task.ID)
 			if err != nil {
-				s.logger.Errorw("failed to start temporal schedule", "error", err)
+				s.logger.Errorw("failed to start temporal schedule", "task_id", id, "error", err)
+				// Rollback the database change
+				task.Enabled = wasEnabled
+				_ = s.repo.Update(ctx, task)
+				return nil, ierr.WithError(err).
+					WithHint("Failed to resume schedule in Temporal").
+					Mark(ierr.ErrInternal)
 			}
+			s.logger.Infow("temporal schedule resumed successfully", "task_id", id)
 		} else {
 			// Pause the schedule
+			s.logger.Infow("pausing temporal schedule", "task_id", id)
 			err = s.orchestrator.StopScheduledTask(ctx, task.ID)
 			if err != nil {
-				s.logger.Errorw("failed to stop temporal schedule", "error", err)
+				s.logger.Errorw("failed to stop temporal schedule", "task_id", id, "error", err)
+				// Rollback the database change
+				task.Enabled = wasEnabled
+				_ = s.repo.Update(ctx, task)
+				return nil, ierr.WithError(err).
+					WithHint("Failed to pause schedule in Temporal").
+					Mark(ierr.ErrInternal)
 			}
+			s.logger.Infow("temporal schedule paused successfully", "task_id", id)
 		}
 	}
 
-	s.logger.Infow("scheduled task updated successfully", "id", task.ID)
+	action := "paused"
+	if newEnabled {
+		action = "resumed"
+	}
+	s.logger.Infow("scheduled task updated successfully",
+		"id", task.ID,
+		"action", action,
+		"enabled", newEnabled)
 
 	return dto.ToScheduledTaskResponse(task), nil
 }
 
-// DeleteScheduledTask deletes a scheduled task
+// DeleteScheduledTask archives a scheduled task (soft delete)
 func (s *scheduledTaskService) DeleteScheduledTask(ctx context.Context, id string) error {
-	err := s.repo.Delete(ctx, id)
+	// Get existing task
+	task, err := s.repo.Get(ctx, id)
 	if err != nil {
-		s.logger.Errorw("failed to delete scheduled task", "id", id, "error", err)
+		s.logger.Errorw("failed to get scheduled task for deletion", "id", id, "error", err)
 		return ierr.WithError(err).
-			WithHint("Failed to delete scheduled task").
+			WithHint("Scheduled task not found").
+			Mark(ierr.ErrNotFound)
+	}
+
+	// Check if already archived
+	if task.Status == string(types.StatusArchived) {
+		s.logger.Infow("scheduled task already archived", "id", id)
+		return ierr.NewError("scheduled task is already archived").
+			WithHint("This scheduled task has already been deleted").
+			WithReportableDetails(map[string]interface{}{
+				"task_id": id,
+				"status":  task.Status,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Archive the task (soft delete)
+	task.Status = string(types.StatusArchived)
+	task.Enabled = false // Disable when archiving
+	task.UpdatedAt = time.Now()
+	task.UpdatedBy = types.GetUserID(ctx)
+
+	// Save the archived task
+	err = s.repo.Update(ctx, task)
+	if err != nil {
+		s.logger.Errorw("failed to archive scheduled task", "id", id, "error", err)
+		return ierr.WithError(err).
+			WithHint("Failed to archive scheduled task").
 			Mark(ierr.ErrDatabase)
 	}
 
-	s.logger.Infow("scheduled task deleted successfully", "id", id)
+	// Delete the Temporal schedule
+	if s.orchestrator != nil {
+		s.logger.Infow("deleting temporal schedule", "task_id", id)
+		err = s.orchestrator.DeleteScheduledTask(ctx, id)
+		if err != nil {
+			s.logger.Errorw("failed to delete temporal schedule", "task_id", id, "error", err)
+			// Don't rollback - task is archived in DB, Temporal cleanup can be retried
+			// Log error but continue
+			s.logger.Warnw("scheduled task archived in database but temporal cleanup failed - may need manual cleanup",
+				"task_id", id,
+				"error", err)
+		} else {
+			s.logger.Infow("temporal schedule deleted successfully", "task_id", id)
+		}
+	}
+
+	s.logger.Infow("scheduled task archived successfully",
+		"id", id,
+		"status", task.Status)
 	return nil
 }
 
-// TriggerManualSync triggers a manual export immediately
-func (s *scheduledTaskService) TriggerManualSync(ctx context.Context, id string) (string, error) {
+// TriggerManualSync triggers a manual export immediately with optional custom time range
+func (s *scheduledTaskService) TriggerManualSync(ctx context.Context, id string, req dto.TriggerManualSyncRequest) (*dto.TriggerManualSyncResponse, error) {
 	if s.orchestrator == nil {
-		return "", ierr.NewError("orchestrator not configured").
+		return nil, ierr.NewError("orchestrator not configured").
 			WithHint("Temporal orchestrator is not available").
 			Mark(ierr.ErrInternal)
 	}
 
-	workflowID, err := s.orchestrator.TriggerManualSync(ctx, id)
+	workflowID, startTime, endTime, mode, err := s.orchestrator.TriggerManualSync(ctx, id, req.StartTime, req.EndTime)
 	if err != nil {
 		s.logger.Errorw("failed to trigger manual sync", "id", id, "error", err)
-		return "", err
+		return nil, err
 	}
 
-	s.logger.Infow("manual sync triggered", "id", id, "workflow_id", workflowID)
-	return workflowID, nil
+	s.logger.Infow("manual sync triggered",
+		"id", id,
+		"workflow_id", workflowID,
+		"start_time", startTime,
+		"end_time", endTime,
+		"mode", mode)
+
+	return &dto.TriggerManualSyncResponse{
+		WorkflowID: workflowID,
+		Message:    "Manual sync triggered successfully",
+		StartTime:  startTime,
+		EndTime:    endTime,
+		Mode:       mode,
+	}, nil
 }
 
 // GetScheduledTasksByEntityType retrieves scheduled tasks by entity type

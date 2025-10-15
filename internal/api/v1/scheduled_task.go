@@ -47,11 +47,6 @@ func (h *ScheduledTaskHandler) CreateScheduledTask(c *gin.Context) {
 		return
 	}
 
-	// Default enabled to true if not provided
-	if !req.Enabled {
-		req.Enabled = true
-	}
-
 	resp, err := h.service.CreateScheduledTask(c.Request.Context(), req)
 	if err != nil {
 		h.logger.Errorw("failed to create scheduled task", "error", err)
@@ -119,17 +114,17 @@ func (h *ScheduledTaskHandler) ListScheduledTasks(c *gin.Context) {
 }
 
 // @Summary Update a scheduled task
-// @Description Update a scheduled task by ID
+// @Description Update a scheduled task by ID - Only enabled field can be changed (pause/resume)
 // @Tags ScheduledTasks
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
 // @Param id path string true "Scheduled Task ID"
-// @Param scheduled_task body dto.UpdateScheduledTaskRequest true "Scheduled Task"
+// @Param scheduled_task body dto.UpdateScheduledTaskRequest true "Update request (enabled: true/false to pause/resume)"
 // @Success 200 {object} dto.ScheduledTaskResponse
-// @Failure 400 {object} ierr.ErrorResponse
-// @Failure 404 {object} ierr.ErrorResponse
-// @Failure 500 {object} ierr.ErrorResponse
+// @Failure 400 {object} ierr.ErrorResponse "Invalid request or task is archived"
+// @Failure 404 {object} ierr.ErrorResponse "Scheduled task not found"
+// @Failure 500 {object} ierr.ErrorResponse "Failed to update Temporal schedule"
 // @Router /tasks/scheduled/{id} [put]
 func (h *ScheduledTaskHandler) UpdateScheduledTask(c *gin.Context) {
 	id := c.Param("id")
@@ -154,16 +149,16 @@ func (h *ScheduledTaskHandler) UpdateScheduledTask(c *gin.Context) {
 }
 
 // @Summary Delete a scheduled task
-// @Description Delete a scheduled task by ID
+// @Description Archive a scheduled task by ID (soft delete) - Sets status to archived and deletes from Temporal
 // @Tags ScheduledTasks
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
 // @Param id path string true "Scheduled Task ID"
-// @Success 204
-// @Failure 400 {object} ierr.ErrorResponse
-// @Failure 404 {object} ierr.ErrorResponse
-// @Failure 500 {object} ierr.ErrorResponse
+// @Success 204 "Scheduled task archived successfully"
+// @Failure 400 {object} ierr.ErrorResponse "Task already archived"
+// @Failure 404 {object} ierr.ErrorResponse "Scheduled task not found"
+// @Failure 500 {object} ierr.ErrorResponse "Failed to archive task"
 // @Router /tasks/scheduled/{id} [delete]
 func (h *ScheduledTaskHandler) DeleteScheduledTask(c *gin.Context) {
 	id := c.Param("id")
@@ -175,16 +170,23 @@ func (h *ScheduledTaskHandler) DeleteScheduledTask(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusNoContent)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Scheduled task archived successfully",
+		"id":      id,
+		"status":  "archived",
+	})
 }
 
 // @Summary Trigger manual sync
-// @Description Trigger a manual export sync immediately for a scheduled task
+// @Description Trigger a manual export sync immediately for a scheduled task with optional custom time range
 // @Tags ScheduledTasks
+// @Accept json
 // @Produce json
 // @Security ApiKeyAuth
 // @Param id path string true "Scheduled Task ID"
-// @Success 200 {object} map[string]string "Returns workflow_id"
+// @Param request body dto.TriggerManualSyncRequest false "Optional start and end time for custom range"
+// @Success 200 {object} dto.TriggerManualSyncResponse "Returns workflow details and time range"
+// @Failure 400 {object} ierr.ErrorResponse
 // @Failure 404 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
 // @Router /tasks/scheduled/{id}/sync [post]
@@ -197,15 +199,33 @@ func (h *ScheduledTaskHandler) TriggerManualSync(c *gin.Context) {
 		return
 	}
 
-	workflowID, err := h.service.TriggerManualSync(c.Request.Context(), id)
+	// Parse request body (optional)
+	var req dto.TriggerManualSyncRequest
+
+	// Try to bind JSON - if empty body or no JSON, continue with automatic time calculation
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Empty body or invalid JSON - use automatic calculation
+		h.logger.Debugw("no custom time range provided, using automatic calculation", "id", id)
+		req = dto.TriggerManualSyncRequest{} // Empty request for automatic
+	} else {
+		// Validate the request
+		if err := req.Validate(); err != nil {
+			h.logger.Errorw("invalid manual sync request", "id", id, "error", err)
+			c.Error(err)
+			return
+		}
+		h.logger.Infow("manual sync with custom time range",
+			"id", id,
+			"start_time", req.StartTime,
+			"end_time", req.EndTime)
+	}
+
+	response, err := h.service.TriggerManualSync(c.Request.Context(), id, req)
 	if err != nil {
 		h.logger.Errorw("failed to trigger manual sync", "id", id, "error", err)
 		c.Error(err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"workflow_id": workflowID,
-		"message":     "Manual sync triggered successfully",
-	})
+	c.JSON(http.StatusOK, response)
 }

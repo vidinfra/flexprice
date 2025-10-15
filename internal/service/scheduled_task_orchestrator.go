@@ -152,14 +152,48 @@ func (o *ScheduledTaskOrchestrator) StopScheduledTask(ctx context.Context, taskI
 	return nil
 }
 
+// DeleteScheduledTask deletes the Temporal schedule permanently
+func (o *ScheduledTaskOrchestrator) DeleteScheduledTask(ctx context.Context, taskID string) error {
+	o.logger.Infow("deleting temporal schedule for scheduled task", "task_id", taskID)
+
+	task, err := o.scheduledTaskRepo.Get(ctx, taskID)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get scheduled task").
+			Mark(ierr.ErrDatabase)
+	}
+
+	if task.TemporalScheduleID == "" {
+		o.logger.Infow("no temporal schedule to delete", "task_id", taskID)
+		return nil
+	}
+
+	// Delete the schedule from Temporal
+	handle := o.temporalClient.ScheduleClient().GetHandle(ctx, task.TemporalScheduleID)
+	err = handle.Delete(ctx)
+	if err != nil {
+		o.logger.Errorw("failed to delete temporal schedule", "schedule_id", task.TemporalScheduleID, "error", err)
+		return ierr.WithError(err).
+			WithHint("Failed to delete Temporal schedule").
+			Mark(ierr.ErrInternal)
+	}
+
+	o.logger.Infow("temporal schedule deleted successfully",
+		"task_id", taskID,
+		"schedule_id", task.TemporalScheduleID)
+	return nil
+}
+
 // TriggerManualSync executes the export workflow immediately (bypasses schedule)
-func (o *ScheduledTaskOrchestrator) TriggerManualSync(ctx context.Context, taskID string) (string, error) {
-	o.logger.Infow("triggering manual sync", "task_id", taskID)
+// If customStart and customEnd are provided, uses those times. Otherwise, calculates automatically.
+// Returns: workflowID, startTime, endTime, mode, error
+func (o *ScheduledTaskOrchestrator) TriggerManualSync(ctx context.Context, taskID string, customStart, customEnd *time.Time) (string, time.Time, time.Time, string, error) {
+	o.logger.Infow("triggering manual sync", "task_id", taskID, "custom_start", customStart, "custom_end", customEnd)
 
 	// Get the task
 	task, err := o.scheduledTaskRepo.Get(ctx, taskID)
 	if err != nil {
-		return "", ierr.WithError(err).
+		return "", time.Time{}, time.Time{}, "", ierr.WithError(err).
 			WithHint("Failed to get scheduled task").
 			Mark(ierr.ErrDatabase)
 	}
@@ -167,14 +201,34 @@ func (o *ScheduledTaskOrchestrator) TriggerManualSync(ctx context.Context, taskI
 	// Get job config
 	jobConfig, err := task.GetS3JobConfig()
 	if err != nil {
-		return "", ierr.WithError(err).
+		return "", time.Time{}, time.Time{}, "", ierr.WithError(err).
 			WithHint("Invalid job configuration").
 			Mark(ierr.ErrValidation)
 	}
 
-	// Calculate time range
-	endTime := time.Now()
-	startTime := o.calculateManualSyncStartTime(ctx, task, endTime)
+	// Determine time range and mode
+	var startTime, endTime time.Time
+	var mode string
+
+	if customStart != nil && customEnd != nil {
+		// User provided custom time range
+		startTime = *customStart
+		endTime = *customEnd
+		mode = "custom"
+		o.logger.Infow("using custom time range",
+			"start_time", startTime,
+			"end_time", endTime,
+			"duration", endTime.Sub(startTime))
+	} else {
+		// Calculate automatically
+		endTime = time.Now()
+		startTime = o.calculateManualSyncStartTime(ctx, task, endTime)
+		mode = "automatic"
+		o.logger.Infow("using automatic time range",
+			"start_time", startTime,
+			"end_time", endTime,
+			"duration", endTime.Sub(startTime))
+	}
 
 	// Generate task ID and use it as workflow ID
 	// Format: {task_id}-export
@@ -184,7 +238,8 @@ func (o *ScheduledTaskOrchestrator) TriggerManualSync(ctx context.Context, taskI
 	o.logger.Infow("triggering manual export",
 		"export_task_id", exportTaskID,
 		"workflow_id", workflowID,
-		"scheduled_task_id", taskID)
+		"scheduled_task_id", taskID,
+		"mode", mode)
 
 	workflowOptions := client.StartWorkflowOptions{
 		ID:        workflowID,
@@ -206,7 +261,7 @@ func (o *ScheduledTaskOrchestrator) TriggerManualSync(ctx context.Context, taskI
 	workflowRun, err := o.temporalClient.ExecuteWorkflow(ctx, workflowOptions, exportWorkflows.ExecuteExportWorkflow, input)
 	if err != nil {
 		o.logger.Errorw("failed to start export workflow", "error", err)
-		return "", ierr.WithError(err).
+		return "", time.Time{}, time.Time{}, "", ierr.WithError(err).
 			WithHint("Failed to start export workflow").
 			Mark(ierr.ErrInternal)
 	}
@@ -214,9 +269,12 @@ func (o *ScheduledTaskOrchestrator) TriggerManualSync(ctx context.Context, taskI
 	o.logger.Infow("manual sync triggered",
 		"scheduled_task_id", taskID,
 		"workflow_id", workflowRun.GetID(),
-		"run_id", workflowRun.GetRunID())
+		"run_id", workflowRun.GetRunID(),
+		"start_time", startTime,
+		"end_time", endTime,
+		"mode", mode)
 
-	return workflowRun.GetID(), nil
+	return workflowRun.GetID(), startTime, endTime, mode, nil
 }
 
 // getCronExpression converts interval to cron expression

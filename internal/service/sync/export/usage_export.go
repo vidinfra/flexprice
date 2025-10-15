@@ -37,7 +37,7 @@ func NewUsageExporter(
 
 // PrepareData fetches feature usage data in batches and converts it to CSV format
 func (e *UsageExporter) PrepareData(ctx context.Context, request *ExportRequest) ([]byte, int, error) {
-	const batchSize = 50
+	const batchSize = 500
 
 	e.logger.Infow("starting batched feature usage data fetch",
 		"tenant_id", request.TenantID,
