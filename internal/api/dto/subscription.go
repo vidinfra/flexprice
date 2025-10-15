@@ -162,12 +162,7 @@ func (r *CancelSubscriptionRequest) Validate() error {
 	}
 	// Set default proration behavior if not provided
 	if r.ProrationBehavior == "" {
-		r.ProrationBehavior = types.ProrationBehaviorCreateProrations
-	}
-
-	// Validate proration behavior
-	if err := r.ProrationBehavior.Validate(); err != nil {
-		return err
+		r.ProrationBehavior = types.ProrationBehaviorNone
 	}
 
 	return nil
