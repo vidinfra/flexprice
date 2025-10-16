@@ -16,10 +16,12 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/config"
+	"github.com/flexprice/flexprice/internal/domain/addon"
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/events"
 	"github.com/flexprice/flexprice/internal/domain/feature"
 	"github.com/flexprice/flexprice/internal/domain/meter"
+	"github.com/flexprice/flexprice/internal/domain/plan"
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
 	ierr "github.com/flexprice/flexprice/internal/errors"
@@ -945,6 +947,8 @@ type AnalyticsData struct {
 	Features              map[string]*feature.Feature
 	Meters                map[string]*meter.Meter
 	Prices                map[string]*price.Price
+	Plans                 map[string]*plan.Plan   // Map of plan ID -> plan
+	Addons                map[string]*addon.Addon // Map of addon ID -> addon
 	Currency              string
 	Params                *events.UsageAnalyticsParams
 }
@@ -1021,6 +1025,8 @@ func (s *featureUsageTrackingService) fetchAnalyticsData(ctx context.Context, re
 		Features:              make(map[string]*feature.Feature),
 		Meters:                make(map[string]*meter.Meter),
 		Prices:                make(map[string]*price.Price),
+		Plans:                 make(map[string]*plan.Plan),
+		Addons:                make(map[string]*addon.Addon),
 	}
 
 	// Build subscription maps
@@ -1033,7 +1039,7 @@ func (s *featureUsageTrackingService) fetchAnalyticsData(ctx context.Context, re
 
 	// 6. Enrich with metadata if we have analytics data
 	if len(analytics) > 0 {
-		if err := s.enrichWithMetadata(ctx, data); err != nil {
+		if err := s.enrichWithMetadata(ctx, data, req); err != nil {
 			s.Logger.Warnw("failed to enrich analytics with metadata",
 				"error", err,
 				"analytics_count", len(analytics),
@@ -1277,7 +1283,7 @@ func (s *featureUsageTrackingService) validateCurrency(subscriptions []*subscrip
 }
 
 // enrichWithMetadata enriches analytics data with feature, meter, and price information
-func (s *featureUsageTrackingService) enrichWithMetadata(ctx context.Context, data *AnalyticsData) error {
+func (s *featureUsageTrackingService) enrichWithMetadata(ctx context.Context, data *AnalyticsData, req *dto.GetUsageAnalyticsRequest) error {
 	// Extract unique feature IDs
 	featureIDs := s.extractUniqueFeatureIDs(data.Analytics)
 	if len(featureIDs) == 0 {
@@ -1325,6 +1331,21 @@ func (s *featureUsageTrackingService) enrichWithMetadata(ctx context.Context, da
 	// Fetch prices from subscription line items
 	if err := s.fetchSubscriptionPrices(ctx, data); err != nil {
 		return err
+	}
+
+	if req.Expand != nil && lo.Contains(req.Expand, "plan") {
+		planMap, err := s.fetchPlans(ctx, data)
+		if err != nil {
+			return err
+		}
+		data.Plans = planMap
+	}
+	if req.Expand != nil && lo.Contains(req.Expand, "addon") {
+		addonMap, err := s.fetchAddons(ctx, data)
+		if err != nil {
+			return err
+		}
+		data.Addons = addonMap
 	}
 
 	// Enrich analytics with metadata
@@ -1879,11 +1900,20 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			Properties:      analytic.Properties,
 			Points:          make([]dto.UsageAnalyticPoint, 0, len(analytic.Points)),
 		}
-
-		// Populate expanded objects based on expand request
-		if expandMap["price"] && analytic.PriceID != "" {
+		// Can expand plan and addon
+		if analytic.PriceID != "" {
 			if price, ok := data.Prices[analytic.PriceID]; ok {
-				item.Price = price
+				switch price.EntityType {
+				case types.PRICE_ENTITY_TYPE_ADDON:
+					item.AddOnID = price.EntityID
+				case types.PRICE_ENTITY_TYPE_PLAN:
+					item.PlanID = price.EntityID
+				case types.PRICE_ENTITY_TYPE_SUBSCRIPTION:
+					item.PlanID = price.ParentPriceID
+				}
+				if expandMap["price"] {
+					item.Price = price
+				}
 			}
 		}
 
@@ -1902,6 +1932,20 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 		if expandMap["subscription_line_item"] && analytic.SubLineItemID != "" {
 			if lineItem, ok := data.SubscriptionLineItems[analytic.SubLineItemID]; ok {
 				item.SubscriptionLineItem = lineItem
+			}
+		}
+
+		// Expand plan if requested
+		if expandMap["plan"] && item.PlanID != "" {
+			if plan, ok := data.Plans[item.PlanID]; ok {
+				item.Plan = plan
+			}
+		}
+
+		// Expand addon if requested
+		if expandMap["addon"] && item.AddOnID != "" {
+			if addon, ok := data.Addons[item.AddOnID]; ok {
+				item.Addon = addon
 			}
 		}
 
@@ -1977,4 +2021,49 @@ func (s *featureUsageTrackingService) getTotalUsageForWeightedSumAggregation(
 	weightedUsage := propertyValue.Div(decimal.NewFromFloat(totalPeriodSeconds)).Mul(decimal.NewFromFloat(remainingSeconds))
 
 	return weightedUsage, nil
+}
+
+// fetchPlansByIDs fetches plans by their IDs
+func (s *featureUsageTrackingService) fetchPlans(ctx context.Context, data *AnalyticsData) (map[string]*plan.Plan, error) {
+
+	// Create filter to fetch plans by IDs
+	planFilter := types.NewNoLimitPlanFilter()
+
+	plans, err := s.PlanRepo.List(ctx, planFilter)
+	if err != nil {
+		s.Logger.Errorw("failed to fetch plans for analytics",
+			"error", err,
+		)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to fetch plans for analytics").
+			Mark(ierr.ErrDatabase)
+	}
+
+	planMap := make(map[string]*plan.Plan)
+	for _, p := range plans {
+		planMap[p.ID] = p
+	}
+
+	return planMap, nil
+}
+
+func (s *featureUsageTrackingService) fetchAddons(ctx context.Context, data *AnalyticsData) (map[string]*addon.Addon, error) {
+	addonFilter := types.NewNoLimitAddonFilter()
+
+	addons, err := s.AddonRepo.List(ctx, addonFilter)
+	if err != nil {
+		s.Logger.Errorw("failed to fetch addons for analytics",
+			"error", err,
+		)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to fetch addons for analytics").
+			Mark(ierr.ErrDatabase)
+	}
+
+	addonMap := make(map[string]*addon.Addon)
+	for _, a := range addons {
+		addonMap[a.ID] = a
+	}
+
+	return addonMap, nil
 }

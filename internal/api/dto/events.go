@@ -6,9 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/flexprice/flexprice/internal/domain/addon"
 	"github.com/flexprice/flexprice/internal/domain/events"
 	"github.com/flexprice/flexprice/internal/domain/feature"
 	"github.com/flexprice/flexprice/internal/domain/meter"
+	"github.com/flexprice/flexprice/internal/domain/plan"
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
 	ierr "github.com/flexprice/flexprice/internal/errors"
@@ -282,7 +284,7 @@ type GetUsageAnalyticsRequest struct {
 	EndTime            time.Time        `json:"end_time,omitempty"`
 	GroupBy            []string         `json:"group_by,omitempty"` // allowed values: "source", "feature_id", "properties.<field_name>"
 	WindowSize         types.WindowSize `json:"window_size,omitempty"`
-	Expand             []string         `json:"expand,omitempty"` // allowed values: "price", "meter", "feature", "subscription_line_item"
+	Expand             []string         `json:"expand,omitempty"` // allowed values: "price", "meter", "feature", "subscription_line_item","plan","addon"
 	// Property filters to filter the events by the keys in `properties` field of the event
 	PropertyFilters map[string][]string `json:"property_filters,omitempty"`
 }
@@ -305,6 +307,8 @@ type UsageAnalyticItem struct {
 	Meter                *meter.Meter                       `json:"meter,omitempty"`                  // Full meter object (only if expand includes "meter")
 	Feature              *feature.Feature                   `json:"feature,omitempty"`                // Full feature object (only if expand includes "feature")
 	SubscriptionLineItem *subscription.SubscriptionLineItem `json:"subscription_line_item,omitempty"` // Full line item (only if expand includes "subscription_line_item")
+	Plan                 *plan.Plan                         `json:"plan,omitempty"`                   // Full plan object (only if expand includes "plan")
+	Addon                *addon.Addon                       `json:"addon,omitempty"`                  // Full addon object (only if expand includes "addon")
 	FeatureName          string                             `json:"name,omitempty"`
 	EventName            string                             `json:"event_name,omitempty"`
 	Source               string                             `json:"source,omitempty"`
@@ -317,6 +321,8 @@ type UsageAnalyticItem struct {
 	EventCount           uint64                             `json:"event_count"`          // Number of events that contributed to this aggregation
 	Properties           map[string]string                  `json:"properties,omitempty"` // Stores property values for flexible grouping (e.g., org_id -> "org123")
 	Points               []UsageAnalyticPoint               `json:"points,omitempty"`
+	AddOnID              string                             `json:"add_on_id,omitempty"`
+	PlanID               string                             `json:"plan_id,omitempty"`
 }
 
 // UsageAnalyticPoint represents a point in the time series data
