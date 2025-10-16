@@ -49,7 +49,7 @@ func NewConfigFromConnection(secretData *types.S3ConnectionMetadata, exportConfi
 
 	// Set defaults
 	if config.Compression == "" {
-		config.Compression = "gzip"
+		config.Compression = "none"
 	}
 	if config.Encryption == "" {
 		config.Encryption = "AES256"

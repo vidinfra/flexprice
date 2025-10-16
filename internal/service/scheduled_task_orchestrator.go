@@ -303,41 +303,44 @@ func (o *ScheduledTaskOrchestrator) getCronExpression(interval types.ScheduledTa
 	}
 }
 
-// CalculateIntervalBoundaries calculates the start and end time based on interval boundaries
-// This ensures data is aligned to natural time boundaries (hour, day, week, month, year)
+// CalculateIntervalBoundaries calculates the start and end time for the PREVIOUS completed interval
+// This ensures we export data from the completed interval before the current time
+// For first run: exports the interval that just completed
+// For incremental run: returns the current boundary start (which becomes the end time)
 func (o *ScheduledTaskOrchestrator) CalculateIntervalBoundaries(currentTime time.Time, interval types.ScheduledTaskInterval) (startTime, endTime time.Time) {
 	switch interval {
 	case types.ScheduledTaskIntervalTesting:
 		// For testing: align to 10-minute intervals
-		// Truncate to the nearest 10 minutes
+		// Return the PREVIOUS completed 10-minute interval
+		// Example: If current time is 2:07 PM, return 2:00 PM - 2:10 PM (not 2:10-2:20)
 		minutes := currentTime.Minute() / 10 * 10
-		startTime = time.Date(
+		endTime = time.Date(
 			currentTime.Year(), currentTime.Month(), currentTime.Day(),
 			currentTime.Hour(), minutes, 0, 0, currentTime.Location(),
 		)
-		endTime = startTime.Add(10 * time.Minute)
+		startTime = endTime.Add(-10 * time.Minute)
 
 	case types.ScheduledTaskIntervalHourly:
-		// Align to hour boundaries
-		// Example: If current time is 10:30 AM, range = 10:00 AM → 11:00 AM
-		startTime = time.Date(
+		// Return the PREVIOUS completed hour
+		// Example: If current time is 10:30 AM, return 9:00 AM → 10:00 AM (not 10:00-11:00)
+		endTime = time.Date(
 			currentTime.Year(), currentTime.Month(), currentTime.Day(),
 			currentTime.Hour(), 0, 0, 0, currentTime.Location(),
 		)
-		endTime = startTime.Add(1 * time.Hour)
+		startTime = endTime.Add(-1 * time.Hour)
 
 	case types.ScheduledTaskIntervalDaily:
-		// Align to day boundaries (midnight to midnight)
-		// Example: If run anytime on 16 Oct 2025, range = 16 Oct 00:00 → 17 Oct 00:00
-		startTime = time.Date(
+		// Return the PREVIOUS completed day
+		// Example: If run anytime on 16 Oct 2025, return 15 Oct 00:00 → 16 Oct 00:00 (not 16-17)
+		endTime = time.Date(
 			currentTime.Year(), currentTime.Month(), currentTime.Day(),
 			0, 0, 0, 0, currentTime.Location(),
 		)
-		endTime = startTime.AddDate(0, 0, 1) // Add 1 day
+		startTime = endTime.AddDate(0, 0, -1) // Previous day
 
 	case types.ScheduledTaskIntervalWeekly:
-		// Align to week boundaries (Monday 00:00 to next Monday 00:00)
-		// Example: If run on Thursday 16 Oct 2025, range = Monday 13 Oct 00:00 → Monday 20 Oct 00:00
+		// Return the PREVIOUS completed week (Monday to Monday)
+		// Example: If run on Thursday 16 Oct 2025, return Mon 6 Oct 00:00 → Mon 13 Oct 00:00 (not 13-20)
 
 		// Get the current weekday (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
 		weekday := currentTime.Weekday()
@@ -350,40 +353,40 @@ func (o *ScheduledTaskOrchestrator) CalculateIntervalBoundaries(currentTime time
 			daysSinceMonday = int(weekday) - 1 // Monday = 0, Tuesday = 1, etc.
 		}
 
-		// Get Monday 00:00 of current week
-		startTime = time.Date(
+		// Get Monday 00:00 of current week (this is endTime)
+		endTime = time.Date(
 			currentTime.Year(), currentTime.Month(), currentTime.Day(),
 			0, 0, 0, 0, currentTime.Location(),
 		).AddDate(0, 0, -daysSinceMonday)
 
-		// End time is next Monday 00:00 (7 days later)
-		endTime = startTime.AddDate(0, 0, 7)
+		// Start time is previous Monday (7 days before)
+		startTime = endTime.AddDate(0, 0, -7)
 
 	case types.ScheduledTaskIntervalMonthly:
-		// Align to month boundaries (1st of month 00:00 to 1st of next month 00:00)
-		// Example: If run on 16 Oct 2025, range = 1 Oct 2025 00:00 → 1 Nov 2025 00:00
-		startTime = time.Date(
+		// Return the PREVIOUS completed month
+		// Example: If run on 16 Oct 2025, return 1 Sep 2025 00:00 → 1 Oct 2025 00:00 (not Oct-Nov)
+		endTime = time.Date(
 			currentTime.Year(), currentTime.Month(), 1,
 			0, 0, 0, 0, currentTime.Location(),
 		)
-		endTime = startTime.AddDate(0, 1, 0) // Add 1 month
+		startTime = endTime.AddDate(0, -1, 0) // Previous month
 
 	case types.ScheduledTaskIntervalYearly:
-		// Align to year boundaries (1st Jan 00:00 to 1st Jan next year 00:00)
-		// Example: If run anytime in 2025, range = 1 Jan 2025 00:00 → 1 Jan 2026 00:00
-		startTime = time.Date(
+		// Return the PREVIOUS completed year
+		// Example: If run anytime in 2025, return 1 Jan 2024 00:00 → 1 Jan 2025 00:00 (not 2025-2026)
+		endTime = time.Date(
 			currentTime.Year(), time.January, 1,
 			0, 0, 0, 0, currentTime.Location(),
 		)
-		endTime = startTime.AddDate(1, 0, 0) // Add 1 year
+		startTime = endTime.AddDate(-1, 0, 0) // Previous year
 
 	default:
-		// Default to daily
-		startTime = time.Date(
+		// Default to previous day
+		endTime = time.Date(
 			currentTime.Year(), currentTime.Month(), currentTime.Day(),
 			0, 0, 0, 0, currentTime.Location(),
 		)
-		endTime = startTime.AddDate(0, 0, 1)
+		startTime = endTime.AddDate(0, 0, -1)
 	}
 
 	return startTime, endTime

@@ -84,10 +84,6 @@ func (a *ExportActivity) ExportData(ctx context.Context, input ExportDataInput) 
 		response, err = exporter.Export(ctx, request)
 	// Add more entity types as needed
 	// case types.ExportEntityTypeCustomer:
-	//     s3Client, err := a.integrationFactory.GetStorageProvider(ctx, input.ConnectionID)
-	//     if err != nil { ... }
-	//     exporter := syncExport.NewCustomerExporter(...)
-	//     response, err = exporter.Export(ctx, request)
 	default:
 		return nil, ierr.NewError("unsupported entity type").
 			WithHintf("Entity type '%s' is not supported for export", input.EntityType).

@@ -39,6 +39,7 @@ import (
 	"go.uber.org/fx"
 
 	_ "github.com/flexprice/flexprice/docs/swagger"
+	"github.com/flexprice/flexprice/internal/domain/events"
 	"github.com/flexprice/flexprice/internal/domain/proration"
 	"github.com/flexprice/flexprice/internal/integration"
 	"github.com/flexprice/flexprice/internal/security"
