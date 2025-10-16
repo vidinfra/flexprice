@@ -184,11 +184,11 @@ func (o *ScheduledTaskOrchestrator) DeleteScheduledTask(ctx context.Context, tas
 	return nil
 }
 
-// TriggerManualSync executes the export workflow immediately (bypasses schedule)
+// TriggerForceRun executes the export workflow immediately (bypasses schedule)
 // If customStart and customEnd are provided, uses those times. Otherwise, calculates automatically.
 // Returns: workflowID, startTime, endTime, mode, error
-func (o *ScheduledTaskOrchestrator) TriggerManualSync(ctx context.Context, taskID string, customStart, customEnd *time.Time) (string, time.Time, time.Time, string, error) {
-	o.logger.Infow("triggering manual sync", "task_id", taskID, "custom_start", customStart, "custom_end", customEnd)
+func (o *ScheduledTaskOrchestrator) TriggerForceRun(ctx context.Context, taskID string, customStart, customEnd *time.Time) (string, time.Time, time.Time, string, error) {
+	o.logger.Infow("triggering force run", "task_id", taskID, "custom_start", customStart, "custom_end", customEnd)
 
 	// Get the task
 	task, err := o.scheduledTaskRepo.Get(ctx, taskID)
@@ -220,13 +220,19 @@ func (o *ScheduledTaskOrchestrator) TriggerManualSync(ctx context.Context, taskI
 			"end_time", endTime,
 			"duration", endTime.Sub(startTime))
 	} else {
-		// Calculate automatically
-		endTime = time.Now()
-		startTime = o.calculateManualSyncStartTime(ctx, task, endTime)
+		// Calculate automatically based on interval boundaries
+		interval := types.ScheduledTaskInterval(task.Interval)
+		currentTime := time.Now()
+
+		// Calculate interval boundaries for force run
+		startTime, endTime = o.CalculateIntervalBoundaries(currentTime, interval)
 		mode = "automatic"
-		o.logger.Infow("using automatic time range",
+
+		o.logger.Infow("using automatic time range based on interval boundaries",
 			"start_time", startTime,
 			"end_time", endTime,
+			"current_time", currentTime,
+			"interval", interval,
 			"duration", endTime.Sub(startTime))
 	}
 
@@ -235,7 +241,7 @@ func (o *ScheduledTaskOrchestrator) TriggerManualSync(ctx context.Context, taskI
 	exportTaskID := types.GenerateUUIDWithPrefix("task")
 	workflowID := fmt.Sprintf("%s-export", exportTaskID)
 
-	o.logger.Infow("triggering manual export",
+	o.logger.Infow("triggering force run export",
 		"export_task_id", exportTaskID,
 		"workflow_id", workflowID,
 		"scheduled_task_id", taskID,
@@ -266,7 +272,7 @@ func (o *ScheduledTaskOrchestrator) TriggerManualSync(ctx context.Context, taskI
 			Mark(ierr.ErrInternal)
 	}
 
-	o.logger.Infow("manual sync triggered",
+	o.logger.Infow("force run triggered",
 		"scheduled_task_id", taskID,
 		"workflow_id", workflowRun.GetID(),
 		"run_id", workflowRun.GetRunID(),
@@ -287,80 +293,98 @@ func (o *ScheduledTaskOrchestrator) getCronExpression(interval types.ScheduledTa
 	case types.ScheduledTaskIntervalDaily:
 		return "0 0 * * *" // Every day at midnight
 	case types.ScheduledTaskIntervalWeekly:
-		return "0 0 * * 0" // Every Sunday at midnight
+		return "0 0 * * 1" // Every Monday at midnight (week starts Monday)
 	case types.ScheduledTaskIntervalMonthly:
 		return "0 0 1 * *" // First day of every month at midnight
+	case types.ScheduledTaskIntervalYearly:
+		return "0 0 1 1 *" // First day of every year at midnight (Jan 1st)
 	default:
 		return "0 0 * * *" // Default to daily
 	}
 }
 
-// calculateManualSyncStartTime determines start time for manual sync
-// Implements incremental sync: uses last successful export's end_time as new start_time
-func (o *ScheduledTaskOrchestrator) calculateManualSyncStartTime(ctx context.Context, task *scheduledtask.ScheduledTask, endTime time.Time) time.Time {
-	o.logger.Infow("calculating start time for manual sync",
-		"scheduled_task_id", task.ID,
-		"interval", task.Interval,
-		"end_time", endTime)
-
-	// Try to get last successful export task for incremental sync
-	lastTask, err := o.taskRepo.GetLastSuccessfulExportTask(ctx, task.ID)
-	if err != nil {
-		// Log error but continue with interval-based logic
-		o.logger.Warnw("error getting last successful export, falling back to interval-based logic",
-			"scheduled_task_id", task.ID,
-			"error", err)
-	}
-
-	// If we found a previous successful export, use its end_time as our start_time (incremental sync)
-	if lastTask != nil && lastTask.Metadata != nil {
-		if endTimeStr, ok := lastTask.Metadata["end_time"].(string); ok {
-			lastEndTime, err := time.Parse(time.RFC3339, endTimeStr)
-			if err != nil {
-				o.logger.Warnw("failed to parse last task end_time, falling back to interval-based logic",
-					"scheduled_task_id", task.ID,
-					"end_time_str", endTimeStr,
-					"error", err)
-			} else {
-				o.logger.Infow("using incremental sync for manual sync - starting from last export's end_time",
-					"scheduled_task_id", task.ID,
-					"last_export_end_time", lastEndTime,
-					"new_start_time", lastEndTime,
-					"new_end_time", endTime,
-					"duration", endTime.Sub(lastEndTime))
-				return lastEndTime
-			}
-		} else {
-			o.logger.Warnw("last task metadata missing end_time, falling back to interval-based logic",
-				"scheduled_task_id", task.ID)
-		}
-	}
-
-	// First run OR no previous task found - use interval-based logic
-	interval := types.ScheduledTaskInterval(task.Interval)
-	var startTime time.Time
-
+// CalculateIntervalBoundaries calculates the start and end time based on interval boundaries
+// This ensures data is aligned to natural time boundaries (hour, day, week, month, year)
+func (o *ScheduledTaskOrchestrator) CalculateIntervalBoundaries(currentTime time.Time, interval types.ScheduledTaskInterval) (startTime, endTime time.Time) {
 	switch interval {
 	case types.ScheduledTaskIntervalTesting:
-		startTime = endTime.Add(-10 * time.Minute)
+		// For testing: align to 10-minute intervals
+		// Truncate to the nearest 10 minutes
+		minutes := currentTime.Minute() / 10 * 10
+		startTime = time.Date(
+			currentTime.Year(), currentTime.Month(), currentTime.Day(),
+			currentTime.Hour(), minutes, 0, 0, currentTime.Location(),
+		)
+		endTime = startTime.Add(10 * time.Minute)
+
 	case types.ScheduledTaskIntervalHourly:
-		startTime = endTime.Add(-1 * time.Hour)
+		// Align to hour boundaries
+		// Example: If current time is 10:30 AM, range = 10:00 AM → 11:00 AM
+		startTime = time.Date(
+			currentTime.Year(), currentTime.Month(), currentTime.Day(),
+			currentTime.Hour(), 0, 0, 0, currentTime.Location(),
+		)
+		endTime = startTime.Add(1 * time.Hour)
+
 	case types.ScheduledTaskIntervalDaily:
-		startTime = endTime.Add(-24 * time.Hour)
+		// Align to day boundaries (midnight to midnight)
+		// Example: If run anytime on 16 Oct 2025, range = 16 Oct 00:00 → 17 Oct 00:00
+		startTime = time.Date(
+			currentTime.Year(), currentTime.Month(), currentTime.Day(),
+			0, 0, 0, 0, currentTime.Location(),
+		)
+		endTime = startTime.AddDate(0, 0, 1) // Add 1 day
+
 	case types.ScheduledTaskIntervalWeekly:
-		startTime = endTime.Add(-7 * 24 * time.Hour)
+		// Align to week boundaries (Monday 00:00 to next Monday 00:00)
+		// Example: If run on Thursday 16 Oct 2025, range = Monday 13 Oct 00:00 → Monday 20 Oct 00:00
+
+		// Get the current weekday (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
+		weekday := currentTime.Weekday()
+
+		// Calculate days since last Monday
+		var daysSinceMonday int
+		if weekday == time.Sunday {
+			daysSinceMonday = 6 // Sunday is 6 days after Monday
+		} else {
+			daysSinceMonday = int(weekday) - 1 // Monday = 0, Tuesday = 1, etc.
+		}
+
+		// Get Monday 00:00 of current week
+		startTime = time.Date(
+			currentTime.Year(), currentTime.Month(), currentTime.Day(),
+			0, 0, 0, 0, currentTime.Location(),
+		).AddDate(0, 0, -daysSinceMonday)
+
+		// End time is next Monday 00:00 (7 days later)
+		endTime = startTime.AddDate(0, 0, 7)
+
 	case types.ScheduledTaskIntervalMonthly:
-		startTime = endTime.AddDate(0, -1, 0)
+		// Align to month boundaries (1st of month 00:00 to 1st of next month 00:00)
+		// Example: If run on 16 Oct 2025, range = 1 Oct 2025 00:00 → 1 Nov 2025 00:00
+		startTime = time.Date(
+			currentTime.Year(), currentTime.Month(), 1,
+			0, 0, 0, 0, currentTime.Location(),
+		)
+		endTime = startTime.AddDate(0, 1, 0) // Add 1 month
+
+	case types.ScheduledTaskIntervalYearly:
+		// Align to year boundaries (1st Jan 00:00 to 1st Jan next year 00:00)
+		// Example: If run anytime in 2025, range = 1 Jan 2025 00:00 → 1 Jan 2026 00:00
+		startTime = time.Date(
+			currentTime.Year(), time.January, 1,
+			0, 0, 0, 0, currentTime.Location(),
+		)
+		endTime = startTime.AddDate(1, 0, 0) // Add 1 year
+
 	default:
-		startTime = endTime.Add(-24 * time.Hour)
+		// Default to daily
+		startTime = time.Date(
+			currentTime.Year(), currentTime.Month(), currentTime.Day(),
+			0, 0, 0, 0, currentTime.Location(),
+		)
+		endTime = startTime.AddDate(0, 0, 1)
 	}
 
-	o.logger.Infow("no previous export found - using interval-based logic for manual sync (first run)",
-		"scheduled_task_id", task.ID,
-		"interval", interval,
-		"start_time", startTime,
-		"end_time", endTime,
-		"duration", endTime.Sub(startTime))
-
-	return startTime
+	return startTime, endTime
 }

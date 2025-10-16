@@ -30,7 +30,22 @@ func RegisterWorkflowsAndActivities(temporalService temporalService.TemporalServ
 
 	// Export activities
 	taskActivity := exportActivities.NewTaskActivity(params.TaskRepo, params.Logger)
-	scheduledTaskActivity := exportActivities.NewScheduledTaskActivity(params.ScheduledTaskRepo, params.TaskRepo, params.Logger)
+
+	// Create orchestrator for interval boundary calculations
+	// Note: temporal client is nil because activity only uses CalculateIntervalBoundaries method
+	scheduledTaskOrchestrator := service.NewScheduledTaskOrchestrator(
+		params.ScheduledTaskRepo,
+		params.TaskRepo,
+		nil, // temporal client not needed for boundary calculations
+		params.Logger,
+	)
+
+	scheduledTaskActivity := exportActivities.NewScheduledTaskActivity(
+		params.ScheduledTaskRepo,
+		params.TaskRepo,
+		params.Logger,
+		scheduledTaskOrchestrator,
+	)
 	exportActivity := exportActivities.NewExportActivity(params.FeatureUsageRepo, params.IntegrationFactory, params.Logger)
 
 	// Get all task queues and register workflows/activities for each

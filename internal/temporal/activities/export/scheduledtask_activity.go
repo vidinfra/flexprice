@@ -11,11 +11,17 @@ import (
 	"github.com/flexprice/flexprice/internal/types"
 )
 
+// IntervalBoundaryCalculator defines the interface for calculating interval boundaries
+type IntervalBoundaryCalculator interface {
+	CalculateIntervalBoundaries(currentTime time.Time, interval types.ScheduledTaskInterval) (startTime, endTime time.Time)
+}
+
 // ScheduledTaskActivity handles scheduled task operations
 type ScheduledTaskActivity struct {
-	scheduledTaskRepo scheduledtask.Repository
-	taskRepo          task.Repository
-	logger            *logger.Logger
+	scheduledTaskRepo  scheduledtask.Repository
+	taskRepo           task.Repository
+	logger             *logger.Logger
+	boundaryCalculator IntervalBoundaryCalculator
 }
 
 // NewScheduledTaskActivity creates a new scheduled task activity
@@ -23,11 +29,13 @@ func NewScheduledTaskActivity(
 	scheduledTaskRepo scheduledtask.Repository,
 	taskRepo task.Repository,
 	logger *logger.Logger,
+	boundaryCalculator IntervalBoundaryCalculator,
 ) *ScheduledTaskActivity {
 	return &ScheduledTaskActivity{
-		scheduledTaskRepo: scheduledTaskRepo,
-		taskRepo:          taskRepo,
-		logger:            logger,
+		scheduledTaskRepo:  scheduledTaskRepo,
+		taskRepo:           taskRepo,
+		logger:             logger,
+		boundaryCalculator: boundaryCalculator,
 	}
 }
 
@@ -106,6 +114,7 @@ func (a *ScheduledTaskActivity) GetScheduledTaskDetails(ctx context.Context, inp
 
 // calculateStartTime determines the start time for the export
 // Implements incremental sync: uses last successful export's end_time as new start_time
+// For first run or when no previous export exists, uses interval-based boundary alignment
 func (a *ScheduledTaskActivity) calculateStartTime(ctx context.Context, task *scheduledtask.ScheduledTask, endTime time.Time) time.Time {
 	a.logger.Infow("calculating start time for export",
 		"scheduled_task_id", task.ID,
@@ -145,27 +154,11 @@ func (a *ScheduledTaskActivity) calculateStartTime(ctx context.Context, task *sc
 		}
 	}
 
-	// First run OR no previous task found - use interval-based logic
+	// First run OR no previous task found - use interval-based boundary alignment
 	interval := types.ScheduledTaskInterval(task.Interval)
-	var startTime time.Time
+	startTime, _ := a.boundaryCalculator.CalculateIntervalBoundaries(endTime, interval)
 
-	switch interval {
-	case types.ScheduledTaskIntervalTesting:
-		startTime = endTime.Add(-10 * time.Minute)
-	case types.ScheduledTaskIntervalHourly:
-		startTime = endTime.Add(-1 * time.Hour)
-	case types.ScheduledTaskIntervalDaily:
-		startTime = endTime.Add(-24 * time.Hour)
-	case types.ScheduledTaskIntervalWeekly:
-		startTime = endTime.Add(-7 * 24 * time.Hour)
-	case types.ScheduledTaskIntervalMonthly:
-		startTime = endTime.AddDate(0, -1, 0)
-	default:
-		// Default to daily
-		startTime = endTime.Add(-24 * time.Hour)
-	}
-
-	a.logger.Infow("no previous export found - using interval-based logic (first run)",
+	a.logger.Infow("no previous export found - using interval-based boundary alignment (first run)",
 		"scheduled_task_id", task.ID,
 		"interval", interval,
 		"start_time", startTime,

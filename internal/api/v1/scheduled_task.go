@@ -177,20 +177,20 @@ func (h *ScheduledTaskHandler) DeleteScheduledTask(c *gin.Context) {
 	})
 }
 
-// @Summary Trigger manual sync
-// @Description Trigger a manual export sync immediately for a scheduled task with optional custom time range
+// @Summary Trigger force run
+// @Description Trigger a force run export immediately for a scheduled task with optional custom time range
 // @Tags ScheduledTasks
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
 // @Param id path string true "Scheduled Task ID"
-// @Param request body dto.TriggerManualSyncRequest false "Optional start and end time for custom range"
-// @Success 200 {object} dto.TriggerManualSyncResponse "Returns workflow details and time range"
+// @Param request body dto.TriggerForceRunRequest false "Optional start and end time for custom range"
+// @Success 200 {object} dto.TriggerForceRunResponse "Returns workflow details and time range"
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 404 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
-// @Router /tasks/scheduled/{id}/sync [post]
-func (h *ScheduledTaskHandler) TriggerManualSync(c *gin.Context) {
+// @Router /v1/scheduled-jobs/{id}/force-run [post]
+func (h *ScheduledTaskHandler) TriggerForceRun(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
 		c.Error(ierr.NewError("id is required").
@@ -200,29 +200,29 @@ func (h *ScheduledTaskHandler) TriggerManualSync(c *gin.Context) {
 	}
 
 	// Parse request body (optional)
-	var req dto.TriggerManualSyncRequest
+	var req dto.TriggerForceRunRequest
 
 	// Try to bind JSON - if empty body or no JSON, continue with automatic time calculation
 	if err := c.ShouldBindJSON(&req); err != nil {
 		// Empty body or invalid JSON - use automatic calculation
 		h.logger.Debugw("no custom time range provided, using automatic calculation", "id", id)
-		req = dto.TriggerManualSyncRequest{} // Empty request for automatic
+		req = dto.TriggerForceRunRequest{} // Empty request for automatic
 	} else {
 		// Validate the request
 		if err := req.Validate(); err != nil {
-			h.logger.Errorw("invalid manual sync request", "id", id, "error", err)
+			h.logger.Errorw("invalid force run request", "id", id, "error", err)
 			c.Error(err)
 			return
 		}
-		h.logger.Infow("manual sync with custom time range",
+		h.logger.Infow("force run with custom time range",
 			"id", id,
 			"start_time", req.StartTime,
 			"end_time", req.EndTime)
 	}
 
-	response, err := h.service.TriggerManualSync(c.Request.Context(), id, req)
+	response, err := h.service.TriggerForceRun(c.Request.Context(), id, req)
 	if err != nil {
-		h.logger.Errorw("failed to trigger manual sync", "id", id, "error", err)
+		h.logger.Errorw("failed to trigger force run", "id", id, "error", err)
 		c.Error(err)
 		return
 	}

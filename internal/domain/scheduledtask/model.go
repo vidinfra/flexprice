@@ -59,6 +59,8 @@ func (j *ScheduledTask) CalculateNextRunTime(fromTime time.Time) time.Time {
 		return fromTime.Add(7 * 24 * time.Hour)
 	case types.ScheduledTaskIntervalMonthly:
 		return fromTime.AddDate(0, 1, 0)
+	case types.ScheduledTaskIntervalYearly:
+		return fromTime.AddDate(1, 0, 0)
 	case types.ScheduledTaskIntervalTesting:
 		return fromTime.Add(10 * time.Minute)
 	default:

@@ -20,7 +20,7 @@ type ScheduledTaskService interface {
 	UpdateScheduledTask(ctx context.Context, id string, req dto.UpdateScheduledTaskRequest) (*dto.ScheduledTaskResponse, error)
 	DeleteScheduledTask(ctx context.Context, id string) error
 	GetScheduledTasksByEntityType(ctx context.Context, entityType types.ScheduledTaskEntityType) ([]*dto.ScheduledTaskResponse, error)
-	TriggerManualSync(ctx context.Context, id string, req dto.TriggerManualSyncRequest) (*dto.TriggerManualSyncResponse, error)
+	TriggerForceRun(ctx context.Context, id string, req dto.TriggerForceRunRequest) (*dto.TriggerForceRunResponse, error)
 }
 
 type scheduledTaskService struct {
@@ -328,30 +328,30 @@ func (s *scheduledTaskService) DeleteScheduledTask(ctx context.Context, id strin
 	return nil
 }
 
-// TriggerManualSync triggers a manual export immediately with optional custom time range
-func (s *scheduledTaskService) TriggerManualSync(ctx context.Context, id string, req dto.TriggerManualSyncRequest) (*dto.TriggerManualSyncResponse, error) {
+// TriggerForceRun triggers a force run export immediately with optional custom time range
+func (s *scheduledTaskService) TriggerForceRun(ctx context.Context, id string, req dto.TriggerForceRunRequest) (*dto.TriggerForceRunResponse, error) {
 	if s.orchestrator == nil {
 		return nil, ierr.NewError("orchestrator not configured").
 			WithHint("Temporal orchestrator is not available").
 			Mark(ierr.ErrInternal)
 	}
 
-	workflowID, startTime, endTime, mode, err := s.orchestrator.TriggerManualSync(ctx, id, req.StartTime, req.EndTime)
+	workflowID, startTime, endTime, mode, err := s.orchestrator.TriggerForceRun(ctx, id, req.StartTime, req.EndTime)
 	if err != nil {
-		s.logger.Errorw("failed to trigger manual sync", "id", id, "error", err)
+		s.logger.Errorw("failed to trigger force run", "id", id, "error", err)
 		return nil, err
 	}
 
-	s.logger.Infow("manual sync triggered",
+	s.logger.Infow("force run triggered",
 		"id", id,
 		"workflow_id", workflowID,
 		"start_time", startTime,
 		"end_time", endTime,
 		"mode", mode)
 
-	return &dto.TriggerManualSyncResponse{
+	return &dto.TriggerForceRunResponse{
 		WorkflowID: workflowID,
-		Message:    "Manual sync triggered successfully",
+		Message:    "Force run triggered successfully",
 		StartTime:  startTime,
 		EndTime:    endTime,
 		Mode:       mode,

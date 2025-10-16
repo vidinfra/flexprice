@@ -13,6 +13,7 @@ const (
 	ScheduledTaskIntervalDaily   ScheduledTaskInterval = "daily"
 	ScheduledTaskIntervalWeekly  ScheduledTaskInterval = "weekly"
 	ScheduledTaskIntervalMonthly ScheduledTaskInterval = "monthly"
+	ScheduledTaskIntervalYearly  ScheduledTaskInterval = "yearly"
 )
 
 // Validate validates the scheduled task interval
@@ -23,6 +24,7 @@ func (s ScheduledTaskInterval) Validate() error {
 		ScheduledTaskIntervalDaily,
 		ScheduledTaskIntervalWeekly,
 		ScheduledTaskIntervalMonthly,
+		ScheduledTaskIntervalYearly,
 	}
 	if s == "" {
 		return ierr.NewError("interval is required").
@@ -35,7 +37,7 @@ func (s ScheduledTaskInterval) Validate() error {
 		}
 	}
 	return ierr.NewError("invalid scheduled task interval").
-		WithHint("Interval must be one of: testing, hourly, daily, weekly, monthly").
+		WithHint("Interval must be one of: testing, hourly, daily, weekly, monthly, yearly").
 		Mark(ierr.ErrValidation)
 }
 

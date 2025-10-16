@@ -105,14 +105,14 @@ func (r *CreateScheduledTaskRequest) ToCreateInput() *types.CreateScheduledTaskI
 	}
 }
 
-// TriggerManualSyncRequest represents the request to trigger a manual sync
-type TriggerManualSyncRequest struct {
+// TriggerForceRunRequest represents the request to trigger a force run
+type TriggerForceRunRequest struct {
 	StartTime *time.Time `json:"start_time,omitempty" validate:"omitempty"`
 	EndTime   *time.Time `json:"end_time,omitempty" validate:"omitempty"`
 }
 
-// Validate validates the manual sync request
-func (r *TriggerManualSyncRequest) Validate() error {
+// Validate validates the force run request
+func (r *TriggerForceRunRequest) Validate() error {
 	if err := validator.ValidateRequest(r); err != nil {
 		return err
 	}
@@ -165,8 +165,8 @@ func (r *TriggerManualSyncRequest) Validate() error {
 	return nil
 }
 
-// TriggerManualSyncResponse represents the response from manual sync trigger
-type TriggerManualSyncResponse struct {
+// TriggerForceRunResponse represents the response from force run trigger
+type TriggerForceRunResponse struct {
 	WorkflowID string    `json:"workflow_id"`
 	Message    string    `json:"message"`
 	StartTime  time.Time `json:"start_time"`

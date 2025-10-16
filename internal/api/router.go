@@ -339,7 +339,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 				scheduledTasks.GET("/:id", handlers.ScheduledTask.GetScheduledTask)
 				scheduledTasks.PUT("/:id", handlers.ScheduledTask.UpdateScheduledTask)
 				scheduledTasks.DELETE("/:id", handlers.ScheduledTask.DeleteScheduledTask)
-				scheduledTasks.POST("/:id/sync", handlers.ScheduledTask.TriggerManualSync)
+				scheduledTasks.POST("/:id/sync", handlers.ScheduledTask.TriggerForceRun)
 			}
 		}
 
