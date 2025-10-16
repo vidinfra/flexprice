@@ -40,7 +40,6 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/wallet"
 	"github.com/flexprice/flexprice/internal/httpclient"
 	"github.com/flexprice/flexprice/internal/integration"
-	s3Integration "github.com/flexprice/flexprice/internal/integration/s3"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/pdf"
 	"github.com/flexprice/flexprice/internal/postgres"
@@ -112,9 +111,6 @@ type ServiceParams struct {
 
 	// Integration Factory
 	IntegrationFactory *integration.Factory
-
-	// S3 Client
-	S3Client *s3Integration.Client
 }
 
 // Common service params
@@ -169,7 +165,6 @@ func NewServiceParams(
 	scheduledTaskRepo scheduledtask.Repository,
 	prorationCalculator proration.Calculator,
 	integrationFactory *integration.Factory,
-	s3Client *s3Integration.Client,
 ) ServiceParams {
 	return ServiceParams{
 		Logger:                       logger,
@@ -222,6 +217,5 @@ func NewServiceParams(
 		ScheduledTaskRepo:            scheduledTaskRepo,
 		ProrationCalculator:          prorationCalculator,
 		IntegrationFactory:           integrationFactory,
-		S3Client:                     s3Client,
 	}
 }

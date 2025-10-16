@@ -3,21 +3,21 @@ package v1
 import (
 	"net/http"
 
-	s3Integration "github.com/flexprice/flexprice/internal/integration/s3"
+	"github.com/flexprice/flexprice/internal/integration"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/gin-gonic/gin"
 )
 
 type TestExportHandler struct {
-	s3Client *s3Integration.Client
-	logger   *logger.Logger
+	integrationFactory *integration.Factory
+	logger             *logger.Logger
 }
 
-func NewTestExportHandler(s3Client *s3Integration.Client, logger *logger.Logger) *TestExportHandler {
+func NewTestExportHandler(integrationFactory *integration.Factory, logger *logger.Logger) *TestExportHandler {
 	return &TestExportHandler{
-		s3Client: s3Client,
-		logger:   logger,
+		integrationFactory: integrationFactory,
+		logger:             logger,
 	}
 }
 
@@ -41,7 +41,13 @@ func (h *TestExportHandler) TestExport(c *gin.Context) {
 	}
 
 	// 1. Get S3 client with decrypted credentials and test config
-	s3Client, s3Config, err := h.s3Client.GetS3Client(ctx, testJobConfig)
+	s3IntegrationClient, err := h.integrationFactory.GetS3Client(ctx)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get S3 integration client", "details": err.Error()})
+		return
+	}
+
+	s3Client, s3Config, err := s3IntegrationClient.GetS3Client(ctx, testJobConfig)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to get S3 client", "details": err.Error()})
 		return

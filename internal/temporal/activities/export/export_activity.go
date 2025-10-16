@@ -80,15 +80,7 @@ func (a *ExportActivity) ExportData(ctx context.Context, input ExportDataInput) 
 
 	switch input.EntityType {
 	case types.ExportEntityTypeEvents:
-		// Get storage provider from factory (currently returns S3 client)
-		s3Client, storageErr := a.integrationFactory.GetStorageProvider(ctx, input.ConnectionID)
-		if storageErr != nil {
-			return nil, ierr.WithError(storageErr).
-				WithHint("Failed to get storage provider from factory").
-				Mark(ierr.ErrInternal)
-		}
-
-		exporter := syncExport.NewUsageExporter(a.featureUsageRepo, s3Client, a.logger)
+		exporter := syncExport.NewUsageExporter(a.featureUsageRepo, a.integrationFactory, a.logger)
 		response, err = exporter.Export(ctx, request)
 	// Add more entity types as needed
 	// case types.ExportEntityTypeCustomer:

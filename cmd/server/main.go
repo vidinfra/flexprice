@@ -14,11 +14,9 @@ import (
 	"github.com/flexprice/flexprice/internal/cache"
 	"github.com/flexprice/flexprice/internal/clickhouse"
 	"github.com/flexprice/flexprice/internal/config"
-	"github.com/flexprice/flexprice/internal/domain/connection"
 	"github.com/flexprice/flexprice/internal/domain/scheduledtask"
 	"github.com/flexprice/flexprice/internal/dynamodb"
 	"github.com/flexprice/flexprice/internal/httpclient"
-	s3Integration "github.com/flexprice/flexprice/internal/integration/s3"
 	"github.com/flexprice/flexprice/internal/kafka"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/pdf"
@@ -188,7 +186,6 @@ func main() {
 			// Services
 			// Integration factory must be provided before service params
 			integration.NewFactory,
-			provideS3Client,
 			provideExportService,
 			service.NewServiceParams,
 			service.NewTenantService,
@@ -297,7 +294,6 @@ func provideHandlers(
 	alertLogsService service.AlertLogsService,
 	integrationFactory *integration.Factory,
 	db postgres.IClient,
-	s3Client *s3Integration.Client,
 	exportService *syncExport.ExportService,
 	scheduledTaskRepo scheduledtask.Repository,
 	scheduledTaskService service.ScheduledTaskService,
@@ -340,7 +336,7 @@ func provideHandlers(
 		Addon:                    v1.NewAddonHandler(addonService, logger),
 		Settings:                 v1.NewSettingsHandler(settingsService, logger),
 		SetupIntent:              v1.NewSetupIntentHandler(integrationFactory, customerService, logger),
-		TestExport:               v1.NewTestExportHandler(s3Client, logger),
+		TestExport:               v1.NewTestExportHandler(integrationFactory, logger),
 		TestUsageExport:          v1.NewTestUsageExportHandler(exportService, scheduledTaskRepo, logger),
 		ScheduledTask:            v1.NewScheduledTaskHandler(scheduledTaskService, logger),
 	}
@@ -350,12 +346,8 @@ func provideRouter(handlers api.Handlers, cfg *config.Configuration, logger *log
 	return api.NewRouter(handlers, cfg, logger, secretService, envAccessService)
 }
 
-func provideS3Client(connectionRepo connection.Repository, encryptionService security.EncryptionService, logger *logger.Logger) *s3Integration.Client {
-	return s3Integration.NewClient(connectionRepo, encryptionService, logger)
-}
-
-func provideExportService(featureUsageRepo events.FeatureUsageRepository, s3Client *s3Integration.Client, logger *logger.Logger) *syncExport.ExportService {
-	return syncExport.NewExportService(featureUsageRepo, s3Client, logger)
+func provideExportService(featureUsageRepo events.FeatureUsageRepository, integrationFactory *integration.Factory, logger *logger.Logger) *syncExport.ExportService {
+	return syncExport.NewExportService(featureUsageRepo, integrationFactory, logger)
 }
 
 func provideTemporalConfig(cfg *config.Configuration) *config.TemporalConfig {

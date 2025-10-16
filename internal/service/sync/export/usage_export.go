@@ -10,28 +10,28 @@ import (
 
 	"github.com/flexprice/flexprice/internal/domain/events"
 	ierr "github.com/flexprice/flexprice/internal/errors"
-	s3Integration "github.com/flexprice/flexprice/internal/integration/s3"
+	"github.com/flexprice/flexprice/internal/integration"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
 )
 
 // UsageExporter handles feature usage export operations
 type UsageExporter struct {
-	featureUsageRepo events.FeatureUsageRepository
-	s3Client         *s3Integration.Client
-	logger           *logger.Logger
+	featureUsageRepo   events.FeatureUsageRepository
+	integrationFactory *integration.Factory
+	logger             *logger.Logger
 }
 
 // NewUsageExporter creates a new usage exporter
 func NewUsageExporter(
 	featureUsageRepo events.FeatureUsageRepository,
-	s3Client *s3Integration.Client,
+	integrationFactory *integration.Factory,
 	logger *logger.Logger,
 ) *UsageExporter {
 	return &UsageExporter{
-		featureUsageRepo: featureUsageRepo,
-		s3Client:         s3Client,
-		logger:           logger,
+		featureUsageRepo:   featureUsageRepo,
+		integrationFactory: integrationFactory,
+		logger:             logger,
 	}
 }
 
@@ -213,10 +213,19 @@ func (e *UsageExporter) Export(ctx context.Context, request *ExportRequest) (*Ex
 	ctx = types.SetTenantID(ctx, request.TenantID)
 	ctx = types.SetEnvironmentID(ctx, request.EnvID)
 
-	s3Client, _, err := e.s3Client.GetS3Client(ctx, request.JobConfig, request.ConnectionID)
+	// Get the S3 integration client from factory
+	s3IntegrationClient, err := e.integrationFactory.GetS3Client(ctx)
 	if err != nil {
 		return nil, ierr.WithError(err).
-			WithHint("Failed to get S3 client").
+			WithHint("Failed to get S3 integration client from factory").
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	// Get the configured S3 client with job config
+	s3Client, _, err := s3IntegrationClient.GetS3Client(ctx, request.JobConfig, request.ConnectionID)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get configured S3 client").
 			Mark(ierr.ErrHTTPClient)
 	}
 

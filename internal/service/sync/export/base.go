@@ -6,7 +6,7 @@ import (
 
 	"github.com/flexprice/flexprice/internal/domain/events"
 	ierr "github.com/flexprice/flexprice/internal/errors"
-	s3Integration "github.com/flexprice/flexprice/internal/integration/s3"
+	"github.com/flexprice/flexprice/internal/integration"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
 )
@@ -22,21 +22,21 @@ type Exporter interface {
 
 // ExportService handles export operations for different entity types
 type ExportService struct {
-	featureUsageRepo events.FeatureUsageRepository
-	s3Client         *s3Integration.Client
-	logger           *logger.Logger
+	featureUsageRepo   events.FeatureUsageRepository
+	integrationFactory *integration.Factory
+	logger             *logger.Logger
 }
 
 // NewExportService creates a new export service
 func NewExportService(
 	featureUsageRepo events.FeatureUsageRepository,
-	s3Client *s3Integration.Client,
+	integrationFactory *integration.Factory,
 	logger *logger.Logger,
 ) *ExportService {
 	return &ExportService{
-		featureUsageRepo: featureUsageRepo,
-		s3Client:         s3Client,
-		logger:           logger,
+		featureUsageRepo:   featureUsageRepo,
+		integrationFactory: integrationFactory,
+		logger:             logger,
 	}
 }
 
@@ -85,7 +85,7 @@ func (s *ExportService) Export(ctx context.Context, request *ExportRequest) (*Ex
 func (s *ExportService) getExporter(entityType types.ExportEntityType) Exporter {
 	switch entityType {
 	case types.ExportEntityTypeEvents:
-		return NewUsageExporter(s.featureUsageRepo, s.s3Client, s.logger)
+		return NewUsageExporter(s.featureUsageRepo, s.integrationFactory, s.logger)
 	case types.ExportEntityTypeCustomer:
 		// return NewCustomerExporter(...) // TODO: Implement
 		return nil
