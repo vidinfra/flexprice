@@ -3777,11 +3777,12 @@ func (s *subscriptionService) ProcessAutoCancellationSubscriptions(ctx context.C
 
 		// Get all past due invoices for this tenant x environment
 		invoicesFilter := &types.InvoiceFilter{
-			InvoiceType:   types.InvoiceTypeSubscription,
-			InvoiceStatus: []types.InvoiceStatus{types.InvoiceStatusFinalized},
-			PaymentStatus: []types.PaymentStatus{types.PaymentStatusFailed, types.PaymentStatusPending, types.PaymentStatusInitiated, types.PaymentStatusProcessing},
-			SkipLineItems: true,
-			QueryFilter:   types.NewNoLimitQueryFilter(),
+			InvoiceType:       types.InvoiceTypeSubscription,
+			InvoiceStatus:     []types.InvoiceStatus{types.InvoiceStatusFinalized},
+			PaymentStatus:     []types.PaymentStatus{types.PaymentStatusFailed, types.PaymentStatusPending},
+			AmountRemainingGt: lo.ToPtr(decimal.NewFromInt(0)),
+			SkipLineItems:     true,
+			QueryFilter:       types.NewNoLimitQueryFilter(),
 		}
 
 		invoices, err := s.InvoiceRepo.List(tenantCtx, invoicesFilter)
@@ -3811,15 +3812,6 @@ func (s *subscriptionService) ProcessAutoCancellationSubscriptions(ctx context.C
 				s.Logger.Warnw("invoice has invalid due date, skipping",
 					"invoice_id", inv.ID,
 					"subscription_id", *inv.SubscriptionID)
-				return false
-			}
-
-			// Must have outstanding amount
-			if !inv.AmountRemaining.GreaterThan(decimal.Zero) {
-				s.Logger.Debugw("invoice has no remaining amount, skipping",
-					"invoice_id", inv.ID,
-					"subscription_id", *inv.SubscriptionID,
-					"amount_remaining", inv.AmountRemaining)
 				return false
 			}
 
