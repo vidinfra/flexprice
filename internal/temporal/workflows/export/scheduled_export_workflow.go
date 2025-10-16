@@ -83,6 +83,7 @@ func ScheduledExportWorkflow(ctx workflow.Context, input ScheduledExportWorkflow
 		ConnectionID:    taskDetails.ConnectionID,
 		TenantID:        taskDetails.TenantID,
 		EnvID:           taskDetails.EnvID,
+		UserID:          "", // Scheduled runs have no user context
 		StartTime:       taskDetails.StartTime,
 		EndTime:         taskDetails.EndTime,
 		JobConfig:       taskDetails.JobConfig,

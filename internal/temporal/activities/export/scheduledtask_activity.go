@@ -141,17 +141,19 @@ func (a *ScheduledTaskActivity) calculateTimeRange(ctx context.Context, task *sc
 					"end_time_str", endTimeStr,
 					"error", err)
 			} else {
-				// Incremental sync: Use last export's end_time as start, and calculate the end of the PREVIOUS completed interval
-				// Example: If current time is 9:20, previous interval is 9:10-9:20, so endTime = 9:20
-				_, endTime := a.boundaryCalculator.CalculateIntervalBoundaries(currentTime, interval)
+				// Incremental sync: Use last export's end_time as start, and current interval's start as end
+				// Example: If current time is 12:15 (cron runs), current interval is 12:00-13:00
+				// We use startTime (12:00) as the endTime for incremental export
+				// This exports the completed interval: lastEndTime (e.g., 11:00) → 12:00
+				startTimeOfCurrentInterval, _ := a.boundaryCalculator.CalculateIntervalBoundaries(currentTime, interval)
 
 				a.logger.Infow("using incremental sync - starting from last export's end_time",
 					"scheduled_task_id", task.ID,
 					"last_export_end_time", lastEndTime,
 					"new_start_time", lastEndTime,
-					"new_end_time", endTime,
-					"duration", endTime.Sub(lastEndTime))
-				return lastEndTime, endTime
+					"new_end_time", startTimeOfCurrentInterval,
+					"duration", startTimeOfCurrentInterval.Sub(lastEndTime))
+				return lastEndTime, startTimeOfCurrentInterval
 			}
 		} else {
 			a.logger.Warnw("last task metadata missing end_time, falling back to interval-based logic",
@@ -159,11 +161,36 @@ func (a *ScheduledTaskActivity) calculateTimeRange(ctx context.Context, task *sc
 		}
 	}
 
-	// First run OR no previous task found - export the completed previous interval
-	// Calculate boundaries to get the END of the previous completed interval
-	startTime, endTime := a.boundaryCalculator.CalculateIntervalBoundaries(currentTime, interval)
+	// First run OR no previous task found
+	// For first run at 11:15 with hourly interval:
+	// - CalculateIntervalBoundaries returns 11:00-12:00 (current interval)
+	// - But we want to export 10:00-11:00 (previous completed interval)
+	// - So we use: endTime - 1*interval as start, and startTime as end
+	currentIntervalStart, _ := a.boundaryCalculator.CalculateIntervalBoundaries(currentTime, interval)
 
-	a.logger.Infow("no previous export found - using completed previous interval (first run)",
+	// Calculate the previous interval
+	var startTime, endTime time.Time
+	endTime = currentIntervalStart // End of previous interval = start of current interval
+
+	// Calculate start of previous interval based on interval type
+	switch interval {
+	case types.ScheduledTaskIntervalTesting:
+		startTime = endTime.Add(-10 * time.Minute)
+	case types.ScheduledTaskIntervalHourly:
+		startTime = endTime.Add(-1 * time.Hour)
+	case types.ScheduledTaskIntervalDaily:
+		startTime = endTime.AddDate(0, 0, -1)
+	case types.ScheduledTaskIntervalWeekly:
+		startTime = endTime.AddDate(0, 0, -7)
+	case types.ScheduledTaskIntervalMonthly:
+		startTime = endTime.AddDate(0, -1, 0)
+	case types.ScheduledTaskIntervalYearly:
+		startTime = endTime.AddDate(-1, 0, 0)
+	default:
+		startTime = endTime.AddDate(0, 0, -1)
+	}
+
+	a.logger.Infow("no previous export found - using previous completed interval (first run)",
 		"scheduled_task_id", task.ID,
 		"interval", interval,
 		"current_time", currentTime,

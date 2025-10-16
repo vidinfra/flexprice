@@ -31,6 +31,7 @@ type CreateTaskInput struct {
 	ScheduledTaskID string
 	TenantID        string
 	EnvID           string
+	UserID          string // User who triggered the export (empty for scheduled runs)
 	EntityType      string
 	StartTime       time.Time
 	EndTime         time.Time
@@ -73,8 +74,8 @@ func (a *TaskActivity) CreateTask(ctx context.Context, input CreateTaskInput) (*
 			Status:    types.StatusPublished,
 			CreatedAt: now,
 			UpdatedAt: now,
-			CreatedBy: types.GetUserID(ctx),
-			UpdatedBy: types.GetUserID(ctx),
+			CreatedBy: input.UserID, // Use passed UserID (empty for scheduled runs)
+			UpdatedBy: input.UserID, // Use passed UserID (empty for scheduled runs)
 		},
 	}
 

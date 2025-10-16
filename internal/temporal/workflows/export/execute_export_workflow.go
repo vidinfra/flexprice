@@ -18,6 +18,7 @@ type ExecuteExportWorkflowInput struct {
 	ConnectionID    string
 	TenantID        string
 	EnvID           string
+	UserID          string // User who triggered the export (empty for scheduled runs)
 	StartTime       time.Time
 	EndTime         time.Time
 	JobConfig       *types.S3JobConfig
@@ -66,6 +67,7 @@ func ExecuteExportWorkflow(ctx workflow.Context, input ExecuteExportWorkflowInpu
 		ScheduledTaskID: input.ScheduledTaskID,
 		TenantID:        input.TenantID,
 		EnvID:           input.EnvID,
+		UserID:          input.UserID, // Pass user ID for audit fields
 		EntityType:      string(input.EntityType),
 		StartTime:       input.StartTime,
 		EndTime:         input.EndTime,

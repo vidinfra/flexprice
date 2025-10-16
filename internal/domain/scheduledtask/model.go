@@ -64,18 +64,28 @@ func (j *ScheduledTask) CalculateNextRunTime(fromTime time.Time) time.Time {
 			fromTime.Hour(), minutes, 0, 0, fromTime.Location())
 
 	case types.ScheduledTaskIntervalHourly:
-		// Align to next hour boundary
-		// Example: 10:30 → 11:00
+		// Align to next hour at 15 minutes past (cron: 15 * * * *)
+		// Example: 10:05 → 10:15, 10:20 → 11:15
+		if fromTime.Minute() < 15 {
+			// Next run is at :15 of current hour
+			return time.Date(fromTime.Year(), fromTime.Month(), fromTime.Day(),
+				fromTime.Hour(), 15, 0, 0, fromTime.Location())
+		}
+		// Next run is at :15 of next hour
 		return time.Date(fromTime.Year(), fromTime.Month(), fromTime.Day(),
-			fromTime.Hour()+1, 0, 0, 0, fromTime.Location())
+			fromTime.Hour()+1, 15, 0, 0, fromTime.Location())
 
 	case types.ScheduledTaskIntervalDaily:
-		// Align to next midnight
-		return time.Date(fromTime.Year(), fromTime.Month(), fromTime.Day(),
-			0, 0, 0, 0, fromTime.Location()).AddDate(0, 0, 1)
+		// Align to next day at 00:15 (cron: 15 0 * * *)
+		nextDay := time.Date(fromTime.Year(), fromTime.Month(), fromTime.Day(),
+			0, 15, 0, 0, fromTime.Location())
+		if fromTime.Before(nextDay) {
+			return nextDay
+		}
+		return nextDay.AddDate(0, 0, 1)
 
 	case types.ScheduledTaskIntervalWeekly:
-		// Align to next Monday midnight
+		// Align to next Monday at 00:15 (cron: 15 0 * * 1)
 		weekday := fromTime.Weekday()
 		var daysUntilMonday int
 		if weekday == time.Sunday {
@@ -83,16 +93,30 @@ func (j *ScheduledTask) CalculateNextRunTime(fromTime time.Time) time.Time {
 		} else {
 			daysUntilMonday = 8 - int(weekday)
 		}
+		nextMonday := time.Date(fromTime.Year(), fromTime.Month(), fromTime.Day(),
+			0, 15, 0, 0, fromTime.Location()).AddDate(0, 0, daysUntilMonday)
+		if fromTime.Before(nextMonday) && weekday == time.Monday {
+			return nextMonday
+		}
 		return time.Date(fromTime.Year(), fromTime.Month(), fromTime.Day(),
-			0, 0, 0, 0, fromTime.Location()).AddDate(0, 0, daysUntilMonday)
+			0, 15, 0, 0, fromTime.Location()).AddDate(0, 0, daysUntilMonday)
 
 	case types.ScheduledTaskIntervalMonthly:
-		// Align to first day of next month at midnight
-		return time.Date(fromTime.Year(), fromTime.Month(), 1,
-			0, 0, 0, 0, fromTime.Location()).AddDate(0, 1, 0)
+		// Align to first day of next month at 00:15 (cron: 15 0 1 * *)
+		nextMonth := time.Date(fromTime.Year(), fromTime.Month(), 1,
+			0, 15, 0, 0, fromTime.Location())
+		if fromTime.Before(nextMonth) {
+			return nextMonth
+		}
+		return nextMonth.AddDate(0, 1, 0)
 
 	case types.ScheduledTaskIntervalYearly:
-		// Align to Jan 1st of next year at midnight
+		// Align to Jan 1st of next year at 00:15 (cron: 15 0 1 1 *)
+		nextYear := time.Date(fromTime.Year(), time.January, 1,
+			0, 15, 0, 0, fromTime.Location())
+		if fromTime.Before(nextYear) {
+			return nextYear
+		}
 		return time.Date(fromTime.Year()+1, time.January, 1,
 			0, 0, 0, 0, fromTime.Location())
 
