@@ -57,6 +57,7 @@ func (r *UpdateGroupRequest) Validate() error {
 type GroupResponse struct {
 	ID         string    `json:"id"`
 	Name       string    `json:"name"`
+	LookupKey  string    `json:"lookup_key"`
 	EntityType string    `json:"entity_type"`
 	EntityIDs  []string  `json:"entity_ids"`
 	Status     string    `json:"status"`
@@ -69,6 +70,7 @@ func NewGroupResponse(group *group.Group, entityIDs []string) *GroupResponse {
 	return &GroupResponse{
 		ID:         group.ID,
 		Name:       group.Name,
+		LookupKey:  group.LookupKey,
 		EntityType: string(group.EntityType),
 		EntityIDs:  entityIDs,
 		Status:     string(group.Status),
