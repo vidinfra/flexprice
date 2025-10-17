@@ -46,6 +46,7 @@ type Handlers struct {
 	EntityIntegrationMapping *v1.EntityIntegrationMappingHandler
 	Settings                 *v1.SettingsHandler
 	SetupIntent              *v1.SetupIntentHandler
+	Group                    *v1.GroupHandler
 
 	// Portal handlers
 	Onboarding *v1.OnboardingHandler
@@ -208,6 +209,14 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			addon.GET("/lookup/:lookup_key", handlers.Addon.GetAddonByLookupKey)
 			addon.PUT("/:id", handlers.Addon.UpdateAddon)
 			addon.DELETE("/:id", handlers.Addon.DeleteAddon)
+		}
+
+		group := v1Private.Group("/groups")
+		{
+			group.POST("", handlers.Group.CreateGroup)
+			group.GET("/:id", handlers.Group.GetGroup)
+			group.PUT("/:id", handlers.Group.UpdateGroup)
+			group.DELETE("/:id", handlers.Group.DeleteGroup)
 		}
 
 		subscription := v1Private.Group("/subscriptions")

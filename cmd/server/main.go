@@ -157,6 +157,7 @@ func main() {
 			repository.NewSubscriptionLineItemRepository,
 			repository.NewSettingsRepository,
 			repository.NewAlertLogsRepository,
+			repository.NewGroupRepository,
 
 			// PubSub
 			pubsubRouter.NewRouter,
@@ -212,6 +213,7 @@ func main() {
 			service.NewSettingsService,
 			service.NewSubscriptionChangeService,
 			service.NewAlertLogsService,
+			service.NewGroupService,
 		),
 	)
 
@@ -278,6 +280,7 @@ func provideHandlers(
 	subscriptionChangeService service.SubscriptionChangeService,
 	featureUsageTrackingService service.FeatureUsageTrackingService,
 	alertLogsService service.AlertLogsService,
+	groupService service.GroupService,
 	integrationFactory *integration.Factory,
 	db postgres.IClient,
 ) api.Handlers {
@@ -319,6 +322,7 @@ func provideHandlers(
 		Addon:                    v1.NewAddonHandler(addonService, logger),
 		Settings:                 v1.NewSettingsHandler(settingsService, logger),
 		SetupIntent:              v1.NewSetupIntentHandler(integrationFactory, customerService, logger),
+		Group:                    v1.NewGroupHandler(groupService, logger),
 	}
 }
 
