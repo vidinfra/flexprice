@@ -1539,16 +1539,15 @@ func (s *billingService) GetCustomerUsageSummary(ctx context.Context, customerID
 	// Convert feature lookup keys to IDs if provided
 	featureIDs := req.FeatureIDs
 	if len(req.FeatureLookupKeys) > 0 {
-		for _, lookupKey := range req.FeatureLookupKeys {
-			filter := types.NewDefaultFeatureFilter()
-			filter.LookupKey = lookupKey
-			features, err := s.FeatureRepo.List(ctx, filter)
-			if err != nil {
-				return nil, err
-			}
-			for _, f := range features {
-				featureIDs = append(featureIDs, f.ID)
-			}
+		// Use built-in LookupKeys filter for efficient batch lookup
+		filter := types.NewDefaultFeatureFilter()
+		filter.LookupKeys = req.FeatureLookupKeys
+		features, err := s.FeatureRepo.List(ctx, filter)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range features {
+			featureIDs = append(featureIDs, f.ID)
 		}
 	}
 
