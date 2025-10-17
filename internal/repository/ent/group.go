@@ -36,6 +36,7 @@ func (r *groupRepository) Create(ctx context.Context, grp *domainGroup.Group) er
 		SetID(grp.ID).
 		SetName(grp.Name).
 		SetEntityType(string(grp.EntityType)).
+		SetLookupKey(grp.LookupKey).
 		SetTenantID(tenantID).
 		SetEnvironmentID(environmentID).
 		SetStatus(string(grp.Status)).
@@ -103,6 +104,35 @@ func (r *groupRepository) GetByName(ctx context.Context, name string) (*domainGr
 		r.log.Error("Failed to get group by name", "error", err, "name", name)
 		return nil, ierr.WithError(err).
 			WithHint("Failed to get group by name").
+			Mark(ierr.ErrDatabase)
+	}
+
+	return r.toDomainGroup(entGroup), nil
+}
+
+func (r *groupRepository) GetByLookupKey(ctx context.Context, lookupKey string) (*domainGroup.Group, error) {
+	client := r.client.Querier(ctx)
+	tenantID := types.GetTenantID(ctx)
+	environmentID := types.GetEnvironmentID(ctx)
+
+	entGroup, err := client.Group.Query().
+		Where(
+			group.LookupKeyEQ(lookupKey),
+			group.TenantIDEQ(tenantID),
+			group.EnvironmentIDEQ(environmentID),
+			group.StatusEQ(string(types.StatusPublished)),
+		).
+		Only(ctx)
+
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ierr.WithError(err).
+				WithHint("Group not found").
+				Mark(ierr.ErrNotFound)
+		}
+		r.log.Error("Failed to get group by lookup key", "error", err, "lookup_key", lookupKey)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get group by lookup key").
 			Mark(ierr.ErrDatabase)
 	}
 
@@ -210,6 +240,7 @@ func (r *groupRepository) toDomainGroup(entGroup *ent.Group) *domainGroup.Group 
 		Name:          entGroup.Name,
 		EntityType:    types.GroupEntityType(entGroup.EntityType),
 		EnvironmentID: entGroup.EnvironmentID,
+		LookupKey:     entGroup.LookupKey,
 		BaseModel: types.BaseModel{
 			TenantID:  entGroup.TenantID,
 			Status:    types.Status(entGroup.Status),

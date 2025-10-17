@@ -14,6 +14,7 @@ type CreateGroupRequest struct {
 	Name       string   `json:"name" validate:"required"`
 	EntityType string   `json:"entity_type" validate:"required"`
 	EntityIDs  []string `json:"entity_ids,omitempty"`
+	LookupKey  string   `json:"lookup_key" validate:"required"`
 }
 
 func (r *CreateGroupRequest) Validate() error {
@@ -37,6 +38,7 @@ func (r *CreateGroupRequest) ToGroup(ctx context.Context) (*group.Group, error) 
 		Name:          r.Name,
 		EntityType:    entityType,
 		EnvironmentID: types.GetEnvironmentID(ctx),
+		LookupKey:     r.LookupKey,
 		BaseModel:     types.GetDefaultBaseModel(ctx),
 	}, nil
 }

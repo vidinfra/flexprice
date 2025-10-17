@@ -42,6 +42,12 @@ func (Group) Fields() []ent.Field {
 			}).
 			Default("price").
 			Immutable(),
+		field.String("lookup_key").
+			SchemaType(map[string]string{
+				"postgres": "varchar(255)",
+			}).
+			Optional().
+			Comment("Idempotency key for group creation"),
 	}
 }
 
@@ -59,5 +65,8 @@ func (Group) Indexes() []ent.Index {
 			Unique().
 			Annotations(entsql.IndexWhere("status = 'published'")),
 		index.Fields("tenant_id", "environment_id", "entity_type"),
+		index.Fields("tenant_id", "environment_id", "lookup_key").
+			Unique().
+			Annotations(entsql.IndexWhere("lookup_key IS NOT NULL AND status = 'published'")),
 	}
 }

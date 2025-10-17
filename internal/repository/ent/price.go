@@ -667,72 +667,25 @@ func (r *priceRepository) CountByIDs(ctx context.Context, ids []string) (int, er
 	return count, nil
 }
 
-// GetByIDs gets prices by their IDs
-func (r *priceRepository) GetByIDs(ctx context.Context, ids []string) ([]*domainPrice.Price, error) {
+// GetByGroupIDs gets prices by multiple group IDs
+func (r *priceRepository) GetByGroupIDs(ctx context.Context, groupIDs []string) ([]*domainPrice.Price, error) {
 	client := r.client.Querier(ctx)
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 
 	entPrices, err := client.Price.Query().
 		Where(
-			price.IDIn(ids...),
+			price.GroupIDIn(groupIDs...),
 			price.TenantIDEQ(tenantID),
 			price.EnvironmentIDEQ(environmentID),
+			price.StatusEQ(string(types.StatusPublished)),
 		).
 		All(ctx)
 
 	if err != nil {
-		r.log.Error("Failed to get prices by IDs", "error", err, "ids", ids)
+		r.log.Error("Failed to get prices by group IDs", "error", err, "group_ids", groupIDs)
 		return nil, ierr.WithError(err).
-			WithHint("Failed to get prices by IDs").
-			Mark(ierr.ErrDatabase)
-	}
-
-	return domainPrice.FromEntList(entPrices), nil
-}
-
-// CountInGroup counts prices in a specific group
-func (r *priceRepository) CountInGroup(ctx context.Context, groupID string) (int, error) {
-	client := r.client.Querier(ctx)
-	tenantID := types.GetTenantID(ctx)
-	environmentID := types.GetEnvironmentID(ctx)
-
-	count, err := client.Price.Query().
-		Where(
-			price.GroupIDEQ(groupID),
-			price.TenantIDEQ(tenantID),
-			price.EnvironmentIDEQ(environmentID),
-		).
-		Count(ctx)
-
-	if err != nil {
-		r.log.Error("Failed to count prices in group", "error", err, "group_id", groupID)
-		return 0, ierr.WithError(err).
-			WithHint("Failed to count prices in group").
-			Mark(ierr.ErrDatabase)
-	}
-
-	return count, nil
-}
-
-// GetInGroup gets prices in a specific group
-func (r *priceRepository) GetInGroup(ctx context.Context, groupID string) ([]*domainPrice.Price, error) {
-	client := r.client.Querier(ctx)
-	tenantID := types.GetTenantID(ctx)
-	environmentID := types.GetEnvironmentID(ctx)
-
-	entPrices, err := client.Price.Query().
-		Where(
-			price.GroupIDEQ(groupID),
-			price.TenantIDEQ(tenantID),
-			price.EnvironmentIDEQ(environmentID),
-		).
-		All(ctx)
-
-	if err != nil {
-		r.log.Error("Failed to get prices in group", "error", err, "group_id", groupID)
-		return nil, ierr.WithError(err).
-			WithHint("Failed to get prices in group").
+			WithHint("Failed to get prices by group IDs").
 			Mark(ierr.ErrDatabase)
 	}
 
@@ -769,35 +722,6 @@ func (r *priceRepository) CountNotInGroup(ctx context.Context, ids []string, exc
 	}
 
 	return count, nil
-}
-
-// UpdateGroupID updates the group ID for a price
-func (r *priceRepository) UpdateGroupID(ctx context.Context, id string, groupID *string) error {
-	client := r.client.Querier(ctx)
-	tenantID := types.GetTenantID(ctx)
-	environmentID := types.GetEnvironmentID(ctx)
-
-	update := client.Price.UpdateOneID(id).
-		Where(
-			price.TenantIDEQ(tenantID),
-			price.EnvironmentIDEQ(environmentID),
-		)
-
-	if groupID != nil {
-		update = update.SetGroupID(*groupID)
-	} else {
-		update = update.ClearGroupID()
-	}
-
-	_, err := update.Save(ctx)
-	if err != nil {
-		r.log.Error("Failed to update price group ID", "error", err, "price_id", id, "group_id", groupID)
-		return ierr.WithError(err).
-			WithHint("Failed to update price group ID").
-			Mark(ierr.ErrDatabase)
-	}
-
-	return nil
 }
 
 // UpdateGroupIDBulk updates the group ID for multiple prices in a single query

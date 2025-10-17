@@ -22,13 +22,10 @@ type Repository interface {
 	CreateBulk(ctx context.Context, prices []*Price) error
 	DeleteBulk(ctx context.Context, ids []string) error
 
-	// Group-related operations
+	// Group-related operations (minimal set)
 	CountByIDs(ctx context.Context, ids []string) (int, error)
-	GetByIDs(ctx context.Context, ids []string) ([]*Price, error)
-	CountInGroup(ctx context.Context, groupID string) (int, error)
-	GetInGroup(ctx context.Context, groupID string) ([]*Price, error)
+	GetByGroupIDs(ctx context.Context, groupIDs []string) ([]*Price, error)
 	CountNotInGroup(ctx context.Context, ids []string, excludeGroupID string) (int, error)
-	UpdateGroupID(ctx context.Context, id string, groupID *string) error
 	UpdateGroupIDBulk(ctx context.Context, ids []string, groupID *string) error
 	ClearGroupIDBulk(ctx context.Context, ids []string) error
 }
