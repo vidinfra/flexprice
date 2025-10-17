@@ -4348,12 +4348,8 @@ func (s *subscriptionService) GetFeatureUsageBySubscription(ctx context.Context,
 		"end_time", usageEndTime,
 		"metered_line_items", len(priceIDs))
 
-	// Get tenant and environment IDs
-	tenantID := types.GetTenantID(ctx)
-	environmentID := types.GetEnvironmentID(ctx)
-
 	// Use the optimized single query
-	usageResults, err := s.FeatureUsageRepo.GetFeatureUsageBySubscription(ctx, req.SubscriptionID, customer.ExternalID, environmentID, tenantID, usageStartTime, usageEndTime)
+	usageResults, err := s.FeatureUsageRepo.GetFeatureUsageBySubscription(ctx, req.SubscriptionID, customer.ExternalID, usageStartTime, usageEndTime)
 	if err != nil {
 		return nil, err
 	}

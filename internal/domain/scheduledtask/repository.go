@@ -2,7 +2,8 @@ package scheduledtask
 
 import (
 	"context"
-	"time"
+
+	"github.com/flexprice/flexprice/internal/types"
 )
 
 // Repository defines the interface for scheduled task persistence operations
@@ -24,15 +25,6 @@ type Repository interface {
 
 	// GetByConnection retrieves all scheduled tasks for a specific connection
 	GetByConnection(ctx context.Context, connectionID string) ([]*ScheduledTask, error)
-
-	// GetByEntityType retrieves all enabled scheduled tasks for a specific entity type
-	GetByEntityType(ctx context.Context, entityType string) ([]*ScheduledTask, error)
-
-	// GetTasksDueForExecution retrieves all enabled tasks that are due for execution
-	GetTasksDueForExecution(ctx context.Context, currentTime time.Time) ([]*ScheduledTask, error)
-
-	// UpdateLastRun updates the last run information for a scheduled task
-	UpdateLastRun(ctx context.Context, taskID string, runTime time.Time, nextRunTime time.Time, status string, errorMsg string) error
 }
 
 // ListFilters defines filters for listing scheduled tasks
@@ -40,8 +32,8 @@ type ListFilters struct {
 	TenantID      string
 	EnvironmentID string
 	ConnectionID  string
-	EntityType    string
-	Interval      string
+	EntityType    types.ScheduledTaskEntityType
+	Interval      types.ScheduledTaskInterval
 	Enabled       *bool
 	Limit         int
 	Offset        int

@@ -2,7 +2,6 @@ package ent
 
 import (
 	"context"
-	"time"
 
 	"github.com/flexprice/flexprice/ent"
 	"github.com/flexprice/flexprice/ent/scheduledtask"
@@ -42,24 +41,12 @@ func (r *ScheduledTaskRepository) Create(ctx context.Context, task *domainst.Sch
 		SetEntityType(task.EntityType).
 		SetInterval(task.Interval).
 		SetEnabled(task.Enabled).
-		SetStatus(task.Status).
+		SetStatus(string(task.Status)).
 		SetCreatedBy(task.CreatedBy).
 		SetUpdatedBy(task.UpdatedBy)
 
 	if task.JobConfig != nil {
 		create = create.SetJobConfig(task.JobConfig)
-	}
-	if task.LastRunAt != nil {
-		create = create.SetLastRunAt(*task.LastRunAt)
-	}
-	if task.NextRunAt != nil {
-		create = create.SetNextRunAt(*task.NextRunAt)
-	}
-	if task.LastRunStatus != "" {
-		create = create.SetLastRunStatus(task.LastRunStatus)
-	}
-	if task.LastRunError != "" {
-		create = create.SetLastRunError(task.LastRunError)
 	}
 	if task.TemporalScheduleID != "" {
 		create = create.SetTemporalScheduleID(task.TemporalScheduleID)
@@ -111,23 +98,11 @@ func (r *ScheduledTaskRepository) Update(ctx context.Context, task *domainst.Sch
 		SetEntityType(task.EntityType).
 		SetInterval(task.Interval).
 		SetEnabled(task.Enabled).
-		SetStatus(task.Status).
+		SetStatus(string(task.Status)).
 		SetUpdatedBy(task.UpdatedBy)
 
 	if task.JobConfig != nil {
 		update = update.SetJobConfig(task.JobConfig)
-	}
-	if task.LastRunAt != nil {
-		update = update.SetLastRunAt(*task.LastRunAt)
-	}
-	if task.NextRunAt != nil {
-		update = update.SetNextRunAt(*task.NextRunAt)
-	}
-	if task.LastRunStatus != "" {
-		update = update.SetLastRunStatus(task.LastRunStatus)
-	}
-	if task.LastRunError != "" {
-		update = update.SetLastRunError(task.LastRunError)
 	}
 	if task.TemporalScheduleID != "" {
 		update = update.SetTemporalScheduleID(task.TemporalScheduleID)
@@ -243,85 +218,6 @@ func (r *ScheduledTaskRepository) GetByConnection(ctx context.Context, connectio
 	return r.entSliceToModel(tasks), nil
 }
 
-// GetByEntityType retrieves all enabled scheduled tasks for a specific entity type
-func (r *ScheduledTaskRepository) GetByEntityType(ctx context.Context, entityType string) ([]*domainst.ScheduledTask, error) {
-	client := r.client.Querier(ctx)
-	tasks, err := client.ScheduledTask.
-		Query().
-		Where(
-			scheduledtask.EntityType(entityType),
-			scheduledtask.Enabled(true),
-			scheduledtask.StatusEQ("published"),
-			scheduledtask.TenantID(types.GetTenantID(ctx)),
-			scheduledtask.EnvironmentID(types.GetEnvironmentID(ctx)),
-		).
-		All(ctx)
-
-	if err != nil {
-		return nil, ierr.WithError(err).
-			WithHint("Failed to get scheduled tasks by entity type").
-			Mark(ierr.ErrDatabase)
-	}
-
-	return r.entSliceToModel(tasks), nil
-}
-
-// GetTasksDueForExecution retrieves all enabled tasks that are due for execution
-func (r *ScheduledTaskRepository) GetTasksDueForExecution(ctx context.Context, currentTime time.Time) ([]*domainst.ScheduledTask, error) {
-	client := r.client.Querier(ctx)
-	tasks, err := client.ScheduledTask.
-		Query().
-		Where(
-			scheduledtask.Enabled(true),
-			scheduledtask.StatusEQ("published"),
-			scheduledtask.Or(
-				scheduledtask.NextRunAtIsNil(),
-				scheduledtask.NextRunAtLTE(currentTime),
-			),
-			scheduledtask.TenantID(types.GetTenantID(ctx)),
-			scheduledtask.EnvironmentID(types.GetEnvironmentID(ctx)),
-		).
-		All(ctx)
-
-	if err != nil {
-		return nil, ierr.WithError(err).
-			WithHint("Failed to get tasks due for execution").
-			Mark(ierr.ErrDatabase)
-	}
-
-	return r.entSliceToModel(tasks), nil
-}
-
-// UpdateLastRun updates the last run information for a scheduled task
-func (r *ScheduledTaskRepository) UpdateLastRun(ctx context.Context, taskID string, runTime time.Time, nextRunTime time.Time, status string, errorMsg string) error {
-	client := r.client.Querier(ctx)
-	update := client.ScheduledTask.
-		UpdateOneID(taskID).
-		SetLastRunAt(runTime).
-		SetNextRunAt(nextRunTime).
-		SetLastRunStatus(status)
-
-	if errorMsg != "" {
-		update = update.SetLastRunError(errorMsg)
-	} else {
-		update = update.ClearLastRunError()
-	}
-
-	err := update.Exec(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return ierr.NewError("scheduled task not found").
-				WithHint("Scheduled task with given ID not found").
-				Mark(ierr.ErrNotFound)
-		}
-		return ierr.WithError(err).
-			WithHint("Failed to update last run").
-			Mark(ierr.ErrDatabase)
-	}
-
-	return nil
-}
-
 // entToModel converts an ent ScheduledTask to domain model
 func (r *ScheduledTaskRepository) entToModel(entTask *ent.ScheduledTask) *domainst.ScheduledTask {
 	if entTask == nil {
@@ -337,12 +233,8 @@ func (r *ScheduledTaskRepository) entToModel(entTask *ent.ScheduledTask) *domain
 		Interval:           entTask.Interval,
 		Enabled:            entTask.Enabled,
 		JobConfig:          entTask.JobConfig,
-		LastRunAt:          entTask.LastRunAt,
-		NextRunAt:          entTask.NextRunAt,
-		LastRunStatus:      entTask.LastRunStatus,
-		LastRunError:       entTask.LastRunError,
 		TemporalScheduleID: entTask.TemporalScheduleID,
-		Status:             entTask.Status,
+		Status:             types.Status(entTask.Status),
 		CreatedAt:          entTask.CreatedAt,
 		UpdatedAt:          entTask.UpdatedAt,
 		CreatedBy:          entTask.CreatedBy,

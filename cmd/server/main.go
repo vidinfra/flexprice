@@ -11,7 +11,6 @@ import (
 	"github.com/flexprice/flexprice/internal/cache"
 	"github.com/flexprice/flexprice/internal/clickhouse"
 	"github.com/flexprice/flexprice/internal/config"
-	"github.com/flexprice/flexprice/internal/domain/scheduledtask"
 	"github.com/flexprice/flexprice/internal/dynamodb"
 	"github.com/flexprice/flexprice/internal/httpclient"
 	"github.com/flexprice/flexprice/internal/kafka"
@@ -35,11 +34,12 @@ import (
 	"github.com/flexprice/flexprice/internal/typst"
 	"github.com/flexprice/flexprice/internal/validator"
 	"github.com/flexprice/flexprice/internal/webhook"
-	temporalSDK "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 
 	_ "github.com/flexprice/flexprice/docs/swagger"
+	"github.com/flexprice/flexprice/internal/domain/connection"
 	"github.com/flexprice/flexprice/internal/domain/events"
+	"github.com/flexprice/flexprice/internal/domain/invoice"
 	"github.com/flexprice/flexprice/internal/domain/proration"
 	"github.com/flexprice/flexprice/internal/integration"
 	"github.com/flexprice/flexprice/internal/security"
@@ -219,7 +219,6 @@ func main() {
 			service.NewSubscriptionChangeService,
 			service.NewAlertLogsService,
 			service.NewScheduledTaskService,
-			service.NewScheduledTaskOrchestrator,
 		),
 	)
 
@@ -229,7 +228,6 @@ func main() {
 			// Temporal components
 			provideTemporalConfig,
 			provideTemporalClient,
-			provideTemporalSDKClient,
 			provideTemporalWorkerManager,
 			provideTemporalService,
 
@@ -289,8 +287,6 @@ func provideHandlers(
 	alertLogsService service.AlertLogsService,
 	integrationFactory *integration.Factory,
 	db postgres.IClient,
-	exportService *syncExport.ExportService,
-	scheduledTaskRepo scheduledtask.Repository,
 	scheduledTaskService service.ScheduledTaskService,
 ) api.Handlers {
 	return api.Handlers{
@@ -332,7 +328,6 @@ func provideHandlers(
 		Settings:                 v1.NewSettingsHandler(settingsService, logger),
 		SetupIntent:              v1.NewSetupIntentHandler(integrationFactory, customerService, logger),
 		TestExport:               v1.NewTestExportHandler(integrationFactory, logger),
-		TestUsageExport:          v1.NewTestUsageExportHandler(exportService, scheduledTaskRepo, logger),
 		ScheduledTask:            v1.NewScheduledTaskHandler(scheduledTaskService, logger),
 	}
 }
@@ -341,8 +336,8 @@ func provideRouter(handlers api.Handlers, cfg *config.Configuration, logger *log
 	return api.NewRouter(handlers, cfg, logger, secretService, envAccessService)
 }
 
-func provideExportService(featureUsageRepo events.FeatureUsageRepository, integrationFactory *integration.Factory, logger *logger.Logger) *syncExport.ExportService {
-	return syncExport.NewExportService(featureUsageRepo, integrationFactory, logger)
+func provideExportService(featureUsageRepo events.FeatureUsageRepository, invoiceRepo invoice.Repository, connectionRepo connection.Repository, integrationFactory *integration.Factory, logger *logger.Logger) *syncExport.ExportService {
+	return syncExport.NewExportService(featureUsageRepo, invoiceRepo, connectionRepo, integrationFactory, logger)
 }
 
 func provideTemporalConfig(cfg *config.Configuration) *config.TemporalConfig {
@@ -378,10 +373,6 @@ func provideTemporalClient(cfg *config.TemporalConfig, log *logger.Logger) (clie
 
 func provideTemporalWorkerManager(temporalClient client.TemporalClient, log *logger.Logger) worker.TemporalWorkerManager {
 	return worker.NewTemporalWorkerManager(temporalClient, log)
-}
-
-func provideTemporalSDKClient(temporalClient client.TemporalClient) temporalSDK.Client {
-	return temporalClient.GetRawClient()
 }
 
 func provideTemporalService(temporalClient client.TemporalClient, workerManager worker.TemporalWorkerManager, log *logger.Logger) temporalservice.TemporalService {

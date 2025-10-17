@@ -2,9 +2,12 @@ package export
 
 import (
 	"context"
-	"time"
+	"fmt"
 
+	"github.com/flexprice/flexprice/internal/api/dto"
+	"github.com/flexprice/flexprice/internal/domain/connection"
 	"github.com/flexprice/flexprice/internal/domain/events"
+	"github.com/flexprice/flexprice/internal/domain/invoice"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/integration"
 	"github.com/flexprice/flexprice/internal/logger"
@@ -14,15 +17,17 @@ import (
 // Exporter defines the interface for entity-specific exporters
 type Exporter interface {
 	// PrepareData fetches and prepares data for export
-	PrepareData(ctx context.Context, request *ExportRequest) ([]byte, int, error)
+	PrepareData(ctx context.Context, request *dto.ExportRequest) ([]byte, int, error)
 
-	// Export performs the complete export operation (fetch + upload)
-	Export(ctx context.Context, request *ExportRequest) (*ExportResponse, error)
+	// GetFilenamePrefix returns the prefix for the exported file
+	GetFilenamePrefix() string
 }
 
 // ExportService handles export operations for different entity types
 type ExportService struct {
 	featureUsageRepo   events.FeatureUsageRepository
+	invoiceRepo        invoice.Repository
+	connectionRepo     connection.Repository
 	integrationFactory *integration.Factory
 	logger             *logger.Logger
 }
@@ -30,38 +35,22 @@ type ExportService struct {
 // NewExportService creates a new export service
 func NewExportService(
 	featureUsageRepo events.FeatureUsageRepository,
+	invoiceRepo invoice.Repository,
+	connectionRepo connection.Repository,
 	integrationFactory *integration.Factory,
 	logger *logger.Logger,
 ) *ExportService {
 	return &ExportService{
 		featureUsageRepo:   featureUsageRepo,
+		invoiceRepo:        invoiceRepo,
+		connectionRepo:     connectionRepo,
 		integrationFactory: integrationFactory,
 		logger:             logger,
 	}
 }
 
-// ExportRequest represents an export request
-type ExportRequest struct {
-	EntityType   types.ExportEntityType
-	ConnectionID string // Connection ID for S3 credentials
-	TenantID     string
-	EnvID        string
-	StartTime    time.Time
-	EndTime      time.Time
-	JobConfig    *types.S3JobConfig // S3 job configuration from scheduled_tasks
-}
-
-// ExportResponse represents the result of an export operation
-type ExportResponse struct {
-	EntityType    string
-	RecordCount   int
-	FileURL       string
-	FileSizeBytes int64
-	ExportedAt    time.Time
-}
-
 // Export routes the export request to the appropriate entity exporter
-func (s *ExportService) Export(ctx context.Context, request *ExportRequest) (*ExportResponse, error) {
+func (s *ExportService) Export(ctx context.Context, request *dto.ExportRequest) (*dto.ExportResponse, error) {
 	s.logger.Infow("starting export",
 		"entity_type", request.EntityType,
 		"tenant_id", request.TenantID,
@@ -77,30 +66,105 @@ func (s *ExportService) Export(ctx context.Context, request *ExportRequest) (*Ex
 			Mark(ierr.ErrValidation)
 	}
 
-	// Delegate to the entity-specific exporter
-	return exporter.Export(ctx, request)
+	// Execute the export workflow: PrepareData -> Upload to provider
+	return s.executeExport(ctx, request, exporter)
+}
+
+// executeExport performs the common export workflow: validate -> prepare data -> upload to provider
+func (s *ExportService) executeExport(ctx context.Context, request *dto.ExportRequest, exporter Exporter) (*dto.ExportResponse, error) {
+	// Step 1: Prepare data (fetch + convert to CSV) - entity-specific logic
+	csvBytes, recordCount, err := exporter.PrepareData(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 2: Get connection to determine provider type
+	conn, err := s.connectionRepo.Get(ctx, request.ConnectionID)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get connection for export").
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Add tenant and environment to context for connection lookup
+	ctx = types.SetTenantID(ctx, request.TenantID)
+	ctx = types.SetEnvironmentID(ctx, request.EnvID)
+
+	// Step 3: Route to appropriate provider based on connection type
+	switch conn.ProviderType {
+	case types.SecretProviderS3:
+		return s.uploadToS3(ctx, request, exporter, csvBytes, recordCount)
+	default:
+		return nil, ierr.NewError("unsupported provider type").
+			WithHintf("Provider type '%s' is not supported for exports", conn.ProviderType).
+			Mark(ierr.ErrValidation)
+	}
+}
+
+// uploadToS3 handles S3-specific upload logic
+func (s *ExportService) uploadToS3(ctx context.Context, request *dto.ExportRequest, exporter Exporter, csvBytes []byte, recordCount int) (*dto.ExportResponse, error) {
+	// Validate S3 job config is provided
+	if request.JobConfig == nil {
+		return nil, ierr.NewError("S3 job configuration is required").
+			WithHint("S3 job configuration must be provided for S3 uploads").
+			Mark(ierr.ErrValidation)
+	}
+
+	s.logger.Infow("uploading to S3",
+		"connection_id", request.ConnectionID,
+		"bucket", request.JobConfig.Bucket,
+		"region", request.JobConfig.Region)
+
+	// Get the S3 integration client from factory
+	s3IntegrationClient, err := s.integrationFactory.GetS3Client(ctx)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get S3 integration client from factory").
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	// Get the configured S3 client with job config
+	s3Client, _, err := s3IntegrationClient.GetS3Client(ctx, request.JobConfig, request.ConnectionID)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get configured S3 client").
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	// Generate filename with start and end times
+	// Format: {prefix}-start_time_{YYMMDDHHMMSS}-end_time_{YYMMDDHHMMSS}.csv
+	startTimeStr := request.StartTime.Format("060102150405") // YYMMDDHHMMSS
+	endTimeStr := request.EndTime.Format("060102150405")     // YYMMDDHHMMSS
+	filenamePrefix := exporter.GetFilenamePrefix()
+	filename := fmt.Sprintf("%s-%s-%s", filenamePrefix, startTimeStr, endTimeStr)
+
+	uploadResponse, err := s3Client.UploadCSV(ctx, filename, csvBytes, filenamePrefix)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to upload CSV to S3").
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	s.logger.Infow("successfully uploaded to S3",
+		"file_url", uploadResponse.FileURL,
+		"file_size_bytes", uploadResponse.FileSizeBytes)
+
+	return &dto.ExportResponse{
+		EntityType:    request.EntityType,
+		RecordCount:   recordCount,
+		FileURL:       uploadResponse.FileURL,
+		FileSizeBytes: uploadResponse.FileSizeBytes,
+		ExportedAt:    uploadResponse.UploadedAt,
+	}, nil
 }
 
 // getExporter returns the appropriate exporter for the given entity type
-func (s *ExportService) getExporter(entityType types.ExportEntityType) Exporter {
+func (s *ExportService) getExporter(entityType types.ScheduledTaskEntityType) Exporter {
 	switch entityType {
-	case types.ExportEntityTypeEvents:
-		return NewUsageExporter(s.featureUsageRepo, s.integrationFactory, s.logger)
-	case types.ExportEntityTypeCustomer:
-		// return NewCustomerExporter(...) // TODO: Implement
-		return nil
-	case types.ExportEntityTypeInvoice:
-		// return NewInvoiceExporter(...) // TODO: Implement
-		return nil
-	case types.ExportEntityTypeSubscription:
-		// return NewSubscriptionExporter(...) // TODO: Implement
-		return nil
-	case types.ExportEntityTypePrice:
-		// return NewPriceExporter(...) // TODO: Implement
-		return nil
-	case types.ExportEntityTypeCreditNote:
-		// return NewCreditNoteExporter(...) // TODO: Implement
-		return nil
+	case types.ScheduledTaskEntityTypeEvents:
+		return NewEventExporter(s.featureUsageRepo, s.integrationFactory, s.logger)
+	case types.ScheduledTaskEntityTypeInvoice:
+		return NewInvoiceExporter(s.invoiceRepo, s.integrationFactory, s.logger)
 	default:
 		return nil
 	}

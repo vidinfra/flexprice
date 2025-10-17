@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/flexprice/flexprice/ent/predicate"
 	"github.com/flexprice/flexprice/ent/scheduledtask"
+	"github.com/flexprice/flexprice/internal/types"
 )
 
 // ScheduledTaskUpdate is the builder for updating ScheduledTask entities.
@@ -83,29 +84,29 @@ func (stu *ScheduledTaskUpdate) SetNillableConnectionID(s *string) *ScheduledTas
 }
 
 // SetEntityType sets the "entity_type" field.
-func (stu *ScheduledTaskUpdate) SetEntityType(s string) *ScheduledTaskUpdate {
-	stu.mutation.SetEntityType(s)
+func (stu *ScheduledTaskUpdate) SetEntityType(ttet types.ScheduledTaskEntityType) *ScheduledTaskUpdate {
+	stu.mutation.SetEntityType(ttet)
 	return stu
 }
 
 // SetNillableEntityType sets the "entity_type" field if the given value is not nil.
-func (stu *ScheduledTaskUpdate) SetNillableEntityType(s *string) *ScheduledTaskUpdate {
-	if s != nil {
-		stu.SetEntityType(*s)
+func (stu *ScheduledTaskUpdate) SetNillableEntityType(ttet *types.ScheduledTaskEntityType) *ScheduledTaskUpdate {
+	if ttet != nil {
+		stu.SetEntityType(*ttet)
 	}
 	return stu
 }
 
 // SetInterval sets the "interval" field.
-func (stu *ScheduledTaskUpdate) SetInterval(s string) *ScheduledTaskUpdate {
-	stu.mutation.SetInterval(s)
+func (stu *ScheduledTaskUpdate) SetInterval(tti types.ScheduledTaskInterval) *ScheduledTaskUpdate {
+	stu.mutation.SetInterval(tti)
 	return stu
 }
 
 // SetNillableInterval sets the "interval" field if the given value is not nil.
-func (stu *ScheduledTaskUpdate) SetNillableInterval(s *string) *ScheduledTaskUpdate {
-	if s != nil {
-		stu.SetInterval(*s)
+func (stu *ScheduledTaskUpdate) SetNillableInterval(tti *types.ScheduledTaskInterval) *ScheduledTaskUpdate {
+	if tti != nil {
+		stu.SetInterval(*tti)
 	}
 	return stu
 }
@@ -125,94 +126,14 @@ func (stu *ScheduledTaskUpdate) SetNillableEnabled(b *bool) *ScheduledTaskUpdate
 }
 
 // SetJobConfig sets the "job_config" field.
-func (stu *ScheduledTaskUpdate) SetJobConfig(m map[string]interface{}) *ScheduledTaskUpdate {
-	stu.mutation.SetJobConfig(m)
+func (stu *ScheduledTaskUpdate) SetJobConfig(tc *types.S3JobConfig) *ScheduledTaskUpdate {
+	stu.mutation.SetJobConfig(tc)
 	return stu
 }
 
 // ClearJobConfig clears the value of the "job_config" field.
 func (stu *ScheduledTaskUpdate) ClearJobConfig() *ScheduledTaskUpdate {
 	stu.mutation.ClearJobConfig()
-	return stu
-}
-
-// SetLastRunAt sets the "last_run_at" field.
-func (stu *ScheduledTaskUpdate) SetLastRunAt(t time.Time) *ScheduledTaskUpdate {
-	stu.mutation.SetLastRunAt(t)
-	return stu
-}
-
-// SetNillableLastRunAt sets the "last_run_at" field if the given value is not nil.
-func (stu *ScheduledTaskUpdate) SetNillableLastRunAt(t *time.Time) *ScheduledTaskUpdate {
-	if t != nil {
-		stu.SetLastRunAt(*t)
-	}
-	return stu
-}
-
-// ClearLastRunAt clears the value of the "last_run_at" field.
-func (stu *ScheduledTaskUpdate) ClearLastRunAt() *ScheduledTaskUpdate {
-	stu.mutation.ClearLastRunAt()
-	return stu
-}
-
-// SetNextRunAt sets the "next_run_at" field.
-func (stu *ScheduledTaskUpdate) SetNextRunAt(t time.Time) *ScheduledTaskUpdate {
-	stu.mutation.SetNextRunAt(t)
-	return stu
-}
-
-// SetNillableNextRunAt sets the "next_run_at" field if the given value is not nil.
-func (stu *ScheduledTaskUpdate) SetNillableNextRunAt(t *time.Time) *ScheduledTaskUpdate {
-	if t != nil {
-		stu.SetNextRunAt(*t)
-	}
-	return stu
-}
-
-// ClearNextRunAt clears the value of the "next_run_at" field.
-func (stu *ScheduledTaskUpdate) ClearNextRunAt() *ScheduledTaskUpdate {
-	stu.mutation.ClearNextRunAt()
-	return stu
-}
-
-// SetLastRunStatus sets the "last_run_status" field.
-func (stu *ScheduledTaskUpdate) SetLastRunStatus(s string) *ScheduledTaskUpdate {
-	stu.mutation.SetLastRunStatus(s)
-	return stu
-}
-
-// SetNillableLastRunStatus sets the "last_run_status" field if the given value is not nil.
-func (stu *ScheduledTaskUpdate) SetNillableLastRunStatus(s *string) *ScheduledTaskUpdate {
-	if s != nil {
-		stu.SetLastRunStatus(*s)
-	}
-	return stu
-}
-
-// ClearLastRunStatus clears the value of the "last_run_status" field.
-func (stu *ScheduledTaskUpdate) ClearLastRunStatus() *ScheduledTaskUpdate {
-	stu.mutation.ClearLastRunStatus()
-	return stu
-}
-
-// SetLastRunError sets the "last_run_error" field.
-func (stu *ScheduledTaskUpdate) SetLastRunError(s string) *ScheduledTaskUpdate {
-	stu.mutation.SetLastRunError(s)
-	return stu
-}
-
-// SetNillableLastRunError sets the "last_run_error" field if the given value is not nil.
-func (stu *ScheduledTaskUpdate) SetNillableLastRunError(s *string) *ScheduledTaskUpdate {
-	if s != nil {
-		stu.SetLastRunError(*s)
-	}
-	return stu
-}
-
-// ClearLastRunError clears the value of the "last_run_error" field.
-func (stu *ScheduledTaskUpdate) ClearLastRunError() *ScheduledTaskUpdate {
-	stu.mutation.ClearLastRunError()
 	return stu
 }
 
@@ -285,13 +206,18 @@ func (stu *ScheduledTaskUpdate) check() error {
 		}
 	}
 	if v, ok := stu.mutation.EntityType(); ok {
-		if err := scheduledtask.EntityTypeValidator(v); err != nil {
+		if err := scheduledtask.EntityTypeValidator(string(v)); err != nil {
 			return &ValidationError{Name: "entity_type", err: fmt.Errorf(`ent: validator failed for field "ScheduledTask.entity_type": %w`, err)}
 		}
 	}
 	if v, ok := stu.mutation.Interval(); ok {
-		if err := scheduledtask.IntervalValidator(v); err != nil {
+		if err := scheduledtask.IntervalValidator(string(v)); err != nil {
 			return &ValidationError{Name: "interval", err: fmt.Errorf(`ent: validator failed for field "ScheduledTask.interval": %w`, err)}
+		}
+	}
+	if v, ok := stu.mutation.JobConfig(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "job_config", err: fmt.Errorf(`ent: validator failed for field "ScheduledTask.job_config": %w`, err)}
 		}
 	}
 	return nil
@@ -344,30 +270,6 @@ func (stu *ScheduledTaskUpdate) sqlSave(ctx context.Context) (n int, err error) 
 	}
 	if stu.mutation.JobConfigCleared() {
 		_spec.ClearField(scheduledtask.FieldJobConfig, field.TypeJSON)
-	}
-	if value, ok := stu.mutation.LastRunAt(); ok {
-		_spec.SetField(scheduledtask.FieldLastRunAt, field.TypeTime, value)
-	}
-	if stu.mutation.LastRunAtCleared() {
-		_spec.ClearField(scheduledtask.FieldLastRunAt, field.TypeTime)
-	}
-	if value, ok := stu.mutation.NextRunAt(); ok {
-		_spec.SetField(scheduledtask.FieldNextRunAt, field.TypeTime, value)
-	}
-	if stu.mutation.NextRunAtCleared() {
-		_spec.ClearField(scheduledtask.FieldNextRunAt, field.TypeTime)
-	}
-	if value, ok := stu.mutation.LastRunStatus(); ok {
-		_spec.SetField(scheduledtask.FieldLastRunStatus, field.TypeString, value)
-	}
-	if stu.mutation.LastRunStatusCleared() {
-		_spec.ClearField(scheduledtask.FieldLastRunStatus, field.TypeString)
-	}
-	if value, ok := stu.mutation.LastRunError(); ok {
-		_spec.SetField(scheduledtask.FieldLastRunError, field.TypeString, value)
-	}
-	if stu.mutation.LastRunErrorCleared() {
-		_spec.ClearField(scheduledtask.FieldLastRunError, field.TypeString)
 	}
 	if value, ok := stu.mutation.TemporalScheduleID(); ok {
 		_spec.SetField(scheduledtask.FieldTemporalScheduleID, field.TypeString, value)
@@ -450,29 +352,29 @@ func (stuo *ScheduledTaskUpdateOne) SetNillableConnectionID(s *string) *Schedule
 }
 
 // SetEntityType sets the "entity_type" field.
-func (stuo *ScheduledTaskUpdateOne) SetEntityType(s string) *ScheduledTaskUpdateOne {
-	stuo.mutation.SetEntityType(s)
+func (stuo *ScheduledTaskUpdateOne) SetEntityType(ttet types.ScheduledTaskEntityType) *ScheduledTaskUpdateOne {
+	stuo.mutation.SetEntityType(ttet)
 	return stuo
 }
 
 // SetNillableEntityType sets the "entity_type" field if the given value is not nil.
-func (stuo *ScheduledTaskUpdateOne) SetNillableEntityType(s *string) *ScheduledTaskUpdateOne {
-	if s != nil {
-		stuo.SetEntityType(*s)
+func (stuo *ScheduledTaskUpdateOne) SetNillableEntityType(ttet *types.ScheduledTaskEntityType) *ScheduledTaskUpdateOne {
+	if ttet != nil {
+		stuo.SetEntityType(*ttet)
 	}
 	return stuo
 }
 
 // SetInterval sets the "interval" field.
-func (stuo *ScheduledTaskUpdateOne) SetInterval(s string) *ScheduledTaskUpdateOne {
-	stuo.mutation.SetInterval(s)
+func (stuo *ScheduledTaskUpdateOne) SetInterval(tti types.ScheduledTaskInterval) *ScheduledTaskUpdateOne {
+	stuo.mutation.SetInterval(tti)
 	return stuo
 }
 
 // SetNillableInterval sets the "interval" field if the given value is not nil.
-func (stuo *ScheduledTaskUpdateOne) SetNillableInterval(s *string) *ScheduledTaskUpdateOne {
-	if s != nil {
-		stuo.SetInterval(*s)
+func (stuo *ScheduledTaskUpdateOne) SetNillableInterval(tti *types.ScheduledTaskInterval) *ScheduledTaskUpdateOne {
+	if tti != nil {
+		stuo.SetInterval(*tti)
 	}
 	return stuo
 }
@@ -492,94 +394,14 @@ func (stuo *ScheduledTaskUpdateOne) SetNillableEnabled(b *bool) *ScheduledTaskUp
 }
 
 // SetJobConfig sets the "job_config" field.
-func (stuo *ScheduledTaskUpdateOne) SetJobConfig(m map[string]interface{}) *ScheduledTaskUpdateOne {
-	stuo.mutation.SetJobConfig(m)
+func (stuo *ScheduledTaskUpdateOne) SetJobConfig(tc *types.S3JobConfig) *ScheduledTaskUpdateOne {
+	stuo.mutation.SetJobConfig(tc)
 	return stuo
 }
 
 // ClearJobConfig clears the value of the "job_config" field.
 func (stuo *ScheduledTaskUpdateOne) ClearJobConfig() *ScheduledTaskUpdateOne {
 	stuo.mutation.ClearJobConfig()
-	return stuo
-}
-
-// SetLastRunAt sets the "last_run_at" field.
-func (stuo *ScheduledTaskUpdateOne) SetLastRunAt(t time.Time) *ScheduledTaskUpdateOne {
-	stuo.mutation.SetLastRunAt(t)
-	return stuo
-}
-
-// SetNillableLastRunAt sets the "last_run_at" field if the given value is not nil.
-func (stuo *ScheduledTaskUpdateOne) SetNillableLastRunAt(t *time.Time) *ScheduledTaskUpdateOne {
-	if t != nil {
-		stuo.SetLastRunAt(*t)
-	}
-	return stuo
-}
-
-// ClearLastRunAt clears the value of the "last_run_at" field.
-func (stuo *ScheduledTaskUpdateOne) ClearLastRunAt() *ScheduledTaskUpdateOne {
-	stuo.mutation.ClearLastRunAt()
-	return stuo
-}
-
-// SetNextRunAt sets the "next_run_at" field.
-func (stuo *ScheduledTaskUpdateOne) SetNextRunAt(t time.Time) *ScheduledTaskUpdateOne {
-	stuo.mutation.SetNextRunAt(t)
-	return stuo
-}
-
-// SetNillableNextRunAt sets the "next_run_at" field if the given value is not nil.
-func (stuo *ScheduledTaskUpdateOne) SetNillableNextRunAt(t *time.Time) *ScheduledTaskUpdateOne {
-	if t != nil {
-		stuo.SetNextRunAt(*t)
-	}
-	return stuo
-}
-
-// ClearNextRunAt clears the value of the "next_run_at" field.
-func (stuo *ScheduledTaskUpdateOne) ClearNextRunAt() *ScheduledTaskUpdateOne {
-	stuo.mutation.ClearNextRunAt()
-	return stuo
-}
-
-// SetLastRunStatus sets the "last_run_status" field.
-func (stuo *ScheduledTaskUpdateOne) SetLastRunStatus(s string) *ScheduledTaskUpdateOne {
-	stuo.mutation.SetLastRunStatus(s)
-	return stuo
-}
-
-// SetNillableLastRunStatus sets the "last_run_status" field if the given value is not nil.
-func (stuo *ScheduledTaskUpdateOne) SetNillableLastRunStatus(s *string) *ScheduledTaskUpdateOne {
-	if s != nil {
-		stuo.SetLastRunStatus(*s)
-	}
-	return stuo
-}
-
-// ClearLastRunStatus clears the value of the "last_run_status" field.
-func (stuo *ScheduledTaskUpdateOne) ClearLastRunStatus() *ScheduledTaskUpdateOne {
-	stuo.mutation.ClearLastRunStatus()
-	return stuo
-}
-
-// SetLastRunError sets the "last_run_error" field.
-func (stuo *ScheduledTaskUpdateOne) SetLastRunError(s string) *ScheduledTaskUpdateOne {
-	stuo.mutation.SetLastRunError(s)
-	return stuo
-}
-
-// SetNillableLastRunError sets the "last_run_error" field if the given value is not nil.
-func (stuo *ScheduledTaskUpdateOne) SetNillableLastRunError(s *string) *ScheduledTaskUpdateOne {
-	if s != nil {
-		stuo.SetLastRunError(*s)
-	}
-	return stuo
-}
-
-// ClearLastRunError clears the value of the "last_run_error" field.
-func (stuo *ScheduledTaskUpdateOne) ClearLastRunError() *ScheduledTaskUpdateOne {
-	stuo.mutation.ClearLastRunError()
 	return stuo
 }
 
@@ -665,13 +487,18 @@ func (stuo *ScheduledTaskUpdateOne) check() error {
 		}
 	}
 	if v, ok := stuo.mutation.EntityType(); ok {
-		if err := scheduledtask.EntityTypeValidator(v); err != nil {
+		if err := scheduledtask.EntityTypeValidator(string(v)); err != nil {
 			return &ValidationError{Name: "entity_type", err: fmt.Errorf(`ent: validator failed for field "ScheduledTask.entity_type": %w`, err)}
 		}
 	}
 	if v, ok := stuo.mutation.Interval(); ok {
-		if err := scheduledtask.IntervalValidator(v); err != nil {
+		if err := scheduledtask.IntervalValidator(string(v)); err != nil {
 			return &ValidationError{Name: "interval", err: fmt.Errorf(`ent: validator failed for field "ScheduledTask.interval": %w`, err)}
+		}
+	}
+	if v, ok := stuo.mutation.JobConfig(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "job_config", err: fmt.Errorf(`ent: validator failed for field "ScheduledTask.job_config": %w`, err)}
 		}
 	}
 	return nil
@@ -741,30 +568,6 @@ func (stuo *ScheduledTaskUpdateOne) sqlSave(ctx context.Context) (_node *Schedul
 	}
 	if stuo.mutation.JobConfigCleared() {
 		_spec.ClearField(scheduledtask.FieldJobConfig, field.TypeJSON)
-	}
-	if value, ok := stuo.mutation.LastRunAt(); ok {
-		_spec.SetField(scheduledtask.FieldLastRunAt, field.TypeTime, value)
-	}
-	if stuo.mutation.LastRunAtCleared() {
-		_spec.ClearField(scheduledtask.FieldLastRunAt, field.TypeTime)
-	}
-	if value, ok := stuo.mutation.NextRunAt(); ok {
-		_spec.SetField(scheduledtask.FieldNextRunAt, field.TypeTime, value)
-	}
-	if stuo.mutation.NextRunAtCleared() {
-		_spec.ClearField(scheduledtask.FieldNextRunAt, field.TypeTime)
-	}
-	if value, ok := stuo.mutation.LastRunStatus(); ok {
-		_spec.SetField(scheduledtask.FieldLastRunStatus, field.TypeString, value)
-	}
-	if stuo.mutation.LastRunStatusCleared() {
-		_spec.ClearField(scheduledtask.FieldLastRunStatus, field.TypeString)
-	}
-	if value, ok := stuo.mutation.LastRunError(); ok {
-		_spec.SetField(scheduledtask.FieldLastRunError, field.TypeString, value)
-	}
-	if stuo.mutation.LastRunErrorCleared() {
-		_spec.ClearField(scheduledtask.FieldLastRunError, field.TypeString)
 	}
 	if value, ok := stuo.mutation.TemporalScheduleID(); ok {
 		_spec.SetField(scheduledtask.FieldTemporalScheduleID, field.TypeString, value)

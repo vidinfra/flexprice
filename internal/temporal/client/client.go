@@ -172,6 +172,30 @@ func (c *temporalClient) DescribeWorkflowExecution(ctx context.Context, workflow
 	return c.client.DescribeWorkflowExecution(ctx, workflowID, runID)
 }
 
+// CreateSchedule implements TemporalClient
+func (c *temporalClient) CreateSchedule(ctx context.Context, options models.CreateScheduleOptions) (models.ScheduleHandle, error) {
+	schedule, err := c.client.ScheduleClient().Create(ctx, options.ToSDKOptions())
+	if err != nil {
+		return nil, err
+	}
+	return models.NewScheduleHandle(schedule), nil
+}
+
+// GetScheduleHandle implements TemporalClient
+func (c *temporalClient) GetScheduleHandle(ctx context.Context, scheduleID string) models.ScheduleHandle {
+	handle := c.client.ScheduleClient().GetHandle(ctx, scheduleID)
+	return models.NewScheduleHandle(handle)
+}
+
+// ExecuteWorkflow implements TemporalClient
+func (c *temporalClient) ExecuteWorkflow(ctx context.Context, options models.StartWorkflowOptions, workflow interface{}, args ...interface{}) (models.WorkflowRun, error) {
+	run, err := c.client.ExecuteWorkflow(ctx, options.ToSDKOptions(), workflow, args...)
+	if err != nil {
+		return nil, err
+	}
+	return models.NewWorkflowRun(run), nil
+}
+
 // GetRawClient implements TemporalClient
 func (c *temporalClient) GetRawClient() client.Client {
 	return c.client

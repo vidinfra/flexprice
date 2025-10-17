@@ -7,6 +7,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/flexprice/flexprice/ent/predicate"
+	"github.com/flexprice/flexprice/internal/types"
 )
 
 // ID filters vertices based on their ID field.
@@ -105,38 +106,20 @@ func ConnectionID(v string) predicate.ScheduledTask {
 }
 
 // EntityType applies equality check predicate on the "entity_type" field. It's identical to EntityTypeEQ.
-func EntityType(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEQ(FieldEntityType, v))
+func EntityType(v types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldEQ(FieldEntityType, vc))
 }
 
 // Interval applies equality check predicate on the "interval" field. It's identical to IntervalEQ.
-func Interval(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEQ(FieldInterval, v))
+func Interval(v types.ScheduledTaskInterval) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldEQ(FieldInterval, vc))
 }
 
 // Enabled applies equality check predicate on the "enabled" field. It's identical to EnabledEQ.
 func Enabled(v bool) predicate.ScheduledTask {
 	return predicate.ScheduledTask(sql.FieldEQ(FieldEnabled, v))
-}
-
-// LastRunAt applies equality check predicate on the "last_run_at" field. It's identical to LastRunAtEQ.
-func LastRunAt(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEQ(FieldLastRunAt, v))
-}
-
-// NextRunAt applies equality check predicate on the "next_run_at" field. It's identical to NextRunAtEQ.
-func NextRunAt(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEQ(FieldNextRunAt, v))
-}
-
-// LastRunStatus applies equality check predicate on the "last_run_status" field. It's identical to LastRunStatusEQ.
-func LastRunStatus(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEQ(FieldLastRunStatus, v))
-}
-
-// LastRunError applies equality check predicate on the "last_run_error" field. It's identical to LastRunErrorEQ.
-func LastRunError(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEQ(FieldLastRunError, v))
 }
 
 // TemporalScheduleID applies equality check predicate on the "temporal_schedule_id" field. It's identical to TemporalScheduleIDEQ.
@@ -645,133 +628,171 @@ func ConnectionIDContainsFold(v string) predicate.ScheduledTask {
 }
 
 // EntityTypeEQ applies the EQ predicate on the "entity_type" field.
-func EntityTypeEQ(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEQ(FieldEntityType, v))
+func EntityTypeEQ(v types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldEQ(FieldEntityType, vc))
 }
 
 // EntityTypeNEQ applies the NEQ predicate on the "entity_type" field.
-func EntityTypeNEQ(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNEQ(FieldEntityType, v))
+func EntityTypeNEQ(v types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldNEQ(FieldEntityType, vc))
 }
 
 // EntityTypeIn applies the In predicate on the "entity_type" field.
-func EntityTypeIn(vs ...string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldIn(FieldEntityType, vs...))
+func EntityTypeIn(vs ...types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	v := make([]any, len(vs))
+	for i := range v {
+		v[i] = string(vs[i])
+	}
+	return predicate.ScheduledTask(sql.FieldIn(FieldEntityType, v...))
 }
 
 // EntityTypeNotIn applies the NotIn predicate on the "entity_type" field.
-func EntityTypeNotIn(vs ...string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNotIn(FieldEntityType, vs...))
+func EntityTypeNotIn(vs ...types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	v := make([]any, len(vs))
+	for i := range v {
+		v[i] = string(vs[i])
+	}
+	return predicate.ScheduledTask(sql.FieldNotIn(FieldEntityType, v...))
 }
 
 // EntityTypeGT applies the GT predicate on the "entity_type" field.
-func EntityTypeGT(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldGT(FieldEntityType, v))
+func EntityTypeGT(v types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldGT(FieldEntityType, vc))
 }
 
 // EntityTypeGTE applies the GTE predicate on the "entity_type" field.
-func EntityTypeGTE(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldGTE(FieldEntityType, v))
+func EntityTypeGTE(v types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldGTE(FieldEntityType, vc))
 }
 
 // EntityTypeLT applies the LT predicate on the "entity_type" field.
-func EntityTypeLT(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldLT(FieldEntityType, v))
+func EntityTypeLT(v types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldLT(FieldEntityType, vc))
 }
 
 // EntityTypeLTE applies the LTE predicate on the "entity_type" field.
-func EntityTypeLTE(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldLTE(FieldEntityType, v))
+func EntityTypeLTE(v types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldLTE(FieldEntityType, vc))
 }
 
 // EntityTypeContains applies the Contains predicate on the "entity_type" field.
-func EntityTypeContains(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldContains(FieldEntityType, v))
+func EntityTypeContains(v types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldContains(FieldEntityType, vc))
 }
 
 // EntityTypeHasPrefix applies the HasPrefix predicate on the "entity_type" field.
-func EntityTypeHasPrefix(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldHasPrefix(FieldEntityType, v))
+func EntityTypeHasPrefix(v types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldHasPrefix(FieldEntityType, vc))
 }
 
 // EntityTypeHasSuffix applies the HasSuffix predicate on the "entity_type" field.
-func EntityTypeHasSuffix(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldHasSuffix(FieldEntityType, v))
+func EntityTypeHasSuffix(v types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldHasSuffix(FieldEntityType, vc))
 }
 
 // EntityTypeEqualFold applies the EqualFold predicate on the "entity_type" field.
-func EntityTypeEqualFold(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEqualFold(FieldEntityType, v))
+func EntityTypeEqualFold(v types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldEqualFold(FieldEntityType, vc))
 }
 
 // EntityTypeContainsFold applies the ContainsFold predicate on the "entity_type" field.
-func EntityTypeContainsFold(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldContainsFold(FieldEntityType, v))
+func EntityTypeContainsFold(v types.ScheduledTaskEntityType) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldContainsFold(FieldEntityType, vc))
 }
 
 // IntervalEQ applies the EQ predicate on the "interval" field.
-func IntervalEQ(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEQ(FieldInterval, v))
+func IntervalEQ(v types.ScheduledTaskInterval) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldEQ(FieldInterval, vc))
 }
 
 // IntervalNEQ applies the NEQ predicate on the "interval" field.
-func IntervalNEQ(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNEQ(FieldInterval, v))
+func IntervalNEQ(v types.ScheduledTaskInterval) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldNEQ(FieldInterval, vc))
 }
 
 // IntervalIn applies the In predicate on the "interval" field.
-func IntervalIn(vs ...string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldIn(FieldInterval, vs...))
+func IntervalIn(vs ...types.ScheduledTaskInterval) predicate.ScheduledTask {
+	v := make([]any, len(vs))
+	for i := range v {
+		v[i] = string(vs[i])
+	}
+	return predicate.ScheduledTask(sql.FieldIn(FieldInterval, v...))
 }
 
 // IntervalNotIn applies the NotIn predicate on the "interval" field.
-func IntervalNotIn(vs ...string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNotIn(FieldInterval, vs...))
+func IntervalNotIn(vs ...types.ScheduledTaskInterval) predicate.ScheduledTask {
+	v := make([]any, len(vs))
+	for i := range v {
+		v[i] = string(vs[i])
+	}
+	return predicate.ScheduledTask(sql.FieldNotIn(FieldInterval, v...))
 }
 
 // IntervalGT applies the GT predicate on the "interval" field.
-func IntervalGT(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldGT(FieldInterval, v))
+func IntervalGT(v types.ScheduledTaskInterval) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldGT(FieldInterval, vc))
 }
 
 // IntervalGTE applies the GTE predicate on the "interval" field.
-func IntervalGTE(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldGTE(FieldInterval, v))
+func IntervalGTE(v types.ScheduledTaskInterval) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldGTE(FieldInterval, vc))
 }
 
 // IntervalLT applies the LT predicate on the "interval" field.
-func IntervalLT(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldLT(FieldInterval, v))
+func IntervalLT(v types.ScheduledTaskInterval) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldLT(FieldInterval, vc))
 }
 
 // IntervalLTE applies the LTE predicate on the "interval" field.
-func IntervalLTE(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldLTE(FieldInterval, v))
+func IntervalLTE(v types.ScheduledTaskInterval) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldLTE(FieldInterval, vc))
 }
 
 // IntervalContains applies the Contains predicate on the "interval" field.
-func IntervalContains(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldContains(FieldInterval, v))
+func IntervalContains(v types.ScheduledTaskInterval) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldContains(FieldInterval, vc))
 }
 
 // IntervalHasPrefix applies the HasPrefix predicate on the "interval" field.
-func IntervalHasPrefix(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldHasPrefix(FieldInterval, v))
+func IntervalHasPrefix(v types.ScheduledTaskInterval) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldHasPrefix(FieldInterval, vc))
 }
 
 // IntervalHasSuffix applies the HasSuffix predicate on the "interval" field.
-func IntervalHasSuffix(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldHasSuffix(FieldInterval, v))
+func IntervalHasSuffix(v types.ScheduledTaskInterval) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldHasSuffix(FieldInterval, vc))
 }
 
 // IntervalEqualFold applies the EqualFold predicate on the "interval" field.
-func IntervalEqualFold(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEqualFold(FieldInterval, v))
+func IntervalEqualFold(v types.ScheduledTaskInterval) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldEqualFold(FieldInterval, vc))
 }
 
 // IntervalContainsFold applies the ContainsFold predicate on the "interval" field.
-func IntervalContainsFold(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldContainsFold(FieldInterval, v))
+func IntervalContainsFold(v types.ScheduledTaskInterval) predicate.ScheduledTask {
+	vc := string(v)
+	return predicate.ScheduledTask(sql.FieldContainsFold(FieldInterval, vc))
 }
 
 // EnabledEQ applies the EQ predicate on the "enabled" field.
@@ -792,256 +813,6 @@ func JobConfigIsNil() predicate.ScheduledTask {
 // JobConfigNotNil applies the NotNil predicate on the "job_config" field.
 func JobConfigNotNil() predicate.ScheduledTask {
 	return predicate.ScheduledTask(sql.FieldNotNull(FieldJobConfig))
-}
-
-// LastRunAtEQ applies the EQ predicate on the "last_run_at" field.
-func LastRunAtEQ(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEQ(FieldLastRunAt, v))
-}
-
-// LastRunAtNEQ applies the NEQ predicate on the "last_run_at" field.
-func LastRunAtNEQ(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNEQ(FieldLastRunAt, v))
-}
-
-// LastRunAtIn applies the In predicate on the "last_run_at" field.
-func LastRunAtIn(vs ...time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldIn(FieldLastRunAt, vs...))
-}
-
-// LastRunAtNotIn applies the NotIn predicate on the "last_run_at" field.
-func LastRunAtNotIn(vs ...time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNotIn(FieldLastRunAt, vs...))
-}
-
-// LastRunAtGT applies the GT predicate on the "last_run_at" field.
-func LastRunAtGT(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldGT(FieldLastRunAt, v))
-}
-
-// LastRunAtGTE applies the GTE predicate on the "last_run_at" field.
-func LastRunAtGTE(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldGTE(FieldLastRunAt, v))
-}
-
-// LastRunAtLT applies the LT predicate on the "last_run_at" field.
-func LastRunAtLT(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldLT(FieldLastRunAt, v))
-}
-
-// LastRunAtLTE applies the LTE predicate on the "last_run_at" field.
-func LastRunAtLTE(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldLTE(FieldLastRunAt, v))
-}
-
-// LastRunAtIsNil applies the IsNil predicate on the "last_run_at" field.
-func LastRunAtIsNil() predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldIsNull(FieldLastRunAt))
-}
-
-// LastRunAtNotNil applies the NotNil predicate on the "last_run_at" field.
-func LastRunAtNotNil() predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNotNull(FieldLastRunAt))
-}
-
-// NextRunAtEQ applies the EQ predicate on the "next_run_at" field.
-func NextRunAtEQ(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEQ(FieldNextRunAt, v))
-}
-
-// NextRunAtNEQ applies the NEQ predicate on the "next_run_at" field.
-func NextRunAtNEQ(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNEQ(FieldNextRunAt, v))
-}
-
-// NextRunAtIn applies the In predicate on the "next_run_at" field.
-func NextRunAtIn(vs ...time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldIn(FieldNextRunAt, vs...))
-}
-
-// NextRunAtNotIn applies the NotIn predicate on the "next_run_at" field.
-func NextRunAtNotIn(vs ...time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNotIn(FieldNextRunAt, vs...))
-}
-
-// NextRunAtGT applies the GT predicate on the "next_run_at" field.
-func NextRunAtGT(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldGT(FieldNextRunAt, v))
-}
-
-// NextRunAtGTE applies the GTE predicate on the "next_run_at" field.
-func NextRunAtGTE(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldGTE(FieldNextRunAt, v))
-}
-
-// NextRunAtLT applies the LT predicate on the "next_run_at" field.
-func NextRunAtLT(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldLT(FieldNextRunAt, v))
-}
-
-// NextRunAtLTE applies the LTE predicate on the "next_run_at" field.
-func NextRunAtLTE(v time.Time) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldLTE(FieldNextRunAt, v))
-}
-
-// NextRunAtIsNil applies the IsNil predicate on the "next_run_at" field.
-func NextRunAtIsNil() predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldIsNull(FieldNextRunAt))
-}
-
-// NextRunAtNotNil applies the NotNil predicate on the "next_run_at" field.
-func NextRunAtNotNil() predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNotNull(FieldNextRunAt))
-}
-
-// LastRunStatusEQ applies the EQ predicate on the "last_run_status" field.
-func LastRunStatusEQ(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEQ(FieldLastRunStatus, v))
-}
-
-// LastRunStatusNEQ applies the NEQ predicate on the "last_run_status" field.
-func LastRunStatusNEQ(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNEQ(FieldLastRunStatus, v))
-}
-
-// LastRunStatusIn applies the In predicate on the "last_run_status" field.
-func LastRunStatusIn(vs ...string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldIn(FieldLastRunStatus, vs...))
-}
-
-// LastRunStatusNotIn applies the NotIn predicate on the "last_run_status" field.
-func LastRunStatusNotIn(vs ...string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNotIn(FieldLastRunStatus, vs...))
-}
-
-// LastRunStatusGT applies the GT predicate on the "last_run_status" field.
-func LastRunStatusGT(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldGT(FieldLastRunStatus, v))
-}
-
-// LastRunStatusGTE applies the GTE predicate on the "last_run_status" field.
-func LastRunStatusGTE(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldGTE(FieldLastRunStatus, v))
-}
-
-// LastRunStatusLT applies the LT predicate on the "last_run_status" field.
-func LastRunStatusLT(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldLT(FieldLastRunStatus, v))
-}
-
-// LastRunStatusLTE applies the LTE predicate on the "last_run_status" field.
-func LastRunStatusLTE(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldLTE(FieldLastRunStatus, v))
-}
-
-// LastRunStatusContains applies the Contains predicate on the "last_run_status" field.
-func LastRunStatusContains(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldContains(FieldLastRunStatus, v))
-}
-
-// LastRunStatusHasPrefix applies the HasPrefix predicate on the "last_run_status" field.
-func LastRunStatusHasPrefix(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldHasPrefix(FieldLastRunStatus, v))
-}
-
-// LastRunStatusHasSuffix applies the HasSuffix predicate on the "last_run_status" field.
-func LastRunStatusHasSuffix(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldHasSuffix(FieldLastRunStatus, v))
-}
-
-// LastRunStatusIsNil applies the IsNil predicate on the "last_run_status" field.
-func LastRunStatusIsNil() predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldIsNull(FieldLastRunStatus))
-}
-
-// LastRunStatusNotNil applies the NotNil predicate on the "last_run_status" field.
-func LastRunStatusNotNil() predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNotNull(FieldLastRunStatus))
-}
-
-// LastRunStatusEqualFold applies the EqualFold predicate on the "last_run_status" field.
-func LastRunStatusEqualFold(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEqualFold(FieldLastRunStatus, v))
-}
-
-// LastRunStatusContainsFold applies the ContainsFold predicate on the "last_run_status" field.
-func LastRunStatusContainsFold(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldContainsFold(FieldLastRunStatus, v))
-}
-
-// LastRunErrorEQ applies the EQ predicate on the "last_run_error" field.
-func LastRunErrorEQ(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEQ(FieldLastRunError, v))
-}
-
-// LastRunErrorNEQ applies the NEQ predicate on the "last_run_error" field.
-func LastRunErrorNEQ(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNEQ(FieldLastRunError, v))
-}
-
-// LastRunErrorIn applies the In predicate on the "last_run_error" field.
-func LastRunErrorIn(vs ...string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldIn(FieldLastRunError, vs...))
-}
-
-// LastRunErrorNotIn applies the NotIn predicate on the "last_run_error" field.
-func LastRunErrorNotIn(vs ...string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNotIn(FieldLastRunError, vs...))
-}
-
-// LastRunErrorGT applies the GT predicate on the "last_run_error" field.
-func LastRunErrorGT(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldGT(FieldLastRunError, v))
-}
-
-// LastRunErrorGTE applies the GTE predicate on the "last_run_error" field.
-func LastRunErrorGTE(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldGTE(FieldLastRunError, v))
-}
-
-// LastRunErrorLT applies the LT predicate on the "last_run_error" field.
-func LastRunErrorLT(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldLT(FieldLastRunError, v))
-}
-
-// LastRunErrorLTE applies the LTE predicate on the "last_run_error" field.
-func LastRunErrorLTE(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldLTE(FieldLastRunError, v))
-}
-
-// LastRunErrorContains applies the Contains predicate on the "last_run_error" field.
-func LastRunErrorContains(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldContains(FieldLastRunError, v))
-}
-
-// LastRunErrorHasPrefix applies the HasPrefix predicate on the "last_run_error" field.
-func LastRunErrorHasPrefix(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldHasPrefix(FieldLastRunError, v))
-}
-
-// LastRunErrorHasSuffix applies the HasSuffix predicate on the "last_run_error" field.
-func LastRunErrorHasSuffix(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldHasSuffix(FieldLastRunError, v))
-}
-
-// LastRunErrorIsNil applies the IsNil predicate on the "last_run_error" field.
-func LastRunErrorIsNil() predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldIsNull(FieldLastRunError))
-}
-
-// LastRunErrorNotNil applies the NotNil predicate on the "last_run_error" field.
-func LastRunErrorNotNil() predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldNotNull(FieldLastRunError))
-}
-
-// LastRunErrorEqualFold applies the EqualFold predicate on the "last_run_error" field.
-func LastRunErrorEqualFold(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldEqualFold(FieldLastRunError, v))
-}
-
-// LastRunErrorContainsFold applies the ContainsFold predicate on the "last_run_error" field.
-func LastRunErrorContainsFold(v string) predicate.ScheduledTask {
-	return predicate.ScheduledTask(sql.FieldContainsFold(FieldLastRunError, v))
 }
 
 // TemporalScheduleIDEQ applies the EQ predicate on the "temporal_schedule_id" field.

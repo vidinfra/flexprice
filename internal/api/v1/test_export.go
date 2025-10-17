@@ -32,12 +32,11 @@ func (h *TestExportHandler) TestExport(c *gin.Context) {
 
 	// Create test S3 job config (using default values from connection)
 	testJobConfig := &types.S3JobConfig{
-		Bucket:        "flexprice-dev-testing", // Default test bucket
-		Region:        "ap-south-1",            // Default region
-		KeyPrefix:     "test-exports",
-		Compression:   "gzip",
-		Encryption:    "AES256",
-		MaxFileSizeMB: 100,
+		Bucket:      "flexprice-dev-testing", // Default test bucket
+		Region:      "ap-south-1",            // Default region
+		KeyPrefix:   "test-exports",
+		Compression: types.S3CompressionTypeGzip,
+		Encryption:  types.S3EncryptionTypeAES256,
 	}
 
 	// 1. Get S3 client with decrypted credentials and test config

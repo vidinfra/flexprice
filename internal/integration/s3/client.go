@@ -42,13 +42,11 @@ type S3Config struct {
 	Bucket             string
 	Region             string
 	KeyPrefix          string
-	Compression        string
-	Encryption         string
+	Compression        types.S3CompressionType
+	Encryption         types.S3EncryptionType
 	EndpointURL        string
 	VirtualHostStyle   bool
 	MaxFileSizeMB      int
-	Interval           types.SyncInterval
-	EntityTypes        []types.ExportEntityType
 }
 
 // GetS3Client returns a configured S3 client with the provided job config and connection ID
@@ -121,14 +119,6 @@ func (c *Client) GetS3Client(ctx context.Context, jobConfig *types.S3JobConfig, 
 		},
 	}
 
-	// Add custom endpoint if provided (for S3-compatible services)
-	if s3Config.EndpointURL != "" {
-		s3Options = append(s3Options, func(o *s3.Options) {
-			o.BaseEndpoint = aws.String(s3Config.EndpointURL)
-			o.UsePathStyle = !s3Config.VirtualHostStyle
-		})
-	}
-
 	// Create S3 client
 	awsS3Client := s3.NewFromConfig(awsCfg, s3Options...)
 
@@ -156,11 +146,7 @@ func (c *Client) GetDecryptedS3Config(conn *connection.Connection, jobConfig *ty
 	}
 
 	// Decrypt credentials
-	c.logger.Infow("Decrypting S3 credentials",
-		"connection_id", conn.ID,
-		"encrypted_access_key_length", len(conn.EncryptedSecretData.S3.AWSAccessKeyID),
-		"encrypted_secret_key_length", len(conn.EncryptedSecretData.S3.AWSSecretAccessKey),
-	)
+	c.logger.Infow("Decrypting S3 credentials", "connection_id", conn.ID)
 
 	accessKey, err := c.encryptionService.Decrypt(conn.EncryptedSecretData.S3.AWSAccessKeyID)
 	if err != nil {
@@ -186,10 +172,7 @@ func (c *Client) GetDecryptedS3Config(conn *connection.Connection, jobConfig *ty
 
 	c.logger.Infow("Decrypted S3 credentials",
 		"connection_id", conn.ID,
-		"decrypted_access_key_length", len(accessKey),
-		"decrypted_secret_key_length", len(secretKey),
 		"has_session_token", sessionToken != "",
-		"access_key_starts_with", accessKey[:min(4, len(accessKey))],
 	)
 
 	// Validate job config is provided
@@ -209,9 +192,6 @@ func (c *Client) GetDecryptedS3Config(conn *connection.Connection, jobConfig *ty
 		KeyPrefix:          jobConfig.KeyPrefix,
 		Compression:        jobConfig.Compression,
 		Encryption:         jobConfig.Encryption,
-		EndpointURL:        jobConfig.EndpointURL,
-		VirtualHostStyle:   jobConfig.VirtualHostStyle,
-		MaxFileSizeMB:      jobConfig.MaxFileSizeMB,
 	}
 
 	c.logger.Infow("successfully created S3 configuration",

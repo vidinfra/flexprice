@@ -11,30 +11,31 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	ierr "github.com/flexprice/flexprice/internal/errors"
+	flexpriceTypes "github.com/flexprice/flexprice/internal/types"
 )
 
-// ExportFormat represents the export file format
-type ExportFormat string
+// UploadFormat represents the upload file format
+type UploadFormat string
 
 const (
-	ExportFormatCSV     ExportFormat = "csv"
-	ExportFormatJSON    ExportFormat = "json"
-	ExportFormatParquet ExportFormat = "parquet"
+	UploadFormatCSV     UploadFormat = "csv"
+	UploadFormatJSON    UploadFormat = "json"
+	UploadFormatParquet UploadFormat = "parquet"
 )
 
-// ExportRequest represents a request to export data to S3
-type ExportRequest struct {
+// UploadRequest represents a request to upload data to S3
+type UploadRequest struct {
 	FileName    string       // File name (without path)
-	Data        []byte       // Data to export
-	Format      ExportFormat // File format
-	EntityType  string       // Entity type being exported (e.g., "feature_usage", "invoice")
-	Timestamp   time.Time    // Timestamp for the export
+	Data        []byte       // Data to upload
+	Format      UploadFormat // File format
+	EntityType  string       // Entity type being uploaded (e.g., "feature_usage", "invoice")
+	Timestamp   time.Time    // Timestamp for the upload
 	Compress    bool         // Whether to compress the data
 	ContentType string       // Content type (optional, will be inferred if empty)
 }
 
-// ExportResponse represents the response after exporting data to S3
-type ExportResponse struct {
+// UploadResponse represents the response after uploading data to S3
+type UploadResponse struct {
 	FileURL        string    // S3 URL of the uploaded file
 	Bucket         string    // S3 bucket name
 	Key            string    // S3 object key
@@ -44,15 +45,15 @@ type ExportResponse struct {
 }
 
 // UploadFile uploads a file to S3
-func (c *s3Client) UploadFile(ctx context.Context, request *ExportRequest) (*ExportResponse, error) {
+func (c *s3Client) UploadFile(ctx context.Context, request *UploadRequest) (*UploadResponse, error) {
 	if request == nil {
-		return nil, ierr.NewError("export request is nil").
-			WithHint("Export request is required").
+		return nil, ierr.NewError("upload request is nil").
+			WithHint("Upload request is required").
 			Mark(ierr.ErrValidation)
 	}
 
 	// Validate request
-	if err := c.validateExportRequest(request); err != nil {
+	if err := c.validateUploadRequest(request); err != nil {
 		return nil, err
 	}
 
@@ -65,7 +66,7 @@ func (c *s3Client) UploadFile(ctx context.Context, request *ExportRequest) (*Exp
 	compressedSize := originalSize
 
 	// Compress data if requested and compression is enabled
-	if request.Compress && c.config.Compression == "gzip" {
+	if request.Compress && c.config.Compression == flexpriceTypes.S3CompressionTypeGzip {
 		compressedData, err := c.compressData(data)
 		if err != nil {
 			return nil, err
@@ -94,10 +95,12 @@ func (c *s3Client) UploadFile(ctx context.Context, request *ExportRequest) (*Exp
 	}
 
 	// Add server-side encryption
-	if c.config.Encryption == "AES256" {
+	if c.config.Encryption == flexpriceTypes.S3EncryptionTypeAES256 {
 		uploadInput.ServerSideEncryption = types.ServerSideEncryptionAes256
-	} else if c.config.Encryption == "aws:kms" {
+	} else if c.config.Encryption == flexpriceTypes.S3EncryptionTypeAwsKms {
 		uploadInput.ServerSideEncryption = types.ServerSideEncryptionAwsKms
+	} else if c.config.Encryption == flexpriceTypes.S3EncryptionTypeAwsKmsDsse {
+		uploadInput.ServerSideEncryption = types.ServerSideEncryptionAwsKmsDsse
 	}
 
 	// Upload to S3
@@ -119,7 +122,7 @@ func (c *s3Client) UploadFile(ctx context.Context, request *ExportRequest) (*Exp
 		"entity_type", request.EntityType,
 	)
 
-	return &ExportResponse{
+	return &UploadResponse{
 		FileURL:        fileURL,
 		Bucket:         c.config.Bucket,
 		Key:            key,
@@ -130,11 +133,11 @@ func (c *s3Client) UploadFile(ctx context.Context, request *ExportRequest) (*Exp
 }
 
 // UploadCSV uploads CSV data to S3
-func (c *s3Client) UploadCSV(ctx context.Context, fileName string, data []byte, entityType string) (*ExportResponse, error) {
-	request := &ExportRequest{
+func (c *s3Client) UploadCSV(ctx context.Context, fileName string, data []byte, entityType string) (*UploadResponse, error) {
+	request := &UploadRequest{
 		FileName:   fileName,
 		Data:       data,
-		Format:     ExportFormatCSV,
+		Format:     UploadFormatCSV,
 		EntityType: entityType,
 		Timestamp:  time.Now(),
 		Compress:   c.config.Compression == "gzip",
@@ -143,11 +146,11 @@ func (c *s3Client) UploadCSV(ctx context.Context, fileName string, data []byte, 
 }
 
 // UploadJSON uploads JSON data to S3
-func (c *s3Client) UploadJSON(ctx context.Context, fileName string, data []byte, entityType string) (*ExportResponse, error) {
-	request := &ExportRequest{
+func (c *s3Client) UploadJSON(ctx context.Context, fileName string, data []byte, entityType string) (*UploadResponse, error) {
+	request := &UploadRequest{
 		FileName:   fileName,
 		Data:       data,
-		Format:     ExportFormatJSON,
+		Format:     UploadFormatJSON,
 		EntityType: entityType,
 		Timestamp:  time.Now(),
 		Compress:   c.config.Compression == "gzip",
@@ -155,8 +158,8 @@ func (c *s3Client) UploadJSON(ctx context.Context, fileName string, data []byte,
 	return c.UploadFile(ctx, request)
 }
 
-// validateExportRequest validates the export request
-func (c *s3Client) validateExportRequest(request *ExportRequest) error {
+// validateUploadRequest validates the upload request
+func (c *s3Client) validateUploadRequest(request *UploadRequest) error {
 	if request.FileName == "" {
 		return ierr.NewError("file name is required").
 			WithHint("File name must be provided").
@@ -173,22 +176,14 @@ func (c *s3Client) validateExportRequest(request *ExportRequest) error {
 			Mark(ierr.ErrValidation)
 	}
 
-	// Check max file size
-	maxSizeBytes := int64(c.config.MaxFileSizeMB * 1024 * 1024)
-	if int64(len(request.Data)) > maxSizeBytes {
-		return ierr.NewErrorf("file size exceeds maximum allowed size of %d MB", c.config.MaxFileSizeMB).
-			WithHintf("Reduce the file size or increase the max_file_size_mb limit").
-			Mark(ierr.ErrValidation)
-	}
-
 	return nil
 }
 
-// generateObjectKey generates the S3 object key for the export
-func (c *s3Client) generateObjectKey(request *ExportRequest) string {
+// generateObjectKey generates the S3 object key for the upload
+func (c *s3Client) generateObjectKey(request *UploadRequest) string {
 	// Format: {key_prefix}/{entity_type}/{filename}.{extension}
 	extension := string(request.Format)
-	if request.Compress && c.config.Compression == "gzip" {
+	if request.Compress && c.config.Compression == flexpriceTypes.S3CompressionTypeGzip {
 		extension = extension + ".gz"
 	}
 
@@ -216,9 +211,6 @@ func (c *s3Client) generateObjectKey(request *ExportRequest) string {
 
 // generateFileURL generates the file URL
 func (c *s3Client) generateFileURL(key string) string {
-	if c.config.EndpointURL != "" {
-		return fmt.Sprintf("%s/%s/%s", c.config.EndpointURL, c.config.Bucket, key)
-	}
 	return fmt.Sprintf("s3://%s/%s", c.config.Bucket, key)
 }
 
@@ -244,17 +236,17 @@ func (c *s3Client) compressData(data []byte) ([]byte, error) {
 }
 
 // getContentType returns the content type for the given format
-func (c *s3Client) getContentType(format ExportFormat, compressed bool) string {
+func (c *s3Client) getContentType(format UploadFormat, compressed bool) string {
 	if compressed {
 		return "application/gzip"
 	}
 
 	switch format {
-	case ExportFormatCSV:
+	case UploadFormatCSV:
 		return "text/csv"
-	case ExportFormatJSON:
+	case UploadFormatJSON:
 		return "application/json"
-	case ExportFormatParquet:
+	case UploadFormatParquet:
 		return "application/octet-stream"
 	default:
 		return "application/octet-stream"

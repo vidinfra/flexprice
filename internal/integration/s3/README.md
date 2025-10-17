@@ -67,9 +67,8 @@ POST /api/v1/connections
       "bucket": "my-export-bucket",
       "region": "us-west-2",
       "key_prefix": "flexprice-exports",
-      "compression": "gzip",
+      "compression": "none",
       "encryption": "AES256",
-      "max_file_size_mb": 100,
       "interval": "daily",
       "entity_types": ["feature_usage", "customer"],
       "sync_active": true
@@ -133,11 +132,8 @@ These are non-sensitive configuration settings:
 - `bucket`: S3 bucket name (required)
 - `region`: AWS region (required, e.g., "us-west-2")
 - `key_prefix`: Prefix for all S3 keys (optional, default: "")
-- `compression`: Compression type - "gzip" or "none" (optional, default: "gzip")
-- `encryption`: Encryption type - "AES256" or "aws:kms" (optional, default: "AES256")
-- `endpoint_url`: Custom endpoint URL for S3-compatible services (optional)
-- `virtual_host_style`: Use virtual-hosted-style URLs (optional, default: false)
-- `max_file_size_mb`: Maximum file size in MB (optional, default: 100)
+- `compression`: Compression type - "gzip" or "none" (optional, default: "none")
+- `encryption`: Encryption type - "AES256", "aws:kms", or "aws:kms:dsse" (optional, default: "AES256")
 - `interval`: Sync interval - "daily", "weekly", or "monthly" (optional, default: "daily")
 - `entity_types`: Array of entity types to export (optional, e.g., ["feature_usage", "customer", "invoice"])
 - `sync_active`: Whether the sync is active (required, boolean, default: false)

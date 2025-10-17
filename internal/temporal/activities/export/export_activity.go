@@ -4,8 +4,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/flexprice/flexprice/internal/api/dto"
+	"github.com/flexprice/flexprice/internal/domain/connection"
 	"github.com/flexprice/flexprice/internal/domain/events"
-	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/domain/invoice"
 	"github.com/flexprice/flexprice/internal/integration"
 	"github.com/flexprice/flexprice/internal/logger"
 	syncExport "github.com/flexprice/flexprice/internal/service/sync/export"
@@ -15,6 +17,8 @@ import (
 // ExportActivity handles the actual export operations
 type ExportActivity struct {
 	featureUsageRepo   events.FeatureUsageRepository
+	invoiceRepo        invoice.Repository
+	connectionRepo     connection.Repository
 	integrationFactory *integration.Factory
 	logger             *logger.Logger
 }
@@ -22,11 +26,15 @@ type ExportActivity struct {
 // NewExportActivity creates a new export activity
 func NewExportActivity(
 	featureUsageRepo events.FeatureUsageRepository,
+	invoiceRepo invoice.Repository,
+	connectionRepo connection.Repository,
 	integrationFactory *integration.Factory,
 	logger *logger.Logger,
 ) *ExportActivity {
 	return &ExportActivity{
 		featureUsageRepo:   featureUsageRepo,
+		invoiceRepo:        invoiceRepo,
+		connectionRepo:     connectionRepo,
 		integrationFactory: integrationFactory,
 		logger:             logger,
 	}
@@ -34,7 +42,7 @@ func NewExportActivity(
 
 // ExportDataInput represents input for exporting data
 type ExportDataInput struct {
-	EntityType   types.ExportEntityType
+	EntityType   types.ScheduledTaskEntityType
 	ConnectionID string
 	TenantID     string
 	EnvID        string
@@ -50,7 +58,7 @@ type ExportDataOutput struct {
 	FileSizeBytes int64
 }
 
-// ExportData performs the complete export: prepare data, generate CSV, upload to S3
+// ExportData performs the complete export: prepare data, generate CSV, upload to provider
 func (a *ExportActivity) ExportData(ctx context.Context, input ExportDataInput) (*ExportDataOutput, error) {
 	a.logger.Infow("starting data export",
 		"entity_type", input.EntityType,
@@ -64,7 +72,7 @@ func (a *ExportActivity) ExportData(ctx context.Context, input ExportDataInput) 
 	ctx = types.SetEnvironmentID(ctx, input.EnvID)
 
 	// Create export request
-	request := &syncExport.ExportRequest{
+	request := &dto.ExportRequest{
 		EntityType:   input.EntityType,
 		ConnectionID: input.ConnectionID,
 		TenantID:     input.TenantID,
@@ -74,22 +82,9 @@ func (a *ExportActivity) ExportData(ctx context.Context, input ExportDataInput) 
 		JobConfig:    input.JobConfig,
 	}
 
-	// Get the appropriate exporter based on entity type
-	var response *syncExport.ExportResponse
-	var err error
-
-	switch input.EntityType {
-	case types.ExportEntityTypeEvents:
-		exporter := syncExport.NewUsageExporter(a.featureUsageRepo, a.integrationFactory, a.logger)
-		response, err = exporter.Export(ctx, request)
-	// Add more entity types as needed
-	// case types.ExportEntityTypeCustomer:
-	default:
-		return nil, ierr.NewError("unsupported entity type").
-			WithHintf("Entity type '%s' is not supported for export", input.EntityType).
-			Mark(ierr.ErrValidation)
-	}
-
+	// Use the ExportService which handles routing to the correct exporter
+	exportService := syncExport.NewExportService(a.featureUsageRepo, a.invoiceRepo, a.connectionRepo, a.integrationFactory, a.logger)
+	response, err := exportService.Export(ctx, request)
 	if err != nil {
 		a.logger.Errorw("export failed", "error", err, "entity_type", input.EntityType)
 		return nil, err

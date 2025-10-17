@@ -32,9 +32,10 @@ type CreateTaskInput struct {
 	TenantID        string
 	EnvID           string
 	UserID          string // User who triggered the export (empty for scheduled runs)
-	EntityType      string
+	EntityType      types.ScheduledTaskEntityType
 	StartTime       time.Time
 	EndTime         time.Time
+	IsForceRun      bool // Indicates if this is a force run (should not store scheduled_task_id)
 }
 
 // CreateTaskOutput represents output from creating a task
@@ -50,18 +51,44 @@ func (a *TaskActivity) CreateTask(ctx context.Context, input CreateTaskInput) (*
 		"scheduled_task_id", input.ScheduledTaskID,
 		"entity_type", input.EntityType,
 		"start_time", input.StartTime,
-		"end_time", input.EndTime)
+		"end_time", input.EndTime,
+		"is_force_run", input.IsForceRun)
+
+	// Set user ID in context for proper BaseModel creation
+	// For scheduled runs, use system user ID; for manual runs, use the provided user ID
+	userID := input.UserID
+	if userID == "" {
+		userID = types.DefaultUserID // Use system user ID for scheduled runs
+	}
+	ctx = types.SetUserID(ctx, userID)
+	ctx = types.SetTenantID(ctx, input.TenantID)
+	ctx = types.SetEnvironmentID(ctx, input.EnvID)
 
 	// Create task with pre-generated ID
 	now := time.Now()
+	baseModel := types.GetDefaultBaseModel(ctx)
+
+	a.logger.Infow("creating task with base model",
+		"task_id", input.TaskID,
+		"created_by", baseModel.CreatedBy,
+		"updated_by", baseModel.UpdatedBy,
+		"tenant_id", baseModel.TenantID,
+		"user_id_from_input", input.UserID)
+
+	// For force runs, don't store scheduled_task_id to avoid interfering with incremental sync
+	var scheduledTaskID string
+	if !input.IsForceRun {
+		scheduledTaskID = input.ScheduledTaskID
+	}
+
 	newTask := &task.Task{
 		ID:              input.TaskID,      // Use pre-generated ID
 		WorkflowID:      &input.WorkflowID, // Store Temporal workflow ID
-		EnvironmentID:   input.EnvID,
+		EnvironmentID:   input.EnvID,       // Set environment ID
 		TaskType:        types.TaskTypeExport,
 		EntityType:      types.EntityType(input.EntityType),
-		ScheduledTaskID: input.ScheduledTaskID,
-		FileURL:         "", // Will be set after upload
+		ScheduledTaskID: scheduledTaskID, // Empty for force runs, populated for scheduled runs
+		FileURL:         "",              // Will be set after upload
 		FileType:        types.FileTypeCSV,
 		TaskStatus:      types.TaskStatusPending,
 		Metadata: map[string]interface{}{
@@ -69,14 +96,7 @@ func (a *TaskActivity) CreateTask(ctx context.Context, input CreateTaskInput) (*
 			"end_time":   input.EndTime.Format(time.RFC3339),
 		},
 		StartedAt: &now,
-		BaseModel: types.BaseModel{
-			TenantID:  input.TenantID,
-			Status:    types.StatusPublished,
-			CreatedAt: now,
-			UpdatedAt: now,
-			CreatedBy: input.UserID, // Use passed UserID (empty for scheduled runs)
-			UpdatedBy: input.UserID, // Use passed UserID (empty for scheduled runs)
-		},
+		BaseModel: baseModel, // This will properly set CreatedBy and UpdatedBy, and TenantID and EnvironmentID
 	}
 
 	err := a.taskRepo.Create(ctx, newTask)
@@ -99,6 +119,7 @@ type UpdateTaskStatusInput struct {
 	TaskID     string
 	TenantID   string
 	EnvID      string
+	UserID     string
 	Status     types.TaskStatus
 	RecordInfo *RecordInfo // Optional: for tracking progress
 	Error      string      // Optional: for failures
@@ -140,10 +161,21 @@ func (a *TaskActivity) UpdateTaskStatus(ctx context.Context, input UpdateTaskSta
 		existingTask.FailedRecords = input.RecordInfo.FailedRecords
 	}
 
+	// Set user ID in context for proper update tracking
+	// Use the UserID from input, fallback to context if not provided
+	userID := input.UserID
+	if userID == "" {
+		userID = types.GetUserID(ctx)
+	}
+	if userID == "" {
+		userID = types.DefaultUserID // Ensure we have a valid user ID
+	}
+	ctx = types.SetUserID(ctx, userID)
+
 	// Update timestamps based on status
 	now := time.Now()
 	existingTask.UpdatedAt = now
-	existingTask.UpdatedBy = types.GetUserID(ctx)
+	existingTask.UpdatedBy = userID
 
 	switch input.Status {
 	case types.TaskStatusProcessing:
@@ -176,6 +208,7 @@ type CompleteTaskInput struct {
 	TaskID      string
 	TenantID    string
 	EnvID       string
+	UserID      string
 	FileURL     string
 	RecordCount int
 	FileSize    int64
@@ -206,10 +239,21 @@ func (a *TaskActivity) CompleteTask(ctx context.Context, input CompleteTaskInput
 	existingTask.SuccessfulRecords = input.RecordCount
 	existingTask.ProcessedRecords = input.RecordCount
 
+	// Set user ID in context for proper update tracking
+	// Use the UserID from input, fallback to context if not provided
+	userID := input.UserID
+	if userID == "" {
+		userID = types.GetUserID(ctx)
+	}
+	if userID == "" {
+		userID = types.DefaultUserID // Ensure we have a valid user ID
+	}
+	ctx = types.SetUserID(ctx, userID)
+
 	now := time.Now()
 	existingTask.CompletedAt = &now
 	existingTask.UpdatedAt = now
-	existingTask.UpdatedBy = types.GetUserID(ctx)
+	existingTask.UpdatedBy = userID
 
 	// Add file details to metadata
 	if existingTask.Metadata == nil {

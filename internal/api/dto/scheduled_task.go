@@ -11,11 +11,37 @@ import (
 
 // CreateScheduledTaskRequest represents a request to create a scheduled task
 type CreateScheduledTaskRequest struct {
-	ConnectionID string                 `json:"connection_id" binding:"required"`
-	EntityType   string                 `json:"entity_type" binding:"required"`
-	Interval     string                 `json:"interval" binding:"required"`
-	Enabled      bool                   `json:"enabled"`
-	JobConfig    map[string]interface{} `json:"job_config" binding:"required"`
+	ConnectionID string                        `json:"connection_id" binding:"required"`
+	EntityType   types.ScheduledTaskEntityType `json:"entity_type" binding:"required"`
+	Interval     types.ScheduledTaskInterval   `json:"interval" binding:"required"`
+	Enabled      bool                          `json:"enabled"`
+	JobConfig    *types.S3JobConfig            `json:"job_config" binding:"required"`
+}
+
+// Validate validates the create request
+func (r *CreateScheduledTaskRequest) Validate() error {
+	// Validate entity type
+	if err := r.EntityType.Validate(); err != nil {
+		return err
+	}
+
+	// Validate interval
+	if err := r.Interval.Validate(); err != nil {
+		return err
+	}
+
+	// Validate S3 job config
+	if r.JobConfig == nil {
+		return ierr.NewError("job_config is required").
+			WithHint("S3 job configuration is required").
+			Mark(ierr.ErrValidation)
+	}
+
+	if err := r.JobConfig.Validate(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // UpdateScheduledTaskRequest represents a request to update a scheduled task
@@ -36,28 +62,21 @@ func (r *UpdateScheduledTaskRequest) Validate() error {
 
 // ScheduledTaskResponse represents a scheduled task response
 type ScheduledTaskResponse struct {
-	ID            string                 `json:"id"`
-	TenantID      string                 `json:"tenant_id"`
-	EnvironmentID string                 `json:"environment_id"`
-	ConnectionID  string                 `json:"connection_id"`
-	EntityType    string                 `json:"entity_type"`
-	Interval      string                 `json:"interval"`
-	Enabled       bool                   `json:"enabled"`
-	JobConfig     map[string]interface{} `json:"job_config"`
-	LastRunAt     *time.Time             `json:"last_run_at,omitempty"`
-	NextRunAt     *time.Time             `json:"next_run_at,omitempty"`
-	LastRunStatus string                 `json:"last_run_status,omitempty"`
-	LastRunError  string                 `json:"last_run_error,omitempty"`
-	Status        string                 `json:"status"`
-	CreatedAt     time.Time              `json:"created_at"`
-	UpdatedAt     time.Time              `json:"updated_at"`
+	ID            string                        `json:"id"`
+	TenantID      string                        `json:"tenant_id"`
+	EnvironmentID string                        `json:"environment_id"`
+	ConnectionID  string                        `json:"connection_id"`
+	EntityType    types.ScheduledTaskEntityType `json:"entity_type"`
+	Interval      types.ScheduledTaskInterval   `json:"interval"`
+	Enabled       bool                          `json:"enabled"`
+	JobConfig     *types.S3JobConfig            `json:"job_config"`
+	Status        string                        `json:"status"`
+	CreatedAt     time.Time                     `json:"created_at"`
+	UpdatedAt     time.Time                     `json:"updated_at"`
 }
 
 // ListScheduledTasksResponse represents a list of scheduled tasks
-type ListScheduledTasksResponse struct {
-	Data       []ScheduledTaskResponse `json:"data"`
-	TotalCount int                     `json:"total_count"`
-}
+type ListScheduledTasksResponse = types.ListResponse[*ScheduledTaskResponse]
 
 // ToScheduledTaskResponse converts a domain scheduled task to a response
 func ToScheduledTaskResponse(task *scheduledtask.ScheduledTask) *ScheduledTaskResponse {
@@ -70,26 +89,22 @@ func ToScheduledTaskResponse(task *scheduledtask.ScheduledTask) *ScheduledTaskRe
 		Interval:      task.Interval,
 		Enabled:       task.Enabled,
 		JobConfig:     task.JobConfig,
-		LastRunAt:     task.LastRunAt,
-		NextRunAt:     task.NextRunAt,
-		LastRunStatus: task.LastRunStatus,
-		LastRunError:  task.LastRunError,
-		Status:        task.Status,
+		Status:        string(task.Status),
 		CreatedAt:     task.CreatedAt,
 		UpdatedAt:     task.UpdatedAt,
 	}
 }
 
 // ToScheduledTaskListResponse converts domain scheduled tasks to a list response
-func ToScheduledTaskListResponse(tasks []*scheduledtask.ScheduledTask, totalCount int) *ListScheduledTasksResponse {
-	responses := make([]ScheduledTaskResponse, 0, len(tasks))
+func ToScheduledTaskListResponse(tasks []*scheduledtask.ScheduledTask, pagination types.PaginationResponse) *ListScheduledTasksResponse {
+	responses := make([]*ScheduledTaskResponse, 0, len(tasks))
 	for _, task := range tasks {
-		responses = append(responses, *ToScheduledTaskResponse(task))
+		responses = append(responses, ToScheduledTaskResponse(task))
 	}
 
 	return &ListScheduledTasksResponse{
-		Data:       responses,
-		TotalCount: totalCount,
+		Items:      responses,
+		Pagination: pagination,
 	}
 }
 
@@ -98,8 +113,8 @@ func (r *CreateScheduledTaskRequest) ToCreateInput() *types.CreateScheduledTaskI
 	enabled := r.Enabled // default will be handled by service if needed
 	return &types.CreateScheduledTaskInput{
 		ConnectionID: r.ConnectionID,
-		EntityType:   types.ScheduledTaskEntityType(r.EntityType),
-		Interval:     types.ScheduledTaskInterval(r.Interval),
+		EntityType:   r.EntityType,
+		Interval:     r.Interval,
 		Enabled:      enabled,
 		JobConfig:    r.JobConfig,
 	}
@@ -172,4 +187,24 @@ type TriggerForceRunResponse struct {
 	StartTime  time.Time `json:"start_time"`
 	EndTime    time.Time `json:"end_time"`
 	Mode       string    `json:"mode"` // "custom" or "automatic"
+}
+
+// ExportRequest represents an export request
+type ExportRequest struct {
+	EntityType   types.ScheduledTaskEntityType `json:"entity_type"`
+	ConnectionID string                        `json:"connection_id"` // Connection ID for S3 credentials
+	TenantID     string                        `json:"tenant_id"`
+	EnvID        string                        `json:"env_id"`
+	StartTime    time.Time                     `json:"start_time"`
+	EndTime      time.Time                     `json:"end_time"`
+	JobConfig    *types.S3JobConfig            `json:"job_config"` // S3 job configuration from scheduled_tasks
+}
+
+// ExportResponse represents the result of an export operation
+type ExportResponse struct {
+	EntityType    types.ScheduledTaskEntityType `json:"entity_type"`
+	RecordCount   int                           `json:"record_count"`
+	FileURL       string                        `json:"file_url"`
+	FileSizeBytes int64                         `json:"file_size_bytes"`
+	ExportedAt    time.Time                     `json:"exported_at"`
 }

@@ -1046,3 +1046,55 @@ func (r *invoiceRepository) DeleteCache(ctx context.Context, key string) {
 	idempotencyKey := cache.GenerateKey(cache.PrefixInvoice, tenantID, environmentID, invoice.IdempotencyKey)
 	r.cache.Delete(ctx, idempotencyKey)
 }
+
+// GetInvoicesForExport retrieves invoices for export purposes with pagination
+func (r *invoiceRepository) GetInvoicesForExport(ctx context.Context, tenantID, envID string, startTime, endTime time.Time, limit, offset int) ([]*domainInvoice.Invoice, error) {
+	span := StartRepositorySpan(ctx, "invoice", "get_invoices_for_export", map[string]interface{}{
+		"tenant_id":  tenantID,
+		"env_id":     envID,
+		"start_time": startTime,
+		"end_time":   endTime,
+		"limit":      limit,
+		"offset":     offset,
+	})
+	defer FinishSpan(span)
+
+	r.logger.Debugw("fetching invoices for export",
+		"tenant_id", tenantID,
+		"env_id", envID,
+		"start_time", startTime,
+		"end_time", endTime,
+		"limit", limit,
+		"offset", offset)
+
+	invoices, err := r.client.Querier(ctx).Invoice.Query().
+		Where(
+			invoice.TenantID(tenantID),
+			invoice.EnvironmentID(envID),
+			invoice.StatusEQ(string(types.StatusPublished)),
+			invoice.CreatedAtGTE(startTime),
+			invoice.CreatedAtLTE(endTime),
+		).
+		Order(ent.Asc(invoice.FieldCreatedAt)).
+		Limit(limit).
+		Offset(offset).
+		All(ctx)
+
+	if err != nil {
+		SetSpanError(span, err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to fetch invoices for export").
+			WithReportableDetails(map[string]interface{}{
+				"tenant_id": tenantID,
+				"env_id":    envID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	result := make([]*domainInvoice.Invoice, len(invoices))
+	for i, inv := range invoices {
+		result[i] = domainInvoice.FromEnt(inv)
+	}
+
+	return result, nil
+}

@@ -43,6 +43,12 @@ func (r *taskRepository) Create(ctx context.Context, t *domainTask.Task) error {
 		t.EnvironmentID = types.GetEnvironmentID(ctx)
 	}
 
+	r.logger.Infow("saving task to database",
+		"task_id", t.ID,
+		"created_by", t.CreatedBy,
+		"updated_by", t.UpdatedBy,
+		"tenant_id", t.TenantID)
+
 	task, err := client.Task.Create().
 		SetID(t.ID).
 		SetTenantID(t.TenantID).
@@ -85,6 +91,13 @@ func (r *taskRepository) Create(ctx context.Context, t *domainTask.Task) error {
 	}
 
 	SetSpanSuccess(span)
+
+	r.logger.Infow("task saved to database successfully",
+		"task_id", task.ID,
+		"created_by", task.CreatedBy,
+		"updated_by", task.UpdatedBy,
+		"tenant_id", task.TenantID)
+
 	*t = *domainTask.FromEnt(task)
 	return nil
 }

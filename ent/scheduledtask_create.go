@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/flexprice/flexprice/ent/scheduledtask"
+	"github.com/flexprice/flexprice/internal/types"
 )
 
 // ScheduledTaskCreate is the builder for creating a ScheduledTask entity.
@@ -117,14 +118,14 @@ func (stc *ScheduledTaskCreate) SetConnectionID(s string) *ScheduledTaskCreate {
 }
 
 // SetEntityType sets the "entity_type" field.
-func (stc *ScheduledTaskCreate) SetEntityType(s string) *ScheduledTaskCreate {
-	stc.mutation.SetEntityType(s)
+func (stc *ScheduledTaskCreate) SetEntityType(ttet types.ScheduledTaskEntityType) *ScheduledTaskCreate {
+	stc.mutation.SetEntityType(ttet)
 	return stc
 }
 
 // SetInterval sets the "interval" field.
-func (stc *ScheduledTaskCreate) SetInterval(s string) *ScheduledTaskCreate {
-	stc.mutation.SetInterval(s)
+func (stc *ScheduledTaskCreate) SetInterval(tti types.ScheduledTaskInterval) *ScheduledTaskCreate {
+	stc.mutation.SetInterval(tti)
 	return stc
 }
 
@@ -143,64 +144,8 @@ func (stc *ScheduledTaskCreate) SetNillableEnabled(b *bool) *ScheduledTaskCreate
 }
 
 // SetJobConfig sets the "job_config" field.
-func (stc *ScheduledTaskCreate) SetJobConfig(m map[string]interface{}) *ScheduledTaskCreate {
-	stc.mutation.SetJobConfig(m)
-	return stc
-}
-
-// SetLastRunAt sets the "last_run_at" field.
-func (stc *ScheduledTaskCreate) SetLastRunAt(t time.Time) *ScheduledTaskCreate {
-	stc.mutation.SetLastRunAt(t)
-	return stc
-}
-
-// SetNillableLastRunAt sets the "last_run_at" field if the given value is not nil.
-func (stc *ScheduledTaskCreate) SetNillableLastRunAt(t *time.Time) *ScheduledTaskCreate {
-	if t != nil {
-		stc.SetLastRunAt(*t)
-	}
-	return stc
-}
-
-// SetNextRunAt sets the "next_run_at" field.
-func (stc *ScheduledTaskCreate) SetNextRunAt(t time.Time) *ScheduledTaskCreate {
-	stc.mutation.SetNextRunAt(t)
-	return stc
-}
-
-// SetNillableNextRunAt sets the "next_run_at" field if the given value is not nil.
-func (stc *ScheduledTaskCreate) SetNillableNextRunAt(t *time.Time) *ScheduledTaskCreate {
-	if t != nil {
-		stc.SetNextRunAt(*t)
-	}
-	return stc
-}
-
-// SetLastRunStatus sets the "last_run_status" field.
-func (stc *ScheduledTaskCreate) SetLastRunStatus(s string) *ScheduledTaskCreate {
-	stc.mutation.SetLastRunStatus(s)
-	return stc
-}
-
-// SetNillableLastRunStatus sets the "last_run_status" field if the given value is not nil.
-func (stc *ScheduledTaskCreate) SetNillableLastRunStatus(s *string) *ScheduledTaskCreate {
-	if s != nil {
-		stc.SetLastRunStatus(*s)
-	}
-	return stc
-}
-
-// SetLastRunError sets the "last_run_error" field.
-func (stc *ScheduledTaskCreate) SetLastRunError(s string) *ScheduledTaskCreate {
-	stc.mutation.SetLastRunError(s)
-	return stc
-}
-
-// SetNillableLastRunError sets the "last_run_error" field if the given value is not nil.
-func (stc *ScheduledTaskCreate) SetNillableLastRunError(s *string) *ScheduledTaskCreate {
-	if s != nil {
-		stc.SetLastRunError(*s)
-	}
+func (stc *ScheduledTaskCreate) SetJobConfig(tc *types.S3JobConfig) *ScheduledTaskCreate {
+	stc.mutation.SetJobConfig(tc)
 	return stc
 }
 
@@ -312,7 +257,7 @@ func (stc *ScheduledTaskCreate) check() error {
 		return &ValidationError{Name: "entity_type", err: errors.New(`ent: missing required field "ScheduledTask.entity_type"`)}
 	}
 	if v, ok := stc.mutation.EntityType(); ok {
-		if err := scheduledtask.EntityTypeValidator(v); err != nil {
+		if err := scheduledtask.EntityTypeValidator(string(v)); err != nil {
 			return &ValidationError{Name: "entity_type", err: fmt.Errorf(`ent: validator failed for field "ScheduledTask.entity_type": %w`, err)}
 		}
 	}
@@ -320,12 +265,17 @@ func (stc *ScheduledTaskCreate) check() error {
 		return &ValidationError{Name: "interval", err: errors.New(`ent: missing required field "ScheduledTask.interval"`)}
 	}
 	if v, ok := stc.mutation.Interval(); ok {
-		if err := scheduledtask.IntervalValidator(v); err != nil {
+		if err := scheduledtask.IntervalValidator(string(v)); err != nil {
 			return &ValidationError{Name: "interval", err: fmt.Errorf(`ent: validator failed for field "ScheduledTask.interval": %w`, err)}
 		}
 	}
 	if _, ok := stc.mutation.Enabled(); !ok {
 		return &ValidationError{Name: "enabled", err: errors.New(`ent: missing required field "ScheduledTask.enabled"`)}
+	}
+	if v, ok := stc.mutation.JobConfig(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "job_config", err: fmt.Errorf(`ent: validator failed for field "ScheduledTask.job_config": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -409,22 +359,6 @@ func (stc *ScheduledTaskCreate) createSpec() (*ScheduledTask, *sqlgraph.CreateSp
 	if value, ok := stc.mutation.JobConfig(); ok {
 		_spec.SetField(scheduledtask.FieldJobConfig, field.TypeJSON, value)
 		_node.JobConfig = value
-	}
-	if value, ok := stc.mutation.LastRunAt(); ok {
-		_spec.SetField(scheduledtask.FieldLastRunAt, field.TypeTime, value)
-		_node.LastRunAt = &value
-	}
-	if value, ok := stc.mutation.NextRunAt(); ok {
-		_spec.SetField(scheduledtask.FieldNextRunAt, field.TypeTime, value)
-		_node.NextRunAt = &value
-	}
-	if value, ok := stc.mutation.LastRunStatus(); ok {
-		_spec.SetField(scheduledtask.FieldLastRunStatus, field.TypeString, value)
-		_node.LastRunStatus = value
-	}
-	if value, ok := stc.mutation.LastRunError(); ok {
-		_spec.SetField(scheduledtask.FieldLastRunError, field.TypeString, value)
-		_node.LastRunError = value
 	}
 	if value, ok := stc.mutation.TemporalScheduleID(); ok {
 		_spec.SetField(scheduledtask.FieldTemporalScheduleID, field.TypeString, value)

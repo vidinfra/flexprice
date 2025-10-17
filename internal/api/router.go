@@ -47,7 +47,6 @@ type Handlers struct {
 	Settings                 *v1.SettingsHandler
 	SetupIntent              *v1.SetupIntentHandler
 	TestExport               *v1.TestExportHandler
-	TestUsageExport          *v1.TestUsageExportHandler
 	ScheduledTask            *v1.ScheduledTaskHandler
 
 	// Portal handlers
@@ -339,7 +338,9 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 				scheduledTasks.GET("/:id", handlers.ScheduledTask.GetScheduledTask)
 				scheduledTasks.PUT("/:id", handlers.ScheduledTask.UpdateScheduledTask)
 				scheduledTasks.DELETE("/:id", handlers.ScheduledTask.DeleteScheduledTask)
-				scheduledTasks.POST("/:id/sync", handlers.ScheduledTask.TriggerForceRun)
+				scheduledTasks.POST("/:id/run", handlers.ScheduledTask.TriggerForceRun)
+				scheduledTasks.POST("/:id/test", handlers.TestExport.TestExport)
+
 			}
 		}
 
@@ -503,13 +504,6 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 		settings.GET("/:key", handlers.Settings.GetSettingByKey)
 		settings.PUT("/:key", handlers.Settings.UpdateSettingByKey)
 		settings.DELETE("/:key", handlers.Settings.DeleteSettingByKey)
-	}
-
-	// Test export
-	test := v1Private.Group("/test")
-	{
-		test.POST("/export", handlers.TestExport.TestExport)
-		test.POST("/export-usage", handlers.TestUsageExport.TestUsageExport)
 	}
 
 	return router

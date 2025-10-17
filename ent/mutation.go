@@ -39352,14 +39352,10 @@ type ScheduledTaskMutation struct {
 	updated_by           *string
 	environment_id       *string
 	connection_id        *string
-	entity_type          *string
-	interval             *string
+	entity_type          *types.ScheduledTaskEntityType
+	interval             *types.ScheduledTaskInterval
 	enabled              *bool
-	job_config           *map[string]interface{}
-	last_run_at          *time.Time
-	next_run_at          *time.Time
-	last_run_status      *string
-	last_run_error       *string
+	job_config           **types.S3JobConfig
 	temporal_schedule_id *string
 	clearedFields        map[string]struct{}
 	done                 bool
@@ -39799,12 +39795,12 @@ func (m *ScheduledTaskMutation) ResetConnectionID() {
 }
 
 // SetEntityType sets the "entity_type" field.
-func (m *ScheduledTaskMutation) SetEntityType(s string) {
-	m.entity_type = &s
+func (m *ScheduledTaskMutation) SetEntityType(ttet types.ScheduledTaskEntityType) {
+	m.entity_type = &ttet
 }
 
 // EntityType returns the value of the "entity_type" field in the mutation.
-func (m *ScheduledTaskMutation) EntityType() (r string, exists bool) {
+func (m *ScheduledTaskMutation) EntityType() (r types.ScheduledTaskEntityType, exists bool) {
 	v := m.entity_type
 	if v == nil {
 		return
@@ -39815,7 +39811,7 @@ func (m *ScheduledTaskMutation) EntityType() (r string, exists bool) {
 // OldEntityType returns the old "entity_type" field's value of the ScheduledTask entity.
 // If the ScheduledTask object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ScheduledTaskMutation) OldEntityType(ctx context.Context) (v string, err error) {
+func (m *ScheduledTaskMutation) OldEntityType(ctx context.Context) (v types.ScheduledTaskEntityType, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldEntityType is only allowed on UpdateOne operations")
 	}
@@ -39835,12 +39831,12 @@ func (m *ScheduledTaskMutation) ResetEntityType() {
 }
 
 // SetInterval sets the "interval" field.
-func (m *ScheduledTaskMutation) SetInterval(s string) {
-	m.interval = &s
+func (m *ScheduledTaskMutation) SetInterval(tti types.ScheduledTaskInterval) {
+	m.interval = &tti
 }
 
 // Interval returns the value of the "interval" field in the mutation.
-func (m *ScheduledTaskMutation) Interval() (r string, exists bool) {
+func (m *ScheduledTaskMutation) Interval() (r types.ScheduledTaskInterval, exists bool) {
 	v := m.interval
 	if v == nil {
 		return
@@ -39851,7 +39847,7 @@ func (m *ScheduledTaskMutation) Interval() (r string, exists bool) {
 // OldInterval returns the old "interval" field's value of the ScheduledTask entity.
 // If the ScheduledTask object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ScheduledTaskMutation) OldInterval(ctx context.Context) (v string, err error) {
+func (m *ScheduledTaskMutation) OldInterval(ctx context.Context) (v types.ScheduledTaskInterval, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldInterval is only allowed on UpdateOne operations")
 	}
@@ -39907,12 +39903,12 @@ func (m *ScheduledTaskMutation) ResetEnabled() {
 }
 
 // SetJobConfig sets the "job_config" field.
-func (m *ScheduledTaskMutation) SetJobConfig(value map[string]interface{}) {
-	m.job_config = &value
+func (m *ScheduledTaskMutation) SetJobConfig(tc *types.S3JobConfig) {
+	m.job_config = &tc
 }
 
 // JobConfig returns the value of the "job_config" field in the mutation.
-func (m *ScheduledTaskMutation) JobConfig() (r map[string]interface{}, exists bool) {
+func (m *ScheduledTaskMutation) JobConfig() (r *types.S3JobConfig, exists bool) {
 	v := m.job_config
 	if v == nil {
 		return
@@ -39923,7 +39919,7 @@ func (m *ScheduledTaskMutation) JobConfig() (r map[string]interface{}, exists bo
 // OldJobConfig returns the old "job_config" field's value of the ScheduledTask entity.
 // If the ScheduledTask object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ScheduledTaskMutation) OldJobConfig(ctx context.Context) (v map[string]interface{}, err error) {
+func (m *ScheduledTaskMutation) OldJobConfig(ctx context.Context) (v *types.S3JobConfig, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldJobConfig is only allowed on UpdateOne operations")
 	}
@@ -39953,202 +39949,6 @@ func (m *ScheduledTaskMutation) JobConfigCleared() bool {
 func (m *ScheduledTaskMutation) ResetJobConfig() {
 	m.job_config = nil
 	delete(m.clearedFields, scheduledtask.FieldJobConfig)
-}
-
-// SetLastRunAt sets the "last_run_at" field.
-func (m *ScheduledTaskMutation) SetLastRunAt(t time.Time) {
-	m.last_run_at = &t
-}
-
-// LastRunAt returns the value of the "last_run_at" field in the mutation.
-func (m *ScheduledTaskMutation) LastRunAt() (r time.Time, exists bool) {
-	v := m.last_run_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldLastRunAt returns the old "last_run_at" field's value of the ScheduledTask entity.
-// If the ScheduledTask object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ScheduledTaskMutation) OldLastRunAt(ctx context.Context) (v *time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldLastRunAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldLastRunAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldLastRunAt: %w", err)
-	}
-	return oldValue.LastRunAt, nil
-}
-
-// ClearLastRunAt clears the value of the "last_run_at" field.
-func (m *ScheduledTaskMutation) ClearLastRunAt() {
-	m.last_run_at = nil
-	m.clearedFields[scheduledtask.FieldLastRunAt] = struct{}{}
-}
-
-// LastRunAtCleared returns if the "last_run_at" field was cleared in this mutation.
-func (m *ScheduledTaskMutation) LastRunAtCleared() bool {
-	_, ok := m.clearedFields[scheduledtask.FieldLastRunAt]
-	return ok
-}
-
-// ResetLastRunAt resets all changes to the "last_run_at" field.
-func (m *ScheduledTaskMutation) ResetLastRunAt() {
-	m.last_run_at = nil
-	delete(m.clearedFields, scheduledtask.FieldLastRunAt)
-}
-
-// SetNextRunAt sets the "next_run_at" field.
-func (m *ScheduledTaskMutation) SetNextRunAt(t time.Time) {
-	m.next_run_at = &t
-}
-
-// NextRunAt returns the value of the "next_run_at" field in the mutation.
-func (m *ScheduledTaskMutation) NextRunAt() (r time.Time, exists bool) {
-	v := m.next_run_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldNextRunAt returns the old "next_run_at" field's value of the ScheduledTask entity.
-// If the ScheduledTask object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ScheduledTaskMutation) OldNextRunAt(ctx context.Context) (v *time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldNextRunAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldNextRunAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldNextRunAt: %w", err)
-	}
-	return oldValue.NextRunAt, nil
-}
-
-// ClearNextRunAt clears the value of the "next_run_at" field.
-func (m *ScheduledTaskMutation) ClearNextRunAt() {
-	m.next_run_at = nil
-	m.clearedFields[scheduledtask.FieldNextRunAt] = struct{}{}
-}
-
-// NextRunAtCleared returns if the "next_run_at" field was cleared in this mutation.
-func (m *ScheduledTaskMutation) NextRunAtCleared() bool {
-	_, ok := m.clearedFields[scheduledtask.FieldNextRunAt]
-	return ok
-}
-
-// ResetNextRunAt resets all changes to the "next_run_at" field.
-func (m *ScheduledTaskMutation) ResetNextRunAt() {
-	m.next_run_at = nil
-	delete(m.clearedFields, scheduledtask.FieldNextRunAt)
-}
-
-// SetLastRunStatus sets the "last_run_status" field.
-func (m *ScheduledTaskMutation) SetLastRunStatus(s string) {
-	m.last_run_status = &s
-}
-
-// LastRunStatus returns the value of the "last_run_status" field in the mutation.
-func (m *ScheduledTaskMutation) LastRunStatus() (r string, exists bool) {
-	v := m.last_run_status
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldLastRunStatus returns the old "last_run_status" field's value of the ScheduledTask entity.
-// If the ScheduledTask object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ScheduledTaskMutation) OldLastRunStatus(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldLastRunStatus is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldLastRunStatus requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldLastRunStatus: %w", err)
-	}
-	return oldValue.LastRunStatus, nil
-}
-
-// ClearLastRunStatus clears the value of the "last_run_status" field.
-func (m *ScheduledTaskMutation) ClearLastRunStatus() {
-	m.last_run_status = nil
-	m.clearedFields[scheduledtask.FieldLastRunStatus] = struct{}{}
-}
-
-// LastRunStatusCleared returns if the "last_run_status" field was cleared in this mutation.
-func (m *ScheduledTaskMutation) LastRunStatusCleared() bool {
-	_, ok := m.clearedFields[scheduledtask.FieldLastRunStatus]
-	return ok
-}
-
-// ResetLastRunStatus resets all changes to the "last_run_status" field.
-func (m *ScheduledTaskMutation) ResetLastRunStatus() {
-	m.last_run_status = nil
-	delete(m.clearedFields, scheduledtask.FieldLastRunStatus)
-}
-
-// SetLastRunError sets the "last_run_error" field.
-func (m *ScheduledTaskMutation) SetLastRunError(s string) {
-	m.last_run_error = &s
-}
-
-// LastRunError returns the value of the "last_run_error" field in the mutation.
-func (m *ScheduledTaskMutation) LastRunError() (r string, exists bool) {
-	v := m.last_run_error
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldLastRunError returns the old "last_run_error" field's value of the ScheduledTask entity.
-// If the ScheduledTask object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ScheduledTaskMutation) OldLastRunError(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldLastRunError is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldLastRunError requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldLastRunError: %w", err)
-	}
-	return oldValue.LastRunError, nil
-}
-
-// ClearLastRunError clears the value of the "last_run_error" field.
-func (m *ScheduledTaskMutation) ClearLastRunError() {
-	m.last_run_error = nil
-	m.clearedFields[scheduledtask.FieldLastRunError] = struct{}{}
-}
-
-// LastRunErrorCleared returns if the "last_run_error" field was cleared in this mutation.
-func (m *ScheduledTaskMutation) LastRunErrorCleared() bool {
-	_, ok := m.clearedFields[scheduledtask.FieldLastRunError]
-	return ok
-}
-
-// ResetLastRunError resets all changes to the "last_run_error" field.
-func (m *ScheduledTaskMutation) ResetLastRunError() {
-	m.last_run_error = nil
-	delete(m.clearedFields, scheduledtask.FieldLastRunError)
 }
 
 // SetTemporalScheduleID sets the "temporal_schedule_id" field.
@@ -40234,7 +40034,7 @@ func (m *ScheduledTaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ScheduledTaskMutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 13)
 	if m.tenant_id != nil {
 		fields = append(fields, scheduledtask.FieldTenantID)
 	}
@@ -40271,18 +40071,6 @@ func (m *ScheduledTaskMutation) Fields() []string {
 	if m.job_config != nil {
 		fields = append(fields, scheduledtask.FieldJobConfig)
 	}
-	if m.last_run_at != nil {
-		fields = append(fields, scheduledtask.FieldLastRunAt)
-	}
-	if m.next_run_at != nil {
-		fields = append(fields, scheduledtask.FieldNextRunAt)
-	}
-	if m.last_run_status != nil {
-		fields = append(fields, scheduledtask.FieldLastRunStatus)
-	}
-	if m.last_run_error != nil {
-		fields = append(fields, scheduledtask.FieldLastRunError)
-	}
 	if m.temporal_schedule_id != nil {
 		fields = append(fields, scheduledtask.FieldTemporalScheduleID)
 	}
@@ -40318,14 +40106,6 @@ func (m *ScheduledTaskMutation) Field(name string) (ent.Value, bool) {
 		return m.Enabled()
 	case scheduledtask.FieldJobConfig:
 		return m.JobConfig()
-	case scheduledtask.FieldLastRunAt:
-		return m.LastRunAt()
-	case scheduledtask.FieldNextRunAt:
-		return m.NextRunAt()
-	case scheduledtask.FieldLastRunStatus:
-		return m.LastRunStatus()
-	case scheduledtask.FieldLastRunError:
-		return m.LastRunError()
 	case scheduledtask.FieldTemporalScheduleID:
 		return m.TemporalScheduleID()
 	}
@@ -40361,14 +40141,6 @@ func (m *ScheduledTaskMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldEnabled(ctx)
 	case scheduledtask.FieldJobConfig:
 		return m.OldJobConfig(ctx)
-	case scheduledtask.FieldLastRunAt:
-		return m.OldLastRunAt(ctx)
-	case scheduledtask.FieldNextRunAt:
-		return m.OldNextRunAt(ctx)
-	case scheduledtask.FieldLastRunStatus:
-		return m.OldLastRunStatus(ctx)
-	case scheduledtask.FieldLastRunError:
-		return m.OldLastRunError(ctx)
 	case scheduledtask.FieldTemporalScheduleID:
 		return m.OldTemporalScheduleID(ctx)
 	}
@@ -40437,14 +40209,14 @@ func (m *ScheduledTaskMutation) SetField(name string, value ent.Value) error {
 		m.SetConnectionID(v)
 		return nil
 	case scheduledtask.FieldEntityType:
-		v, ok := value.(string)
+		v, ok := value.(types.ScheduledTaskEntityType)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEntityType(v)
 		return nil
 	case scheduledtask.FieldInterval:
-		v, ok := value.(string)
+		v, ok := value.(types.ScheduledTaskInterval)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -40458,39 +40230,11 @@ func (m *ScheduledTaskMutation) SetField(name string, value ent.Value) error {
 		m.SetEnabled(v)
 		return nil
 	case scheduledtask.FieldJobConfig:
-		v, ok := value.(map[string]interface{})
+		v, ok := value.(*types.S3JobConfig)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetJobConfig(v)
-		return nil
-	case scheduledtask.FieldLastRunAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetLastRunAt(v)
-		return nil
-	case scheduledtask.FieldNextRunAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetNextRunAt(v)
-		return nil
-	case scheduledtask.FieldLastRunStatus:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetLastRunStatus(v)
-		return nil
-	case scheduledtask.FieldLastRunError:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetLastRunError(v)
 		return nil
 	case scheduledtask.FieldTemporalScheduleID:
 		v, ok := value.(string)
@@ -40541,18 +40285,6 @@ func (m *ScheduledTaskMutation) ClearedFields() []string {
 	if m.FieldCleared(scheduledtask.FieldJobConfig) {
 		fields = append(fields, scheduledtask.FieldJobConfig)
 	}
-	if m.FieldCleared(scheduledtask.FieldLastRunAt) {
-		fields = append(fields, scheduledtask.FieldLastRunAt)
-	}
-	if m.FieldCleared(scheduledtask.FieldNextRunAt) {
-		fields = append(fields, scheduledtask.FieldNextRunAt)
-	}
-	if m.FieldCleared(scheduledtask.FieldLastRunStatus) {
-		fields = append(fields, scheduledtask.FieldLastRunStatus)
-	}
-	if m.FieldCleared(scheduledtask.FieldLastRunError) {
-		fields = append(fields, scheduledtask.FieldLastRunError)
-	}
 	if m.FieldCleared(scheduledtask.FieldTemporalScheduleID) {
 		fields = append(fields, scheduledtask.FieldTemporalScheduleID)
 	}
@@ -40581,18 +40313,6 @@ func (m *ScheduledTaskMutation) ClearField(name string) error {
 		return nil
 	case scheduledtask.FieldJobConfig:
 		m.ClearJobConfig()
-		return nil
-	case scheduledtask.FieldLastRunAt:
-		m.ClearLastRunAt()
-		return nil
-	case scheduledtask.FieldNextRunAt:
-		m.ClearNextRunAt()
-		return nil
-	case scheduledtask.FieldLastRunStatus:
-		m.ClearLastRunStatus()
-		return nil
-	case scheduledtask.FieldLastRunError:
-		m.ClearLastRunError()
 		return nil
 	case scheduledtask.FieldTemporalScheduleID:
 		m.ClearTemporalScheduleID()
@@ -40640,18 +40360,6 @@ func (m *ScheduledTaskMutation) ResetField(name string) error {
 		return nil
 	case scheduledtask.FieldJobConfig:
 		m.ResetJobConfig()
-		return nil
-	case scheduledtask.FieldLastRunAt:
-		m.ResetLastRunAt()
-		return nil
-	case scheduledtask.FieldNextRunAt:
-		m.ResetNextRunAt()
-		return nil
-	case scheduledtask.FieldLastRunStatus:
-		m.ResetLastRunStatus()
-		return nil
-	case scheduledtask.FieldLastRunError:
-		m.ResetLastRunError()
 		return nil
 	case scheduledtask.FieldTemporalScheduleID:
 		m.ResetTemporalScheduleID()

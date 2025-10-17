@@ -1295,7 +1295,11 @@ func (r *FeatureUsageRepository) getAnalyticsPoints(
 }
 
 // GetFeatureUsageBySubscription gets usage data for a subscription using a single optimized query
-func (r *FeatureUsageRepository) GetFeatureUsageBySubscription(ctx context.Context, subscriptionID, externalCustomerID, environmentID, tenantID string, startTime, endTime time.Time) (map[string]*events.UsageByFeatureResult, error) {
+func (r *FeatureUsageRepository) GetFeatureUsageBySubscription(ctx context.Context, subscriptionID, externalCustomerID string, startTime, endTime time.Time) (map[string]*events.UsageByFeatureResult, error) {
+	// Extract tenantID and environmentID from context
+	tenantID := types.GetTenantID(ctx)
+	environmentID := types.GetEnvironmentID(ctx)
+
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "feature_usage", "get_usage_by_subscription_v2", map[string]interface{}{
 		"subscription_id":      subscriptionID,
@@ -1386,7 +1390,11 @@ func (r *FeatureUsageRepository) GetFeatureUsageBySubscription(ctx context.Conte
 }
 
 // GetFeatureUsageForExport retrieves feature usage data for export in batches
-func (r *FeatureUsageRepository) GetFeatureUsageForExport(ctx context.Context, tenantID, environmentID string, startTime, endTime time.Time, batchSize int, offset int) ([]*events.FeatureUsage, error) {
+func (r *FeatureUsageRepository) GetFeatureUsageForExport(ctx context.Context, startTime, endTime time.Time, batchSize int, offset int) ([]*events.FeatureUsage, error) {
+	// Extract tenantID and environmentID from context
+	tenantID := types.GetTenantID(ctx)
+	environmentID := types.GetEnvironmentID(ctx)
+
 	span := StartRepositorySpan(ctx, "feature_usage", "get_for_export_batched", map[string]interface{}{
 		"tenant_id":      tenantID,
 		"environment_id": environmentID,

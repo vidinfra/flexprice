@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/flexprice/flexprice/ent/scheduledtask"
+	"github.com/flexprice/flexprice/internal/types"
 )
 
 // ScheduledTask is the model entity for the ScheduledTask schema.
@@ -35,21 +36,13 @@ type ScheduledTask struct {
 	// Reference to the connection (S3, etc.) to use for export
 	ConnectionID string `json:"connection_id,omitempty"`
 	// Entity type to export (feature_usage, customer, invoice, etc.)
-	EntityType string `json:"entity_type,omitempty"`
+	EntityType types.ScheduledTaskEntityType `json:"entity_type,omitempty"`
 	// Schedule interval (hourly, daily, weekly, monthly)
-	Interval string `json:"interval,omitempty"`
+	Interval types.ScheduledTaskInterval `json:"interval,omitempty"`
 	// Whether this scheduled job is active
 	Enabled bool `json:"enabled,omitempty"`
-	// Job-specific configuration (bucket, region, key_prefix, compression, etc.)
-	JobConfig map[string]interface{} `json:"job_config,omitempty"`
-	// Timestamp of the last successful run
-	LastRunAt *time.Time `json:"last_run_at,omitempty"`
-	// Timestamp for the next scheduled run
-	NextRunAt *time.Time `json:"next_run_at,omitempty"`
-	// Status of the last run (success, failed, running)
-	LastRunStatus string `json:"last_run_status,omitempty"`
-	// Error message from last run if failed
-	LastRunError string `json:"last_run_error,omitempty"`
+	// S3 job configuration (bucket, region, key_prefix, compression, encryption)
+	JobConfig *types.S3JobConfig `json:"job_config,omitempty"`
 	// Temporal schedule ID for the recurring workflow
 	TemporalScheduleID string `json:"temporal_schedule_id,omitempty"`
 	selectValues       sql.SelectValues
@@ -64,9 +57,9 @@ func (*ScheduledTask) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case scheduledtask.FieldEnabled:
 			values[i] = new(sql.NullBool)
-		case scheduledtask.FieldID, scheduledtask.FieldTenantID, scheduledtask.FieldStatus, scheduledtask.FieldCreatedBy, scheduledtask.FieldUpdatedBy, scheduledtask.FieldEnvironmentID, scheduledtask.FieldConnectionID, scheduledtask.FieldEntityType, scheduledtask.FieldInterval, scheduledtask.FieldLastRunStatus, scheduledtask.FieldLastRunError, scheduledtask.FieldTemporalScheduleID:
+		case scheduledtask.FieldID, scheduledtask.FieldTenantID, scheduledtask.FieldStatus, scheduledtask.FieldCreatedBy, scheduledtask.FieldUpdatedBy, scheduledtask.FieldEnvironmentID, scheduledtask.FieldConnectionID, scheduledtask.FieldEntityType, scheduledtask.FieldInterval, scheduledtask.FieldTemporalScheduleID:
 			values[i] = new(sql.NullString)
-		case scheduledtask.FieldCreatedAt, scheduledtask.FieldUpdatedAt, scheduledtask.FieldLastRunAt, scheduledtask.FieldNextRunAt:
+		case scheduledtask.FieldCreatedAt, scheduledtask.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -141,13 +134,13 @@ func (st *ScheduledTask) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field entity_type", values[i])
 			} else if value.Valid {
-				st.EntityType = value.String
+				st.EntityType = types.ScheduledTaskEntityType(value.String)
 			}
 		case scheduledtask.FieldInterval:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field interval", values[i])
 			} else if value.Valid {
-				st.Interval = value.String
+				st.Interval = types.ScheduledTaskInterval(value.String)
 			}
 		case scheduledtask.FieldEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -162,32 +155,6 @@ func (st *ScheduledTask) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &st.JobConfig); err != nil {
 					return fmt.Errorf("unmarshal field job_config: %w", err)
 				}
-			}
-		case scheduledtask.FieldLastRunAt:
-			if value, ok := values[i].(*sql.NullTime); !ok {
-				return fmt.Errorf("unexpected type %T for field last_run_at", values[i])
-			} else if value.Valid {
-				st.LastRunAt = new(time.Time)
-				*st.LastRunAt = value.Time
-			}
-		case scheduledtask.FieldNextRunAt:
-			if value, ok := values[i].(*sql.NullTime); !ok {
-				return fmt.Errorf("unexpected type %T for field next_run_at", values[i])
-			} else if value.Valid {
-				st.NextRunAt = new(time.Time)
-				*st.NextRunAt = value.Time
-			}
-		case scheduledtask.FieldLastRunStatus:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field last_run_status", values[i])
-			} else if value.Valid {
-				st.LastRunStatus = value.String
-			}
-		case scheduledtask.FieldLastRunError:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field last_run_error", values[i])
-			} else if value.Valid {
-				st.LastRunError = value.String
 			}
 		case scheduledtask.FieldTemporalScheduleID:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -256,32 +223,16 @@ func (st *ScheduledTask) String() string {
 	builder.WriteString(st.ConnectionID)
 	builder.WriteString(", ")
 	builder.WriteString("entity_type=")
-	builder.WriteString(st.EntityType)
+	builder.WriteString(fmt.Sprintf("%v", st.EntityType))
 	builder.WriteString(", ")
 	builder.WriteString("interval=")
-	builder.WriteString(st.Interval)
+	builder.WriteString(fmt.Sprintf("%v", st.Interval))
 	builder.WriteString(", ")
 	builder.WriteString("enabled=")
 	builder.WriteString(fmt.Sprintf("%v", st.Enabled))
 	builder.WriteString(", ")
 	builder.WriteString("job_config=")
 	builder.WriteString(fmt.Sprintf("%v", st.JobConfig))
-	builder.WriteString(", ")
-	if v := st.LastRunAt; v != nil {
-		builder.WriteString("last_run_at=")
-		builder.WriteString(v.Format(time.ANSIC))
-	}
-	builder.WriteString(", ")
-	if v := st.NextRunAt; v != nil {
-		builder.WriteString("next_run_at=")
-		builder.WriteString(v.Format(time.ANSIC))
-	}
-	builder.WriteString(", ")
-	builder.WriteString("last_run_status=")
-	builder.WriteString(st.LastRunStatus)
-	builder.WriteString(", ")
-	builder.WriteString("last_run_error=")
-	builder.WriteString(st.LastRunError)
 	builder.WriteString(", ")
 	builder.WriteString("temporal_schedule_id=")
 	builder.WriteString(st.TemporalScheduleID)

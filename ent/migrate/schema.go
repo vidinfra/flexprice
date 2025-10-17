@@ -1386,10 +1386,6 @@ var (
 		{Name: "interval", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(20)"}},
 		{Name: "enabled", Type: field.TypeBool, Default: true},
 		{Name: "job_config", Type: field.TypeJSON, Nullable: true},
-		{Name: "last_run_at", Type: field.TypeTime, Nullable: true},
-		{Name: "next_run_at", Type: field.TypeTime, Nullable: true},
-		{Name: "last_run_status", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(20)"}},
-		{Name: "last_run_error", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "temporal_schedule_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(100)"}},
 	}
 	// ScheduledTasksTable holds the schema information for the "scheduled_tasks" table.
@@ -1412,11 +1408,6 @@ var (
 				Name:    "scheduledtask_entity_type_interval_enabled",
 				Unique:  false,
 				Columns: []*schema.Column{ScheduledTasksColumns[9], ScheduledTasksColumns[10], ScheduledTasksColumns[11]},
-			},
-			{
-				Name:    "scheduledtask_enabled_next_run_at",
-				Unique:  false,
-				Columns: []*schema.Column{ScheduledTasksColumns[11], ScheduledTasksColumns[14]},
 			},
 			{
 				Name:    "scheduledtask_connection_id_entity_type",

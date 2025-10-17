@@ -41,9 +41,13 @@ func NewScheduledTaskActivity(
 
 // GetScheduledTaskDetailsInput represents input for getting task details
 type GetScheduledTaskDetailsInput struct {
-	ScheduledTaskID string
-	TenantID        string
-	EnvID           string
+	ScheduledTaskID       string
+	TenantID              string
+	EnvID                 string
+	WorkflowExecutionTime time.Time // Actual workflow execution time
+	// Optional custom time range for force runs
+	CustomStartTime *time.Time
+	CustomEndTime   *time.Time
 }
 
 // ScheduledTaskDetails contains task details needed for export
@@ -51,7 +55,7 @@ type ScheduledTaskDetails struct {
 	ScheduledTaskID string
 	TenantID        string
 	EnvID           string
-	EntityType      string
+	EntityType      types.ScheduledTaskEntityType
 	Enabled         bool
 	ConnectionID    string
 	StartTime       time.Time
@@ -88,18 +92,37 @@ func (a *ScheduledTaskActivity) GetScheduledTaskDetails(ctx context.Context, inp
 			Mark(ierr.ErrValidation)
 	}
 
-	// Calculate time range using interval boundaries
-	currentTime := time.Now()
+	// Use workflow execution time for calculating interval boundaries
+	// This ensures retries use the same time boundaries as the original execution
+	executionTime := input.WorkflowExecutionTime
+	a.logger.Infow("execution time", "execution_time", executionTime)
+	if executionTime.IsZero() {
+		// Fallback to current time if not provided (for backward compatibility)
+		executionTime = time.Now()
+	}
 
 	// Calculate start and end times
-	// For first run: uses interval boundaries
-	// For subsequent runs: uses incremental sync (last export's end_time as new start_time)
-	startTime, endTime := a.calculateTimeRange(ctx, task, currentTime)
+	var startTime, endTime time.Time
+
+	// Check if custom time range is provided (for force runs)
+	if input.CustomStartTime != nil && input.CustomEndTime != nil {
+		// Use custom time range for force runs
+		startTime = *input.CustomStartTime
+		endTime = *input.CustomEndTime
+		a.logger.Infow("using custom time range for force run",
+			"scheduled_task_id", input.ScheduledTaskID,
+			"start_time", startTime,
+			"end_time", endTime)
+	} else {
+		// For scheduled runs: uses interval boundaries or incremental sync
+		startTime, endTime = a.calculateTimeRange(ctx, task, executionTime)
+	}
 
 	a.logger.Infow("scheduled task details retrieved",
 		"scheduled_task_id", input.ScheduledTaskID,
 		"entity_type", task.EntityType,
 		"interval", task.Interval,
+		"execution_time", executionTime,
 		"start_time", startTime,
 		"end_time", endTime)
 
@@ -174,18 +197,12 @@ func (a *ScheduledTaskActivity) calculateTimeRange(ctx context.Context, task *sc
 
 	// Calculate start of previous interval based on interval type
 	switch interval {
-	case types.ScheduledTaskIntervalTesting:
+	case types.ScheduledTaskIntervalCustom:
 		startTime = endTime.Add(-10 * time.Minute)
 	case types.ScheduledTaskIntervalHourly:
 		startTime = endTime.Add(-1 * time.Hour)
 	case types.ScheduledTaskIntervalDaily:
 		startTime = endTime.AddDate(0, 0, -1)
-	case types.ScheduledTaskIntervalWeekly:
-		startTime = endTime.AddDate(0, 0, -7)
-	case types.ScheduledTaskIntervalMonthly:
-		startTime = endTime.AddDate(0, -1, 0)
-	case types.ScheduledTaskIntervalYearly:
-		startTime = endTime.AddDate(-1, 0, 0)
 	default:
 		startTime = endTime.AddDate(0, 0, -1)
 	}
@@ -199,60 +216,4 @@ func (a *ScheduledTaskActivity) calculateTimeRange(ctx context.Context, task *sc
 		"duration", endTime.Sub(startTime))
 
 	return startTime, endTime
-}
-
-// UpdateScheduledTaskInput represents input for updating scheduled task
-type UpdateScheduledTaskInput struct {
-	ScheduledTaskID string
-	TenantID        string
-	EnvID           string
-	LastRunAt       time.Time
-	LastRunStatus   string
-	LastRunError    string
-}
-
-// UpdateScheduledTaskLastRun updates the last run timestamp of a scheduled task
-func (a *ScheduledTaskActivity) UpdateScheduledTaskLastRun(ctx context.Context, input UpdateScheduledTaskInput) error {
-	a.logger.Infow("updating scheduled task last run",
-		"scheduled_task_id", input.ScheduledTaskID,
-		"tenant_id", input.TenantID,
-		"env_id", input.EnvID,
-		"last_run_at", input.LastRunAt,
-		"status", input.LastRunStatus)
-
-	// Add tenant and env to context for repository query
-	ctx = types.SetTenantID(ctx, input.TenantID)
-	ctx = types.SetEnvironmentID(ctx, input.EnvID)
-
-	task, err := a.scheduledTaskRepo.Get(ctx, input.ScheduledTaskID)
-	if err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to get scheduled task").
-			Mark(ierr.ErrDatabase)
-	}
-
-	// Update last run fields
-	task.LastRunAt = &input.LastRunAt
-	task.LastRunStatus = input.LastRunStatus
-	task.LastRunError = input.LastRunError
-	task.UpdatedAt = time.Now()
-	task.UpdatedBy = types.GetUserID(ctx)
-
-	// Calculate next run time
-	nextRun := task.CalculateNextRunTime(input.LastRunAt)
-	task.NextRunAt = &nextRun
-
-	err = a.scheduledTaskRepo.Update(ctx, task)
-	if err != nil {
-		a.logger.Errorw("failed to update scheduled task", "error", err)
-		return ierr.WithError(err).
-			WithHint("Failed to update scheduled task").
-			Mark(ierr.ErrDatabase)
-	}
-
-	a.logger.Infow("scheduled task updated",
-		"scheduled_task_id", input.ScheduledTaskID,
-		"next_run_at", nextRun)
-
-	return nil
 }

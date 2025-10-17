@@ -37,14 +37,6 @@ const (
 	FieldEnabled = "enabled"
 	// FieldJobConfig holds the string denoting the job_config field in the database.
 	FieldJobConfig = "job_config"
-	// FieldLastRunAt holds the string denoting the last_run_at field in the database.
-	FieldLastRunAt = "last_run_at"
-	// FieldNextRunAt holds the string denoting the next_run_at field in the database.
-	FieldNextRunAt = "next_run_at"
-	// FieldLastRunStatus holds the string denoting the last_run_status field in the database.
-	FieldLastRunStatus = "last_run_status"
-	// FieldLastRunError holds the string denoting the last_run_error field in the database.
-	FieldLastRunError = "last_run_error"
 	// FieldTemporalScheduleID holds the string denoting the temporal_schedule_id field in the database.
 	FieldTemporalScheduleID = "temporal_schedule_id"
 	// Table holds the table name of the scheduledtask in the database.
@@ -66,10 +58,6 @@ var Columns = []string{
 	FieldInterval,
 	FieldEnabled,
 	FieldJobConfig,
-	FieldLastRunAt,
-	FieldNextRunAt,
-	FieldLastRunStatus,
-	FieldLastRunError,
 	FieldTemporalScheduleID,
 }
 
@@ -167,26 +155,6 @@ func ByInterval(opts ...sql.OrderTermOption) OrderOption {
 // ByEnabled orders the results by the enabled field.
 func ByEnabled(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEnabled, opts...).ToFunc()
-}
-
-// ByLastRunAt orders the results by the last_run_at field.
-func ByLastRunAt(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldLastRunAt, opts...).ToFunc()
-}
-
-// ByNextRunAt orders the results by the next_run_at field.
-func ByNextRunAt(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldNextRunAt, opts...).ToFunc()
-}
-
-// ByLastRunStatus orders the results by the last_run_status field.
-func ByLastRunStatus(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldLastRunStatus, opts...).ToFunc()
-}
-
-// ByLastRunError orders the results by the last_run_error field.
-func ByLastRunError(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldLastRunError, opts...).ToFunc()
 }
 
 // ByTemporalScheduleID orders the results by the temporal_schedule_id field.

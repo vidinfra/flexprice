@@ -83,13 +83,17 @@ func (h *ScheduledTaskHandler) GetScheduledTask(c *gin.Context) {
 }
 
 // @Summary List scheduled tasks
-// @Description Get a list of scheduled tasks
+// @Description Get a list of scheduled tasks with optional filters
 // @Tags ScheduledTasks
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
 // @Param limit query int false "Limit"
 // @Param offset query int false "Offset"
+// @Param connection_id query string false "Filter by connection ID"
+// @Param entity_type query string false "Filter by entity type"
+// @Param interval query string false "Filter by interval"
+// @Param enabled query bool false "Filter by enabled status"
 // @Success 200 {object} dto.ListScheduledTasksResponse
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
@@ -103,7 +107,24 @@ func (h *ScheduledTaskHandler) ListScheduledTasks(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.service.ListScheduledTasks(c.Request.Context(), &filter)
+	// Get additional query parameters
+	connectionID := c.Query("connection_id")
+	entityTypeStr := c.Query("entity_type")
+	intervalStr := c.Query("interval")
+	enabledStr := c.Query("enabled")
+
+	// Convert string parameters to enum types
+	var entityType types.ScheduledTaskEntityType
+	if entityTypeStr != "" {
+		entityType = types.ScheduledTaskEntityType(entityTypeStr)
+	}
+
+	var interval types.ScheduledTaskInterval
+	if intervalStr != "" {
+		interval = types.ScheduledTaskInterval(intervalStr)
+	}
+
+	resp, err := h.service.ListScheduledTasks(c.Request.Context(), &filter, connectionID, entityType, interval, enabledStr)
 	if err != nil {
 		h.logger.Errorw("failed to list scheduled tasks", "error", err)
 		c.Error(err)
