@@ -236,3 +236,35 @@ func (s *InMemoryPriceStore) GetByPlanID(ctx context.Context, planID string) ([]
 func (s *InMemoryPriceStore) Clear() {
 	s.InMemoryStore.Clear()
 }
+
+func (s *InMemoryPriceStore) GetInGroup(ctx context.Context, groupID string) ([]*price.Price, error) {
+	return nil, nil
+}
+
+func (s *InMemoryPriceStore) CountInGroup(ctx context.Context, groupID string) (int, error) {
+	return 0, nil
+}
+
+func (s *InMemoryPriceStore) CountNotInGroup(ctx context.Context, ids []string, excludeGroupID string) (int, error) {
+	return 0, nil
+}
+
+func (s *InMemoryPriceStore) UpdateGroupID(ctx context.Context, id string, groupID *string) error {
+	return nil
+}
+
+func (s *InMemoryPriceStore) GetByIDs(ctx context.Context, ids []string) ([]*price.Price, error) {
+	return nil, nil
+}
+
+func (s *InMemoryPriceStore) CountByIDs(ctx context.Context, ids []string) (int, error) {
+	return 0, nil
+}
+
+func (s *InMemoryPriceStore) UpdateGroupIDBulk(ctx context.Context, ids []string, groupID *string) error {
+	return nil
+}
+
+func (s *InMemoryPriceStore) ClearGroupIDBulk(ctx context.Context, ids []string) error {
+	return nil
+}

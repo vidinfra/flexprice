@@ -5,8 +5,6 @@ import (
 
 	"github.com/flexprice/flexprice/ent"
 	"github.com/flexprice/flexprice/ent/group"
-	"github.com/flexprice/flexprice/ent/predicate"
-	"github.com/flexprice/flexprice/ent/price"
 	"github.com/flexprice/flexprice/internal/cache"
 	domainGroup "github.com/flexprice/flexprice/internal/domain/group"
 	ierr "github.com/flexprice/flexprice/internal/errors"
@@ -37,7 +35,7 @@ func (r *groupRepository) Create(ctx context.Context, grp *domainGroup.Group) er
 	_, err := client.Group.Create().
 		SetID(grp.ID).
 		SetName(grp.Name).
-		SetEntityType(grp.EntityType).
+		SetEntityType(string(grp.EntityType)).
 		SetTenantID(tenantID).
 		SetEnvironmentID(environmentID).
 		SetStatus(string(grp.Status)).
@@ -65,6 +63,7 @@ func (r *groupRepository) Get(ctx context.Context, id string) (*domainGroup.Grou
 			group.IDEQ(id),
 			group.TenantIDEQ(tenantID),
 			group.EnvironmentIDEQ(environmentID),
+			group.StatusEQ(string(types.StatusPublished)),
 		).
 		Only(ctx)
 
@@ -119,6 +118,7 @@ func (r *groupRepository) List(ctx context.Context, filter *types.GroupFilter) (
 		Where(
 			group.TenantIDEQ(tenantID),
 			group.EnvironmentIDEQ(environmentID),
+			group.StatusEQ(string(types.StatusPublished)),
 		)
 
 	// Apply filters
@@ -190,7 +190,7 @@ func (r *groupRepository) Delete(ctx context.Context, id string) error {
 			group.TenantIDEQ(tenantID),
 			group.EnvironmentIDEQ(environmentID),
 		).
-		SetStatus(string(types.StatusDeleted)).
+		SetStatus(string(types.StatusArchived)).
 		SetUpdatedBy(types.GetUserID(ctx)).
 		Save(ctx)
 
@@ -204,133 +204,11 @@ func (r *groupRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *groupRepository) GetPricesInGroup(ctx context.Context, groupID string) ([]string, error) {
-	client := r.client.Querier(ctx)
-	tenantID := types.GetTenantID(ctx)
-	environmentID := types.GetEnvironmentID(ctx)
-
-	entPrices, err := client.Price.Query().
-		Where(
-			price.GroupIDEQ(groupID),
-			price.TenantIDEQ(tenantID),
-			price.EnvironmentIDEQ(environmentID),
-		).
-		All(ctx)
-
-	if err != nil {
-		r.log.Error("Failed to get prices in group", "error", err, "group_id", groupID)
-		return nil, ierr.WithError(err).
-			WithHint("Failed to get prices in group").
-			Mark(ierr.ErrDatabase)
-	}
-
-	priceIDs := make([]string, len(entPrices))
-	for i, price := range entPrices {
-		priceIDs[i] = price.ID
-	}
-
-	return priceIDs, nil
-}
-
-func (r *groupRepository) UpdatePriceGroup(ctx context.Context, priceID string, groupID *string) error {
-	client := r.client.Querier(ctx)
-	tenantID := types.GetTenantID(ctx)
-	environmentID := types.GetEnvironmentID(ctx)
-
-	update := client.Price.UpdateOneID(priceID).
-		Where(
-			price.TenantIDEQ(tenantID),
-			price.EnvironmentIDEQ(environmentID),
-		)
-
-	if groupID != nil {
-		update = update.SetGroupID(*groupID)
-	} else {
-		update = update.ClearGroupID()
-	}
-
-	_, err := update.Save(ctx)
-	if err != nil {
-		r.log.Error("Failed to update price group", "error", err, "price_id", priceID, "group_id", groupID)
-		return ierr.WithError(err).
-			WithHint("Failed to update price group").
-			Mark(ierr.ErrDatabase)
-	}
-
-	return nil
-}
-
-func (r *groupRepository) ValidatePricesExist(ctx context.Context, priceIDs []string) error {
-	client := r.client.Querier(ctx)
-	tenantID := types.GetTenantID(ctx)
-	environmentID := types.GetEnvironmentID(ctx)
-
-	count, err := client.Price.Query().
-		Where(
-			price.IDIn(priceIDs...),
-			price.TenantIDEQ(tenantID),
-			price.EnvironmentIDEQ(environmentID),
-		).
-		Count(ctx)
-
-	if err != nil {
-		r.log.Error("Failed to validate prices exist", "error", err)
-		return ierr.WithError(err).
-			WithHint("Failed to validate prices exist").
-			Mark(ierr.ErrDatabase)
-	}
-
-	if count != len(priceIDs) {
-		return ierr.NewError("one or more prices not found").
-			WithHint("One or more price IDs are invalid").
-			Mark(ierr.ErrValidation)
-	}
-
-	return nil
-}
-
-func (r *groupRepository) ValidatePricesNotInOtherGroup(ctx context.Context, priceIDs []string, excludeGroupID string) error {
-	client := r.client.Querier(ctx)
-	tenantID := types.GetTenantID(ctx)
-	environmentID := types.GetEnvironmentID(ctx)
-
-	var predicates []predicate.Price
-	predicates = append(predicates,
-		price.IDIn(priceIDs...),
-		price.TenantIDEQ(tenantID),
-		price.EnvironmentIDEQ(environmentID),
-		price.GroupIDNotNil(),
-	)
-
-	if excludeGroupID != "" {
-		predicates = append(predicates, price.GroupIDNEQ(excludeGroupID))
-	}
-
-	count, err := client.Price.Query().
-		Where(predicates...).
-		Count(ctx)
-
-	if err != nil {
-		r.log.Error("Failed to validate prices not in other group", "error", err)
-		return ierr.WithError(err).
-			WithHint("Failed to validate prices not in other group").
-			Mark(ierr.ErrDatabase)
-	}
-
-	if count > 0 {
-		return ierr.NewError("one or more prices are already in another group").
-			WithHint("One or more prices are already assigned to another group").
-			Mark(ierr.ErrValidation)
-	}
-
-	return nil
-}
-
 func (r *groupRepository) toDomainGroup(entGroup *ent.Group) *domainGroup.Group {
 	return &domainGroup.Group{
 		ID:            entGroup.ID,
 		Name:          entGroup.Name,
-		EntityType:    entGroup.EntityType,
+		EntityType:    types.GroupEntityType(entGroup.EntityType),
 		EnvironmentID: entGroup.EnvironmentID,
 		BaseModel: types.BaseModel{
 			TenantID:  entGroup.TenantID,

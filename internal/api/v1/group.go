@@ -7,6 +7,7 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/service"
+	"github.com/flexprice/flexprice/internal/types"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,7 +21,7 @@ func NewGroupHandler(service service.GroupService, log *logger.Logger) *GroupHan
 }
 
 // @Summary Create a group
-// @Description Create a new group for organizing prices
+// @Description Create a new group for organizing entities (prices, plans, customers, etc.)
 // @Tags Groups
 // @Accept json
 // @Produce json
@@ -73,7 +74,7 @@ func (h *GroupHandler) GetGroup(c *gin.Context) {
 }
 
 // @Summary Update a group
-// @Description Update a group's details and associated prices
+// @Description Update a group's details and associated entities
 // @Tags Groups
 // @Accept json
 // @Produce json
@@ -106,7 +107,7 @@ func (h *GroupHandler) UpdateGroup(c *gin.Context) {
 }
 
 // @Summary Delete a group
-// @Description Delete a group and remove all price associations
+// @Description Delete a group and remove all entity associations
 // @Tags Groups
 // @Accept json
 // @Produce json
@@ -127,4 +128,36 @@ func (h *GroupHandler) DeleteGroup(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// @Summary List groups
+// @Description List groups with optional filtering
+// @Tags Groups
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param entity_type query string false "Filter by entity type"
+// @Param name query string false "Filter by group name"
+// @Success 200 {object} dto.ListGroupsResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /groups [get]
+func (h *GroupHandler) ListGroups(c *gin.Context) {
+	// Parse query parameters
+	entityType := c.Query("entity_type")
+	name := c.Query("name")
+
+	// Create filter
+	filter := &types.GroupFilter{
+		EntityType: entityType,
+		Name:       name,
+	}
+
+	resp, err := h.service.ListGroups(c.Request.Context(), filter)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }

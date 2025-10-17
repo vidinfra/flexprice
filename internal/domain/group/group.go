@@ -8,10 +8,10 @@ import (
 
 // Group represents a grouping entity for organizing related items
 type Group struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	EntityType    string `json:"entity_type"`
-	EnvironmentID string `json:"environment_id"`
+	ID            string                `json:"id"`
+	Name          string                `json:"name"`
+	EntityType    types.GroupEntityType `json:"entity_type"`
+	EnvironmentID string                `json:"environment_id"`
 	types.BaseModel
 }
 
@@ -22,8 +22,5 @@ type Repository interface {
 	GetByName(ctx context.Context, name string) (*Group, error)
 	Update(ctx context.Context, group *Group) error
 	Delete(ctx context.Context, id string) error
-	GetPricesInGroup(ctx context.Context, groupID string) ([]string, error)
-	UpdatePriceGroup(ctx context.Context, priceID string, groupID *string) error
-	ValidatePricesExist(ctx context.Context, priceIDs []string) error
-	ValidatePricesNotInOtherGroup(ctx context.Context, priceIDs []string, excludeGroupID string) error
+	List(ctx context.Context, filter *types.GroupFilter) ([]*Group, error)
 }
