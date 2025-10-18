@@ -381,7 +381,6 @@ func (s *scheduledTaskService) startScheduledTask(ctx context.Context, task *sch
 	}
 
 	action := &client.ScheduleWorkflowAction{
-		ID:       task.ID, // Use task ID as workflow ID
 		Workflow: exportWorkflows.ExecuteExportWorkflow,
 		Args: []interface{}{
 			exportWorkflows.ExecuteExportWorkflowInput{
@@ -509,7 +508,7 @@ func (s *scheduledTaskService) triggerForceRun(ctx context.Context, taskID strin
 	}
 
 	// Generate workflow ID for force run
-	workflowID := fmt.Sprintf("%s-force-run", types.GenerateUUIDWithPrefix("wf"))
+	workflowID := fmt.Sprintf("%s-export", types.GenerateUUIDWithPrefix(types.UUID_PREFIX_TASK))
 
 	s.logger.Infow("triggering force run export",
 		"workflow_id", workflowID,
