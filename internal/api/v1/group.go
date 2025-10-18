@@ -94,7 +94,7 @@ func (h *GroupHandler) DeleteGroup(c *gin.Context) {
 		return
 	}
 
-	c.Status(http.StatusNoContent)
+	c.Status(http.StatusOK)
 }
 
 // @Summary List groups
@@ -143,9 +143,14 @@ func (h *GroupHandler) ListGroups(c *gin.Context) {
 // @Router /groups/{id}/add [post]
 func (h *GroupHandler) AddEntityToGroup(c *gin.Context) {
 	id := c.Param("id")
-	entityID := c.Param("entity_id")
-
-	err := h.service.AddEntityToGroup(c.Request.Context(), id, entityID)
+	var req dto.AddEntityToGroupRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(ierr.WithError(err).
+			WithHint("Invalid request format").
+			Mark(ierr.ErrValidation))
+		return
+	}
+	err := h.service.AddEntityToGroup(c.Request.Context(), id, req)
 	if err != nil {
 		c.Error(err)
 		return

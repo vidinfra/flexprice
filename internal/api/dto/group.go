@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/flexprice/flexprice/internal/domain/group"
+	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/flexprice/flexprice/internal/validator"
 )
@@ -43,14 +44,23 @@ func (r *CreateGroupRequest) ToGroup(ctx context.Context) (*group.Group, error) 
 	}, nil
 }
 
-// UpdateGroupRequest represents the request to update a group
-type UpdateGroupRequest struct {
-	Name      *string  `json:"name,omitempty"`
-	EntityIDs []string `json:"entity_ids,omitempty"`
+// AddEntityToGroupRequest represents the request to add an entity to a group
+type AddEntityToGroupRequest struct {
+	EntityIDs []string `json:"entity_ids" validate:"required"`
 }
 
-func (r *UpdateGroupRequest) Validate() error {
-	return validator.ValidateRequest(r)
+func (r *AddEntityToGroupRequest) Validate() error {
+	if err := validator.ValidateRequest(r); err != nil {
+		return err
+	}
+
+	if len(r.EntityIDs) == 0 {
+		return ierr.NewError("no entities provided").
+			WithHint("No entities provided").
+			Mark(ierr.ErrValidation)
+	}
+
+	return nil
 }
 
 // GroupResponse represents the group response

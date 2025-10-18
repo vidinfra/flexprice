@@ -19,7 +19,7 @@ type GroupService interface {
 	GetGroup(ctx context.Context, id string) (*dto.GroupResponse, error)
 	DeleteGroup(ctx context.Context, id string) error
 	ListGroups(ctx context.Context, filter *types.GroupFilter) (*dto.ListGroupsResponse, error)
-	AddEntityToGroup(ctx context.Context, id string, entityID string) error
+	AddEntityToGroup(ctx context.Context, id string, req dto.AddEntityToGroupRequest) error
 }
 
 type groupService struct {
@@ -188,31 +188,31 @@ func (s *groupService) ListGroups(ctx context.Context, filter *types.GroupFilter
 }
 
 // AddEntityToGroup adds an entity to a group
-func (s *groupService) AddEntityToGroup(ctx context.Context, groupID string, entityID string) error {
-	entityType := types.GroupEntityType(entityID)
-	if err := entityType.Validate(); err != nil {
-		return ierr.NewError("invalid entity type").
-			WithHint("Entity type must be one of: price, plan, customer, invoice, subscription, addon, feature, entitlement").
-			Mark(ierr.ErrValidation)
+func (s *groupService) AddEntityToGroup(ctx context.Context, groupID string, req dto.AddEntityToGroupRequest) error {
+
+	if err := req.Validate(); err != nil {
+		return err
 	}
 
-	entityIDs, err := s.validateEntities(ctx, entityType, []string{entityID}, groupID)
+	groupObj, err := s.GroupRepo.Get(ctx, groupID)
 	if err != nil {
-		return ierr.NewError("invalid entity").
-			WithHint("Entity must be one of: price, plan, customer, invoice, subscription, addon, feature, entitlement").
-			Mark(ierr.ErrValidation)
+		return err
 	}
 
-	return s.associateEntities(ctx, entityType, groupID, entityIDs)
+	entityIDs, err := s.validateEntities(ctx, groupObj.EntityType, req.EntityIDs, groupID)
+	if err != nil {
+		return err
+	}
+
+	return s.associateEntities(ctx, groupObj.EntityType, groupID, entityIDs)
 }
 
 // validateEntities validates entities using the appropriate validator
 func (s *groupService) validateEntities(ctx context.Context, entityType types.GroupEntityType, entityIDs []string, excludeGroupID string) ([]string, error) {
 	validator, exists := s.validators[entityType]
 	if !exists {
-		s.log.Error("unsupported entity type", "entity_type", entityType)
 		return nil, ierr.NewError("unsupported entity type").
-			WithHint("Only price entities are currently supported").
+			WithHint("Unsupported entity type: " + entityType.String()).
 			Mark(ierr.ErrValidation)
 	}
 
@@ -223,9 +223,8 @@ func (s *groupService) validateEntities(ctx context.Context, entityType types.Gr
 func (s *groupService) getAssociatedEntities(ctx context.Context, entityType types.GroupEntityType, groupID string) ([]string, error) {
 	validator, exists := s.validators[entityType]
 	if !exists {
-		s.log.Error("unsupported entity type", "entity_type", entityType)
 		return nil, ierr.NewError("unsupported entity type").
-			WithHint("Only price entities are currently supported").
+			WithHint("Unsupported entity type: " + entityType.String()).
 			Mark(ierr.ErrValidation)
 	}
 
@@ -249,9 +248,8 @@ func (s *groupService) getAssociatedEntitiesBulk(ctx context.Context, groups []*
 	for entityType, groupIDs := range groupsByType {
 		validator, exists := s.validators[entityType]
 		if !exists {
-			s.log.Error("unsupported entity type in bulk fetch", "entity_type", entityType)
 			return nil, ierr.NewError("unsupported entity type").
-				WithHint("Only price entities are currently supported").
+				WithHint("Unsupported entity type: " + entityType.String()).
 				Mark(ierr.ErrValidation)
 		}
 
@@ -275,7 +273,7 @@ func (s *groupService) associateEntities(ctx context.Context, entityType types.G
 	if !exists {
 		s.log.Error("unsupported entity type", "entity_type", entityType)
 		return ierr.NewError("unsupported entity type").
-			WithHint("Only price entities are currently supported").
+			WithHint("Unsupported entity type: " + entityType.String()).
 			Mark(ierr.ErrValidation)
 	}
 
@@ -286,9 +284,8 @@ func (s *groupService) associateEntities(ctx context.Context, entityType types.G
 func (s *groupService) disassociateEntities(ctx context.Context, entityType types.GroupEntityType, entityIDs []string) error {
 	validator, exists := s.validators[entityType]
 	if !exists {
-		s.log.Error("unsupported entity type", "entity_type", entityType)
 		return ierr.NewError("unsupported entity type").
-			WithHint("Only price entities are currently supported").
+			WithHint("Unsupported entity type: " + entityType.String()).
 			Mark(ierr.ErrValidation)
 	}
 

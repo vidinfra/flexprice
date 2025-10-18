@@ -9,14 +9,7 @@ import (
 type GroupEntityType string
 
 const (
-	GroupEntityTypePrice        GroupEntityType = "price"
-	GroupEntityTypePlan         GroupEntityType = "plan"
-	GroupEntityTypeCustomer     GroupEntityType = "customer"
-	GroupEntityTypeInvoice      GroupEntityType = "invoice"
-	GroupEntityTypeSubscription GroupEntityType = "subscription"
-	GroupEntityTypeAddon        GroupEntityType = "addon"
-	GroupEntityTypeFeature      GroupEntityType = "feature"
-	GroupEntityTypeEntitlement  GroupEntityType = "entitlement"
+	GroupEntityTypePrice GroupEntityType = "price"
 )
 
 func (e GroupEntityType) String() string {
@@ -26,17 +19,13 @@ func (e GroupEntityType) String() string {
 func (e GroupEntityType) Validate() error {
 	allowed := []GroupEntityType{
 		GroupEntityTypePrice,
-		GroupEntityTypePlan,
-		GroupEntityTypeCustomer,
-		GroupEntityTypeInvoice,
-		GroupEntityTypeSubscription,
-		GroupEntityTypeAddon,
-		GroupEntityTypeFeature,
-		GroupEntityTypeEntitlement,
 	}
 	if !lo.Contains(allowed, e) {
 		return ierr.NewError("invalid group entity type").
-			WithHint("Entity type must be one of: price, plan, customer, invoice, subscription, addon, feature, entitlement").
+			WithHint("Unsupported entity type: " + e.String()).
+			WithReportableDetails(map[string]interface{}{
+				"allowed_types": allowed,
+			}).
 			Mark(ierr.ErrValidation)
 	}
 	return nil
@@ -46,13 +35,6 @@ func (e GroupEntityType) Validate() error {
 func GetAllGroupEntityTypes() []GroupEntityType {
 	return []GroupEntityType{
 		GroupEntityTypePrice,
-		GroupEntityTypePlan,
-		GroupEntityTypeCustomer,
-		GroupEntityTypeInvoice,
-		GroupEntityTypeSubscription,
-		GroupEntityTypeAddon,
-		GroupEntityTypeFeature,
-		GroupEntityTypeEntitlement,
 	}
 }
 
