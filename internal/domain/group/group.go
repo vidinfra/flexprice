@@ -3,6 +3,7 @@ package group
 import (
 	"context"
 
+	"github.com/flexprice/flexprice/ent"
 	"github.com/flexprice/flexprice/internal/types"
 )
 
@@ -16,6 +17,40 @@ type Group struct {
 	types.BaseModel
 }
 
+// FromEnt converts an Ent Group to a domain Group
+func FromEnt(e *ent.Group) *Group {
+	if e == nil {
+		return nil
+	}
+	return &Group{
+		ID:            e.ID,
+		Name:          e.Name,
+		EntityType:    types.GroupEntityType(e.EntityType),
+		EnvironmentID: e.EnvironmentID,
+		LookupKey:     e.LookupKey,
+		BaseModel: types.BaseModel{
+			TenantID:  e.TenantID,
+			Status:    types.Status(e.Status),
+			CreatedAt: e.CreatedAt,
+			UpdatedAt: e.UpdatedAt,
+			CreatedBy: e.CreatedBy,
+			UpdatedBy: e.UpdatedBy,
+		},
+	}
+}
+
+// FromEntList converts a list of Ent Groups to domain Groups
+func FromEntList(list []*ent.Group) []*Group {
+	if list == nil {
+		return nil
+	}
+	groups := make([]*Group, len(list))
+	for i, item := range list {
+		groups[i] = FromEnt(item)
+	}
+	return groups
+}
+
 // Repository defines the interface for group data operations
 type Repository interface {
 	Create(ctx context.Context, group *Group) error
@@ -25,4 +60,5 @@ type Repository interface {
 	Update(ctx context.Context, group *Group) error
 	Delete(ctx context.Context, id string) error
 	List(ctx context.Context, filter *types.GroupFilter) ([]*Group, error)
+	Count(ctx context.Context, filter *types.GroupFilter) (int, error)
 }

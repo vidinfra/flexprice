@@ -156,17 +156,26 @@ func (s *groupService) DeleteGroup(ctx context.Context, id string) error {
 
 // ListGroups retrieves groups with optional filtering
 func (s *groupService) ListGroups(ctx context.Context, filter *types.GroupFilter) (*dto.ListGroupsResponse, error) {
+	if filter == nil {
+		filter = &types.GroupFilter{
+			QueryFilter: types.NewDefaultQueryFilter(),
+		}
+	}
+
+	if err := filter.Validate(); err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Invalid filter parameters").
+			Mark(ierr.ErrValidation)
+	}
 
 	groups, err := s.GroupRepo.List(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(groups) == 0 {
-		return &dto.ListGroupsResponse{
-			Groups: []*dto.GroupResponse{},
-			Total:  0,
-		}, nil
+	total, err := s.GroupRepo.Count(ctx, filter)
+	if err != nil {
+		return nil, err
 	}
 
 	// Get associated entities for all groups in bulk (single query instead of N queries)
@@ -182,8 +191,8 @@ func (s *groupService) ListGroups(ctx context.Context, filter *types.GroupFilter
 	}
 
 	return &dto.ListGroupsResponse{
-		Groups: responses,
-		Total:  len(responses),
+		Items:      responses,
+		Pagination: types.NewPaginationResponse(total, filter.GetLimit(), filter.GetOffset()),
 	}, nil
 }
 

@@ -97,38 +97,6 @@ func (h *GroupHandler) DeleteGroup(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// @Summary List groups
-// @Description List groups with optional filtering
-// @Tags Groups
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param entity_type query string false "Filter by entity type"
-// @Param name query string false "Filter by group name"
-// @Success 200 {object} dto.ListGroupsResponse
-// @Failure 400 {object} ierr.ErrorResponse
-// @Failure 500 {object} ierr.ErrorResponse
-// @Router /groups [get]
-func (h *GroupHandler) ListGroups(c *gin.Context) {
-	// Parse query parameters
-	entityType := c.Query("entity_type")
-	name := c.Query("name")
-
-	// Create filter
-	filter := &types.GroupFilter{
-		EntityType: entityType,
-		Name:       name,
-	}
-
-	resp, err := h.service.ListGroups(c.Request.Context(), filter)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-
-	c.JSON(http.StatusOK, resp)
-}
-
 // @Summary Add entity to group
 // @Description Add an entity to a group
 // @Tags Groups
@@ -157,4 +125,50 @@ func (h *GroupHandler) AddEntityToGroup(c *gin.Context) {
 	}
 
 	c.Status(http.StatusOK)
+}
+
+// @Summary Get groups
+// @Description Get groups with optional filtering via query parameters
+// @Tags Groups
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param entity_type query string false "Filter by entity type (e.g., 'price')"
+// @Param name query string false "Filter by group name (contains search)"
+// @Param lookup_key query string false "Filter by lookup key (exact match)"
+// @Param limit query int false "Number of items to return (default: 20)"
+// @Param offset query int false "Number of items to skip (default: 0)"
+// @Param sort_by query string false "Field to sort by (name, created_at, updated_at)"
+// @Param sort_order query string false "Sort order (asc, desc)"
+// @Success 200 {object} dto.ListGroupsResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /groups/search [post]
+func (h *GroupHandler) ListGroups(c *gin.Context) {
+	var filter types.GroupFilter
+	if err := c.ShouldBindJSON(&filter); err != nil {
+		c.Error(ierr.WithError(err).
+			WithHint("Invalid filter parameters").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	if err := filter.Validate(); err != nil {
+		c.Error(ierr.WithError(err).
+			WithHint("Invalid filter parameters").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	if filter.GetLimit() == 0 {
+		filter.QueryFilter = types.NewDefaultQueryFilter()
+	}
+
+	resp, err := h.service.ListGroups(c.Request.Context(), &filter)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }

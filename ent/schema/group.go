@@ -54,7 +54,8 @@ func (Group) Fields() []ent.Field {
 // Edges of the Group.
 func (Group) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.To("prices", Price.Type),
+		edge.From("prices", Price.Type).
+			Ref("group"),
 	}
 }
 

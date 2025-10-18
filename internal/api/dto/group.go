@@ -82,8 +82,5 @@ func NewGroupResponse(group *group.Group, entityIDs []string) *GroupResponse {
 	}
 }
 
-// ListGroupsResponse represents the response for listing groups
-type ListGroupsResponse struct {
-	Groups []*GroupResponse `json:"groups"`
-	Total  int              `json:"total"`
-}
+// ListGroupsResponse represents the response for listing groupstype
+type ListGroupsResponse = types.ListResponse[*GroupResponse]
