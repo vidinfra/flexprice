@@ -182,6 +182,8 @@ func (s *scheduledTaskService) ListScheduledTasks(ctx context.Context, filter *t
 }
 
 // UpdateScheduledTask updates a scheduled task (only enabled field can be changed)
+// When enabled=true: resumes paused schedules or creates new ones if they don't exist
+// When enabled=false: pauses existing schedules
 func (s *scheduledTaskService) UpdateScheduledTask(ctx context.Context, id string, req dto.UpdateScheduledTaskRequest) (*dto.ScheduledTaskResponse, error) {
 	// Validate request
 	if err := req.Validate(); err != nil {
@@ -237,9 +239,9 @@ func (s *scheduledTaskService) UpdateScheduledTask(ctx context.Context, id strin
 		if newEnabled {
 			// Resume/Start the schedule
 			s.logger.Infow("resuming temporal schedule", "task_id", id)
-			err = s.startScheduledTask(ctx, task)
+			err = s.resumeScheduledTask(ctx, task)
 			if err != nil {
-				s.logger.Errorw("failed to start temporal schedule", "task_id", id, "error", err)
+				s.logger.Errorw("failed to resume temporal schedule", "task_id", id, "error", err)
 				// Rollback the database change
 				task.Enabled = wasEnabled
 				_ = s.repo.Update(ctx, task)
@@ -251,9 +253,9 @@ func (s *scheduledTaskService) UpdateScheduledTask(ctx context.Context, id strin
 		} else {
 			// Pause the schedule
 			s.logger.Infow("pausing temporal schedule", "task_id", id)
-			err = s.stopScheduledTask(ctx, task)
+			err = s.pauseScheduledTask(ctx, task)
 			if err != nil {
-				s.logger.Errorw("failed to stop temporal schedule", "task_id", id, "error", err)
+				s.logger.Errorw("failed to pause temporal schedule", "task_id", id, "error", err)
 				// Rollback the database change
 				task.Enabled = wasEnabled
 				_ = s.repo.Update(ctx, task)
@@ -366,13 +368,11 @@ func (s *scheduledTaskService) TriggerForceRun(ctx context.Context, id string, r
 
 // ===== PRIVATE HELPER METHODS =====
 
-// startScheduledTask creates and starts a Temporal schedule for the task
+// startScheduledTask creates a new Temporal schedule for the task (used during creation)
+// This function should only be called when creating a new scheduled task
 func (s *scheduledTaskService) startScheduledTask(ctx context.Context, task *scheduledtask.ScheduledTask) error {
-	// Always create a new schedule - the TemporalScheduleID is set upfront but schedule doesn't exist yet
 	s.logger.Infow("creating new temporal schedule", "task_id", task.ID)
 
-	// Create new Temporal schedule
-	// Use the scheduled task ID directly (already has schtask_ prefix)
 	scheduleID := task.ID
 	cronExpr := s.getCronExpression(types.ScheduledTaskInterval(task.Interval))
 
@@ -391,16 +391,16 @@ func (s *scheduledTaskService) startScheduledTask(ctx context.Context, task *sch
 			},
 		},
 		TaskQueue:                string(types.TemporalTaskQueueExport),
-		WorkflowExecutionTimeout: 15 * time.Minute, // 15 minutes for export tasks
-		WorkflowRunTimeout:       15 * time.Minute, // 15 minutes for single workflow run
-		WorkflowTaskTimeout:      15 * time.Minute, // 15 minute for workflow task processing
+		WorkflowExecutionTimeout: 15 * time.Minute,
+		WorkflowRunTimeout:       15 * time.Minute,
+		WorkflowTaskTimeout:      15 * time.Minute,
 	}
 
 	scheduleOptions := models.CreateScheduleOptions{
 		ID:     scheduleID,
 		Spec:   scheduleSpec,
 		Action: action,
-		Paused: false, // Start immediately
+		Paused: false,
 	}
 
 	_, err := s.temporalClient.CreateSchedule(ctx, scheduleOptions)
@@ -419,14 +419,14 @@ func (s *scheduledTaskService) startScheduledTask(ctx context.Context, task *sch
 	return nil
 }
 
-// stopScheduledTask pauses the Temporal schedule for the task
-func (s *scheduledTaskService) stopScheduledTask(ctx context.Context, task *scheduledtask.ScheduledTask) error {
+// pauseScheduledTask pauses the Temporal schedule for the task
+// This function safely handles cases where the schedule doesn't exist
+func (s *scheduledTaskService) pauseScheduledTask(ctx context.Context, task *scheduledtask.ScheduledTask) error {
 	if task.TemporalScheduleID == "" {
-		s.logger.Infow("no temporal schedule to stop", "task_id", task.ID)
+		s.logger.Infow("no temporal schedule to pause", "task_id", task.ID)
 		return nil
 	}
 
-	// Pause the schedule
 	handle := s.temporalClient.GetScheduleHandle(ctx, task.TemporalScheduleID)
 	err := handle.Pause(ctx, client.SchedulePauseOptions{})
 	if err != nil {
@@ -436,7 +436,57 @@ func (s *scheduledTaskService) stopScheduledTask(ctx context.Context, task *sche
 			Mark(ierr.ErrInternal)
 	}
 
-	s.logger.Infow("scheduled task stopped successfully", "task_id", task.ID)
+	s.logger.Infow("temporal schedule paused successfully", "task_id", task.ID)
+	return nil
+}
+
+// resumeScheduledTask resumes or creates a Temporal schedule for the task
+// This function intelligently handles:
+// - Resuming paused schedules
+// - Creating new schedules if they don't exist
+// - Handling schedules that are already running
+func (s *scheduledTaskService) resumeScheduledTask(ctx context.Context, task *scheduledtask.ScheduledTask) error {
+	if task.TemporalScheduleID == "" {
+		s.logger.Infow("no temporal schedule ID, creating new schedule", "task_id", task.ID)
+		err := s.startScheduledTask(ctx, task)
+		if err != nil {
+			return err
+		}
+		task.TemporalScheduleID = task.ID
+		err = s.repo.Update(ctx, task)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	scheduleID := task.TemporalScheduleID
+	handle := s.temporalClient.GetScheduleHandle(ctx, scheduleID)
+
+	// Try to get existing schedule to check its state
+	schedule, err := handle.Describe(ctx)
+	if err != nil {
+		// Schedule doesn't exist, create a new one
+		s.logger.Infow("schedule not found, creating new one", "task_id", task.ID, "schedule_id", scheduleID)
+		return s.startScheduledTask(ctx, task)
+	}
+
+	// Check if schedule is paused
+	if schedule.Schedule.State.Paused {
+		s.logger.Infow("resuming paused schedule", "task_id", task.ID, "schedule_id", scheduleID)
+		err = handle.Unpause(ctx, client.ScheduleUnpauseOptions{})
+		if err != nil {
+			s.logger.Errorw("failed to unpause schedule", "error", err)
+			return ierr.WithError(err).
+				WithHint("Failed to resume Temporal schedule").
+				Mark(ierr.ErrInternal)
+		}
+		s.logger.Infow("temporal schedule resumed successfully", "task_id", task.ID)
+		return nil
+	}
+
+	// Schedule exists and is not paused
+	s.logger.Infow("temporal schedule already running", "task_id", task.ID, "schedule_id", scheduleID)
 	return nil
 }
 
@@ -447,7 +497,6 @@ func (s *scheduledTaskService) deleteTemporalSchedule(ctx context.Context, task 
 		return nil
 	}
 
-	// Delete the schedule from Temporal
 	handle := s.temporalClient.GetScheduleHandle(ctx, task.TemporalScheduleID)
 	err := handle.Delete(ctx)
 	if err != nil {
