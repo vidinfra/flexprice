@@ -31,7 +31,7 @@ func (s ScheduledTaskInterval) Validate() error {
 		}
 	}
 	return ierr.NewError("invalid scheduled task interval").
-		WithHint("Interval must be one of: testing, hourly, daily").
+		WithHint("Interval must be one of: custom, hourly, daily").
 		Mark(ierr.ErrValidation)
 }
 

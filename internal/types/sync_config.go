@@ -10,15 +10,6 @@ type SyncConfig struct {
 	Plan         *EntitySyncConfig `json:"plan,omitempty"`
 	Subscription *EntitySyncConfig `json:"subscription,omitempty"`
 	Invoice      *EntitySyncConfig `json:"invoice,omitempty"`
-
-	// Export sync (S3, Athena, BigQuery, etc.)
-	FeatureUsage *EntitySyncConfig `json:"feature_usage,omitempty"`
-	Customer     *EntitySyncConfig `json:"customer,omitempty"`
-	Price        *EntitySyncConfig `json:"price,omitempty"`
-	CreditNote   *EntitySyncConfig `json:"credit_note,omitempty"`
-
-	// S3 Export Configuration (stored in sync_config column)
-	S3 *S3ExportConfig `json:"s3,omitempty"`
 }
 
 // EntitySyncConfig defines sync direction for an entity
@@ -34,12 +25,6 @@ func DefaultSyncConfig() *SyncConfig {
 		Plan:         &EntitySyncConfig{Inbound: false, Outbound: false},
 		Subscription: &EntitySyncConfig{Inbound: false, Outbound: false},
 		Invoice:      &EntitySyncConfig{Inbound: false, Outbound: false},
-
-		// Export sync
-		FeatureUsage: &EntitySyncConfig{Inbound: false, Outbound: false},
-		Customer:     &EntitySyncConfig{Inbound: false, Outbound: false},
-		Price:        &EntitySyncConfig{Inbound: false, Outbound: false},
-		CreditNote:   &EntitySyncConfig{Inbound: false, Outbound: false},
 	}
 }
 

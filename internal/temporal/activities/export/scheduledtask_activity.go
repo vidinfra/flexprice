@@ -140,21 +140,21 @@ func (a *ScheduledTaskActivity) GetScheduledTaskDetails(ctx context.Context, inp
 }
 
 // calculateTimeRange determines the start and end time for the export
-// Implements incremental sync: uses last successful export's end_time as new start_time
+// Implements incremental sync: uses last export's end_time as new start_time (regardless of task status)
 // For first run or when no previous export exists, uses interval-based boundary alignment
 func (a *ScheduledTaskActivity) calculateTimeRange(ctx context.Context, task *scheduledtask.ScheduledTask, currentTime time.Time) (time.Time, time.Time) {
 	interval := types.ScheduledTaskInterval(task.Interval)
 
-	// Try to get last successful export task for incremental sync
-	lastTask, err := a.taskRepo.GetLastSuccessfulExportTask(ctx, task.ID)
+	// Try to get last export task for incremental sync (regardless of status)
+	lastTask, err := a.taskRepo.GetLastExportTask(ctx, task.ID)
 	if err != nil {
 		// Log error but continue with interval-based logic
-		a.logger.Warnw("error getting last successful export, falling back to interval-based logic",
+		a.logger.Warnw("error getting last export, falling back to interval-based logic",
 			"scheduled_task_id", task.ID,
 			"error", err)
 	}
 
-	// If we found a previous successful export, use its end_time as our start_time (incremental sync)
+	// If we found a previous export, use its end_time as our start_time (incremental sync)
 	if lastTask != nil && lastTask.Metadata != nil {
 		if endTimeStr, ok := lastTask.Metadata["end_time"].(string); ok {
 			lastEndTime, err := time.Parse(time.RFC3339, endTimeStr)

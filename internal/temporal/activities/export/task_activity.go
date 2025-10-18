@@ -218,7 +218,6 @@ type CompleteTaskInput struct {
 func (a *TaskActivity) CompleteTask(ctx context.Context, input CompleteTaskInput) error {
 	a.logger.Infow("completing task",
 		"task_id", input.TaskID,
-		"file_url", input.FileURL,
 		"record_count", input.RecordCount)
 
 	// Set tenant and env context for repository queries

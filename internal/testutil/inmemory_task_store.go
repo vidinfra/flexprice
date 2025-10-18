@@ -97,8 +97,8 @@ func (s *InMemoryTaskStore) Count(ctx context.Context, filter *types.TaskFilter)
 	return s.InMemoryStore.Count(ctx, filter, taskFilterFn)
 }
 
-// GetLastSuccessfulExportTask gets the last completed export task for a scheduled job
-func (s *InMemoryTaskStore) GetLastSuccessfulExportTask(ctx context.Context, scheduledJobID string) (*task.Task, error) {
+// GetLastExportTask gets the last export task for a scheduled job (regardless of status)
+func (s *InMemoryTaskStore) GetLastExportTask(ctx context.Context, scheduledJobID string) (*task.Task, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -106,12 +106,11 @@ func (s *InMemoryTaskStore) GetLastSuccessfulExportTask(ctx context.Context, sch
 	for _, t := range s.items {
 		if t.ScheduledTaskID == scheduledJobID &&
 			t.TaskType == types.TaskTypeExport &&
-			t.TaskStatus == types.TaskStatusCompleted &&
 			t.Status == types.StatusPublished &&
 			CheckEnvironmentFilter(ctx, t.EnvironmentID) &&
 			t.TenantID == types.GetTenantID(ctx) {
 
-			if lastTask == nil || (t.CompletedAt != nil && lastTask.CompletedAt != nil && t.CompletedAt.After(*lastTask.CompletedAt)) {
+			if lastTask == nil || t.CreatedAt.After(lastTask.CreatedAt) {
 				lastTask = t
 			}
 		}

@@ -46,7 +46,6 @@ type Handlers struct {
 	EntityIntegrationMapping *v1.EntityIntegrationMappingHandler
 	Settings                 *v1.SettingsHandler
 	SetupIntent              *v1.SetupIntentHandler
-	TestExport               *v1.TestExportHandler
 	ScheduledTask            *v1.ScheduledTaskHandler
 
 	// Portal handlers
@@ -339,7 +338,6 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 				scheduledTasks.PUT("/:id", handlers.ScheduledTask.UpdateScheduledTask)
 				scheduledTasks.DELETE("/:id", handlers.ScheduledTask.DeleteScheduledTask)
 				scheduledTasks.POST("/:id/run", handlers.ScheduledTask.TriggerForceRun)
-				scheduledTasks.POST("/:id/test", handlers.TestExport.TestExport)
 
 			}
 		}

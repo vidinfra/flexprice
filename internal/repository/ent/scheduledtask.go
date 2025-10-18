@@ -93,7 +93,12 @@ func (r *ScheduledTaskRepository) Get(ctx context.Context, id string) (*domainst
 func (r *ScheduledTaskRepository) Update(ctx context.Context, task *domainst.ScheduledTask) error {
 	client := r.client.Querier(ctx)
 	update := client.ScheduledTask.
-		UpdateOneID(task.ID).
+		Update().
+		Where(
+			scheduledtask.ID(task.ID),
+			scheduledtask.TenantID(types.GetTenantID(ctx)),
+			scheduledtask.EnvironmentID(types.GetEnvironmentID(ctx)),
+		).
 		SetConnectionID(task.ConnectionID).
 		SetEntityType(task.EntityType).
 		SetInterval(task.Interval).
@@ -109,16 +114,31 @@ func (r *ScheduledTaskRepository) Update(ctx context.Context, task *domainst.Sch
 	}
 
 	err := update.Exec(ctx)
-
 	if err != nil {
-		if ent.IsNotFound(err) {
-			return ierr.NewError("scheduled task not found").
-				WithHint("Scheduled task with given ID not found").
-				Mark(ierr.ErrNotFound)
-		}
 		return ierr.WithError(err).
 			WithHint("Failed to update scheduled task").
 			Mark(ierr.ErrDatabase)
+	}
+
+	// Check if any rows were affected by doing a count query
+	count, err := client.ScheduledTask.
+		Query().
+		Where(
+			scheduledtask.ID(task.ID),
+			scheduledtask.TenantID(types.GetTenantID(ctx)),
+			scheduledtask.EnvironmentID(types.GetEnvironmentID(ctx)),
+		).
+		Count(ctx)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to verify update").
+			Mark(ierr.ErrDatabase)
+	}
+
+	if count == 0 {
+		return ierr.NewError("scheduled task not found").
+			WithHint("No rows matched ID + tenant + environment").
+			Mark(ierr.ErrNotFound)
 	}
 
 	return nil
@@ -127,19 +147,25 @@ func (r *ScheduledTaskRepository) Update(ctx context.Context, task *domainst.Sch
 // Delete deletes a scheduled task
 func (r *ScheduledTaskRepository) Delete(ctx context.Context, id string) error {
 	client := r.client.Querier(ctx)
-	err := client.ScheduledTask.
-		DeleteOneID(id).
+	affected, err := client.ScheduledTask.
+		Delete().
+		Where(
+			scheduledtask.ID(id),
+			scheduledtask.TenantID(types.GetTenantID(ctx)),
+			scheduledtask.EnvironmentID(types.GetEnvironmentID(ctx)),
+		).
 		Exec(ctx)
 
 	if err != nil {
-		if ent.IsNotFound(err) {
-			return ierr.NewError("scheduled task not found").
-				WithHint("Scheduled task with given ID not found").
-				Mark(ierr.ErrNotFound)
-		}
 		return ierr.WithError(err).
 			WithHint("Failed to delete scheduled task").
 			Mark(ierr.ErrDatabase)
+	}
+
+	if affected == 0 {
+		return ierr.NewError("scheduled task not found").
+			WithHint("No rows matched ID + tenant + environment").
+			Mark(ierr.ErrNotFound)
 	}
 
 	return nil

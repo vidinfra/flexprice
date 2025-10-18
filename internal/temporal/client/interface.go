@@ -33,7 +33,6 @@ type TemporalClient interface {
 	// Schedule operations
 	CreateSchedule(ctx context.Context, options models.CreateScheduleOptions) (models.ScheduleHandle, error)
 	GetScheduleHandle(ctx context.Context, scheduleID string) models.ScheduleHandle
-	ExecuteWorkflow(ctx context.Context, options models.StartWorkflowOptions, workflow interface{}, args ...interface{}) (models.WorkflowRun, error)
 
 	// Raw client access (for advanced use cases)
 	GetRawClient() client.Client

@@ -11,15 +11,19 @@ import (
 
 // CreateScheduledTaskRequest represents a request to create a scheduled task
 type CreateScheduledTaskRequest struct {
-	ConnectionID string                        `json:"connection_id" binding:"required"`
-	EntityType   types.ScheduledTaskEntityType `json:"entity_type" binding:"required"`
-	Interval     types.ScheduledTaskInterval   `json:"interval" binding:"required"`
+	ConnectionID string                        `json:"connection_id" binding:"required" validate:"required"`
+	EntityType   types.ScheduledTaskEntityType `json:"entity_type" binding:"required" validate:"required"`
+	Interval     types.ScheduledTaskInterval   `json:"interval" binding:"required" validate:"required"`
 	Enabled      bool                          `json:"enabled"`
-	JobConfig    *types.S3JobConfig            `json:"job_config" binding:"required"`
+	JobConfig    *types.S3JobConfig            `json:"job_config" binding:"required" validate:"required"`
 }
 
 // Validate validates the create request
 func (r *CreateScheduledTaskRequest) Validate() error {
+	// run struct-tag validations first
+	if err := validator.ValidateRequest(r); err != nil {
+		return err
+	}
 	// Validate entity type
 	if err := r.EntityType.Validate(); err != nil {
 		return err
@@ -31,12 +35,6 @@ func (r *CreateScheduledTaskRequest) Validate() error {
 	}
 
 	// Validate S3 job config
-	if r.JobConfig == nil {
-		return ierr.NewError("job_config is required").
-			WithHint("S3 job configuration is required").
-			Mark(ierr.ErrValidation)
-	}
-
 	if err := r.JobConfig.Validate(); err != nil {
 		return err
 	}

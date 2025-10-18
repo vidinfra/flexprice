@@ -142,11 +142,13 @@ func (s *scheduledTaskService) ListScheduledTasks(ctx context.Context, filter *t
 
 	// Convert QueryFilter to ListFilters
 	listFilters := &scheduledtask.ListFilters{
-		ConnectionID: connectionID,
-		EntityType:   entityType,
-		Interval:     interval,
-		Limit:        filter.GetLimit(),
-		Offset:       filter.GetOffset(),
+		TenantID:      types.GetTenantID(ctx),
+		EnvironmentID: types.GetEnvironmentID(ctx),
+		ConnectionID:  connectionID,
+		EntityType:    entityType,
+		Interval:      interval,
+		Limit:         filter.GetLimit(),
+		Offset:        filter.GetOffset(),
 	}
 
 	// Parse enabled filter
@@ -582,7 +584,7 @@ func (s *scheduledTaskService) triggerForceRun(ctx context.Context, taskID strin
 		IsForceRun:      true, // Mark as force run to avoid storing scheduled_task_id
 	}
 
-	workflowRun, err := s.temporalClient.ExecuteWorkflow(ctx, workflowOptions, exportWorkflows.ExecuteExportWorkflow, input)
+	workflowRun, err := s.temporalClient.StartWorkflow(ctx, workflowOptions, exportWorkflows.ExecuteExportWorkflow, input)
 	if err != nil {
 		s.logger.Errorw("failed to start export workflow", "error", err)
 		return "", time.Time{}, time.Time{}, "", ierr.WithError(err).

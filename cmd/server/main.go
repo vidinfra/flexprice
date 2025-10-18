@@ -37,9 +37,6 @@ import (
 	"go.uber.org/fx"
 
 	_ "github.com/flexprice/flexprice/docs/swagger"
-	"github.com/flexprice/flexprice/internal/domain/connection"
-	"github.com/flexprice/flexprice/internal/domain/events"
-	"github.com/flexprice/flexprice/internal/domain/invoice"
 	"github.com/flexprice/flexprice/internal/domain/proration"
 	"github.com/flexprice/flexprice/internal/integration"
 	"github.com/flexprice/flexprice/internal/security"
@@ -180,7 +177,7 @@ func main() {
 			// Services
 			// Integration factory must be provided before service params
 			integration.NewFactory,
-			provideExportService,
+			syncExport.NewExportService,
 			service.NewServiceParams,
 			service.NewTenantService,
 			service.NewAuthService,
@@ -327,17 +324,12 @@ func provideHandlers(
 		Addon:                    v1.NewAddonHandler(addonService, logger),
 		Settings:                 v1.NewSettingsHandler(settingsService, logger),
 		SetupIntent:              v1.NewSetupIntentHandler(integrationFactory, customerService, logger),
-		TestExport:               v1.NewTestExportHandler(integrationFactory, logger),
 		ScheduledTask:            v1.NewScheduledTaskHandler(scheduledTaskService, logger),
 	}
 }
 
 func provideRouter(handlers api.Handlers, cfg *config.Configuration, logger *logger.Logger, secretService service.SecretService, envAccessService service.EnvAccessService) *gin.Engine {
 	return api.NewRouter(handlers, cfg, logger, secretService, envAccessService)
-}
-
-func provideExportService(featureUsageRepo events.FeatureUsageRepository, invoiceRepo invoice.Repository, connectionRepo connection.Repository, integrationFactory *integration.Factory, logger *logger.Logger) *syncExport.ExportService {
-	return syncExport.NewExportService(featureUsageRepo, invoiceRepo, connectionRepo, integrationFactory, logger)
 }
 
 func provideTemporalConfig(cfg *config.Configuration) *config.TemporalConfig {

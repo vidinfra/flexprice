@@ -58,6 +58,9 @@ func (s *ExportService) Export(ctx context.Context, request *dto.ExportRequest) 
 		"start_time", request.StartTime,
 		"end_time", request.EndTime)
 
+	ctx = types.SetTenantID(ctx, request.TenantID)
+	ctx = types.SetEnvironmentID(ctx, request.EnvID)
+
 	// Get the appropriate exporter for the entity type
 	exporter := s.getExporter(request.EntityType)
 	if exporter == nil {

@@ -16,7 +16,7 @@ type Repository interface {
 	Update(ctx context.Context, task *Task) error
 	Delete(ctx context.Context, id string) error
 
-	// GetLastSuccessfulExportTask gets the last completed export task for a scheduled job
-	// Returns nil if no previous successful export exists (first run scenario)
-	GetLastSuccessfulExportTask(ctx context.Context, scheduledJobID string) (*Task, error)
+	// GetLastExportTask gets the last export task for a scheduled job (regardless of status)
+	// Returns nil if no previous export exists (first run scenario)
+	GetLastExportTask(ctx context.Context, scheduledJobID string) (*Task, error)
 }
