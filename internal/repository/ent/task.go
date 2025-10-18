@@ -339,7 +339,7 @@ func (o TaskQueryOptions) GetFieldName(field string) string {
 	}
 }
 
-func (o TaskQueryOptions) applyEntityQueryOptions(_ context.Context, f *types.TaskFilter, query *ent.TaskQuery) *ent.TaskQuery {
+func (o TaskQueryOptions) applyEntityQueryOptions(ctx context.Context, f *types.TaskFilter, query *ent.TaskQuery) *ent.TaskQuery {
 	if f == nil {
 		return query
 	}
@@ -353,6 +353,9 @@ func (o TaskQueryOptions) applyEntityQueryOptions(_ context.Context, f *types.Ta
 	}
 	if f.TaskStatus != nil {
 		query = query.Where(task.TaskStatus(string(*f.TaskStatus)))
+	}
+	if f.ScheduledTaskID != "" {
+		query = query.Where(task.ScheduledTaskID(f.ScheduledTaskID))
 	}
 	if f.CreatedBy != "" {
 		query = query.Where(task.CreatedBy(f.CreatedBy))

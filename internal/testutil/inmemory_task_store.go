@@ -161,6 +161,11 @@ func taskFilterFn(ctx context.Context, t *task.Task, filter interface{}) bool {
 		return false
 	}
 
+	// Filter by scheduled task ID
+	if f.ScheduledTaskID != "" && t.ScheduledTaskID != f.ScheduledTaskID {
+		return false
+	}
+
 	// Filter by created by
 	if f.CreatedBy != "" && t.CreatedBy != f.CreatedBy {
 		return false

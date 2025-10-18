@@ -1410,9 +1410,9 @@ var (
 				Columns: []*schema.Column{ScheduledTasksColumns[9], ScheduledTasksColumns[10], ScheduledTasksColumns[11]},
 			},
 			{
-				Name:    "scheduledtask_connection_id_entity_type",
+				Name:    "scheduledtask_connection_id_entity_type_status",
 				Unique:  true,
-				Columns: []*schema.Column{ScheduledTasksColumns[8], ScheduledTasksColumns[9]},
+				Columns: []*schema.Column{ScheduledTasksColumns[8], ScheduledTasksColumns[9], ScheduledTasksColumns[2]},
 			},
 		},
 	}

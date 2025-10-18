@@ -187,10 +187,8 @@ func (cu *ConnectionUpdate) check() error {
 		}
 	}
 	if v, ok := cu.mutation.SyncConfig(); ok {
-		if v != nil {
-			if err := v.Validate(); err != nil {
-				return &ValidationError{Name: "sync_config", err: fmt.Errorf(`ent: validator failed for field "Connection.sync_config": %w`, err)}
-			}
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "sync_config", err: fmt.Errorf(`ent: validator failed for field "Connection.sync_config": %w`, err)}
 		}
 	}
 	return nil
@@ -441,10 +439,8 @@ func (cuo *ConnectionUpdateOne) check() error {
 		}
 	}
 	if v, ok := cuo.mutation.SyncConfig(); ok {
-		if v != nil {
-			if err := v.Validate(); err != nil {
-				return &ValidationError{Name: "sync_config", err: fmt.Errorf(`ent: validator failed for field "Connection.sync_config": %w`, err)}
-			}
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "sync_config", err: fmt.Errorf(`ent: validator failed for field "Connection.sync_config": %w`, err)}
 		}
 	}
 	return nil
