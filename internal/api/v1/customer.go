@@ -266,22 +266,26 @@ func (h *CustomerHandler) GetCustomerUsageSummary(c *gin.Context) {
 		return
 	}
 
-	// Resolve customer ID
-	var customerID string
-	if req.CustomerID != "" {
-		customerID = req.CustomerID
-	} else {
-		// Get customer by lookup key
+	if req.CustomerLookupKey != "" {
 		customer, err := h.service.GetCustomerByLookupKey(c.Request.Context(), req.CustomerLookupKey)
 		if err != nil {
 			c.Error(err)
 			return
 		}
-		customerID = customer.ID
+
+		// Case: when both customer_id and customer_lookup_key are provided, ensure they refer to the same customer
+		if req.CustomerID != "" && customer.ID != req.CustomerID {
+			c.Error(ierr.NewError("customer_id and customer_lookup_key refer to different customers").
+				WithHint("Providing either customer_id or customer_lookup_key is sufficient. But when providing both, ensure both identifiers refer to the same customer.").
+				Mark(ierr.ErrValidation))
+			return
+		}
+
+		req.CustomerID = customer.ID
 	}
 
 	// Call billing service
-	response, err := h.billing.GetCustomerUsageSummary(c.Request.Context(), customerID, &req)
+	response, err := h.billing.GetCustomerUsageSummary(c.Request.Context(), req.CustomerID, &req)
 	if err != nil {
 		c.Error(err)
 		return
