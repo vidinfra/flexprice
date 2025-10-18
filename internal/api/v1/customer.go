@@ -243,7 +243,6 @@ func (h *CustomerHandler) GetCustomerEntitlements(c *gin.Context) {
 // @Param customer_id query string false "Customer ID"
 // @Param customer_lookup_key query string false "Customer Lookup Key (external_customer_id)"
 // @Param feature_ids query []string false "Feature IDs"
-// @Param feature_lookup_keys query []string false "Feature Lookup Keys"
 // @Param subscription_ids query []string false "Subscription IDs"
 // @Success 200 {object} dto.CustomerUsageSummaryResponse
 // @Failure 400 {object} ierr.ErrorResponse
@@ -252,7 +251,7 @@ func (h *CustomerHandler) GetCustomerEntitlements(c *gin.Context) {
 func (h *CustomerHandler) GetCustomerUsageSummary(c *gin.Context) {
 	// Parse query parameters and form data using binding
 	var req dto.GetCustomerUsageSummaryRequest
-	if err := c.ShouldBind(&req); err != nil {
+	if err := c.ShouldBindQuery(&req); err != nil {
 		c.Error(ierr.WithError(err).
 			WithHint("Invalid query parameters").
 			Mark(ierr.ErrValidation))
