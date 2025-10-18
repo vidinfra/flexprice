@@ -249,23 +249,50 @@ func (h *CustomerHandler) GetCustomerEntitlements(c *gin.Context) {
 // @Failure 500 {object} ierr.ErrorResponse
 // @Router /customers/usage [get]
 func (h *CustomerHandler) GetCustomerUsageSummary(c *gin.Context) {
-	// Parse query parameters using binding
 	var req dto.GetCustomerUsageSummaryRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.Error(ierr.WithError(err).
-			WithHint("Invalid query parameters").
-			Mark(ierr.ErrValidation))
-		return
+
+	// Check if the deprecated path parameter route was used
+	pathParamID := c.Param("id")
+	if pathParamID != "" {
+		// Deprecated route: /customers/:id/usage
+		c.Header("Deprecation", "true")
+		c.Header("Sunset", "2026-04-01")
+		c.Header("Warning", "299 - \"Deprecated endpoint. Please use GET /v1/customers/usage with query parameters instead.\"")
+		h.log.Warnw("Deprecated endpoint used",
+			"path", c.Request.URL.Path,
+			"deprecation_notice", "GET /v1/customers/:id/usage is deprecated",
+		)
+
+		// For backward compatibility, use path param as customer_id
+		req.CustomerID = pathParamID
+
+		// Still bind query parameters for other fields (feature_ids, subscription_ids, etc)
+		if err := c.ShouldBindQuery(&req); err != nil {
+			c.Error(ierr.WithError(err).
+				WithHint("Invalid query parameters").
+				Mark(ierr.ErrValidation))
+			return
+		}
+	} else {
+		// Current route: /customers/usage with query parameters
+		// Parse query parameters using binding
+		if err := c.ShouldBindQuery(&req); err != nil {
+			c.Error(ierr.WithError(err).
+				WithHint("Invalid query parameters").
+				Mark(ierr.ErrValidation))
+			return
+		}
+
+		// Validate that at least one customer identifier is provided
+		if req.CustomerID == "" && req.CustomerLookupKey == "" {
+			c.Error(ierr.NewError("either customer_id or customer_lookup_key is required").
+				WithHint("Provide customer_id or customer_lookup_key").
+				Mark(ierr.ErrValidation))
+			return
+		}
 	}
 
-	// Validate that at least one customer identifier is provided
-	if req.CustomerID == "" && req.CustomerLookupKey == "" {
-		c.Error(ierr.NewError("either customer_id or customer_lookup_key is required").
-			WithHint("Provide customer_id or customer_lookup_key").
-			Mark(ierr.ErrValidation))
-		return
-	}
-
+	// Resolve customer_lookup_key to customer_id if provided
 	if req.CustomerLookupKey != "" {
 		customer, err := h.service.GetCustomerByLookupKey(c.Request.Context(), req.CustomerLookupKey)
 		if err != nil {
