@@ -249,7 +249,7 @@ func (h *CustomerHandler) GetCustomerEntitlements(c *gin.Context) {
 // @Failure 500 {object} ierr.ErrorResponse
 // @Router /customers/usage [get]
 func (h *CustomerHandler) GetCustomerUsageSummary(c *gin.Context) {
-	// Parse query parameters and form data using binding
+	// Parse query parameters using binding
 	var req dto.GetCustomerUsageSummaryRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		c.Error(ierr.WithError(err).
