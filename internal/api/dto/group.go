@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/flexprice/flexprice/internal/domain/group"
-	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/flexprice/flexprice/internal/validator"
 )
@@ -52,12 +51,6 @@ type AddEntityToGroupRequest struct {
 func (r *AddEntityToGroupRequest) Validate() error {
 	if err := validator.ValidateRequest(r); err != nil {
 		return err
-	}
-
-	if len(r.EntityIDs) == 0 {
-		return ierr.NewError("no entities provided").
-			WithHint("No entities provided").
-			Mark(ierr.ErrValidation)
 	}
 
 	return nil
