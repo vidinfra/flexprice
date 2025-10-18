@@ -263,9 +263,6 @@ func (h *CustomerHandler) GetCustomerUsageSummary(c *gin.Context) {
 			"deprecation_notice", "GET /v1/customers/:id/usage is deprecated",
 		)
 
-		// For backward compatibility, use path param as customer_id
-		req.CustomerID = pathParamID
-
 		// Still bind query parameters for other fields (feature_ids, subscription_ids, etc)
 		if err := c.ShouldBindQuery(&req); err != nil {
 			c.Error(ierr.WithError(err).
@@ -273,8 +270,19 @@ func (h *CustomerHandler) GetCustomerUsageSummary(c *gin.Context) {
 				Mark(ierr.ErrValidation))
 			return
 		}
+
+		// If client also provided customer_id in query, ensure it matches the path id
+		if req.CustomerID != "" && req.CustomerID != pathParamID {
+			c.Error(ierr.NewError("path id and query customer_id refer to different customers").
+				WithHint("Do not mix different identifiers on the deprecated route; use /v1/customers/usage").
+				Mark(ierr.ErrValidation))
+			return
+		}
+
+		// For backward compatibility, ensure customer_id is set from path param
+		req.CustomerID = pathParamID
 	} else {
-		// Current route: /customers/usage with query parameters
+		// Route in-place: /customers/usage with query parameters
 		// Parse query parameters using binding
 		if err := c.ShouldBindQuery(&req); err != nil {
 			c.Error(ierr.WithError(err).
