@@ -23,9 +23,7 @@ type Repository interface {
 	DeleteBulk(ctx context.Context, ids []string) error
 
 	// Group-related operations (minimal set)
-	CountByIDs(ctx context.Context, ids []string) (int, error)
 	GetByGroupIDs(ctx context.Context, groupIDs []string) ([]*Price, error)
-	CountNotInGroup(ctx context.Context, ids []string, excludeGroupID string) (int, error)
 	UpdateGroupIDBulk(ctx context.Context, ids []string, groupID *string) error
 	ClearGroupIDBulk(ctx context.Context, ids []string) error
 }

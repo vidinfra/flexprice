@@ -73,39 +73,6 @@ func (h *GroupHandler) GetGroup(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// @Summary Update a group
-// @Description Update a group's details and associated entities
-// @Tags Groups
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param id path string true "Group ID"
-// @Param group body dto.UpdateGroupRequest true "Group"
-// @Success 200 {object} dto.GroupResponse
-// @Failure 400 {object} ierr.ErrorResponse
-// @Failure 404 {object} ierr.ErrorResponse
-// @Failure 500 {object} ierr.ErrorResponse
-// @Router /groups/{id} [put]
-func (h *GroupHandler) UpdateGroup(c *gin.Context) {
-	id := c.Param("id")
-
-	var req dto.UpdateGroupRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.Error(ierr.WithError(err).
-			WithHint("Invalid request format").
-			Mark(ierr.ErrValidation))
-		return
-	}
-
-	resp, err := h.service.UpdateGroup(c.Request.Context(), id, req)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-
-	c.JSON(http.StatusOK, resp)
-}
-
 // @Summary Delete a group
 // @Description Delete a group and remove all entity associations
 // @Tags Groups
@@ -160,4 +127,29 @@ func (h *GroupHandler) ListGroups(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+// @Summary Add entity to group
+// @Description Add an entity to a group
+// @Tags Groups
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Group ID"
+// @Param entity_id path string true "Entity ID"
+// @Success 200 {object} dto.GroupResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /groups/{id}/add [post]
+func (h *GroupHandler) AddEntityToGroup(c *gin.Context) {
+	id := c.Param("id")
+	entityID := c.Param("entity_id")
+
+	err := h.service.AddEntityToGroup(c.Request.Context(), id, entityID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.Status(http.StatusOK)
 }
