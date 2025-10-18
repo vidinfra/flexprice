@@ -171,7 +171,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 
 			// New endpoints for entitlements and usage
 			customer.GET("/:id/entitlements", handlers.Customer.GetCustomerEntitlements)
-			customer.GET("/:id/usage", handlers.Customer.GetCustomerUsageSummary)
+			customer.GET("/usage", handlers.Customer.GetCustomerUsageSummary)
 
 			// other routes for customer
 			customer.GET("/:id/wallets", handlers.Wallet.GetWalletsByCustomerID)

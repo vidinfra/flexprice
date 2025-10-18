@@ -235,31 +235,54 @@ func (h *CustomerHandler) GetCustomerEntitlements(c *gin.Context) {
 }
 
 // @Summary Get customer usage summary
-// @Description Get customer usage summary
+// @Description Get customer usage summary by customer_id or customer_lookup_key (external_customer_id)
 // @Tags Customers
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
-// @Param id path string true "Customer ID"
-// @Param filter query dto.GetCustomerUsageSummaryRequest false "Filter"
+// @Param customer_id query string false "Customer ID"
+// @Param customer_lookup_key query string false "Customer Lookup Key (external_customer_id)"
+// @Param feature_ids query []string false "Feature IDs"
+// @Param feature_lookup_keys query []string false "Feature Lookup Keys"
+// @Param subscription_ids query []string false "Subscription IDs"
 // @Success 200 {object} dto.CustomerUsageSummaryResponse
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
-// @Router /customers/{id}/usage [get]
+// @Router /customers/usage [get]
 func (h *CustomerHandler) GetCustomerUsageSummary(c *gin.Context) {
-	id := c.Param("id")
-
-	// Parse query parameters using binding
+	// Parse query parameters and form data using binding
 	var req dto.GetCustomerUsageSummaryRequest
-	if err := c.ShouldBindQuery(&req); err != nil {
+	if err := c.ShouldBind(&req); err != nil {
 		c.Error(ierr.WithError(err).
 			WithHint("Invalid query parameters").
 			Mark(ierr.ErrValidation))
 		return
 	}
 
-	// Call billing service instead of customer service
-	response, err := h.billing.GetCustomerUsageSummary(c.Request.Context(), id, &req)
+	// Validate that at least one customer identifier is provided
+	if req.CustomerID == "" && req.CustomerLookupKey == "" {
+		c.Error(ierr.NewError("either customer_id or customer_lookup_key is required").
+			WithHint("Provide customer_id or customer_lookup_key").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	// Resolve customer ID
+	var customerID string
+	if req.CustomerID != "" {
+		customerID = req.CustomerID
+	} else {
+		// Get customer by lookup key
+		customer, err := h.service.GetCustomerByLookupKey(c.Request.Context(), req.CustomerLookupKey)
+		if err != nil {
+			c.Error(err)
+			return
+		}
+		customerID = customer.ID
+	}
+
+	// Call billing service
+	response, err := h.billing.GetCustomerUsageSummary(c.Request.Context(), customerID, &req)
 	if err != nil {
 		c.Error(err)
 		return
