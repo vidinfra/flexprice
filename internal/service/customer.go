@@ -21,6 +21,8 @@ type CustomerService interface {
 	DeleteCustomer(ctx context.Context, id string) error
 	GetCustomerByLookupKey(ctx context.Context, lookupKey string) (*dto.CustomerResponse, error)
 	GetCustomerPaymentMethods(ctx context.Context, customerID string) ([]*dto.PaymentMethodResponse, error)
+	SetDefaultPaymentMethod(ctx context.Context, customerID string, paymentMethodID string) error
+	DeletePaymentMethod(ctx context.Context, customerID string, paymentMethodID string) error
 }
 
 type customerService struct {
@@ -439,6 +441,24 @@ func (s *customerService) GetCustomerPaymentMethods(ctx context.Context, custome
 		return nil, err
 	}
 	return stripeCustomerPaymentMethods, nil
+}
+
+func (s *customerService) SetDefaultPaymentMethod(ctx context.Context, customerID string, paymentMethodID string) error {
+	stripeService := NewStripeService(s.ServiceParams)
+	if err := stripeService.SetDefaultPaymentMethod(ctx, customerID, paymentMethodID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *customerService) DeletePaymentMethod(ctx context.Context, customerID string, paymentMethodID string) error {
+	stripeService := NewStripeService(s.ServiceParams)
+	if err := stripeService.DetachPaymentMethod(ctx, paymentMethodID); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *customerService) publishWebhookEvent(ctx context.Context, eventName string, customerID string) {

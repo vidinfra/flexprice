@@ -696,6 +696,22 @@ func (s *StripeService) GetCustomerPaymentMethods(ctx context.Context, req *dto.
 		Type:     stripe.String("card"),
 	}
 
+	// get single customer
+	customer, err := stripeClient.V1Customers.Retrieve(ctx, *params.Customer, nil)
+	if err != nil {
+		s.Logger.Errorw("failed to retrieve stripe customer",
+			"error", err,
+			"customer_id", req.CustomerID,
+			"stripe_customer_id", stripeCustomerID)
+		return nil, ierr.NewError("failed to retrieve stripe customer").
+			WithHint("Unable to retrieve Stripe customer").
+			WithReportableDetails(map[string]interface{}{
+				"customer_id": req.CustomerID,
+				"error":       err.Error(),
+			}).
+			Mark(ierr.ErrSystem)
+	}
+
 	paymentMethods := stripeClient.V1PaymentMethods.List(ctx, params)
 	var responses []*dto.PaymentMethodResponse
 
@@ -728,6 +744,10 @@ func (s *StripeService) GetCustomerPaymentMethods(ctx context.Context, req *dto.
 				ExpMonth:    int(pm.Card.ExpMonth),
 				ExpYear:     int(pm.Card.ExpYear),
 				Fingerprint: pm.Card.Fingerprint,
+			}
+
+			if customer.InvoiceSettings != nil && customer.InvoiceSettings.DefaultPaymentMethod != nil {
+				response.IsDefault = customer.InvoiceSettings.DefaultPaymentMethod.ID == pm.ID
 			}
 		}
 
@@ -819,6 +839,52 @@ func (s *StripeService) SetDefaultPaymentMethod(ctx context.Context, customerID,
 	s.Logger.Infow("successfully set default payment method in Stripe",
 		"customer_id", customerID,
 		"stripe_customer_id", stripeCustomerID,
+		"payment_method_id", paymentMethodID,
+	)
+
+	return nil
+}
+
+// DetachPaymentMethod detaches a payment method from Stripe
+func (s *StripeService) DetachPaymentMethod(ctx context.Context, paymentMethodID string) error {
+	// Get Stripe connection
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderStripe)
+	if err != nil {
+		return ierr.NewError("failed to get Stripe connection").
+			WithHint("Stripe connection not configured for this environment").
+			Mark(ierr.ErrNotFound)
+	}
+
+	stripeConfig, err := s.GetDecryptedStripeConfig(conn)
+	if err != nil {
+		return ierr.NewError("failed to get Stripe configuration").
+			WithHint("Invalid Stripe configuration").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Initialize Stripe client
+	stripeClient := stripe.NewClient(stripeConfig.SecretKey, nil)
+
+	s.Logger.Infow("deleting payment method from Stripe",
+		"payment_method_id", paymentMethodID,
+	)
+
+	// Detach the payment method from the customer
+	_, err = stripeClient.V1PaymentMethods.Detach(ctx, paymentMethodID, nil)
+	if err != nil {
+		s.Logger.Errorw("failed to delete payment method from Stripe",
+			"error", err,
+			"payment_method_id", paymentMethodID,
+		)
+		return ierr.NewError("failed to delete payment method").
+			WithHint("Could not delete payment method from Stripe").
+			WithReportableDetails(map[string]interface{}{
+				"payment_method_id": paymentMethodID,
+			}).
+			Mark(ierr.ErrSystem)
+	}
+
+	s.Logger.Infow("successfully deleted payment method from Stripe",
 		"payment_method_id", paymentMethodID,
 	)
 

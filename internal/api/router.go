@@ -166,10 +166,14 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			customer.POST("", handlers.Customer.CreateCustomer)
 			customer.GET("", handlers.Customer.GetCustomers)
 			customer.GET("/:id", handlers.Customer.GetCustomer)
-			customer.GET("/:id/payment-methods", handlers.Customer.GetCustomerPaymentMethods)
 			customer.PUT("/:id", handlers.Customer.UpdateCustomer)
 			customer.DELETE("/:id", handlers.Customer.DeleteCustomer)
 			customer.GET("/lookup/:lookup_key", handlers.Customer.GetCustomerByLookupKey)
+
+			// Payment method routes
+			customer.GET("/:id/payment-methods", handlers.Customer.GetCustomerPaymentMethods)
+			customer.PUT("/:id/payment-methods/default", handlers.Customer.SetDefaultPaymentMethod)
+			customer.DELETE("/:id/payment-methods/:payment_method_id", handlers.Customer.DeletePaymentMethod)
 
 			// New endpoints for entitlements and usage
 			customer.GET("/:id/entitlements", handlers.Customer.GetCustomerEntitlements)
