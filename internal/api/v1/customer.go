@@ -321,3 +321,57 @@ func (h *CustomerHandler) GetCustomerPaymentMethods(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, resp)
 }
+
+// @Summary Set default payment method
+// @Description Set default payment method
+// @Tags Customers
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Customer ID"
+// @Success 200 {object} dto.PaymentMethodResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /customers/{id}/payment-methods [put]
+func (h *CustomerHandler) SetDefaultPaymentMethod(c *gin.Context) {
+	id := c.Param("id")
+	var req dto.SetDefaultPaymentMethodRequest
+	req.CustomerID = id
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(ierr.WithError(err).
+			WithHint("Invalid request payload").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	if err := h.service.SetDefaultPaymentMethod(c.Request.Context(), id, req.PaymentMethodID); err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Default payment method updated successfully"})
+}
+
+// @Summary Delete payment method
+// @Description Delete payment method
+// @Tags Customers
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Customer ID"
+// @Param payment_method_id path string true "Payment Method ID"
+// @Success 200 {object} dto.PaymentMethodResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /customers/{id}/payment-methods/{payment_method_id} [delete]
+func (h *CustomerHandler) DeletePaymentMethod(c *gin.Context) {
+	id := c.Param("id")
+	paymentMethodId := c.Param("payment_method_id")
+
+	if err := h.service.DeletePaymentMethod(c.Request.Context(), id, paymentMethodId); err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Payment method deleted successfully"})
+}

@@ -825,6 +825,52 @@ func (s *StripeService) SetDefaultPaymentMethod(ctx context.Context, customerID,
 	return nil
 }
 
+// DetachPaymentMethod detaches a payment method from Stripe
+func (s *StripeService) DetachPaymentMethod(ctx context.Context, paymentMethodID string) error {
+	// Get Stripe connection
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderStripe)
+	if err != nil {
+		return ierr.NewError("failed to get Stripe connection").
+			WithHint("Stripe connection not configured for this environment").
+			Mark(ierr.ErrNotFound)
+	}
+
+	stripeConfig, err := s.GetDecryptedStripeConfig(conn)
+	if err != nil {
+		return ierr.NewError("failed to get Stripe configuration").
+			WithHint("Invalid Stripe configuration").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Initialize Stripe client
+	stripeClient := stripe.NewClient(stripeConfig.SecretKey, nil)
+
+	s.Logger.Infow("deleting payment method from Stripe",
+		"payment_method_id", paymentMethodID,
+	)
+
+	// Detach the payment method from the customer
+	_, err = stripeClient.V1PaymentMethods.Detach(ctx, paymentMethodID, nil)
+	if err != nil {
+		s.Logger.Errorw("failed to delete payment method from Stripe",
+			"error", err,
+			"payment_method_id", paymentMethodID,
+		)
+		return ierr.NewError("failed to delete payment method").
+			WithHint("Could not delete payment method from Stripe").
+			WithReportableDetails(map[string]interface{}{
+				"payment_method_id": paymentMethodID,
+			}).
+			Mark(ierr.ErrSystem)
+	}
+
+	s.Logger.Infow("successfully deleted payment method from Stripe",
+		"payment_method_id", paymentMethodID,
+	)
+
+	return nil
+}
+
 // GetDefaultPaymentMethod retrieves the default payment method from Stripe
 func (s *StripeService) GetDefaultPaymentMethod(ctx context.Context, customerID string) (*dto.PaymentMethodResponse, error) {
 	// Get Stripe connection
