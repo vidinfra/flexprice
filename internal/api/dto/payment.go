@@ -259,12 +259,13 @@ type GetCustomerPaymentMethodsRequest struct {
 
 // PaymentMethodResponse represents a payment method response
 type PaymentMethodResponse struct {
-	ID       string                 `json:"id"`
-	Type     string                 `json:"type"`
-	Customer string                 `json:"customer"`
-	Created  int64                  `json:"created"`
-	Card     *CardDetails           `json:"card,omitempty"`
-	Metadata map[string]interface{} `json:"metadata"`
+	ID        string                 `json:"id"`
+	Type      string                 `json:"type"`
+	Customer  string                 `json:"customer"`
+	Created   int64                  `json:"created"`
+	IsDefault bool                   `json:"is_default"`
+	Card      *CardDetails           `json:"card,omitempty"`
+	Metadata  map[string]interface{} `json:"metadata"`
 }
 
 // CardDetails represents card details in a payment method

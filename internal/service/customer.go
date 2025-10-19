@@ -454,25 +454,6 @@ func (s *customerService) SetDefaultPaymentMethod(ctx context.Context, customerI
 
 func (s *customerService) DeletePaymentMethod(ctx context.Context, customerID string, paymentMethodID string) error {
 	stripeService := NewStripeService(s.ServiceParams)
-	paymentMethods, err := stripeService.GetCustomerPaymentMethods(ctx, &dto.GetCustomerPaymentMethodsRequest{CustomerID: customerID})
-	if err != nil {
-		return err
-	}
-
-	found := false
-	for _, pm := range paymentMethods {
-		if pm.ID == paymentMethodID {
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		return ierr.NewError("payment method not found for the customer").
-			WithHint("The specified payment method does not exist for the given customer").
-			Mark(ierr.ErrNotFound)
-	}
-
 	if err := stripeService.DetachPaymentMethod(ctx, paymentMethodID); err != nil {
 		return err
 	}

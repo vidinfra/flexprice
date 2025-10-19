@@ -696,6 +696,22 @@ func (s *StripeService) GetCustomerPaymentMethods(ctx context.Context, req *dto.
 		Type:     stripe.String("card"),
 	}
 
+	// get single customer
+	customer, err := stripeClient.V1Customers.Retrieve(ctx, *params.Customer, nil)
+	if err != nil {
+		s.Logger.Errorw("failed to retrieve stripe customer",
+			"error", err,
+			"customer_id", req.CustomerID,
+			"stripe_customer_id", stripeCustomerID)
+		return nil, ierr.NewError("failed to retrieve stripe customer").
+			WithHint("Unable to retrieve Stripe customer").
+			WithReportableDetails(map[string]interface{}{
+				"customer_id": req.CustomerID,
+				"error":       err.Error(),
+			}).
+			Mark(ierr.ErrSystem)
+	}
+
 	paymentMethods := stripeClient.V1PaymentMethods.List(ctx, params)
 	var responses []*dto.PaymentMethodResponse
 
@@ -728,6 +744,10 @@ func (s *StripeService) GetCustomerPaymentMethods(ctx context.Context, req *dto.
 				ExpMonth:    int(pm.Card.ExpMonth),
 				ExpYear:     int(pm.Card.ExpYear),
 				Fingerprint: pm.Card.Fingerprint,
+			}
+
+			if customer.InvoiceSettings != nil && customer.InvoiceSettings.DefaultPaymentMethod != nil {
+				response.IsDefault = customer.InvoiceSettings.DefaultPaymentMethod.ID == pm.ID
 			}
 		}
 
