@@ -352,6 +352,27 @@ func (h *CustomerHandler) SetDefaultPaymentMethod(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Default payment method updated successfully"})
 }
 
+// @Summary Get payment method details
+// @Description Get payment method details
+// @Tags Customers
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param payment_method_id path string true "Payment Method ID"
+// @Success 200 {object} dto.PaymentMethodResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /customers/payment-methods/{payment_method_id} [get]
+func (h *CustomerHandler) GetPaymentMethodDetails(c *gin.Context) {
+	paymentMethodId := c.Param("payment_method_id")
+	resp, err := h.service.GetPaymentMethodDetails(c.Request.Context(), paymentMethodId)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 // @Summary Delete payment method
 // @Description Delete payment method
 // @Tags Customers

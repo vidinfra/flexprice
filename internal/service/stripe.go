@@ -891,6 +891,33 @@ func (s *StripeService) DetachPaymentMethod(ctx context.Context, paymentMethodID
 	return nil
 }
 
+// GetPaymentMethodDetails gets the details of a payment method from Stripe
+func (s *StripeService) GetPaymentMethodDetails(ctx context.Context, paymentMethodID string) (*dto.PaymentMethodResponse, error) {
+	// Get Stripe connection
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderStripe)
+	if err != nil {
+		return nil, ierr.NewError("failed to get Stripe connection").
+			WithHint("Stripe connection not configured for this environment").
+			Mark(ierr.ErrNotFound)
+	}
+
+	stripeConfig, err := s.GetDecryptedStripeConfig(conn)
+	if err != nil {
+		return nil, ierr.NewError("failed to get Stripe configuration").
+			WithHint("Invalid Stripe configuration").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Initialize Stripe client
+	stripeClient := stripe.NewClient(stripeConfig.SecretKey, nil)
+
+	s.Logger.Infow("getting payment method from Stripe",
+		"payment_method_id", paymentMethodID,
+	)
+
+	return s.getPaymentMethodDetails(ctx, stripeClient, paymentMethodID)
+}
+
 // GetDefaultPaymentMethod retrieves the default payment method from Stripe
 func (s *StripeService) GetDefaultPaymentMethod(ctx context.Context, customerID string) (*dto.PaymentMethodResponse, error) {
 	// Get Stripe connection
