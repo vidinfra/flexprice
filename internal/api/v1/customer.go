@@ -364,8 +364,10 @@ func (h *CustomerHandler) SetDefaultPaymentMethod(c *gin.Context) {
 // @Failure 500 {object} ierr.ErrorResponse
 // @Router /customers/payment-methods/{payment_method_id} [get]
 func (h *CustomerHandler) GetPaymentMethodDetails(c *gin.Context) {
+	customerID := c.Param("id")
 	paymentMethodId := c.Param("payment_method_id")
-	resp, err := h.service.GetPaymentMethodDetails(c.Request.Context(), paymentMethodId)
+
+	resp, err := h.service.GetPaymentMethodDetails(c.Request.Context(), customerID, paymentMethodId)
 	if err != nil {
 		c.Error(err)
 		return
