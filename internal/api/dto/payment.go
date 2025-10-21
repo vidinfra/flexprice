@@ -263,7 +263,7 @@ type PaymentMethodResponse struct {
 	Type      string                 `json:"type"`
 	Customer  string                 `json:"customer"`
 	Created   int64                  `json:"created"`
-	IsDefault bool                   `json:"is_default"`
+	IsDefault bool                   `json:"is_default,omitempty"`
 	Card      *CardDetails           `json:"card,omitempty"`
 	Metadata  map[string]interface{} `json:"metadata"`
 }

@@ -173,6 +173,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			// Payment method routes
 			customer.GET("/:id/payment-methods", handlers.Customer.GetCustomerPaymentMethods)
 			customer.PUT("/:id/payment-methods/default", handlers.Customer.SetDefaultPaymentMethod)
+			customer.GET("/:id/payment-methods/:payment_method_id", handlers.Customer.GetPaymentMethodDetails)
 			customer.DELETE("/:id/payment-methods/:payment_method_id", handlers.Customer.DeletePaymentMethod)
 
 			// New endpoints for entitlements and usage
