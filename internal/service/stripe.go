@@ -892,7 +892,7 @@ func (s *StripeService) DetachPaymentMethod(ctx context.Context, paymentMethodID
 }
 
 // GetPaymentMethodDetails gets the details of a payment method from Stripe
-func (s *StripeService) GetPaymentMethodDetails(ctx context.Context, paymentMethodID string) (*dto.PaymentMethodResponse, error) {
+func (s *StripeService) GetPaymentMethodDetails(ctx context.Context, customerID string, paymentMethodID string) (*dto.PaymentMethodResponse, error) {
 	// Get Stripe connection
 	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderStripe)
 	if err != nil {
@@ -915,7 +915,79 @@ func (s *StripeService) GetPaymentMethodDetails(ctx context.Context, paymentMeth
 		"payment_method_id", paymentMethodID,
 	)
 
-	return s.getPaymentMethodDetails(ctx, stripeClient, paymentMethodID)
+	// Get our customer to find Stripe customer ID
+	customerService := NewCustomerService(s.ServiceParams)
+	ourCustomerResp, err := customerService.GetCustomer(ctx, customerID)
+	if err != nil {
+		return nil, err
+	}
+	ourCustomer := ourCustomerResp.Customer
+
+	stripeCustomerID, exists := ourCustomer.Metadata["stripe_customer_id"]
+	if !exists || stripeCustomerID == "" {
+		return nil, ierr.NewError("customer not found in Stripe").
+			WithHint("Customer must have a Stripe account").
+			Mark(ierr.ErrNotFound)
+	}
+
+	// Get customer from Stripe to find default payment method
+	customer, err := stripeClient.V1Customers.Retrieve(ctx, stripeCustomerID, nil)
+	if err != nil {
+		s.Logger.Errorw("failed to get customer from Stripe",
+			"error", err,
+			"customer_id", customerID,
+			"stripe_customer_id", stripeCustomerID,
+		)
+		return nil, ierr.NewError("failed to get customer from Stripe").
+			WithHint("Could not retrieve customer information from Stripe").
+			Mark(ierr.ErrSystem)
+	}
+
+	paymentMethod, err := stripeClient.V1PaymentMethods.Retrieve(ctx, paymentMethodID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &dto.PaymentMethodResponse{
+		ID:   paymentMethod.ID,
+		Type: string(paymentMethod.Type),
+		Customer: func() string {
+			if paymentMethod.Customer != nil {
+				return paymentMethod.Customer.ID
+			}
+			return ""
+		}(),
+		Created:  paymentMethod.Created,
+		Metadata: make(map[string]interface{}),
+	}
+
+	// Convert metadata
+	for k, v := range paymentMethod.Metadata {
+		response.Metadata[k] = v
+	}
+
+	// Add card details if it's a card
+	if paymentMethod.Type == stripe.PaymentMethodTypeCard && paymentMethod.Card != nil {
+		response.Card = &dto.CardDetails{
+			Brand:       string(paymentMethod.Card.Brand),
+			Last4:       paymentMethod.Card.Last4,
+			ExpMonth:    int(paymentMethod.Card.ExpMonth),
+			ExpYear:     int(paymentMethod.Card.ExpYear),
+			Fingerprint: paymentMethod.Card.Fingerprint,
+		}
+
+		if customer.InvoiceSettings != nil && customer.InvoiceSettings.DefaultPaymentMethod != nil {
+			response.IsDefault = customer.InvoiceSettings.DefaultPaymentMethod.ID == paymentMethod.ID
+		}
+	}
+
+	s.Logger.Infow("successfully retrieved payment method details",
+		"customer_id", customerID,
+		"stripe_customer_id", stripeCustomerID,
+		"payment_method_id", paymentMethodID,
+	)
+
+	return response, nil
 }
 
 // GetDefaultPaymentMethod retrieves the default payment method from Stripe

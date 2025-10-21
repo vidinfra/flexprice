@@ -22,7 +22,7 @@ type CustomerService interface {
 	GetCustomerByLookupKey(ctx context.Context, lookupKey string) (*dto.CustomerResponse, error)
 	GetCustomerPaymentMethods(ctx context.Context, customerID string) ([]*dto.PaymentMethodResponse, error)
 	SetDefaultPaymentMethod(ctx context.Context, customerID string, paymentMethodID string) error
-	GetPaymentMethodDetails(ctx context.Context, paymentMethodID string) (*dto.PaymentMethodResponse, error)
+	GetPaymentMethodDetails(ctx context.Context, customerID string, paymentMethodID string) (*dto.PaymentMethodResponse, error)
 	DeletePaymentMethod(ctx context.Context, customerID string, paymentMethodID string) error
 }
 
@@ -444,6 +444,15 @@ func (s *customerService) GetCustomerPaymentMethods(ctx context.Context, custome
 	return stripeCustomerPaymentMethods, nil
 }
 
+func (s *customerService) GetPaymentMethodDetails(ctx context.Context, customerID string, paymentMethodID string) (*dto.PaymentMethodResponse, error) {
+	stripeService := NewStripeService(s.ServiceParams)
+	paymentMethod, err := stripeService.GetPaymentMethodDetails(ctx, customerID, paymentMethodID)
+	if err != nil {
+		return nil, err
+	}
+	return paymentMethod, nil
+}
+
 func (s *customerService) SetDefaultPaymentMethod(ctx context.Context, customerID string, paymentMethodID string) error {
 	stripeService := NewStripeService(s.ServiceParams)
 	if err := stripeService.SetDefaultPaymentMethod(ctx, customerID, paymentMethodID); err != nil {
@@ -460,15 +469,6 @@ func (s *customerService) DeletePaymentMethod(ctx context.Context, customerID st
 	}
 
 	return nil
-}
-
-func (s *customerService) GetPaymentMethodDetails(ctx context.Context, paymentMethodID string) (*dto.PaymentMethodResponse, error) {
-	stripeService := NewStripeService(s.ServiceParams)
-	paymentMethod, err := stripeService.GetPaymentMethodDetails(ctx, paymentMethodID)
-	if err != nil {
-		return nil, err
-	}
-	return paymentMethod, nil
 }
 
 func (s *customerService) publishWebhookEvent(ctx context.Context, eventName string, customerID string) {
