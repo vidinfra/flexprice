@@ -140,62 +140,22 @@ func (a *ScheduledTaskActivity) GetScheduledTaskDetails(ctx context.Context, inp
 }
 
 // calculateTimeRange determines the start and end time for the export
-// Implements incremental sync: uses last export's end_time as new start_time (regardless of task status)
-// For first run or when no previous export exists, uses interval-based boundary alignment
+// Always exports the previous completed interval based on execution time
+// Each run is independent and deterministic - no catch-up for missed runs
+// Example: Run at 12:15 with hourly interval always exports 11:00-12:00
 func (a *ScheduledTaskActivity) calculateTimeRange(ctx context.Context, task *scheduledtask.ScheduledTask, currentTime time.Time) (time.Time, time.Time) {
 	interval := types.ScheduledTaskInterval(task.Interval)
 
-	// Try to get last export task for incremental sync (regardless of status)
-	lastTask, err := a.taskRepo.GetLastExportTask(ctx, task.ID)
-	if err != nil {
-		// Log error but continue with interval-based logic
-		a.logger.Warnw("error getting last export, falling back to interval-based logic",
-			"scheduled_task_id", task.ID,
-			"error", err)
-	}
-
-	// If we found a previous export, use its end_time as our start_time (incremental sync)
-	if lastTask != nil && lastTask.Metadata != nil {
-		if endTimeStr, ok := lastTask.Metadata["end_time"].(string); ok {
-			lastEndTime, err := time.Parse(time.RFC3339, endTimeStr)
-			if err != nil {
-				a.logger.Warnw("failed to parse last task end_time, falling back to interval-based logic",
-					"scheduled_task_id", task.ID,
-					"end_time_str", endTimeStr,
-					"error", err)
-			} else {
-				// Incremental sync: Use last export's end_time as start, and current interval's start as end
-				// Example: If current time is 12:15 (cron runs), current interval is 12:00-13:00
-				// We use startTime (12:00) as the endTime for incremental export
-				// This exports the completed interval: lastEndTime (e.g., 11:00) → 12:00
-				startTimeOfCurrentInterval, _ := a.boundaryCalculator.CalculateIntervalBoundaries(currentTime, interval)
-
-				a.logger.Infow("using incremental sync - starting from last export's end_time",
-					"scheduled_task_id", task.ID,
-					"last_export_end_time", lastEndTime,
-					"new_start_time", lastEndTime,
-					"new_end_time", startTimeOfCurrentInterval,
-					"duration", startTimeOfCurrentInterval.Sub(lastEndTime))
-				return lastEndTime, startTimeOfCurrentInterval
-			}
-		} else {
-			a.logger.Warnw("last task metadata missing end_time, falling back to interval-based logic",
-				"scheduled_task_id", task.ID)
-		}
-	}
-
-	// First run OR no previous task found
-	// For first run at 11:15 with hourly interval:
-	// - CalculateIntervalBoundaries returns 11:00-12:00 (current interval)
-	// - But we want to export 10:00-11:00 (previous completed interval)
-	// - So we use: endTime - 1*interval as start, and startTime as end
+	// Get current interval boundaries
+	// Example: currentTime = 12:15 → returns 12:00-13:00 (current interval)
 	currentIntervalStart, _ := a.boundaryCalculator.CalculateIntervalBoundaries(currentTime, interval)
 
-	// Calculate the previous interval
-	var startTime, endTime time.Time
-	endTime = currentIntervalStart // End of previous interval = start of current interval
+	// We want to export the PREVIOUS completed interval
+	// So use current interval start as the end time
+	endTime := currentIntervalStart
 
 	// Calculate start of previous interval based on interval type
+	var startTime time.Time
 	switch interval {
 	case types.ScheduledTaskIntervalCustom:
 		startTime = endTime.Add(-10 * time.Minute)
@@ -207,7 +167,7 @@ func (a *ScheduledTaskActivity) calculateTimeRange(ctx context.Context, task *sc
 		startTime = endTime.AddDate(0, 0, -1)
 	}
 
-	a.logger.Infow("no previous export found - using previous completed interval (first run)",
+	a.logger.Infow("calculated export time range",
 		"scheduled_task_id", task.ID,
 		"interval", interval,
 		"current_time", currentTime,

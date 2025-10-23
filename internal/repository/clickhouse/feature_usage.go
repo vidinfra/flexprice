@@ -472,11 +472,14 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 	}
 
 	// Add group by columns based on params.GroupBy
-	// Always include feature_id for cost calculation, then add requested grouping dimensions
-	groupByColumns := []string{"feature_id"}       // Always include feature_id for cost calculation
-	groupByColumnAliases := []string{"feature_id"} // for SELECT clause
+	// Always include feature_id, price_id, meter_id, sub_line_item_id for granular tracking
+	groupByColumns := []string{"feature_id", "price_id", "meter_id", "sub_line_item_id"}
+	groupByColumnAliases := []string{"feature_id", "price_id", "meter_id", "sub_line_item_id"}
 	groupByFieldMapping := make(map[string]string) // maps original field to column alias
 	groupByFieldMapping["feature_id"] = "feature_id"
+	groupByFieldMapping["price_id"] = "price_id"
+	groupByFieldMapping["meter_id"] = "meter_id"
+	groupByFieldMapping["sub_line_item_id"] = "sub_line_item_id"
 
 	// Add the requested grouping dimensions
 	for _, groupBy := range params.GroupBy {
@@ -665,6 +668,12 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 			switch groupByCol {
 			case "feature_id":
 				analytics.FeatureID = value
+			case "price_id":
+				analytics.PriceID = value
+			case "meter_id":
+				analytics.MeterID = value
+			case "sub_line_item_id":
+				analytics.SubLineItemID = value
 			case "source":
 				analytics.Source = value
 			default:
@@ -751,9 +760,9 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 	bucketWindowExpr := r.formatWindowSize(featureInfo.BucketSize, nil)
 
 	// Build group by columns based on request parameters
-	groupByColumns := []string{"bucket_start", "feature_id"}
-	innerSelectColumns := []string{"feature_id"} // For inner query (has access to properties column)
-	outerSelectColumns := []string{"feature_id"} // For outer query (only has aliased columns)
+	groupByColumns := []string{"bucket_start", "feature_id", "price_id", "meter_id", "sub_line_item_id"}
+	innerSelectColumns := []string{"feature_id", "price_id", "meter_id", "sub_line_item_id"} // For inner query (has access to properties column)
+	outerSelectColumns := []string{"feature_id", "price_id", "meter_id", "sub_line_item_id"} // For outer query (only has aliased columns)
 
 	// Add grouping columns
 	for _, groupBy := range params.GroupBy {
@@ -916,6 +925,12 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 			switch selectCol {
 			case "feature_id":
 				analytics.FeatureID = value
+			case "price_id":
+				analytics.PriceID = value
+			case "meter_id":
+				analytics.MeterID = value
+			case "sub_line_item_id":
+				analytics.SubLineItemID = value
 			case "source":
 				analytics.Source = value
 			default:
@@ -972,6 +987,24 @@ func (r *FeatureUsageRepository) getMaxBucketPointsForGroup(ctx context.Context,
 	if group.Source != "" {
 		innerQuery += " AND source = ?"
 		queryParams = append(queryParams, group.Source)
+	}
+
+	// Add filter for this specific group's price_id
+	if group.PriceID != "" {
+		innerQuery += " AND price_id = ?"
+		queryParams = append(queryParams, group.PriceID)
+	}
+
+	// Add filter for this specific group's meter_id
+	if group.MeterID != "" {
+		innerQuery += " AND meter_id = ?"
+		queryParams = append(queryParams, group.MeterID)
+	}
+
+	// Add filter for this specific group's sub_line_item_id
+	if group.SubLineItemID != "" {
+		innerQuery += " AND sub_line_item_id = ?"
+		queryParams = append(queryParams, group.SubLineItemID)
 	}
 
 	// Add filters for this specific group's properties

@@ -1411,7 +1411,7 @@ var (
 			},
 			{
 				Name:    "scheduledtask_connection_id_entity_type_status",
-				Unique:  true,
+				Unique:  false,
 				Columns: []*schema.Column{ScheduledTasksColumns[8], ScheduledTasksColumns[9], ScheduledTasksColumns[2]},
 			},
 		},

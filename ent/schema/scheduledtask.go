@@ -75,9 +75,7 @@ func (ScheduledTask) Indexes() []ent.Index {
 		index.Fields("connection_id", "enabled"),
 		// Index for finding jobs by entity type and interval
 		index.Fields("entity_type", "interval", "enabled"),
-		// Unique constraint: one active job per connection + entity_type + status
-		// Only enforces uniqueness when status is "published"
-		index.Fields("connection_id", "entity_type", "status").
-			Unique(),
+		// Index for finding jobs by connection, entity type, and status
+		index.Fields("connection_id", "entity_type", "status"),
 	}
 }

@@ -622,13 +622,12 @@ func (s *scheduledTaskService) getCronExpression(interval types.ScheduledTaskInt
 // CalculateIntervalBoundaries calculates interval boundaries based on current time
 //
 // Returns the interval that aligns with the current time:
-//   - Force run at 10:30 → 10:00-11:00 (current interval in progress)
-//   - First run at 11:15 (cron) → 11:00-12:00 (activity will use this as-is for first export)
-//   - Incremental at 12:15 (cron) → 12:00-13:00 (activity uses only startTime=12:00 as endTime, with lastEndTime as start)
+//   - Run at 10:30 → 10:00-11:00 (current interval)
+//   - Run at 11:15 (cron) → 11:00-12:00 (current interval)
+//   - Run at 12:15 (cron) → 12:00-13:00 (current interval)
 //
-// The activity layer handles the logic:
-//   - First run: Uses both start and end from this function
-//   - Incremental: Uses lastEndTime + startTime (from this function) to create the range
+// The activity layer uses the start boundary as the end time for exports,
+// then subtracts one interval to calculate the previous completed interval
 func (s *scheduledTaskService) CalculateIntervalBoundaries(currentTime time.Time, interval types.ScheduledTaskInterval) (startTime, endTime time.Time) {
 	switch interval {
 	case types.ScheduledTaskIntervalCustom:

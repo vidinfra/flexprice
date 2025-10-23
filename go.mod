@@ -8,19 +8,18 @@ require (
 	github.com/Shopify/sarama v1.38.0
 	github.com/ThreeDotsLabs/watermill v1.4.4
 	github.com/ThreeDotsLabs/watermill-kafka/v2 v2.2.2
-	github.com/aws/aws-lambda-go v1.47.0
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.28.7
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.48
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.15.22
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.38.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.79.1
-	github.com/awslabs/aws-lambda-go-api-proxy v0.16.2
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cockroachdb/errors v1.11.3
 	github.com/getsentry/sentry-go v0.30.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-playground/validator/v10 v10.22.1
+	github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/grafana/pyroscope-go v1.2.4
 	github.com/h2non/filetype v1.1.3
@@ -106,7 +105,6 @@ require (
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/mock v1.6.0 // indirect
