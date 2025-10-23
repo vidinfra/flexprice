@@ -92,22 +92,28 @@ ADD COLUMN alert_settings JSONB DEFAULT NULL;
 --     "threshold": "500.00",
 --     "condition": "below"
 --   },
+--   "info": {
+--     "threshold": "1000.00",
+--     "condition": "below"
+--   },
 --   "alert_enabled": false
 -- }
 ```
 
 #### 3.1.2 Alert State Logic
-The system supports three distinct alert states based on ongoing wallet balance comparison with feature thresholds:
+The system supports four distinct alert states based on ongoing wallet balance comparison with feature thresholds:
 
 **For "below" condition (most common for wallet balance monitoring):**
 - **in_alarm State**: `ongoing_balance <= critical.threshold` - Balance is at or below the critical threshold
 - **warning State**: `critical.threshold < ongoing_balance <= warning.threshold` - Balance is within the warning range
-- **ok State**: `ongoing_balance > warning.threshold` - Balance is above the warning threshold (healthy)
+- **info State**: `warning.threshold < ongoing_balance <= info.threshold` - Balance is within the info range (informational notification)
+- **ok State**: `ongoing_balance > info.threshold` - Balance is above the info threshold (healthy)
 
 **For "above" condition (e.g., usage monitoring):**
 - **in_alarm State**: `ongoing_balance >= critical.threshold` - Usage is at or above the critical threshold
 - **warning State**: `warning.threshold <= ongoing_balance < critical.threshold` - Usage is within the warning range
-- **ok State**: `ongoing_balance < warning.threshold` - Usage is below the warning threshold (healthy)
+- **info State**: `info.threshold <= ongoing_balance < warning.threshold` - Usage is within the info range (informational notification)
+- **ok State**: `ongoing_balance < info.threshold` - Usage is below the info threshold (healthy)
 
 #### 3.1.3 Threshold Configuration
 ```json
@@ -120,6 +126,10 @@ The system supports three distinct alert states based on ongoing wallet balance 
     "threshold": "500.00",
     "condition": "below"
   },
+  "info": {
+    "threshold": "1000.00",
+    "condition": "below"
+  },
   "alert_enabled": false
 }
 ```
@@ -127,9 +137,10 @@ The system supports three distinct alert states based on ongoing wallet balance 
 **Key Rules:**
 - `critical` threshold defines the **in_alarm** boundary
 - `warning` threshold defines the **warning** boundary (optional)
-- Both thresholds must use the same `condition` (either "below" or "above")
-- For "below" condition: `warning.threshold > critical.threshold`
-- For "above" condition: `warning.threshold < critical.threshold`
+- `info` threshold defines the **info** boundary (optional)
+- All thresholds must use the same `condition` (either "below" or "above")
+- For "below" condition: `info.threshold > warning.threshold > critical.threshold`
+- For "above" condition: `info.threshold < warning.threshold < critical.threshold`
 - `alert_enabled` defaults to `false` if not provided
 
 ### 3.2 Architecture Integration
@@ -167,6 +178,7 @@ func (Feature) Fields() []ent.Field {
 type AlertSettings struct {
     Critical     *AlertThreshold `json:"critical"`     // Critical threshold (required for complete settings)
     Warning      *AlertThreshold `json:"warning"`      // Warning threshold (optional)
+    Info         *AlertThreshold `json:"info"`         // Info threshold (optional)
     AlertEnabled *bool           `json:"alert_enabled"` // Defaults to false if not provided
 }
 
@@ -204,7 +216,8 @@ const (
 // Extended alert states
 const (
     AlertStateOk      AlertState = "ok"
-    AlertStateWarning AlertState = "warning"  // New state
+    AlertStateInfo    AlertState = "info"     // New state
+    AlertStateWarning AlertState = "warning"
     AlertStateInAlarm AlertState = "in_alarm"
 )
 ```
@@ -275,6 +288,7 @@ The system compares wallet balance against feature alert thresholds:
 func (at *AlertSettings) AlertState(ongoingBalance decimal.Decimal) (AlertState, error) {
     criticalThreshold := lo.FromPtr(at.Critical)
     warningThreshold := lo.FromPtr(at.Warning)
+    infoThreshold := lo.FromPtr(at.Info)
 
     switch at.Critical.Condition {
     case AlertConditionAbove:
@@ -285,6 +299,9 @@ func (at *AlertSettings) AlertState(ongoingBalance decimal.Decimal) (AlertState,
         if warningThreshold != nil && ongoingBalance.GreaterThanOrEqual(warningThreshold.Threshold) {
             return AlertStateWarning, nil // Usage approaching limit
         }
+        if infoThreshold != nil && ongoingBalance.GreaterThanOrEqual(infoThreshold.Threshold) {
+            return AlertStateInfo, nil // Usage informational level
+        }
         return AlertStateOk, nil // Usage normal
         
     case AlertConditionBelow:
@@ -294,6 +311,9 @@ func (at *AlertSettings) AlertState(ongoingBalance decimal.Decimal) (AlertState,
         }
         if warningThreshold != nil && ongoingBalance.LessThanOrEqual(warningThreshold.Threshold) {
             return AlertStateWarning, nil // Balance low (warning)
+        }
+        if infoThreshold != nil && ongoingBalance.LessThanOrEqual(infoThreshold.Threshold) {
+            return AlertStateInfo, nil // Balance informational level
         }
         return AlertStateOk, nil // Balance healthy
     }
@@ -393,7 +413,10 @@ flowchart TD
    if critical.threshold < ongoing_balance <= warning.threshold:
        alert_status = warning
    
-   if ongoing_balance > warning.threshold:
+   if warning.threshold < ongoing_balance <= info.threshold:
+       alert_status = info
+   
+   if ongoing_balance > info.threshold:
        alert_status = ok
    
    # For "above" condition (usage monitoring):
@@ -403,7 +426,10 @@ flowchart TD
    if warning.threshold <= ongoing_balance < critical.threshold:
        alert_status = warning
    
-   if ongoing_balance < warning.threshold:
+   if info.threshold <= ongoing_balance < warning.threshold:
+       alert_status = info
+   
+   if ongoing_balance < info.threshold:
        alert_status = ok
    ```
 
@@ -463,13 +489,16 @@ The system implements intelligent state transition logic to prevent alert spam:
 
    | Determined Status | Previous Status | Action |
    |------------------|----------------|--------|
-   | **ok** | in_alarm OR warning | ✅ Create new alert log (recovery) |
+   | **ok** | in_alarm OR warning OR info | ✅ Create new alert log (recovery) |
    | **ok** | ok | ❌ Skip - no change |
    | **ok** | NULL (no previous) | ❌ Skip - system healthy from start |
-   | **warning** | ok OR in_alarm | ✅ Create new alert log (state change) |
+   | **info** | ok OR warning OR in_alarm | ✅ Create new alert log (state change) |
+   | **info** | info | ❌ Skip - no change |
+   | **info** | NULL (no previous) | ✅ Create new alert log (problem detected) |
+   | **warning** | ok OR info OR in_alarm | ✅ Create new alert log (state change) |
    | **warning** | warning | ❌ Skip - no change |
    | **warning** | NULL (no previous) | ✅ Create new alert log (problem detected) |
-   | **in_alarm** | ok OR warning | ✅ Create new alert log (escalation) |
+   | **in_alarm** | ok OR info OR warning | ✅ Create new alert log (escalation) |
    | **in_alarm** | in_alarm | ❌ Skip - no change |
    | **in_alarm** | NULL (no previous) | ✅ Create new alert log (critical problem) |
 
@@ -483,7 +512,7 @@ The system implements intelligent state transition logic to prevent alert spam:
            // System is healthy from the start - no need to log
            shouldCreateLog = false
        } else {
-           // Problem state detected for first time (WARNING or IN_ALARM) - create alert
+           // Problem state detected for first time (INFO, WARNING or IN_ALARM) - create alert
            shouldCreateLog = true
        }
    } else if prev_alertLog.alert_status != determined_alert_status {
@@ -524,6 +553,10 @@ The system implements intelligent state transition logic to prevent alert spam:
            },
            "warning": {
              "threshold": "500",
+             "condition": "below"
+           },
+           "info": {
+             "threshold": "1000",
              "condition": "below"
            },
            "alert_enabled": true
@@ -1018,6 +1051,9 @@ graph TB
   - `warning`: *AlertThreshold (optional pointer)
     - `threshold`: decimal.Decimal (the threshold value)
     - `condition`: AlertCondition (must match critical.condition)
+  - `info`: *AlertThreshold (optional pointer)
+    - `threshold`: decimal.Decimal (the threshold value)
+    - `condition`: AlertCondition (must match critical.condition)
   - `alert_enabled`: *bool (defaults to false if not provided)
 
 #### A.1.2 Parent Entity Architecture
@@ -1146,6 +1182,9 @@ func (s *featureService) UpdateFeature(ctx context.Context, id string, req dto.U
         if req.AlertSettings.Warning != nil {
             newAlertSettings.Warning = req.AlertSettings.Warning
         }
+        if req.AlertSettings.Info != nil {
+            newAlertSettings.Info = req.AlertSettings.Info
+        }
         if req.AlertSettings.AlertEnabled != nil {
             newAlertSettings.AlertEnabled = req.AlertSettings.AlertEnabled
         } else if feature.AlertSettings == nil {
@@ -1209,15 +1248,23 @@ if existingAlert == nil {
 | Current State | Previous State | Action | Reason |
 |--------------|---------------|--------|---------|
 | OK | NULL | ❌ Skip | Healthy from start |
+| INFO | NULL | ✅ Log | Problem detected |
 | WARNING | NULL | ✅ Log | Problem detected |
 | IN_ALARM | NULL | ✅ Log | Critical problem |
+| OK | INFO | ✅ Log | Recovery |
 | OK | WARNING | ✅ Log | Recovery |
 | OK | IN_ALARM | ✅ Log | Recovery |
+| INFO | OK | ✅ Log | Degradation |
+| INFO | WARNING | ✅ Log | Improvement |
+| INFO | IN_ALARM | ✅ Log | Improvement |
 | WARNING | OK | ✅ Log | Degradation |
+| WARNING | INFO | ✅ Log | Degradation |
 | WARNING | IN_ALARM | ✅ Log | Improvement |
 | IN_ALARM | OK | ✅ Log | Critical drop |
+| IN_ALARM | INFO | ✅ Log | Escalation |
 | IN_ALARM | WARNING | ✅ Log | Escalation |
 | OK | OK | ❌ Skip | No change |
+| INFO | INFO | ❌ Skip | No change |
 | WARNING | WARNING | ❌ Skip | No change |
 | IN_ALARM | IN_ALARM | ❌ Skip | No change |
 
@@ -1275,6 +1322,10 @@ CREATE INDEX idx_features_alert_settings ON features(alert_settings) WHERE alert
 --     "threshold": "500.00",
 --     "condition": "below"
 --   },
+--   "info": {
+--     "threshold": "1000.00",
+--     "condition": "below"
+--   },
 --   "alert_enabled": false
 -- }
 ```
@@ -1316,11 +1367,15 @@ curl -X POST /api/v1/features \
         "threshold": "500.00",
         "condition": "below"
       },
+      "info": {
+        "threshold": "1000.00",
+        "condition": "below"
+      },
       "alert_enabled": true
     }
   }'
 # Response: alert_enabled defaults to false if not provided
-# warning is optional, critical typically required for meaningful alerts
+# warning and info are optional, critical typically required for meaningful alerts
 ```
 
 ### Update Feature Alert Settings
@@ -1337,13 +1392,25 @@ curl -X PUT /api/v1/features/feature_123 \
     }
   }'
 
-# Update only warning threshold (critical and alert_enabled remain unchanged)
+# Update only warning threshold (critical, info and alert_enabled remain unchanged)
 curl -X PUT /api/v1/features/feature_123 \
   -H "Content-Type: application/json" \
   -d '{
     "alert_settings": {
       "warning": {
         "threshold": "200.00",
+        "condition": "below"
+      }
+    }
+  }'
+
+# Update only info threshold (critical, warning and alert_enabled remain unchanged)
+curl -X PUT /api/v1/features/feature_123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "alert_settings": {
+      "info": {
+        "threshold": "1500.00",
         "condition": "below"
       }
     }
@@ -1369,6 +1436,10 @@ curl -X PUT /api/v1/features/feature_123 \
       },
       "warning": {
         "threshold": "500.00",
+        "condition": "below"
+      },
+      "info": {
+        "threshold": "1000.00",
         "condition": "below"
       },
       "alert_enabled": true
@@ -1406,6 +1477,10 @@ curl -X GET /api/v1/features
       },
       "warning": {
         "threshold": "500.00",
+        "condition": "below"
+      },
+      "info": {
+        "threshold": "1000.00",
         "condition": "below"
       },
       "alert_enabled": true
@@ -1460,6 +1535,10 @@ INSERT INTO alert_logs (
             },
             "warning": {
                 "threshold": "500.00",
+                "condition": "below"
+            },
+            "info": {
+                "threshold": "1000.00",
                 "condition": "below"
             },
             "alert_enabled": true
