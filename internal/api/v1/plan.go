@@ -281,6 +281,19 @@ func (h *PlanHandler) SyncPlanPrices(c *gin.Context) {
 			Mark(ierr.ErrValidation))
 		return
 	}
+	// Verify that the plan exists
+
+	planResp, err := h.service.GetPlan(c.Request.Context(), id)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	if planResp == nil {
+		c.Error(ierr.NewError("plan not found").
+			WithHintf("No plan found with ID %s", id).
+			Mark(ierr.ErrNotFound))
+		return
+	}
 
 	// Start the price sync workflow using the unified method
 	workflowRun, err := h.temporalService.ExecuteWorkflow(c.Request.Context(), types.TemporalPriceSyncWorkflow, id)
