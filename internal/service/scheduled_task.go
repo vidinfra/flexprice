@@ -581,7 +581,6 @@ func (s *scheduledTaskService) triggerForceRun(ctx context.Context, taskID strin
 		UserID:          types.GetUserID(ctx), // Get user ID from context for force runs
 		CustomStartTime: &startTime,           // Always pass calculated time range for force runs
 		CustomEndTime:   &endTime,
-		IsForceRun:      true, // Mark as force run to avoid storing scheduled_task_id
 	}
 
 	workflowRun, err := s.temporalClient.StartWorkflow(ctx, workflowOptions, exportWorkflows.ExecuteExportWorkflow, input)

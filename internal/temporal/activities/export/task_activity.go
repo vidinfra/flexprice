@@ -35,7 +35,6 @@ type CreateTaskInput struct {
 	EntityType      types.ScheduledTaskEntityType
 	StartTime       time.Time
 	EndTime         time.Time
-	IsForceRun      bool // Indicates if this is a force run (should not store scheduled_task_id)
 }
 
 // CreateTaskOutput represents output from creating a task
@@ -51,8 +50,7 @@ func (a *TaskActivity) CreateTask(ctx context.Context, input CreateTaskInput) (*
 		"scheduled_task_id", input.ScheduledTaskID,
 		"entity_type", input.EntityType,
 		"start_time", input.StartTime,
-		"end_time", input.EndTime,
-		"is_force_run", input.IsForceRun)
+		"end_time", input.EndTime)
 
 	// Set user ID in context for proper BaseModel creation
 	// For scheduled runs, use system user ID; for manual runs, use the provided user ID
@@ -75,20 +73,14 @@ func (a *TaskActivity) CreateTask(ctx context.Context, input CreateTaskInput) (*
 		"tenant_id", baseModel.TenantID,
 		"user_id_from_input", input.UserID)
 
-	// For force runs, don't store scheduled_task_id to avoid interfering with incremental sync
-	var scheduledTaskID string
-	if !input.IsForceRun {
-		scheduledTaskID = input.ScheduledTaskID
-	}
-
 	newTask := &task.Task{
 		ID:              input.TaskID,      // Use pre-generated ID
 		WorkflowID:      &input.WorkflowID, // Store Temporal workflow ID
 		EnvironmentID:   input.EnvID,       // Set environment ID
 		TaskType:        types.TaskTypeExport,
 		EntityType:      types.EntityType(input.EntityType),
-		ScheduledTaskID: scheduledTaskID, // Empty for force runs, populated for scheduled runs
-		FileURL:         "",              // Will be set after upload
+		ScheduledTaskID: input.ScheduledTaskID, // Always store scheduled_task_id
+		FileURL:         "",                    // Will be set after upload
 		FileType:        types.FileTypeCSV,
 		TaskStatus:      types.TaskStatusPending,
 		Metadata: map[string]interface{}{

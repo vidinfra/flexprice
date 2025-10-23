@@ -21,7 +21,6 @@ type ExecuteExportWorkflowInput struct {
 	// Optional custom time range for force runs
 	CustomStartTime *time.Time
 	CustomEndTime   *time.Time
-	IsForceRun      bool // Indicates if this is a force run (should not store scheduled_task_id)
 }
 
 // ExecuteExportWorkflowOutput represents output from the export workflow
@@ -148,7 +147,6 @@ func ExecuteExportWorkflow(ctx workflow.Context, input ExecuteExportWorkflowInpu
 		EntityType:      taskDetails.EntityType,
 		StartTime:       taskDetails.StartTime,
 		EndTime:         taskDetails.EndTime,
-		IsForceRun:      input.IsForceRun, // Pass force run flag
 	}
 
 	var createTaskOutput export.CreateTaskOutput
