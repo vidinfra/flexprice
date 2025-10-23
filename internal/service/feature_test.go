@@ -673,6 +673,107 @@ func (s *FeatureServiceSuite) TestUpdateFeature() {
 			wantErr: false,
 		},
 		{
+			name: "success - alert settings with all three thresholds (critical + warning + info)",
+			id:   s.testData.features.apiCalls.ID,
+			req: dto.UpdateFeatureRequest{
+				AlertSettings: &types.AlertSettings{
+					Critical: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(100),
+						Condition: types.AlertConditionBelow,
+					},
+					Warning: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(500),
+						Condition: types.AlertConditionBelow,
+					},
+					Info: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(1000),
+						Condition: types.AlertConditionBelow,
+					},
+					AlertEnabled: lo.ToPtr(true),
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "success - alert settings with info-only (standalone)",
+			id:   s.testData.features.apiCalls.ID,
+			req: dto.UpdateFeatureRequest{
+				AlertSettings: &types.AlertSettings{
+					Info: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(1000),
+						Condition: types.AlertConditionBelow,
+					},
+					AlertEnabled: lo.ToPtr(true),
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "success - alert settings with critical + info (no warning)",
+			id:   s.testData.features.apiCalls.ID,
+			req: dto.UpdateFeatureRequest{
+				AlertSettings: &types.AlertSettings{
+					Critical: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(100),
+						Condition: types.AlertConditionBelow,
+					},
+					Info: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(1000),
+						Condition: types.AlertConditionBelow,
+					},
+					AlertEnabled: lo.ToPtr(true),
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "error - invalid info ordering (info < warning for below condition)",
+			id:   s.testData.features.apiCalls.ID,
+			req: dto.UpdateFeatureRequest{
+				AlertSettings: &types.AlertSettings{
+					Critical: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(100),
+						Condition: types.AlertConditionBelow,
+					},
+					Warning: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(500),
+						Condition: types.AlertConditionBelow,
+					},
+					Info: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(200), // Wrong: should be > warning (500)
+						Condition: types.AlertConditionBelow,
+					},
+					AlertEnabled: lo.ToPtr(true),
+				},
+			},
+			wantErr:   true,
+			errString: "info threshold must be greater than warning threshold",
+		},
+		{
+			name: "error - alert_enabled true without any thresholds",
+			id:   s.testData.features.storage.ID, // Use storage feature which has no alert settings
+			req: dto.UpdateFeatureRequest{
+				AlertSettings: &types.AlertSettings{
+					AlertEnabled: lo.ToPtr(true),
+				},
+			},
+			wantErr:   true,
+			errString: "at least one threshold (critical, warning, or info) is required when alert_enabled is true",
+		},
+		{
+			name: "success - partial update with info only (keeps existing critical/warning)",
+			id:   s.testData.features.apiCalls.ID,
+			req: dto.UpdateFeatureRequest{
+				AlertSettings: &types.AlertSettings{
+					Info: &types.AlertThreshold{
+						Threshold: decimal.NewFromInt(1500),
+						Condition: types.AlertConditionBelow,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "error - feature not found",
 			id:   "nonexistent-id",
 			req: dto.UpdateFeatureRequest{
@@ -718,6 +819,11 @@ func (s *FeatureServiceSuite) TestUpdateFeature() {
 					s.NotNil(resp.AlertSettings.Warning, "warning should be present")
 					s.Equal(tt.req.AlertSettings.Warning.Threshold, resp.AlertSettings.Warning.Threshold, "warning threshold should be updated")
 					s.Equal(tt.req.AlertSettings.Warning.Condition, resp.AlertSettings.Warning.Condition, "warning condition should be updated")
+				}
+				if tt.req.AlertSettings.Info != nil {
+					s.NotNil(resp.AlertSettings.Info, "info should be present")
+					s.Equal(tt.req.AlertSettings.Info.Threshold, resp.AlertSettings.Info.Threshold, "info threshold should be updated")
+					s.Equal(tt.req.AlertSettings.Info.Condition, resp.AlertSettings.Info.Condition, "info condition should be updated")
 				}
 				if tt.req.AlertSettings.AlertEnabled != nil {
 					s.Equal(tt.req.AlertSettings.AlertEnabled, resp.AlertSettings.AlertEnabled, "alert_enabled should be updated")

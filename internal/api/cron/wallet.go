@@ -348,8 +348,9 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 						AlertSettings: &types.AlertSettings{
 							Critical: &types.AlertThreshold{
 								Threshold: wallet.AlertConfig.Threshold.Value,
-								Condition: types.AlertConditionBelow, // Wallet alerts are always "below" threshold
+								Condition: types.AlertConditionBelow, // Wallet alerts are "below" threshold
 							},
+							AlertEnabled: lo.ToPtr(true),
 						},
 						ValueAtTime: *ongoingBalance,
 						Timestamp:   time.Now().UTC(),

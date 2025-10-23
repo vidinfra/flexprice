@@ -215,9 +215,10 @@ func (s *featureService) UpdateFeature(ctx context.Context, id string, req dto.U
 		// Start with existing settings (preserve what's not being updated)
 		newAlertSettings := &types.AlertSettings{}
 		if feature.AlertSettings != nil {
-			// Preserve existing critical, warning, and alert_enabled if not being updated
+			// Preserve existing critical, warning, info, and alert_enabled if not being updated
 			newAlertSettings.Critical = feature.AlertSettings.Critical
 			newAlertSettings.Warning = feature.AlertSettings.Warning
+			newAlertSettings.Info = feature.AlertSettings.Info
 			newAlertSettings.AlertEnabled = feature.AlertSettings.AlertEnabled
 		}
 
@@ -227,6 +228,9 @@ func (s *featureService) UpdateFeature(ctx context.Context, id string, req dto.U
 		}
 		if req.AlertSettings.Warning != nil {
 			newAlertSettings.Warning = req.AlertSettings.Warning
+		}
+		if req.AlertSettings.Info != nil {
+			newAlertSettings.Info = req.AlertSettings.Info
 		}
 		if req.AlertSettings.AlertEnabled != nil {
 			newAlertSettings.AlertEnabled = req.AlertSettings.AlertEnabled

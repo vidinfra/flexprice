@@ -859,6 +859,7 @@ func (s *walletService) processWalletOperation(ctx context.Context, req *wallet.
 				Threshold: thresholdValue,
 				Condition: types.AlertConditionBelow,
 			},
+			AlertEnabled: lo.ToPtr(true),
 		},
 		ValueAtTime: newCreditBalance,
 		Timestamp:   time.Now().UTC(),
