@@ -282,7 +282,7 @@ func (h *PlanHandler) SyncPlanPrices(c *gin.Context) {
 		return
 	}
 	// Verify that the plan exists
-	planResp, err := h.service.GetPlan(c.Request.Context(), id)
+	_, err := h.service.GetPlan(c.Request.Context(), id)
 	if err != nil {
 		c.Error(err)
 		return
