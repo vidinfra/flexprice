@@ -15,8 +15,4 @@ type Repository interface {
 	Count(ctx context.Context, filter *types.TaskFilter) (int, error)
 	Update(ctx context.Context, task *Task) error
 	Delete(ctx context.Context, id string) error
-
-	// GetLastExportTask gets the last export task for a scheduled job (regardless of status)
-	// Returns nil if no previous export exists (first run scenario)
-	GetLastExportTask(ctx context.Context, scheduledJobID string) (*Task, error)
 }

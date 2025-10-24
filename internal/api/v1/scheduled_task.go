@@ -210,7 +210,7 @@ func (h *ScheduledTaskHandler) DeleteScheduledTask(c *gin.Context) {
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 404 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
-// @Router /v1/scheduled-jobs/{id}/force-run [post]
+// @Router /tasks/scheduled/{id}/run [post]
 func (h *ScheduledTaskHandler) TriggerForceRun(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {

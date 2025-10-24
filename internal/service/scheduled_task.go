@@ -548,7 +548,7 @@ func (s *scheduledTaskService) triggerForceRun(ctx context.Context, taskID strin
 
 		// Calculate interval boundaries for force run
 		startTime, endTime = s.CalculateIntervalBoundaries(currentTime, interval)
-		mode = "automatic"
+		mode = "force run"
 
 		s.logger.Infow("using automatic time range based on interval boundaries",
 			"start_time", startTime,

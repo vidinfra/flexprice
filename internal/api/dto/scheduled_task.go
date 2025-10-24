@@ -13,7 +13,7 @@ import (
 type CreateScheduledTaskRequest struct {
 	ConnectionID string                        `json:"connection_id" binding:"required" validate:"required"`
 	EntityType   types.ScheduledTaskEntityType `json:"entity_type" binding:"required" validate:"required"`
-	Interval     types.ScheduledTaskInterval   `json:"interval" binding:"required" validate:"required"`
+	Interval     types.ScheduledTaskInterval   `json:"interval" binding:"required" validate:"required" enums:"hourly,daily"` // Note: "custom" is excluded from API (internal testing only)
 	Enabled      bool                          `json:"enabled"`
 	JobConfig    *types.S3JobConfig            `json:"job_config" binding:"required" validate:"required"`
 }
@@ -24,6 +24,14 @@ func (r *CreateScheduledTaskRequest) Validate() error {
 	if err := validator.ValidateRequest(r); err != nil {
 		return err
 	}
+
+	// Reject "custom" interval from API requests (internal testing only)
+	if r.Interval == types.ScheduledTaskIntervalCustom {
+		return ierr.NewError("interval 'custom' is not available for API usage").
+			WithHint("Please use 'hourly' or 'daily' intervals.").
+			Mark(ierr.ErrValidation)
+	}
+
 	// Validate entity type
 	if err := r.EntityType.Validate(); err != nil {
 		return err
@@ -65,7 +73,7 @@ type ScheduledTaskResponse struct {
 	EnvironmentID string                        `json:"environment_id"`
 	ConnectionID  string                        `json:"connection_id"`
 	EntityType    types.ScheduledTaskEntityType `json:"entity_type"`
-	Interval      types.ScheduledTaskInterval   `json:"interval"`
+	Interval      types.ScheduledTaskInterval   `json:"interval" enums:"hourly,daily"` // Note: "custom" is excluded from API docs
 	Enabled       bool                          `json:"enabled"`
 	JobConfig     *types.S3JobConfig            `json:"job_config"`
 	Status        string                        `json:"status"`
