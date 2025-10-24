@@ -29,8 +29,8 @@ func FromEnt(f *ent.Feature) *Feature {
 
 	// Extract alert settings from Ent entity
 	var alertSettings *types.AlertSettings
-	// Check if alert settings are set (critical threshold must be provided)
-	if f.AlertSettings.Critical != nil {
+	// Check if critical or info threshold is set
+	if f.AlertSettings.Critical != nil || f.AlertSettings.Info != nil {
 		alertSettings = &f.AlertSettings
 	}
 

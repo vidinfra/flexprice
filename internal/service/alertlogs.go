@@ -118,13 +118,13 @@ func (s *alertLogsService) LogAlert(ctx context.Context, req *LogAlertRequest) e
 	}
 
 	// Business logic: Log alerts ONLY when state changes or when problems are detected
-	// Works for all alert types (wallet, feature, etc.) and all states (ok, warning, in_alarm)
+	// Works for all alert types (wallet, feature, etc.) and all states (ok, info, warning, in_alarm)
 	shouldCreateLog := false
 	var webhookEventName string
 
 	// State transition rules:
 	// 1. No previous alert + OK state → Skip (system is healthy from start, no alert needed)
-	// 2. No previous alert + WARNING/IN_ALARM → Create (problem detected for first time)
+	// 2. No previous alert + INFO/WARNING/IN_ALARM → Create (problem detected for first time)
 	// 3. Previous alert exists + status changed → Create (state transition)
 	// 4. Previous alert exists + status unchanged → Skip (no change)
 
@@ -139,7 +139,7 @@ func (s *alertLogsService) LogAlert(ctx context.Context, req *LogAlertRequest) e
 				"alert_status", req.AlertStatus,
 			)
 		} else {
-			// Problem state detected for first time (WARNING or IN_ALARM) - create alert
+			// Problem state detected for first time (INFO, WARNING or IN_ALARM) - create alert
 			shouldCreateLog = true
 			webhookEventName = s.getWebhookEventName(req.AlertType, req.AlertStatus)
 			s.Logger.Infow("creating alert - problem detected for first time",
@@ -327,10 +327,13 @@ var alertWebhookMapping = map[types.AlertType]map[types.AlertState]WebhookEventM
 		types.AlertStateInAlarm: {
 			WebhookEvent: types.WebhookEventFeatureWalletBalanceAlert, // "feature.balance.threshold.alert"
 		},
-		types.AlertStateOk: {
+		types.AlertStateWarning: {
 			WebhookEvent: types.WebhookEventFeatureWalletBalanceAlert, // "feature.balance.threshold.alert"
 		},
-		types.AlertStateWarning: {
+		types.AlertStateInfo: {
+			WebhookEvent: types.WebhookEventFeatureWalletBalanceAlert, // "feature.balance.threshold.alert"
+		},
+		types.AlertStateOk: {
 			WebhookEvent: types.WebhookEventFeatureWalletBalanceAlert, // "feature.balance.threshold.alert"
 		},
 	},
