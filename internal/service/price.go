@@ -630,94 +630,95 @@ func (s *priceService) GetPrices(ctx context.Context, filter *types.PriceFilter)
 		}
 
 		s.Logger.Debugw("fetched price units for prices", "count", len(priceUnitsByID))
-		// Collect entity IDs based on entity type for efficient bulk fetching
-		var planIDs []string
-		var addonIDs []string
+	}
 
-		// Separate prices by entity type to collect IDs
-		for _, p := range prices {
-			if p.EntityType == types.PRICE_ENTITY_TYPE_PLAN && p.EntityID != "" {
-				planIDs = append(planIDs, p.EntityID)
-			} else if p.EntityType == types.PRICE_ENTITY_TYPE_ADDON && p.EntityID != "" {
-				addonIDs = append(addonIDs, p.EntityID)
+	// Collect entity IDs based on entity type for efficient bulk fetching
+	var planIDs []string
+	var addonIDs []string
+
+	// Separate prices by entity type to collect IDs
+	for _, p := range prices {
+		if p.EntityType == types.PRICE_ENTITY_TYPE_PLAN && p.EntityID != "" {
+			planIDs = append(planIDs, p.EntityID)
+		} else if p.EntityType == types.PRICE_ENTITY_TYPE_ADDON && p.EntityID != "" {
+			addonIDs = append(addonIDs, p.EntityID)
+		}
+	}
+
+	// If plans are requested to be expanded, fetch plans in bulk
+	var plansByID map[string]*dto.PlanResponse
+	planService := NewPlanService(s.ServiceParams)
+	if filter.GetExpand().Has(types.ExpandPlan) && len(planIDs) > 0 {
+		// Remove duplicates
+		planIDs = lo.Uniq(planIDs)
+
+		// Fetch plans in bulk
+		planFilter := types.NewNoLimitPlanFilter()
+		planFilter.PlanIDs = planIDs
+
+		plansResponse, err := planService.GetPlans(ctx, planFilter)
+		if err != nil {
+			return nil, err
+		}
+
+		// Create a map for plan lookup
+		plansByID = make(map[string]*dto.PlanResponse, len(plansResponse.Items))
+		for _, p := range plansResponse.Items {
+			plansByID[p.Plan.ID] = p
+		}
+	}
+
+	// If addons are requested to be expanded, fetch addons in bulk
+	var addonsByID map[string]*dto.AddonResponse
+	addonService := NewAddonService(s.ServiceParams)
+	if filter.GetExpand().Has(types.ExpandAddons) && len(addonIDs) > 0 {
+		// Remove duplicates
+		addonIDs = lo.Uniq(addonIDs)
+
+		// Fetch addons in bulk
+		addonFilter := types.NewNoLimitAddonFilter()
+		addonFilter.AddonIDs = addonIDs
+		addonsResponse, err := addonService.GetAddons(ctx, addonFilter)
+		if err != nil {
+			return nil, err
+		}
+
+		// Create a map for addon lookup
+		addonsByID = make(map[string]*dto.AddonResponse, len(addonsResponse.Items))
+		for _, a := range addonsResponse.Items {
+			addonsByID[a.Addon.ID] = a
+		}
+	}
+
+	// Build response with expanded fields
+	for i, p := range prices {
+		response.Items[i] = &dto.PriceResponse{Price: p}
+
+		// Add meter if requested and available
+		if filter.GetExpand().Has(types.ExpandMeters) && p.MeterID != "" {
+			if m, ok := metersByID[p.MeterID]; ok {
+				response.Items[i].Meter = m
 			}
 		}
 
-		// If plans are requested to be expanded, fetch plans in bulk
-		var plansByID map[string]*dto.PlanResponse
-		planService := NewPlanService(s.ServiceParams)
-		if filter.GetExpand().Has(types.ExpandPlan) && len(planIDs) > 0 {
-			// Remove duplicates
-			planIDs = lo.Uniq(planIDs)
-
-			// Fetch plans in bulk
-			planFilter := types.NewNoLimitPlanFilter()
-			planFilter.PlanIDs = planIDs
-
-			plansResponse, err := planService.GetPlans(ctx, planFilter)
-			if err != nil {
-				return nil, err
-			}
-
-			// Create a map for plan lookup
-			plansByID = make(map[string]*dto.PlanResponse, len(plansResponse.Items))
-			for _, p := range plansResponse.Items {
-				plansByID[p.Plan.ID] = p
+		// Add price unit if requested and available
+		if filter.GetExpand().Has(types.ExpandPriceUnit) && p.PriceUnitID != "" {
+			if pu, ok := priceUnitsByID[p.PriceUnitID]; ok {
+				response.Items[i].PricingUnit = pu
 			}
 		}
 
-		// If addons are requested to be expanded, fetch addons in bulk
-		var addonsByID map[string]*dto.AddonResponse
-		addonService := NewAddonService(s.ServiceParams)
-		if filter.GetExpand().Has(types.ExpandAddons) && len(addonIDs) > 0 {
-			// Remove duplicates
-			addonIDs = lo.Uniq(addonIDs)
-
-			// Fetch addons in bulk
-			addonFilter := types.NewNoLimitAddonFilter()
-			addonFilter.AddonIDs = addonIDs
-			addonsResponse, err := addonService.GetAddons(ctx, addonFilter)
-			if err != nil {
-				return nil, err
-			}
-
-			// Create a map for addon lookup
-			addonsByID = make(map[string]*dto.AddonResponse, len(addonsResponse.Items))
-			for _, a := range addonsResponse.Items {
-				addonsByID[a.Addon.ID] = a
+		// Add plan if requested and available
+		if filter.GetExpand().Has(types.ExpandPlan) && p.EntityType == types.PRICE_ENTITY_TYPE_PLAN && p.EntityID != "" {
+			if plan, ok := plansByID[p.EntityID]; ok {
+				response.Items[i].Plan = plan
 			}
 		}
 
-		// Build response with expanded fields
-		for i, p := range prices {
-			response.Items[i] = &dto.PriceResponse{Price: p}
-
-			// Add meter if requested and available
-			if filter.GetExpand().Has(types.ExpandMeters) && p.MeterID != "" {
-				if m, ok := metersByID[p.MeterID]; ok {
-					response.Items[i].Meter = m
-				}
-			}
-
-			// Add price unit if requested and available
-			if filter.GetExpand().Has(types.ExpandPriceUnit) && p.PriceUnitID != "" {
-				if pu, ok := priceUnitsByID[p.PriceUnitID]; ok {
-					response.Items[i].PricingUnit = pu
-				}
-			}
-
-			// Add plan if requested and available
-			if filter.GetExpand().Has(types.ExpandPlan) && p.EntityType == types.PRICE_ENTITY_TYPE_PLAN && p.EntityID != "" {
-				if plan, ok := plansByID[p.EntityID]; ok {
-					response.Items[i].Plan = plan
-				}
-			}
-
-			// Add addon if requested and available
-			if filter.GetExpand().Has(types.ExpandAddons) && p.EntityType == types.PRICE_ENTITY_TYPE_ADDON && p.EntityID != "" {
-				if addon, ok := addonsByID[p.EntityID]; ok {
-					response.Items[i].Addon = addon
-				}
+		// Add addon if requested and available
+		if filter.GetExpand().Has(types.ExpandAddons) && p.EntityType == types.PRICE_ENTITY_TYPE_ADDON && p.EntityID != "" {
+			if addon, ok := addonsByID[p.EntityID]; ok {
+				response.Items[i].Addon = addon
 			}
 		}
 	}
