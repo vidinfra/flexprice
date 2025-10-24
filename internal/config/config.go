@@ -40,6 +40,7 @@ type Configuration struct {
 	FeatureUsageTrackingLazy FeatureUsageTrackingLazyConfig `mapstructure:"feature_usage_tracking_lazy" validate:"required"`
 	EnvAccess                EnvAccessConfig                `mapstructure:"env_access" json:"env_access" validate:"omitempty"`
 	FeatureFlag              FeatureFlagConfig              `mapstructure:"feature_flag" validate:"required"`
+	Email                    EmailConfig                    `mapstructure:"email" validate:"required"`
 }
 
 type CacheConfig struct {
@@ -219,6 +220,22 @@ type EnvAccessConfig struct {
 type FeatureFlagConfig struct {
 	EnableFeatureUsageForAnalytics bool   `mapstructure:"enable_feature_usage_for_analytics" validate:"required"`
 	ForceV1ForTenant               string `mapstructure:"force_v1_for_tenant" validate:"omitempty"`
+}
+
+type Email struct {
+	Enabled      bool   `mapstructure:"enabled" validate:"required"`
+	ResendAPIKey string `mapstructure:"resend_api_key" validate:"omitempty"`
+	FromAddress  string `mapstructure:"from_address" validate:"omitempty"`
+	ReplyTo      string `mapstructure:"reply_to" validate:"omitempty"`
+	CalendarURL  string `mapstructure:"calendar_url" validate:"omitempty"`
+}
+
+type EmailConfig struct {
+	Enabled      bool   `mapstructure:"enabled" validate:"required"`
+	ResendAPIKey string `mapstructure:"resend_api_key" validate:"omitempty"`
+	FromAddress  string `mapstructure:"from_address" validate:"omitempty"`
+	ReplyTo      string `mapstructure:"reply_to" validate:"omitempty"`
+	CalendarURL  string `mapstructure:"calendar_url" validate:"omitempty"`
 }
 
 func NewConfig() (*Configuration, error) {
