@@ -36,7 +36,7 @@ func NewPriceUnitRepository(client postgres.IClient, log *logger.Logger, cache c
 }
 
 func (r *priceUnitRepository) Create(ctx context.Context, unit *domainPriceUnit.PriceUnit) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("creating price unit",
 		"price_unit_id", unit.ID,
@@ -132,7 +132,7 @@ func (r *priceUnitRepository) GetByID(ctx context.Context, id string) (*domainPr
 		return cachedUnit, nil
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	r.log.Debugw("getting price unit",
 		"price_unit_id", id,
@@ -182,7 +182,7 @@ func (r *priceUnitRepository) List(ctx context.Context, filter *domainPriceUnit.
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	query := client.PriceUnit.Query()
 
 	// Apply entity-specific filters
@@ -213,7 +213,7 @@ func (r *priceUnitRepository) List(ctx context.Context, filter *domainPriceUnit.
 }
 
 func (r *priceUnitRepository) Count(ctx context.Context, filter *domainPriceUnit.PriceUnitFilter) (int, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "price_unit", "count", map[string]interface{}{
@@ -248,7 +248,7 @@ func (r *priceUnitRepository) Count(ctx context.Context, filter *domainPriceUnit
 }
 
 func (r *priceUnitRepository) Update(ctx context.Context, unit *domainPriceUnit.PriceUnit) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("updating price unit",
 		"price_unit_id", unit.ID,
@@ -298,7 +298,7 @@ func (r *priceUnitRepository) Update(ctx context.Context, unit *domainPriceUnit.
 }
 
 func (r *priceUnitRepository) Delete(ctx context.Context, id string) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("deleting price unit",
 		"price_unit_id", id,
@@ -374,7 +374,7 @@ func (r *priceUnitRepository) GetByCode(ctx context.Context, code string, tenant
 			Mark(ierr.ErrValidation)
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	q := client.PriceUnit.Query().
 		Where(

@@ -32,7 +32,7 @@ func NewSettingsRepository(client postgres.IClient, log *logger.Logger, cache ca
 }
 
 func (r *settingsRepository) Create(ctx context.Context, s *domainSettings.Setting) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("creating setting",
 		"setting_id", s.ID,
@@ -87,7 +87,7 @@ func (r *settingsRepository) Create(ctx context.Context, s *domainSettings.Setti
 }
 
 func (r *settingsRepository) Update(ctx context.Context, s *domainSettings.Setting) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("updating setting",
 		"setting_id", s.ID,
@@ -126,7 +126,7 @@ func (r *settingsRepository) Update(ctx context.Context, s *domainSettings.Setti
 }
 
 func (r *settingsRepository) Delete(ctx context.Context, id string) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("deleting setting",
 		"setting_id", id,
@@ -169,7 +169,7 @@ func (r *settingsRepository) Get(ctx context.Context, id string) (*domainSetting
 		return cachedSetting, nil
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	r.log.Debugw("getting setting", "id", id)
 
 	s, err := client.Settings.Query().
@@ -204,7 +204,7 @@ func (r *settingsRepository) Get(ctx context.Context, id string) (*domainSetting
 
 func (r *settingsRepository) GetByKey(ctx context.Context, key string) (*domainSettings.Setting, error) {
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	r.log.Debugw("getting setting by key", "key", key)
 
 	s, err := client.Settings.Query().
@@ -241,7 +241,7 @@ func (r *settingsRepository) DeleteByKey(ctx context.Context, key string) error 
 		return err
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("deleting setting by key", "key", key)
 
@@ -338,7 +338,7 @@ func (r *settingsRepository) ListAllTenantEnvSettingsByKey(ctx context.Context, 
 			Mark(ierr.ErrValidation)
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Query all settings for the given key
 	settings, err := client.Settings.Query().

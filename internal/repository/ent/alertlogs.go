@@ -31,7 +31,7 @@ func NewAlertLogsRepository(client postgres.IClient, log *logger.Logger, cache c
 }
 
 func (r *alertLogsRepository) Create(ctx context.Context, al *domainAlertLogs.AlertLog) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("creating alert log",
 		"alert_log_id", al.ID,
@@ -112,7 +112,7 @@ func (r *alertLogsRepository) Create(ctx context.Context, al *domainAlertLogs.Al
 }
 
 func (r *alertLogsRepository) Get(ctx context.Context, id string) (*domainAlertLogs.AlertLog, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "alertlogs", "get", map[string]interface{}{
@@ -150,7 +150,7 @@ func (r *alertLogsRepository) Get(ctx context.Context, id string) (*domainAlertL
 }
 
 func (r *alertLogsRepository) List(ctx context.Context, filter *types.AlertLogFilter) ([]*domainAlertLogs.AlertLog, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "alertlogs", "list", map[string]interface{}{
@@ -202,7 +202,7 @@ func (r *alertLogsRepository) List(ctx context.Context, filter *types.AlertLogFi
 }
 
 func (r *alertLogsRepository) Count(ctx context.Context, filter *types.AlertLogFilter) (int, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "alertlogs", "count", map[string]interface{}{})
@@ -244,7 +244,7 @@ func (r *alertLogsRepository) Count(ctx context.Context, filter *types.AlertLogF
 // If alertType is nil, searches across all alert types
 // If parentEntityType and parentEntityID are provided, filters by those as well
 func (r *alertLogsRepository) GetLatestAlert(ctx context.Context, entityType types.AlertEntityType, entityID string, alertType *types.AlertType, parentEntityType *string, parentEntityID *string) (*domainAlertLogs.AlertLog, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "alertlogs", "get_latest_alert", map[string]interface{}{
@@ -301,7 +301,7 @@ func (r *alertLogsRepository) GetLatestAlert(ctx context.Context, entityType typ
 }
 
 func (r *alertLogsRepository) ListByEntity(ctx context.Context, entityType types.AlertEntityType, entityID string, limit int) ([]*domainAlertLogs.AlertLog, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "alertlogs", "list_by_entity", map[string]interface{}{
@@ -342,7 +342,7 @@ func (r *alertLogsRepository) ListByEntity(ctx context.Context, entityType types
 }
 
 func (r *alertLogsRepository) ListByAlertType(ctx context.Context, alertType types.AlertType, limit int) ([]*domainAlertLogs.AlertLog, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "alertlogs", "list_by_alert_type", map[string]interface{}{
