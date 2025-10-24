@@ -46,6 +46,7 @@ type Handlers struct {
 	EntityIntegrationMapping *v1.EntityIntegrationMappingHandler
 	Settings                 *v1.SettingsHandler
 	SetupIntent              *v1.SetupIntentHandler
+	ScheduledTask            *v1.ScheduledTaskHandler
 
 	// Portal handlers
 	Onboarding *v1.OnboardingHandler
@@ -327,6 +328,18 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			tasks.GET("", handlers.Task.ListTasks)
 			tasks.GET("/:id", handlers.Task.GetTask)
 			tasks.PUT("/:id/status", handlers.Task.UpdateTaskStatus)
+
+			// Scheduled tasks routes under /tasks/scheduled
+			scheduledTasks := tasks.Group("/scheduled")
+			{
+				scheduledTasks.POST("", handlers.ScheduledTask.CreateScheduledTask)
+				scheduledTasks.GET("", handlers.ScheduledTask.ListScheduledTasks)
+				scheduledTasks.GET("/:id", handlers.ScheduledTask.GetScheduledTask)
+				scheduledTasks.PUT("/:id", handlers.ScheduledTask.UpdateScheduledTask)
+				scheduledTasks.DELETE("/:id", handlers.ScheduledTask.DeleteScheduledTask)
+				scheduledTasks.POST("/:id/run", handlers.ScheduledTask.TriggerForceRun)
+
+			}
 		}
 
 		// Tax rate routes

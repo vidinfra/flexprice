@@ -43,11 +43,19 @@ func (r *taskRepository) Create(ctx context.Context, t *domainTask.Task) error {
 		t.EnvironmentID = types.GetEnvironmentID(ctx)
 	}
 
+	r.logger.Infow("saving task to database",
+		"task_id", t.ID,
+		"created_by", t.CreatedBy,
+		"updated_by", t.UpdatedBy,
+		"tenant_id", t.TenantID)
+
 	task, err := client.Task.Create().
 		SetID(t.ID).
 		SetTenantID(t.TenantID).
 		SetTaskType(string(t.TaskType)).
 		SetEntityType(string(t.EntityType)).
+		SetNillableScheduledTaskID(&t.ScheduledTaskID).
+		SetNillableWorkflowID(t.WorkflowID).
 		SetFileURL(t.FileURL).
 		SetNillableFileName(t.FileName).
 		SetFileType(string(t.FileType)).
@@ -83,6 +91,13 @@ func (r *taskRepository) Create(ctx context.Context, t *domainTask.Task) error {
 	}
 
 	SetSpanSuccess(span)
+
+	r.logger.Infow("task saved to database successfully",
+		"task_id", task.ID,
+		"created_by", task.CreatedBy,
+		"updated_by", task.UpdatedBy,
+		"tenant_id", task.TenantID)
+
 	*t = *domainTask.FromEnt(task)
 	return nil
 }
@@ -196,6 +211,7 @@ func (r *taskRepository) Update(ctx context.Context, t *domainTask.Task) error {
 	query.
 		SetTaskType(string(t.TaskType)).
 		SetEntityType(string(t.EntityType)).
+		SetNillableScheduledTaskID(&t.ScheduledTaskID).
 		SetFileURL(t.FileURL).
 		SetNillableFileName(t.FileName).
 		SetFileType(string(t.FileType)).
@@ -323,7 +339,7 @@ func (o TaskQueryOptions) GetFieldName(field string) string {
 	}
 }
 
-func (o TaskQueryOptions) applyEntityQueryOptions(_ context.Context, f *types.TaskFilter, query *ent.TaskQuery) *ent.TaskQuery {
+func (o TaskQueryOptions) applyEntityQueryOptions(ctx context.Context, f *types.TaskFilter, query *ent.TaskQuery) *ent.TaskQuery {
 	if f == nil {
 		return query
 	}
@@ -337,6 +353,9 @@ func (o TaskQueryOptions) applyEntityQueryOptions(_ context.Context, f *types.Ta
 	}
 	if f.TaskStatus != nil {
 		query = query.Where(task.TaskStatus(string(*f.TaskStatus)))
+	}
+	if f.ScheduledTaskID != "" {
+		query = query.Where(task.ScheduledTaskID(f.ScheduledTaskID))
 	}
 	if f.CreatedBy != "" {
 		query = query.Where(task.CreatedBy(f.CreatedBy))

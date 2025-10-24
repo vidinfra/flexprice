@@ -60,6 +60,33 @@ func (s *connectionService) encryptMetadata(encryptedSecretData types.Connection
 			}
 		}
 
+	case types.SecretProviderS3:
+		if encryptedSecretData.S3 != nil {
+			encryptedAccessKeyID, err := s.encryptionService.Encrypt(encryptedSecretData.S3.AWSAccessKeyID)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+			encryptedSecretAccessKey, err := s.encryptionService.Encrypt(encryptedSecretData.S3.AWSSecretAccessKey)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+
+			// Encrypt session token if provided (for temporary credentials)
+			var encryptedSessionToken string
+			if encryptedSecretData.S3.AWSSessionToken != "" {
+				encryptedSessionToken, err = s.encryptionService.Encrypt(encryptedSecretData.S3.AWSSessionToken)
+				if err != nil {
+					return types.ConnectionMetadata{}, err
+				}
+			}
+
+			encryptedMetadata.S3 = &types.S3ConnectionMetadata{
+				AWSAccessKeyID:     encryptedAccessKeyID,
+				AWSSecretAccessKey: encryptedSecretAccessKey,
+				AWSSessionToken:    encryptedSessionToken,
+			}
+		}
+
 	default:
 		// For other providers or unknown types, use generic format
 		if encryptedSecretData.Generic != nil {
@@ -109,6 +136,33 @@ func (s *connectionService) decryptMetadata(encryptedSecretData types.Connection
 				SecretKey:      decryptedSecretKey,
 				WebhookSecret:  decryptedWebhookSecret,
 				AccountID:      encryptedSecretData.Stripe.AccountID, // Account ID is not sensitive
+			}
+		}
+
+	case types.SecretProviderS3:
+		if encryptedSecretData.S3 != nil {
+			decryptedAccessKeyID, err := s.encryptionService.Decrypt(encryptedSecretData.S3.AWSAccessKeyID)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+			decryptedSecretAccessKey, err := s.encryptionService.Decrypt(encryptedSecretData.S3.AWSSecretAccessKey)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+
+			// Decrypt session token if present (for temporary credentials)
+			var decryptedSessionToken string
+			if encryptedSecretData.S3.AWSSessionToken != "" {
+				decryptedSessionToken, err = s.encryptionService.Decrypt(encryptedSecretData.S3.AWSSessionToken)
+				if err != nil {
+					return types.ConnectionMetadata{}, err
+				}
+			}
+
+			decryptedMetadata.S3 = &types.S3ConnectionMetadata{
+				AWSAccessKeyID:     decryptedAccessKeyID,
+				AWSSecretAccessKey: decryptedSecretAccessKey,
+				AWSSessionToken:    decryptedSessionToken,
 			}
 		}
 

@@ -219,6 +219,18 @@ func convertConnectionMetadataToMap(encryptedSecretData types.ConnectionMetadata
 				"account_id":      encryptedSecretData.Stripe.AccountID,
 			}
 		}
+	case types.SecretProviderS3:
+		if encryptedSecretData.S3 != nil {
+			result := map[string]interface{}{
+				"aws_access_key_id":     encryptedSecretData.S3.AWSAccessKeyID,
+				"aws_secret_access_key": encryptedSecretData.S3.AWSSecretAccessKey,
+			}
+			// Add session token if present (for temporary credentials)
+			if encryptedSecretData.S3.AWSSessionToken != "" {
+				result["aws_session_token"] = encryptedSecretData.S3.AWSSessionToken
+			}
+			return result
+		}
 	default:
 		// For other providers or unknown types, use generic format
 		if encryptedSecretData.Generic != nil {
