@@ -123,18 +123,8 @@ func NewEntClients(config *config.Configuration, logger *logger.Logger) (*EntCli
 			return nil, fmt.Errorf("failed to connect to postgres reader: %w", err)
 		}
 
-		// Configure reader connection pool (typically larger for read replicas)
-		readerMaxOpenConns := config.Postgres.MaxOpenConns
-		if readerMaxOpenConns == 0 {
-			readerMaxOpenConns = config.Postgres.MaxOpenConns * 2 // Default to 2x writer
-		}
-		readerMaxIdleConns := config.Postgres.MaxIdleConns
-		if readerMaxIdleConns == 0 {
-			readerMaxIdleConns = config.Postgres.MaxIdleConns * 2 // Default to 2x writer
-		}
-
-		readerDB.SetMaxOpenConns(readerMaxOpenConns)
-		readerDB.SetMaxIdleConns(readerMaxIdleConns)
+		readerDB.SetMaxOpenConns(config.Postgres.MaxOpenConns)
+		readerDB.SetMaxIdleConns(config.Postgres.MaxIdleConns)
 		readerDB.SetConnMaxLifetime(time.Duration(config.Postgres.ConnMaxLifetimeMinutes) * time.Minute)
 
 		// Create reader driver
@@ -151,8 +141,6 @@ func NewEntClients(config *config.Configuration, logger *logger.Logger) (*EntCli
 		logger.Debugw("connected to postgres reader",
 			"host", config.Postgres.ReaderHost,
 			"port", config.Postgres.ReaderPort,
-			"max_open_conns", readerMaxOpenConns,
-			"max_idle_conns", readerMaxIdleConns,
 		)
 	} else {
 		// Use writer client as reader if no separate reader is configured

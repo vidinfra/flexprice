@@ -3,10 +3,12 @@ package ent
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/flexprice/flexprice/ent"
 	"github.com/flexprice/flexprice/ent/predicate"
+	"github.com/flexprice/flexprice/ent/price"
 	"github.com/flexprice/flexprice/ent/priceunit"
 	"github.com/flexprice/flexprice/internal/cache"
 	domainPriceUnit "github.com/flexprice/flexprice/internal/domain/priceunit"
@@ -422,6 +424,69 @@ func (r *priceUnitRepository) ConvertToPriceUnit(ctx context.Context, code strin
 	}
 	// amount in custom currency = amount in fiat currency / conversion_rate
 	return fiatAmount.Div(unit.ConversionRate), nil
+}
+
+// ExistsByCode checks if a pricing unit with the given code exists for a tenant and environment
+func (r *priceUnitRepository) ExistsByCode(ctx context.Context, code string) (bool, error) {
+	client := r.client.Reader(ctx)
+
+	// Start a span for this repository operation
+	span := StartRepositorySpan(ctx, "price_unit", "exists_by_code", map[string]interface{}{
+		"code": code,
+	})
+	defer FinishSpan(span)
+
+	query := client.PriceUnit.Query().
+		Where(
+			priceunit.CodeEQ(strings.ToLower(code)),
+			priceunit.TenantIDEQ(types.GetTenantID(ctx)),
+			priceunit.EnvironmentIDEQ(types.GetEnvironmentID(ctx)),
+			priceunit.StatusEQ(string(types.StatusPublished)),
+		)
+
+	exists, err := query.Exist(ctx)
+	if err != nil {
+		SetSpanError(span, err)
+		return false, ierr.WithError(err).
+			WithHint("Failed to check if price unit exists by code").
+			WithReportableDetails(map[string]any{
+				"code": code,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	SetSpanSuccess(span)
+	return exists, nil
+}
+
+// IsUsedByPrices checks if a pricing unit is being used by any prices
+func (r *priceUnitRepository) IsUsedByPrices(ctx context.Context, priceUnitID string) (bool, error) {
+	client := r.client.Reader(ctx)
+
+	// Start a span for this repository operation
+	span := StartRepositorySpan(ctx, "price_unit", "is_used_by_prices", map[string]interface{}{
+		"price_unit_id": priceUnitID,
+	})
+	defer FinishSpan(span)
+
+	exists, err := client.Price.Query().
+		Where(
+			price.PriceUnitIDEQ(priceUnitID),
+		).
+		Exist(ctx)
+
+	if err != nil {
+		SetSpanError(span, err)
+		return false, ierr.WithError(err).
+			WithHint("Failed to check if price unit is in use").
+			WithReportableDetails(map[string]any{
+				"price_unit_id": priceUnitID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	SetSpanSuccess(span)
+	return exists, nil
 }
 
 // PriceUnitQuery type alias for better readability
