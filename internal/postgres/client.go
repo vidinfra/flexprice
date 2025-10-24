@@ -130,10 +130,9 @@ func NewEntClients(config *config.Configuration, logger *logger.Logger) (*EntCli
 		// Create reader driver
 		readerDrv := entsql.OpenDB(dialect.Postgres, readerDB)
 
-		// Create reader client with options
+		// Create reader client with options (removing debug logs for reads)
 		readerOpts := []ent.Option{
 			ent.Driver(readerDrv),
-			ent.Debug(), // Enable debug logging
 		}
 
 		readerClient = ent.NewClient(readerOpts...)
