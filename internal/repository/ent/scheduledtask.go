@@ -31,7 +31,7 @@ func (r *ScheduledTaskRepository) Create(ctx context.Context, task *domainst.Sch
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 	create := client.ScheduledTask.
 		Create().
 		SetID(task.ID).
@@ -65,7 +65,7 @@ func (r *ScheduledTaskRepository) Create(ctx context.Context, task *domainst.Sch
 
 // Get retrieves a scheduled task by ID
 func (r *ScheduledTaskRepository) Get(ctx context.Context, id string) (*domainst.ScheduledTask, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	task, err := client.ScheduledTask.
 		Query().
 		Where(
@@ -91,7 +91,7 @@ func (r *ScheduledTaskRepository) Get(ctx context.Context, id string) (*domainst
 
 // Update updates an existing scheduled task
 func (r *ScheduledTaskRepository) Update(ctx context.Context, task *domainst.ScheduledTask) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 	update := client.ScheduledTask.
 		Update().
 		Where(
@@ -146,7 +146,7 @@ func (r *ScheduledTaskRepository) Update(ctx context.Context, task *domainst.Sch
 
 // Delete deletes a scheduled task
 func (r *ScheduledTaskRepository) Delete(ctx context.Context, id string) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 	affected, err := client.ScheduledTask.
 		Delete().
 		Where(
@@ -173,7 +173,7 @@ func (r *ScheduledTaskRepository) Delete(ctx context.Context, id string) error {
 
 // List retrieves all scheduled tasks with optional filters
 func (r *ScheduledTaskRepository) List(ctx context.Context, filters *domainst.ListFilters) ([]*domainst.ScheduledTask, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	query := client.ScheduledTask.Query()
 
 	// Apply tenant and environment filters
@@ -225,7 +225,7 @@ func (r *ScheduledTaskRepository) List(ctx context.Context, filters *domainst.Li
 
 // GetByConnection retrieves all scheduled tasks for a specific connection
 func (r *ScheduledTaskRepository) GetByConnection(ctx context.Context, connectionID string) ([]*domainst.ScheduledTask, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	tasks, err := client.ScheduledTask.
 		Query().
 		Where(

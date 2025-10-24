@@ -39,7 +39,7 @@ func (r *secretRepository) Create(ctx context.Context, s *domainSecret.Secret) e
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("creating secret",
 		"secret_id", s.ID,
@@ -110,7 +110,7 @@ func (r *secretRepository) Create(ctx context.Context, s *domainSecret.Secret) e
 }
 
 func (r *secretRepository) Get(ctx context.Context, id string) (*domainSecret.Secret, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	r.log.Debugw("getting secret", "secret_id", id)
 
@@ -149,7 +149,7 @@ func (r *secretRepository) GetAPIKeyByValue(ctx context.Context, value string) (
 	}
 
 	// Not found in cache, fetch from database
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Get tenant ID from context, but don't require it for API key verification
 	tenantID := types.GetTenantID(ctx)
@@ -187,7 +187,7 @@ func (r *secretRepository) GetAPIKeyByValue(ctx context.Context, value string) (
 }
 
 func (r *secretRepository) UpdateLastUsed(ctx context.Context, id string) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("updating last used timestamp", "secret_id", id)
 
@@ -218,7 +218,7 @@ func (r *secretRepository) UpdateLastUsed(ctx context.Context, id string) error 
 }
 
 func (r *secretRepository) List(ctx context.Context, filter *types.SecretFilter) ([]*domainSecret.Secret, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	r.log.Debugw("listing secrets")
 
@@ -238,7 +238,7 @@ func (r *secretRepository) List(ctx context.Context, filter *types.SecretFilter)
 }
 
 func (r *secretRepository) Count(ctx context.Context, filter *types.SecretFilter) (int, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	r.log.Debugw("counting secrets")
 
@@ -285,7 +285,7 @@ func (r *secretRepository) Delete(ctx context.Context, id string) error {
 		return err
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 	r.log.Debugw("deleting secret", "secret_id", id)
 
 	err = client.Secret.UpdateOneID(id).

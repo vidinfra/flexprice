@@ -36,7 +36,7 @@ func (r *taskRepository) Create(ctx context.Context, t *domainTask.Task) error {
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	// Set environment ID from context if not already set
 	if t.EnvironmentID == "" {
@@ -109,7 +109,7 @@ func (r *taskRepository) Get(ctx context.Context, id string) (*domainTask.Task, 
 	})
 	defer FinishSpan(span)
 
-	task, err := r.client.Querier(ctx).Task.Query().
+	task, err := r.client.Reader(ctx).Task.Query().
 		Where(
 			task.ID(id),
 			task.TenantID(types.GetTenantID(ctx)),
@@ -145,7 +145,7 @@ func (r *taskRepository) List(ctx context.Context, filter *types.TaskFilter) ([]
 	})
 	defer FinishSpan(span)
 
-	query := r.client.Querier(ctx).Task.Query()
+	query := r.client.Reader(ctx).Task.Query()
 
 	// Apply entity-specific filters
 	query = r.queryOpts.applyEntityQueryOptions(ctx, filter, query)
@@ -172,7 +172,7 @@ func (r *taskRepository) Count(ctx context.Context, filter *types.TaskFilter) (i
 	})
 	defer FinishSpan(span)
 
-	query := r.client.Querier(ctx).Task.Query()
+	query := r.client.Reader(ctx).Task.Query()
 
 	query = ApplyBaseFilters(ctx, query, filter, r.queryOpts)
 	query = r.queryOpts.applyEntityQueryOptions(ctx, filter, query)
@@ -196,7 +196,7 @@ func (r *taskRepository) Update(ctx context.Context, t *domainTask.Task) error {
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	// Use predicate-based update for optimistic locking
 	query := client.Task.Update().
@@ -261,7 +261,7 @@ func (r *taskRepository) Delete(ctx context.Context, id string) error {
 	})
 	defer FinishSpan(span)
 
-	_, err := r.client.Querier(ctx).Task.Update().
+	_, err := r.client.Writer(ctx).Task.Update().
 		Where(
 			task.ID(id),
 			task.TenantID(types.GetTenantID(ctx)),

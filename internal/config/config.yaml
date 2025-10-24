@@ -46,6 +46,8 @@ postgres:
   host: 127.0.0.1 # For local mode
   # Will be overridden by FLEXPRICE_POSTGRES_HOST env var in Docker
   port: 5432
+  reader_host: 127.0.0.1
+  reader_port: 5432
   user: flexprice
   password: flexprice123
   dbname: flexprice

@@ -116,6 +116,10 @@ type PostgresConfig struct {
 	MaxIdleConns           int    `mapstructure:"max_idle_conns" default:"5"`
 	ConnMaxLifetimeMinutes int    `mapstructure:"conn_max_lifetime_minutes" default:"60"`
 	AutoMigrate            bool   `mapstructure:"auto_migrate" default:"false"`
+
+	// Reader endpoint configuration for read replicas
+	ReaderHost string `mapstructure:"reader_host"`
+	ReaderPort int    `mapstructure:"reader_port"`
 }
 
 type APIKeyConfig struct {
@@ -342,4 +346,31 @@ func (c PostgresConfig) GetDSN() string {
 		c.Port,
 		c.SSLMode,
 	)
+}
+
+func (c PostgresConfig) GetReaderDSN() string {
+	// If reader host is not configured, fall back to writer host
+	host := c.ReaderHost
+	port := c.ReaderPort
+
+	if host == "" {
+		host = c.Host
+	}
+	if port == 0 {
+		port = c.Port
+	}
+
+	return fmt.Sprintf(
+		"user=%s password=%s dbname=%s host=%s port=%d sslmode=%s",
+		c.User,
+		c.Password,
+		c.DBName,
+		host,
+		port,
+		c.SSLMode,
+	)
+}
+
+func (c PostgresConfig) HasSeparateReader() bool {
+	return c.ReaderHost != "" && c.ReaderHost != c.Host
 }

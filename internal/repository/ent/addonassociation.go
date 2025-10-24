@@ -35,7 +35,7 @@ func NewAddonAssociationRepository(client postgres.IClient, log *logger.Logger, 
 }
 
 func (r *addonAssociationRepository) Create(ctx context.Context, a *domainAddonAssociation.AddonAssociation) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("creating addon association",
 		"addon_association_id", a.ID,
@@ -121,7 +121,7 @@ func (r *addonAssociationRepository) GetByID(ctx context.Context, id string) (*d
 		return cachedAddonAssociation, nil
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	r.log.Debugw("getting addon association",
 		"addon_association_id", id,
@@ -171,7 +171,7 @@ func (r *addonAssociationRepository) List(ctx context.Context, filter *types.Add
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	query := client.AddonAssociation.Query()
 
 	// Apply entity-specific filters
@@ -199,7 +199,7 @@ func (r *addonAssociationRepository) List(ctx context.Context, filter *types.Add
 }
 
 func (r *addonAssociationRepository) Count(ctx context.Context, filter *types.AddonAssociationFilter) (int, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "addon_association", "count", map[string]interface{}{
@@ -231,7 +231,7 @@ func (r *addonAssociationRepository) Count(ctx context.Context, filter *types.Ad
 }
 
 func (r *addonAssociationRepository) Update(ctx context.Context, a *domainAddonAssociation.AddonAssociation) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("updating addon association",
 		"addon_association_id", a.ID,
@@ -282,7 +282,7 @@ func (r *addonAssociationRepository) Update(ctx context.Context, a *domainAddonA
 }
 
 func (r *addonAssociationRepository) Delete(ctx context.Context, id string) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("deleting addon association",
 		"addon_association_id", id,

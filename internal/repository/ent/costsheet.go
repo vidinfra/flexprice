@@ -42,7 +42,7 @@ func NewCostSheetRepository(client postgres.IClient, logger *logger.Logger) doma
 // - Returns appropriate domain errors for different failure scenarios
 func (r *costsheetRepository) Create(ctx context.Context, cs *domainCostsheet.Costsheet) error {
 	// Get database client from context
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	// Start tracing span for monitoring and debugging
 	span := StartRepositorySpan(ctx, "costsheet", "create", map[string]interface{}{
@@ -102,7 +102,7 @@ func (r *costsheetRepository) Create(ctx context.Context, cs *domainCostsheet.Co
 // It includes tenant and environment filtering for multi-tenant support.
 // Returns domain errors for not found and database operation failures.
 func (r *costsheetRepository) Get(ctx context.Context, id string) (*domainCostsheet.Costsheet, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start tracing span
 	span := StartRepositorySpan(ctx, "costsheet", "get", map[string]interface{}{
@@ -148,7 +148,7 @@ func (r *costsheetRepository) Get(ctx context.Context, id string) (*domainCostsh
 // It updates the costsheet with new values while maintaining tenant and environment isolation.
 // Handles various error scenarios including not found and constraint violations.
 func (r *costsheetRepository) Update(ctx context.Context, cs *domainCostsheet.Costsheet) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	// Start tracing span
 	span := StartRepositorySpan(ctx, "costsheet", "update", map[string]interface{}{
@@ -208,7 +208,7 @@ func (r *costsheetRepository) Update(ctx context.Context, cs *domainCostsheet.Co
 // Delete performs a soft delete (archiving) only for published cost sheets.
 // Returns an error if the cost sheet is not in published status.
 func (r *costsheetRepository) Delete(ctx context.Context, id string) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	// Start tracing span
 	span := StartRepositorySpan(ctx, "costsheet", "delete", map[string]interface{}{
@@ -287,7 +287,7 @@ func (r *costsheetRepository) Delete(ctx context.Context, id string) error {
 // List retrieves costsheets based on the provided filter criteria.
 // Supports pagination, sorting, and various filtering options.
 func (r *costsheetRepository) List(ctx context.Context, filter *domainCostsheet.Filter) ([]*domainCostsheet.Costsheet, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start tracing span
 	span := StartRepositorySpan(ctx, "costsheet", "list", map[string]interface{}{

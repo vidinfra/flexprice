@@ -32,7 +32,7 @@ func NewConnectionRepository(client postgres.IClient, log *logger.Logger, cache 
 }
 
 func (r *connectionRepository) Create(ctx context.Context, c *domainConnection.Connection) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("creating connection",
 		"connection_id", c.ID,
@@ -105,7 +105,7 @@ func (r *connectionRepository) Get(ctx context.Context, id string) (*domainConne
 		return cachedConnection, nil
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	r.log.Debugw("getting connection", "connection_id", id)
 
 	c, err := client.Connection.Query().
@@ -180,7 +180,7 @@ func (r *connectionRepository) GetByProvider(ctx context.Context, provider types
 }
 
 func (r *connectionRepository) List(ctx context.Context, filter *types.ConnectionFilter) ([]*domainConnection.Connection, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	query := client.Connection.Query()
 	query = r.queryOpts.ApplyTenantFilter(ctx, query)
@@ -241,7 +241,7 @@ func convertConnectionMetadataToMap(encryptedSecretData types.ConnectionMetadata
 }
 
 func (r *connectionRepository) Count(ctx context.Context, filter *types.ConnectionFilter) (int, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	query := client.Connection.Query()
 	query = r.queryOpts.ApplyTenantFilter(ctx, query)
@@ -264,7 +264,7 @@ func (r *connectionRepository) Count(ctx context.Context, filter *types.Connecti
 }
 
 func (r *connectionRepository) Update(ctx context.Context, c *domainConnection.Connection) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("updating connection",
 		"connection_id", c.ID,
@@ -316,7 +316,7 @@ func (r *connectionRepository) Update(ctx context.Context, c *domainConnection.C
 }
 
 func (r *connectionRepository) Delete(ctx context.Context, c *domainConnection.Connection) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("deleting connection",
 		"connection_id", c.ID,

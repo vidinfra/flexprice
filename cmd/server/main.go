@@ -90,7 +90,7 @@ func main() {
 			cache.NewInMemoryCache,
 
 			// Postgres
-			postgres.NewEntClient,
+			postgres.NewEntClients,
 			postgres.NewClient,
 
 			// Clickhouse
