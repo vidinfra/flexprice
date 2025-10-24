@@ -4,8 +4,9 @@ import (
 	"fmt"
 
 	"github.com/flexprice/flexprice/internal/service"
-	"github.com/flexprice/flexprice/internal/temporal/activities"
 	exportActivities "github.com/flexprice/flexprice/internal/temporal/activities/export"
+	planActivities "github.com/flexprice/flexprice/internal/temporal/activities/plan"
+	taskActivities "github.com/flexprice/flexprice/internal/temporal/activities/task"
 	temporalService "github.com/flexprice/flexprice/internal/temporal/service"
 	"github.com/flexprice/flexprice/internal/temporal/workflows"
 	exportWorkflows "github.com/flexprice/flexprice/internal/temporal/workflows/export"
@@ -23,10 +24,10 @@ type WorkerConfig struct {
 func RegisterWorkflowsAndActivities(temporalService temporalService.TemporalService, params service.ServiceParams) error {
 	// Create activity instances with dependencies
 	planService := service.NewPlanService(params)
-	planActivities := activities.NewPlanActivities(planService)
+	planActivities := planActivities.NewPlanActivities(planService)
 
 	taskService := service.NewTaskService(params)
-	taskActivities := activities.NewTaskActivities(taskService)
+	taskActivities := taskActivities.NewTaskActivities(taskService)
 
 	// Export activities
 	taskActivity := exportActivities.NewTaskActivity(params.TaskRepo, params.Logger)
@@ -61,8 +62,8 @@ func RegisterWorkflowsAndActivities(temporalService temporalService.TemporalServ
 // buildWorkerConfig creates a worker configuration for a specific task queue
 func buildWorkerConfig(
 	taskQueue types.TemporalTaskQueue,
-	planActivities *activities.PlanActivities,
-	taskActivities *activities.TaskActivities,
+	planActivities *planActivities.PlanActivities,
+	taskActivities *taskActivities.TaskActivities,
 	taskActivity *exportActivities.TaskActivity,
 	scheduledTaskActivity *exportActivities.ScheduledTaskActivity,
 	exportActivity *exportActivities.ExportActivity,
