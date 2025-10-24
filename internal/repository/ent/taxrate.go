@@ -171,7 +171,7 @@ func (r *taxrateRepository) List(ctx context.Context, filter *types.TaxRateFilte
 			Mark(ierr.ErrValidation)
 	}
 
-	query := r.client.Writer(ctx).TaxRate.Query()
+	query := r.client.Reader(ctx).TaxRate.Query()
 
 	query = ApplyQueryOptions(ctx, query, filter, r.queryOpts)
 
@@ -206,7 +206,7 @@ func (r *taxrateRepository) Count(ctx context.Context, filter *types.TaxRateFilt
 	})
 	defer FinishSpan(span)
 
-	query := r.client.Writer(ctx).TaxRate.Query()
+	query := r.client.Reader(ctx).TaxRate.Query()
 
 	query = ApplyQueryOptions(ctx, query, filter, r.queryOpts)
 

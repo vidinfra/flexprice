@@ -169,7 +169,7 @@ func (r *taxappliedRepository) Update(ctx context.Context, ta *domainTaxApplied.
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Writer(ctx)
+	client := r.client.Reader(ctx)
 
 	r.log.Debugw("updating taxapplied",
 		"taxapplied_id", ta.ID,
@@ -283,7 +283,7 @@ func (r *taxappliedRepository) List(ctx context.Context, filter *types.TaxApplie
 			Mark(ierr.ErrValidation)
 	}
 
-	query := r.client.Writer(ctx).TaxApplied.Query()
+	query := r.client.Reader(ctx).TaxApplied.Query()
 
 	query = ApplyQueryOptions(ctx, query, filter, r.queryOpts)
 

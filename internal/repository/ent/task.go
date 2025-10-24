@@ -109,7 +109,7 @@ func (r *taskRepository) Get(ctx context.Context, id string) (*domainTask.Task, 
 	})
 	defer FinishSpan(span)
 
-	task, err := r.client.Writer(ctx).Task.Query().
+	task, err := r.client.Reader(ctx).Task.Query().
 		Where(
 			task.ID(id),
 			task.TenantID(types.GetTenantID(ctx)),
@@ -145,7 +145,7 @@ func (r *taskRepository) List(ctx context.Context, filter *types.TaskFilter) ([]
 	})
 	defer FinishSpan(span)
 
-	query := r.client.Writer(ctx).Task.Query()
+	query := r.client.Reader(ctx).Task.Query()
 
 	// Apply entity-specific filters
 	query = r.queryOpts.applyEntityQueryOptions(ctx, filter, query)
@@ -172,7 +172,7 @@ func (r *taskRepository) Count(ctx context.Context, filter *types.TaskFilter) (i
 	})
 	defer FinishSpan(span)
 
-	query := r.client.Writer(ctx).Task.Query()
+	query := r.client.Reader(ctx).Task.Query()
 
 	query = ApplyBaseFilters(ctx, query, filter, r.queryOpts)
 	query = r.queryOpts.applyEntityQueryOptions(ctx, filter, query)

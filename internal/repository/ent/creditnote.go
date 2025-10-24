@@ -327,7 +327,7 @@ func (r *creditnoteRepository) Get(ctx context.Context, id string) (*domainCredi
 
 	r.log.Debugw("getting credit note", "creditnote_id", id)
 
-	creditNote, err := r.client.Writer(ctx).CreditNote.Query().
+	creditNote, err := r.client.Reader(ctx).CreditNote.Query().
 		Where(creditnote.ID(id),
 			creditnote.TenantID(types.GetTenantID(ctx)),
 			creditnote.EnvironmentID(types.GetEnvironmentID(ctx)),
@@ -528,7 +528,7 @@ func (r *creditnoteRepository) GetByIdempotencyKey(ctx context.Context, key stri
 		return cachedCreditNote, nil
 	}
 
-	cn, err := r.client.Writer(ctx).CreditNote.Query().
+	cn, err := r.client.Reader(ctx).CreditNote.Query().
 		Where(
 			creditnote.IdempotencyKey(key),
 			creditnote.EnvironmentID(types.GetEnvironmentID(ctx)),

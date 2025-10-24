@@ -347,7 +347,7 @@ func (r *subscriptionRepository) ListSubscriptionsDueForRenewal(ctx context.Cont
 	windowEnd := targetTime.Add(1 * time.Hour)
 
 	// Find subscriptions ending exactly at the target time
-	subs, err := r.client.Writer(ctx).Subscription.Query().
+	subs, err := r.client.Reader(ctx).Subscription.Query().
 		Where(
 			subscription.And(
 				subscription.SubscriptionStatusEQ(string(types.SubscriptionStatusActive)),

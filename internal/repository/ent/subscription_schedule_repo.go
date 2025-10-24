@@ -86,7 +86,7 @@ func (r *SubscriptionScheduleRepository) Get(ctx context.Context, id string) (*s
 	})
 	defer FinishSpan(span)
 
-	client := r.Client.Writer(ctx)
+	client := r.Client.Reader(ctx)
 
 	r.Logger.Debugw("getting subscription schedule",
 		"schedule_id", id,
@@ -141,7 +141,7 @@ func (r *SubscriptionScheduleRepository) GetBySubscriptionID(ctx context.Context
 	})
 	defer FinishSpan(span)
 
-	client := r.Client.Writer(ctx)
+	client := r.Client.Reader(ctx)
 
 	r.Logger.Debugw("getting subscription schedule by subscription ID",
 		"subscription_id", subscriptionID,
@@ -294,7 +294,7 @@ func (r *SubscriptionScheduleRepository) ListPhases(ctx context.Context, schedul
 	})
 	defer FinishSpan(span)
 
-	client := r.Client.Writer(ctx)
+	client := r.Client.Reader(ctx)
 
 	r.Logger.Debugw("listing subscription schedule phases",
 		"schedule_id", scheduleID,
@@ -382,7 +382,7 @@ func (r *SubscriptionScheduleRepository) GetPhase(ctx context.Context, id string
 	})
 	defer FinishSpan(span)
 
-	client := r.Client.Writer(ctx)
+	client := r.Client.Reader(ctx)
 
 	r.Logger.Debugw("getting subscription schedule phase",
 		"phase_id", id,

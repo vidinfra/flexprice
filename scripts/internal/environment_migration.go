@@ -131,7 +131,7 @@ func (s *migrationScript) updateEntitiesWithEnvironmentID(ctx context.Context, t
 			entity,
 		)
 
-		result, err := s.pgClient.Reader(ctx).QueryContext(ctx, query, environmentID, tenantID)
+		result, err := s.pgClient.Writer(ctx).QueryContext(ctx, query, environmentID, tenantID)
 		if err != nil {
 			s.log.Errorw("Failed to update entity", "entity", entity, "error", err)
 			continue
