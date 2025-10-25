@@ -908,7 +908,7 @@ func (s *subscriptionService) ListSubscriptions(ctx context.Context, filter *typ
 
 	// Get plans in bulk
 	planFilter := types.NewNoLimitPlanFilter()
-	planFilter.EntityIDs = uniquePlanIDs
+	planFilter.PlanIDs = uniquePlanIDs
 	if filter != nil && filter.Expand != nil {
 		s.Logger.Debugw("passing expand filters to plan service", "expand", filter.Expand)
 		planFilter.Expand = filter.Expand // pass on the filters to next layer
