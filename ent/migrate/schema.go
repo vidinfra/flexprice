@@ -86,6 +86,8 @@ var (
 		{Name: "environment_id", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "entity_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "entity_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "parent_entity_type", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "parent_entity_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "alert_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "alert_status", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "alert_info", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
@@ -104,12 +106,17 @@ var (
 			{
 				Name:    "idx_alertlogs_type",
 				Unique:  false,
-				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[10]},
+				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[12]},
 			},
 			{
 				Name:    "idx_alertlogs_entity_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[8], AlertLogsColumns[9], AlertLogsColumns[3]},
+			},
+			{
+				Name:    "idx_alertlogs_entity_parent_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[8], AlertLogsColumns[9], AlertLogsColumns[10], AlertLogsColumns[11], AlertLogsColumns[3]},
 			},
 		},
 	}
@@ -842,6 +849,7 @@ var (
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
 		{Name: "unit_singular", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "unit_plural", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "alert_settings", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
 	}
 	// FeaturesTable holds the schema information for the "features" table.
 	FeaturesTable = &schema.Table{
@@ -1371,6 +1379,51 @@ var (
 			},
 		},
 	}
+	// ScheduledTasksColumns holds the columns for the "scheduled_tasks" table.
+	ScheduledTasksColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Unique: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "tenant_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "status", Type: field.TypeString, Default: "published", SchemaType: map[string]string{"postgres": "varchar(20)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeString, Nullable: true},
+		{Name: "updated_by", Type: field.TypeString, Nullable: true},
+		{Name: "environment_id", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "connection_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "entity_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "interval", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(20)"}},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "job_config", Type: field.TypeJSON, Nullable: true},
+		{Name: "temporal_schedule_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(100)"}},
+	}
+	// ScheduledTasksTable holds the schema information for the "scheduled_tasks" table.
+	ScheduledTasksTable = &schema.Table{
+		Name:       "scheduled_tasks",
+		Columns:    ScheduledTasksColumns,
+		PrimaryKey: []*schema.Column{ScheduledTasksColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "scheduledtask_tenant_id_environment_id_enabled",
+				Unique:  false,
+				Columns: []*schema.Column{ScheduledTasksColumns[1], ScheduledTasksColumns[7], ScheduledTasksColumns[11]},
+			},
+			{
+				Name:    "scheduledtask_connection_id_enabled",
+				Unique:  false,
+				Columns: []*schema.Column{ScheduledTasksColumns[8], ScheduledTasksColumns[11]},
+			},
+			{
+				Name:    "scheduledtask_entity_type_interval_enabled",
+				Unique:  false,
+				Columns: []*schema.Column{ScheduledTasksColumns[9], ScheduledTasksColumns[10], ScheduledTasksColumns[11]},
+			},
+			{
+				Name:    "scheduledtask_connection_id_entity_type_status",
+				Unique:  false,
+				Columns: []*schema.Column{ScheduledTasksColumns[8], ScheduledTasksColumns[9], ScheduledTasksColumns[2]},
+			},
+		},
+	}
 	// SecretsColumns holds the columns for the "secrets" table.
 	SecretsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString, Unique: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
@@ -1771,7 +1824,9 @@ var (
 		{Name: "environment_id", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "task_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "entity_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
-		{Name: "file_url", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(255)"}},
+		{Name: "scheduled_task_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "workflow_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
+		{Name: "file_url", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "varchar(255)"}},
 		{Name: "file_name", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
 		{Name: "file_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(10)"}},
 		{Name: "task_status", Type: field.TypeString, Default: "PENDING", SchemaType: map[string]string{"postgres": "varchar(50)"}},
@@ -1804,7 +1859,7 @@ var (
 			{
 				Name:    "idx_tasks_tenant_env_task_status",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[1], TasksColumns[7], TasksColumns[13], TasksColumns[2]},
+				Columns: []*schema.Column{TasksColumns[1], TasksColumns[7], TasksColumns[15], TasksColumns[2]},
 			},
 		},
 	}
@@ -2151,6 +2206,7 @@ var (
 		PlansTable,
 		PricesTable,
 		PriceUnitTable,
+		ScheduledTasksTable,
 		SecretsTable,
 		SettingsTable,
 		SubscriptionsTable,

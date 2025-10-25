@@ -38,7 +38,7 @@ func NewSubscriptionRepository(client postgres.IClient, logger *logger.Logger, c
 }
 
 func (r *subscriptionRepository) Create(ctx context.Context, sub *domainSub.Subscription) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "subscription", "create", map[string]interface{}{
@@ -112,7 +112,7 @@ func (r *subscriptionRepository) Get(ctx context.Context, id string) (*domainSub
 		return cachedSub, nil
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	sub, err := client.Subscription.Query().
 		Where(
@@ -143,7 +143,7 @@ func (r *subscriptionRepository) Get(ctx context.Context, id string) (*domainSub
 }
 
 func (r *subscriptionRepository) Update(ctx context.Context, sub *domainSub.Subscription) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 	now := time.Now().UTC()
 
 	// Start a span for this repository operation
@@ -236,7 +236,7 @@ func (r *subscriptionRepository) Update(ctx context.Context, sub *domainSub.Subs
 }
 
 func (r *subscriptionRepository) Delete(ctx context.Context, id string) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "subscription", "delete", map[string]interface{}{
@@ -294,7 +294,7 @@ func (r *subscriptionRepository) List(ctx context.Context, filter *types.Subscri
 		return nil, fmt.Errorf("invalid filter: %w", err)
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	query := client.Subscription.Query()
 
 	if filter.WithLineItems {
@@ -347,7 +347,7 @@ func (r *subscriptionRepository) ListSubscriptionsDueForRenewal(ctx context.Cont
 	windowEnd := targetTime.Add(1 * time.Hour)
 
 	// Find subscriptions ending exactly at the target time
-	subs, err := r.client.Querier(ctx).Subscription.Query().
+	subs, err := r.client.Reader(ctx).Subscription.Query().
 		Where(
 			subscription.And(
 				subscription.SubscriptionStatusEQ(string(types.SubscriptionStatusActive)),
@@ -407,7 +407,7 @@ func (r *subscriptionRepository) ListAllTenant(ctx context.Context, filter *type
 		return nil, fmt.Errorf("invalid filter: %w", err)
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	query := client.Subscription.Query()
 
 	// Apply entity-specific filters
@@ -454,7 +454,7 @@ func (r *subscriptionRepository) Count(ctx context.Context, filter *types.Subscr
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	query := client.Subscription.Query()
 	query = ApplyBaseFilters(ctx, query, filter, r.queryOpts)
 
@@ -712,7 +712,7 @@ func (r *subscriptionRepository) CreateWithLineItems(ctx context.Context, sub *d
 		}
 
 		// Create line items
-		client := r.client.Querier(ctx)
+		client := r.client.Writer(ctx)
 		bulk := make([]*ent.SubscriptionLineItemCreate, len(items))
 		for i, item := range items {
 			// Set environment ID from context if not already set
@@ -774,7 +774,7 @@ func (r *subscriptionRepository) GetWithLineItems(ctx context.Context, id string
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	sub, err := client.Subscription.Query().
 		Where(
 			subscription.ID(id),
@@ -822,7 +822,7 @@ func (r *subscriptionRepository) CreatePause(ctx context.Context, pause *domainS
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	// Set environment ID from context if not already set
 	if pause.EnvironmentID == "" {
@@ -870,7 +870,7 @@ func (r *subscriptionRepository) GetPause(ctx context.Context, id string) (*doma
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	p, err := client.SubscriptionPause.Query().
 		Where(
 			subscriptionpause.ID(id),
@@ -904,7 +904,7 @@ func (r *subscriptionRepository) UpdatePause(ctx context.Context, pause *domainS
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 	now := time.Now().UTC()
 
 	p, err := client.SubscriptionPause.Query().
@@ -957,7 +957,7 @@ func (r *subscriptionRepository) ListPauses(ctx context.Context, subscriptionID 
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	pauses, err := client.SubscriptionPause.Query().
 		Where(
 			subscriptionpause.SubscriptionID(subscriptionID),
@@ -987,7 +987,7 @@ func (r *subscriptionRepository) GetWithPauses(ctx context.Context, id string) (
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	sub, err := client.Subscription.Query().
 		Where(
 			subscription.ID(id),

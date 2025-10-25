@@ -33,6 +33,7 @@ import (
 	"github.com/flexprice/flexprice/ent/plan"
 	"github.com/flexprice/flexprice/ent/price"
 	"github.com/flexprice/flexprice/ent/priceunit"
+	"github.com/flexprice/flexprice/ent/scheduledtask"
 	"github.com/flexprice/flexprice/ent/schema"
 	"github.com/flexprice/flexprice/ent/secret"
 	"github.com/flexprice/flexprice/ent/settings"
@@ -187,11 +188,11 @@ func init() {
 	// alertlogs.EntityIDValidator is a validator for the "entity_id" field. It is called by the builders before save.
 	alertlogs.EntityIDValidator = alertlogsDescEntityID.Validators[0].(func(string) error)
 	// alertlogsDescAlertType is the schema descriptor for alert_type field.
-	alertlogsDescAlertType := alertlogsFields[3].Descriptor()
+	alertlogsDescAlertType := alertlogsFields[5].Descriptor()
 	// alertlogs.AlertTypeValidator is a validator for the "alert_type" field. It is called by the builders before save.
 	alertlogs.AlertTypeValidator = alertlogsDescAlertType.Validators[0].(func(string) error)
 	// alertlogsDescAlertStatus is the schema descriptor for alert_status field.
-	alertlogsDescAlertStatus := alertlogsFields[4].Descriptor()
+	alertlogsDescAlertStatus := alertlogsFields[6].Descriptor()
 	// alertlogs.AlertStatusValidator is a validator for the "alert_status" field. It is called by the builders before save.
 	alertlogs.AlertStatusValidator = alertlogsDescAlertStatus.Validators[0].(func(string) error)
 	authFields := schema.Auth{}.Fields()
@@ -1368,6 +1369,51 @@ func init() {
 			return nil
 		}
 	}()
+	scheduledtaskMixin := schema.ScheduledTask{}.Mixin()
+	scheduledtaskMixinFields0 := scheduledtaskMixin[0].Fields()
+	_ = scheduledtaskMixinFields0
+	scheduledtaskMixinFields1 := scheduledtaskMixin[1].Fields()
+	_ = scheduledtaskMixinFields1
+	scheduledtaskFields := schema.ScheduledTask{}.Fields()
+	_ = scheduledtaskFields
+	// scheduledtaskDescTenantID is the schema descriptor for tenant_id field.
+	scheduledtaskDescTenantID := scheduledtaskMixinFields0[0].Descriptor()
+	// scheduledtask.TenantIDValidator is a validator for the "tenant_id" field. It is called by the builders before save.
+	scheduledtask.TenantIDValidator = scheduledtaskDescTenantID.Validators[0].(func(string) error)
+	// scheduledtaskDescStatus is the schema descriptor for status field.
+	scheduledtaskDescStatus := scheduledtaskMixinFields0[1].Descriptor()
+	// scheduledtask.DefaultStatus holds the default value on creation for the status field.
+	scheduledtask.DefaultStatus = scheduledtaskDescStatus.Default.(string)
+	// scheduledtaskDescCreatedAt is the schema descriptor for created_at field.
+	scheduledtaskDescCreatedAt := scheduledtaskMixinFields0[2].Descriptor()
+	// scheduledtask.DefaultCreatedAt holds the default value on creation for the created_at field.
+	scheduledtask.DefaultCreatedAt = scheduledtaskDescCreatedAt.Default.(func() time.Time)
+	// scheduledtaskDescUpdatedAt is the schema descriptor for updated_at field.
+	scheduledtaskDescUpdatedAt := scheduledtaskMixinFields0[3].Descriptor()
+	// scheduledtask.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	scheduledtask.DefaultUpdatedAt = scheduledtaskDescUpdatedAt.Default.(func() time.Time)
+	// scheduledtask.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	scheduledtask.UpdateDefaultUpdatedAt = scheduledtaskDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// scheduledtaskDescEnvironmentID is the schema descriptor for environment_id field.
+	scheduledtaskDescEnvironmentID := scheduledtaskMixinFields1[0].Descriptor()
+	// scheduledtask.DefaultEnvironmentID holds the default value on creation for the environment_id field.
+	scheduledtask.DefaultEnvironmentID = scheduledtaskDescEnvironmentID.Default.(string)
+	// scheduledtaskDescConnectionID is the schema descriptor for connection_id field.
+	scheduledtaskDescConnectionID := scheduledtaskFields[1].Descriptor()
+	// scheduledtask.ConnectionIDValidator is a validator for the "connection_id" field. It is called by the builders before save.
+	scheduledtask.ConnectionIDValidator = scheduledtaskDescConnectionID.Validators[0].(func(string) error)
+	// scheduledtaskDescEntityType is the schema descriptor for entity_type field.
+	scheduledtaskDescEntityType := scheduledtaskFields[2].Descriptor()
+	// scheduledtask.EntityTypeValidator is a validator for the "entity_type" field. It is called by the builders before save.
+	scheduledtask.EntityTypeValidator = scheduledtaskDescEntityType.Validators[0].(func(string) error)
+	// scheduledtaskDescInterval is the schema descriptor for interval field.
+	scheduledtaskDescInterval := scheduledtaskFields[3].Descriptor()
+	// scheduledtask.IntervalValidator is a validator for the "interval" field. It is called by the builders before save.
+	scheduledtask.IntervalValidator = scheduledtaskDescInterval.Validators[0].(func(string) error)
+	// scheduledtaskDescEnabled is the schema descriptor for enabled field.
+	scheduledtaskDescEnabled := scheduledtaskFields[4].Descriptor()
+	// scheduledtask.DefaultEnabled holds the default value on creation for the enabled field.
+	scheduledtask.DefaultEnabled = scheduledtaskDescEnabled.Default.(bool)
 	secretMixin := schema.Secret{}.Mixin()
 	secretMixinFields0 := secretMixin[0].Fields()
 	_ = secretMixinFields0
@@ -1799,27 +1845,27 @@ func init() {
 	// task.EntityTypeValidator is a validator for the "entity_type" field. It is called by the builders before save.
 	task.EntityTypeValidator = taskDescEntityType.Validators[0].(func(string) error)
 	// taskDescFileURL is the schema descriptor for file_url field.
-	taskDescFileURL := taskFields[3].Descriptor()
-	// task.FileURLValidator is a validator for the "file_url" field. It is called by the builders before save.
-	task.FileURLValidator = taskDescFileURL.Validators[0].(func(string) error)
+	taskDescFileURL := taskFields[5].Descriptor()
+	// task.DefaultFileURL holds the default value on creation for the file_url field.
+	task.DefaultFileURL = taskDescFileURL.Default.(string)
 	// taskDescFileType is the schema descriptor for file_type field.
-	taskDescFileType := taskFields[5].Descriptor()
+	taskDescFileType := taskFields[7].Descriptor()
 	// task.FileTypeValidator is a validator for the "file_type" field. It is called by the builders before save.
 	task.FileTypeValidator = taskDescFileType.Validators[0].(func(string) error)
 	// taskDescTaskStatus is the schema descriptor for task_status field.
-	taskDescTaskStatus := taskFields[6].Descriptor()
+	taskDescTaskStatus := taskFields[8].Descriptor()
 	// task.DefaultTaskStatus holds the default value on creation for the task_status field.
 	task.DefaultTaskStatus = taskDescTaskStatus.Default.(string)
 	// taskDescProcessedRecords is the schema descriptor for processed_records field.
-	taskDescProcessedRecords := taskFields[8].Descriptor()
+	taskDescProcessedRecords := taskFields[10].Descriptor()
 	// task.DefaultProcessedRecords holds the default value on creation for the processed_records field.
 	task.DefaultProcessedRecords = taskDescProcessedRecords.Default.(int)
 	// taskDescSuccessfulRecords is the schema descriptor for successful_records field.
-	taskDescSuccessfulRecords := taskFields[9].Descriptor()
+	taskDescSuccessfulRecords := taskFields[11].Descriptor()
 	// task.DefaultSuccessfulRecords holds the default value on creation for the successful_records field.
 	task.DefaultSuccessfulRecords = taskDescSuccessfulRecords.Default.(int)
 	// taskDescFailedRecords is the schema descriptor for failed_records field.
-	taskDescFailedRecords := taskFields[10].Descriptor()
+	taskDescFailedRecords := taskFields[12].Descriptor()
 	// task.DefaultFailedRecords holds the default value on creation for the failed_records field.
 	task.DefaultFailedRecords = taskDescFailedRecords.Default.(int)
 	taxappliedMixin := schema.TaxApplied{}.Mixin()

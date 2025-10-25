@@ -1328,7 +1328,11 @@ func (r *FeatureUsageRepository) getAnalyticsPoints(
 }
 
 // GetFeatureUsageBySubscription gets usage data for a subscription using a single optimized query
-func (r *FeatureUsageRepository) GetFeatureUsageBySubscription(ctx context.Context, subscriptionID, externalCustomerID, environmentID, tenantID string, startTime, endTime time.Time) (map[string]*events.UsageByFeatureResult, error) {
+func (r *FeatureUsageRepository) GetFeatureUsageBySubscription(ctx context.Context, subscriptionID, externalCustomerID string, startTime, endTime time.Time) (map[string]*events.UsageByFeatureResult, error) {
+	// Extract tenantID and environmentID from context
+	tenantID := types.GetTenantID(ctx)
+	environmentID := types.GetEnvironmentID(ctx)
+
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "feature_usage", "get_usage_by_subscription_v2", map[string]interface{}{
 		"subscription_id":      subscriptionID,
@@ -1414,6 +1418,130 @@ func (r *FeatureUsageRepository) GetFeatureUsageBySubscription(ctx context.Conte
 	r.logger.Debugw("optimized subscription usage query completed",
 		"subscription_id", subscriptionID,
 		"feature_count", len(results))
+
+	return results, nil
+}
+
+// GetFeatureUsageForExport retrieves feature usage data for export in batches
+func (r *FeatureUsageRepository) GetFeatureUsageForExport(ctx context.Context, startTime, endTime time.Time, batchSize int, offset int) ([]*events.FeatureUsage, error) {
+	// Extract tenantID and environmentID from context
+	tenantID := types.GetTenantID(ctx)
+	environmentID := types.GetEnvironmentID(ctx)
+
+	span := StartRepositorySpan(ctx, "feature_usage", "get_for_export_batched", map[string]interface{}{
+		"tenant_id":      tenantID,
+		"environment_id": environmentID,
+		"start_time":     startTime,
+		"end_time":       endTime,
+		"batch_size":     batchSize,
+		"offset":         offset,
+	})
+	defer FinishSpan(span)
+
+	query := `
+		SELECT 
+			id,
+			tenant_id,
+			external_customer_id,
+			customer_id,
+			event_name,
+			source,
+			timestamp,
+			ingested_at,
+			properties,
+			environment_id,
+			subscription_id,
+			sub_line_item_id,
+			price_id,
+			meter_id,
+			feature_id,
+			period_id,
+			unique_hash,
+			qty_total,
+			sign
+		FROM feature_usage
+		WHERE tenant_id = ?
+		  AND environment_id = ?
+		  AND timestamp >= ?
+		  AND timestamp < ?
+		  AND sign = 1
+		ORDER BY timestamp DESC
+		LIMIT ? OFFSET ?
+	`
+
+	rows, err := r.store.GetConn().Query(ctx, query, tenantID, environmentID, startTime, endTime, batchSize, offset)
+	if err != nil {
+		SetSpanError(span, err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to query feature usage for export in batch").
+			WithReportableDetails(map[string]interface{}{
+				"batch_size": batchSize,
+				"offset":     offset,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	defer rows.Close()
+
+	var results []*events.FeatureUsage
+	for rows.Next() {
+		var usage events.FeatureUsage
+		var propertiesJSON string
+
+		err := rows.Scan(
+			&usage.ID,
+			&usage.TenantID,
+			&usage.ExternalCustomerID,
+			&usage.CustomerID,
+			&usage.EventName,
+			&usage.Source,
+			&usage.Timestamp,
+			&usage.IngestedAt,
+			&propertiesJSON,
+			&usage.EnvironmentID,
+			&usage.SubscriptionID,
+			&usage.SubLineItemID,
+			&usage.PriceID,
+			&usage.MeterID,
+			&usage.FeatureID,
+			&usage.PeriodID,
+			&usage.UniqueHash,
+			&usage.QtyTotal,
+			&usage.Sign,
+		)
+		if err != nil {
+			SetSpanError(span, err)
+			return nil, ierr.WithError(err).
+				WithHint("Failed to scan feature usage row").
+				Mark(ierr.ErrDatabase)
+		}
+
+		// Parse properties JSON
+		if propertiesJSON != "" {
+			if err := json.Unmarshal([]byte(propertiesJSON), &usage.Properties); err != nil {
+				r.logger.Warnw("failed to parse properties JSON",
+					"event_id", usage.ID,
+					"error", err)
+				usage.Properties = make(map[string]interface{})
+			}
+		}
+
+		results = append(results, &usage)
+	}
+
+	if err := rows.Err(); err != nil {
+		SetSpanError(span, err)
+		return nil, ierr.WithError(err).
+			WithHint("Error iterating feature usage rows").
+			Mark(ierr.ErrDatabase)
+	}
+
+	SetSpanSuccess(span)
+	r.logger.Debugw("feature usage export batch query completed",
+		"tenant_id", tenantID,
+		"environment_id", environmentID,
+		"batch_size", batchSize,
+		"offset", offset,
+		"records_in_batch", len(results))
 
 	return results, nil
 }

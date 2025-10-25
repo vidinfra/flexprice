@@ -68,6 +68,23 @@ func convertFlatMetadataToStructured(flatMetadata map[string]interface{}, provid
 			Stripe: stripeMetadata,
 		}
 
+	case types.SecretProviderS3:
+		s3Metadata := &types.S3ConnectionMetadata{}
+
+		if accessKey, ok := flatMetadata["aws_access_key_id"].(string); ok {
+			s3Metadata.AWSAccessKeyID = accessKey
+		}
+		if secretKey, ok := flatMetadata["aws_secret_access_key"].(string); ok {
+			s3Metadata.AWSSecretAccessKey = secretKey
+		}
+		if sessionToken, ok := flatMetadata["aws_session_token"].(string); ok {
+			s3Metadata.AWSSessionToken = sessionToken
+		}
+
+		return types.ConnectionMetadata{
+			S3: s3Metadata,
+		}
+
 	default:
 		// For other providers or unknown types, use generic format
 		return types.ConnectionMetadata{

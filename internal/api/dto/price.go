@@ -797,8 +797,10 @@ func (r *UpdatePriceRequest) ToCreatePriceRequest(existingPrice *price.Price) Cr
 
 type PriceResponse struct {
 	*price.Price
-	Meter       *MeterResponse     `json:"meter,omitempty"`
 	PricingUnit *PriceUnitResponse `json:"pricing_unit,omitempty"`
+	Meter       *MeterResponse     `json:"meter,omitempty"`
+	Plan        *PlanResponse      `json:"plan,omitempty"`
+	Addon       *AddonResponse     `json:"addon,omitempty"`
 
 	// TODO: Remove this once we have a proper price entity type
 	PlanID string `json:"plan_id,omitempty"`

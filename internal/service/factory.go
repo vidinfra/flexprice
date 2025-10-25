@@ -28,6 +28,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/priceunit"
 	"github.com/flexprice/flexprice/internal/domain/proration"
+	"github.com/flexprice/flexprice/internal/domain/scheduledtask"
 	"github.com/flexprice/flexprice/internal/domain/secret"
 	"github.com/flexprice/flexprice/internal/domain/settings"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
@@ -98,6 +99,7 @@ type ServiceParams struct {
 	SettingsRepo                 settings.Repository
 	AlertLogsRepo                alertlogs.Repository
 	GroupRepo                    group.Repository
+	ScheduledTaskRepo            scheduledtask.Repository
 
 	// Publishers
 	EventPublisher   publisher.EventPublisher
@@ -163,6 +165,7 @@ func NewServiceParams(
 	settingsRepo settings.Repository,
 	alertLogsRepo alertlogs.Repository,
 	groupRepo group.Repository,
+	scheduledTaskRepo scheduledtask.Repository,
 	prorationCalculator proration.Calculator,
 	integrationFactory *integration.Factory,
 ) ServiceParams {
@@ -215,6 +218,7 @@ func NewServiceParams(
 		SettingsRepo:                 settingsRepo,
 		AlertLogsRepo:                alertLogsRepo,
 		GroupRepo:                    groupRepo,
+		ScheduledTaskRepo:            scheduledTaskRepo,
 		ProrationCalculator:          prorationCalculator,
 		IntegrationFactory:           integrationFactory,
 	}

@@ -33,7 +33,7 @@ func NewPriceRepository(client postgres.IClient, log *logger.Logger, cache cache
 }
 
 func (r *priceRepository) Create(ctx context.Context, p *domainPrice.Price) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("creating price",
 		"price_id", p.ID,
@@ -142,7 +142,7 @@ func (r *priceRepository) Get(ctx context.Context, id string) (*domainPrice.Pric
 		return cachedPrice, nil
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	r.log.Debugw("getting price",
 		"price_id", id,
@@ -185,7 +185,7 @@ func (r *priceRepository) List(ctx context.Context, filter *types.PriceFilter) (
 		}
 	}
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "price", "list", map[string]interface{}{
@@ -215,7 +215,7 @@ func (r *priceRepository) List(ctx context.Context, filter *types.PriceFilter) (
 }
 
 func (r *priceRepository) Count(ctx context.Context, filter *types.PriceFilter) (int, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "price", "count", map[string]interface{}{
@@ -259,7 +259,7 @@ func (r *priceRepository) ListAll(ctx context.Context, filter *types.PriceFilter
 }
 
 func (r *priceRepository) Update(ctx context.Context, p *domainPrice.Price) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("updating price",
 		"price_id", p.ID,
@@ -321,7 +321,7 @@ func (r *priceRepository) Update(ctx context.Context, p *domainPrice.Price) erro
 }
 
 func (r *priceRepository) Delete(ctx context.Context, id string) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("deleting price",
 		"price_id", id,
@@ -365,7 +365,7 @@ func (r *priceRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (r *priceRepository) CreateBulk(ctx context.Context, prices []*domainPrice.Price) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("bulk creating prices",
 		"count", len(prices),
@@ -436,7 +436,7 @@ func (r *priceRepository) CreateBulk(ctx context.Context, prices []*domainPrice.
 }
 
 func (r *priceRepository) DeleteBulk(ctx context.Context, ids []string) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 
 	r.log.Debugw("bulk deleting prices",
 		"count", len(ids),
@@ -588,7 +588,7 @@ func (o PriceQueryOptions) applyEntityQueryOptions(_ context.Context, f *types.P
 }
 
 func (r *priceRepository) GetByPlanID(ctx context.Context, planID string) ([]*domainPrice.Price, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	prices, err := client.Price.Query().
 		Where(price.EntityID(planID), price.Status(string(types.StatusPublished))).
