@@ -37,7 +37,7 @@ func (r *userRepository) Create(ctx context.Context, user *domainUser.User) erro
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 	_, err := client.User.
 		Create().
 		SetID(user.ID).
@@ -82,7 +82,7 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*domainUser.Us
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	user, err := client.User.
 		Query().
 		Where(
@@ -123,7 +123,7 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*domainU
 	})
 	defer FinishSpan(span)
 
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// For login, we don't have tenant ID in context, so we just search by email
 	query := client.User.Query().Where(

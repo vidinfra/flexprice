@@ -11,16 +11,18 @@ type ConnectionMetadataType string
 const (
 	ConnectionMetadataTypeStripe  ConnectionMetadataType = "stripe"
 	ConnectionMetadataTypeGeneric ConnectionMetadataType = "generic"
+	ConnectionMetadataTypeS3      ConnectionMetadataType = "s3"
 )
 
 func (t ConnectionMetadataType) Validate() error {
 	allowedTypes := []ConnectionMetadataType{
 		ConnectionMetadataTypeStripe,
 		ConnectionMetadataTypeGeneric,
+		ConnectionMetadataTypeS3,
 	}
 	if !lo.Contains(allowedTypes, t) {
 		return ierr.NewError("invalid connection metadata type").
-			WithHint("Connection metadata type must be one of: stripe, generic").
+			WithHint("Connection metadata type must be one of: stripe, generic, s3").
 			Mark(ierr.ErrValidation)
 	}
 	return nil
@@ -32,6 +34,29 @@ type StripeConnectionMetadata struct {
 	SecretKey      string `json:"secret_key"`
 	WebhookSecret  string `json:"webhook_secret"`
 	AccountID      string `json:"account_id,omitempty"`
+}
+
+// S3ConnectionMetadata represents S3-specific connection metadata (encrypted secrets only)
+// This goes in the encrypted_secret_data column
+type S3ConnectionMetadata struct {
+	AWSAccessKeyID     string `json:"aws_access_key_id"`           // AWS access key (encrypted)
+	AWSSecretAccessKey string `json:"aws_secret_access_key"`       // AWS secret access key (encrypted)
+	AWSSessionToken    string `json:"aws_session_token,omitempty"` // AWS session token for temporary credentials (encrypted)
+}
+
+// Validate validates the S3 connection metadata
+func (s *S3ConnectionMetadata) Validate() error {
+	if s.AWSAccessKeyID == "" {
+		return ierr.NewError("aws_access_key_id is required").
+			WithHint("AWS access key ID is required").
+			Mark(ierr.ErrValidation)
+	}
+	if s.AWSSecretAccessKey == "" {
+		return ierr.NewError("aws_secret_access_key is required").
+			WithHint("AWS secret access key is required").
+			Mark(ierr.ErrValidation)
+	}
+	return nil
 }
 
 // ConnectionSettings represents general connection settings
@@ -77,6 +102,7 @@ func (g *GenericConnectionMetadata) Validate() error {
 // ConnectionMetadata represents structured connection metadata
 type ConnectionMetadata struct {
 	Stripe   *StripeConnectionMetadata  `json:"stripe,omitempty"`
+	S3       *S3ConnectionMetadata      `json:"s3,omitempty"`
 	Generic  *GenericConnectionMetadata `json:"generic,omitempty"`
 	Settings *ConnectionSettings        `json:"settings,omitempty"`
 }
@@ -91,6 +117,13 @@ func (c *ConnectionMetadata) Validate(providerType SecretProvider) error {
 				Mark(ierr.ErrValidation)
 		}
 		return c.Stripe.Validate()
+	case SecretProviderS3:
+		if c.S3 == nil {
+			return ierr.NewError("s3 metadata is required").
+				WithHint("S3 metadata is required for s3 provider").
+				Mark(ierr.ErrValidation)
+		}
+		return c.S3.Validate()
 	default:
 		// For other providers or unknown types, use generic format
 		if c.Generic == nil {

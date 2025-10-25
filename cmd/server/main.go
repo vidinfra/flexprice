@@ -40,6 +40,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/proration"
 	"github.com/flexprice/flexprice/internal/integration"
 	"github.com/flexprice/flexprice/internal/security"
+	syncExport "github.com/flexprice/flexprice/internal/service/sync/export"
 	"github.com/gin-gonic/gin"
 )
 
@@ -89,7 +90,7 @@ func main() {
 			cache.NewInMemoryCache,
 
 			// Postgres
-			postgres.NewEntClient,
+			postgres.NewEntClients,
 			postgres.NewClient,
 
 			// Clickhouse
@@ -157,6 +158,7 @@ func main() {
 			repository.NewSubscriptionLineItemRepository,
 			repository.NewSettingsRepository,
 			repository.NewAlertLogsRepository,
+			repository.NewScheduledTaskRepository,
 
 			// PubSub
 			pubsubRouter.NewRouter,
@@ -175,6 +177,7 @@ func main() {
 			// Services
 			// Integration factory must be provided before service params
 			integration.NewFactory,
+			syncExport.NewExportService,
 			service.NewServiceParams,
 			service.NewTenantService,
 			service.NewAuthService,
@@ -212,6 +215,7 @@ func main() {
 			service.NewSettingsService,
 			service.NewSubscriptionChangeService,
 			service.NewAlertLogsService,
+			service.NewScheduledTaskService,
 		),
 	)
 
@@ -280,6 +284,7 @@ func provideHandlers(
 	alertLogsService service.AlertLogsService,
 	integrationFactory *integration.Factory,
 	db postgres.IClient,
+	scheduledTaskService service.ScheduledTaskService,
 ) api.Handlers {
 	return api.Handlers{
 		Events:                   v1.NewEventsHandler(eventService, eventPostProcessingService, featureUsageTrackingService, cfg, logger),
@@ -305,8 +310,8 @@ func provideHandlers(
 		Tax:                      v1.NewTaxHandler(taxService, logger),
 		Onboarding:               v1.NewOnboardingHandler(onboardingService, logger),
 		CronSubscription:         cron.NewSubscriptionHandler(subscriptionService, logger),
+		CronWallet:               cron.NewWalletCronHandler(logger, walletService, tenantService, environmentService, featureService, alertLogsService),
 		CronInvoice:              cron.NewInvoiceHandler(invoiceService, subscriptionService, connectionService, tenantService, environmentService, integrationFactory, logger),
-		CronWallet:               cron.NewWalletCronHandler(logger, walletService, tenantService, environmentService, alertLogsService),
 		CreditGrant:              v1.NewCreditGrantHandler(creditGrantService, logger),
 		CostSheet:                v1.NewCostSheetHandler(costSheetService, logger),
 		CronCreditGrant:          cron.NewCreditGrantCronHandler(creditGrantService, logger),
@@ -319,6 +324,7 @@ func provideHandlers(
 		Addon:                    v1.NewAddonHandler(addonService, logger),
 		Settings:                 v1.NewSettingsHandler(settingsService, logger),
 		SetupIntent:              v1.NewSetupIntentHandler(integrationFactory, customerService, logger),
+		ScheduledTask:            v1.NewScheduledTaskHandler(scheduledTaskService, logger),
 	}
 }
 

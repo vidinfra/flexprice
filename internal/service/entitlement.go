@@ -440,7 +440,7 @@ func (s *entitlementService) ListEntitlements(ctx context.Context, filter *types
 
 			if len(entityIDs) > 0 {
 				planFilter := types.NewNoLimitPlanFilter()
-				planFilter.EntityIDs = entityIDs
+				planFilter.PlanIDs = entityIDs
 				plans, err := s.PlanRepo.List(ctx, planFilter)
 				if err != nil {
 					return nil, err
