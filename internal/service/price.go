@@ -86,6 +86,13 @@ func (s *priceService) CreatePrice(ctx context.Context, req dto.CreatePriceReque
 		return s.createPriceWithUnitConfig(ctx, req)
 	}
 
+	// Validate group if provided
+	if req.GroupID != "" {
+		if err := s.validateGroup(ctx, req.GroupID); err != nil {
+			return nil, err
+		}
+	}
+
 	// Handle regular price case
 	price, err := req.ToPrice(ctx)
 	if err != nil {
@@ -764,6 +771,13 @@ func (s *priceService) UpdatePrice(ctx context.Context, id string, req dto.Updat
 				return err
 			}
 
+			// Validate group if provided
+			if req.GroupID != "" {
+				if err := s.validateGroup(ctx, req.GroupID); err != nil {
+					return err
+				}
+			}
+
 			// Convert update request to create request - this handles all the field mapping
 			createReq := req.ToCreatePriceRequest(existingPrice)
 
@@ -802,6 +816,13 @@ func (s *priceService) UpdatePrice(ctx context.Context, id string, req dto.Updat
 		}
 		if req.EffectiveFrom != nil {
 			existingPrice.EndDate = req.EffectiveFrom
+		}
+
+		if req.GroupID != "" {
+			if err := s.validateGroup(ctx, req.GroupID); err != nil {
+				return nil, err
+			}
+			existingPrice.GroupID = req.GroupID
 		}
 
 		// Update the price in database
@@ -1189,4 +1210,10 @@ func (s *priceService) CalculateCostSheetPrice(ctx context.Context, price *price
 	// For now, we'll use the same calculation as CalculateCost
 	// In the future, we can add costsheet-specific pricing rules here
 	return s.CalculateCost(ctx, price, quantity)
+}
+
+// validateGroup validates that a group exists and is of type "price"
+func (s *priceService) validateGroup(ctx context.Context, groupID string) error {
+	groupService := NewGroupService(s.ServiceParams, s.PriceRepo, s.Logger)
+	return groupService.ValidateGroup(ctx, groupID, types.GroupEntityTypePrice)
 }

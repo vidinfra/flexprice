@@ -421,7 +421,8 @@ func (r *priceRepository) CreateBulk(ctx context.Context, prices []*domainPrice.
 			SetCreatedAt(p.CreatedAt).
 			SetUpdatedAt(p.UpdatedAt).
 			SetCreatedBy(p.CreatedBy).
-			SetUpdatedBy(p.UpdatedBy)
+			SetUpdatedBy(p.UpdatedBy).
+			SetNillableGroupID(lo.ToPtr(p.GroupID))
 	}
 
 	_, err := client.Price.CreateBulk(builders...).Save(ctx)
@@ -645,7 +646,7 @@ func (r *priceRepository) DeleteCache(ctx context.Context, priceID string) {
 
 // CountByIDs counts prices by their IDs
 func (r *priceRepository) CountByIDs(ctx context.Context, ids []string) (int, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 
@@ -669,7 +670,7 @@ func (r *priceRepository) CountByIDs(ctx context.Context, ids []string) (int, er
 
 // GetByGroupIDs gets prices by multiple group IDs
 func (r *priceRepository) GetByGroupIDs(ctx context.Context, groupIDs []string) ([]*domainPrice.Price, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 
@@ -694,7 +695,7 @@ func (r *priceRepository) GetByGroupIDs(ctx context.Context, groupIDs []string) 
 
 // CountNotInGroup counts prices that are not in a specific group
 func (r *priceRepository) CountNotInGroup(ctx context.Context, ids []string, excludeGroupID string) (int, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 
@@ -726,7 +727,7 @@ func (r *priceRepository) CountNotInGroup(ctx context.Context, ids []string, exc
 
 // UpdateGroupIDBulk updates the group ID for multiple prices in a single query
 func (r *priceRepository) UpdateGroupIDBulk(ctx context.Context, ids []string, groupID *string) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 
@@ -755,7 +756,7 @@ func (r *priceRepository) UpdateGroupIDBulk(ctx context.Context, ids []string, g
 }
 
 func (r *priceRepository) ClearGroupIDBulk(ctx context.Context, ids []string) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 

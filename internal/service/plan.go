@@ -38,7 +38,7 @@ func (s *planService) CreatePlan(ctx context.Context, req dto.CreatePlanRequest)
 	}
 
 	plan := req.ToPlan(ctx)
-
+	groupService := NewGroupService(s.ServiceParams, s.PriceRepo, s.Logger)
 	// Start a transaction to create plan, prices, and entitlements
 	err := s.DB.WithTx(ctx, func(ctx context.Context) error {
 		// 1. Create the plan
@@ -58,6 +58,13 @@ func (s *planService) CreatePlan(ctx context.Context, req dto.CreatePlanRequest)
 					return ierr.NewError("price request cannot be nil").
 						WithHint("Please provide valid price configuration").
 						Mark(ierr.ErrValidation)
+				}
+
+				// Validate group if provided
+				if planPriceReq.CreatePriceRequest.GroupID != "" {
+					if err := groupService.ValidateGroup(ctx, planPriceReq.CreatePriceRequest.GroupID, types.GroupEntityTypePrice); err != nil {
+						return err
+					}
 				}
 
 				// If price unit config is provided, use price unit handling logic
@@ -416,10 +423,18 @@ func (s *planService) UpdatePlan(ctx context.Context, id string, req dto.UpdateP
 			// Create new prices
 			bulkCreatePrices := make([]*price.Price, 0) // Slice for bulk creation
 
+			groupService := NewGroupService(s.ServiceParams, s.PriceRepo, s.Logger)
 			for _, reqPrice := range req.Prices {
 				if reqPrice.ID == "" {
 					var newPrice *price.Price
 					var err error
+
+					// Validate group if provided
+					if reqPrice.CreatePriceRequest.GroupID != "" {
+						if err := groupService.ValidateGroup(ctx, reqPrice.CreatePriceRequest.GroupID, types.GroupEntityTypePrice); err != nil {
+							return err
+						}
+					}
 
 					// If price unit config is provided, handle it through the price service
 					if reqPrice.PriceUnitConfig != nil {

@@ -20,6 +20,7 @@ type GroupService interface {
 	DeleteGroup(ctx context.Context, id string) error
 	ListGroups(ctx context.Context, filter *types.GroupFilter) (*dto.ListGroupsResponse, error)
 	AddEntityToGroup(ctx context.Context, id string, req dto.AddEntityToGroupRequest) error
+	ValidateGroup(ctx context.Context, id string, entityType types.GroupEntityType) error
 }
 
 type groupService struct {
@@ -299,4 +300,23 @@ func (s *groupService) disassociateEntities(ctx context.Context, entityType type
 	}
 
 	return validator.RemoveFromGroup(ctx, entityIDs)
+}
+
+func (s *groupService) ValidateGroup(ctx context.Context, id string, entityType types.GroupEntityType) error {
+	group, err := s.GroupRepo.Get(ctx, id)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to fetch group for validation").
+			Mark(ierr.ErrDatabase)
+	}
+	if group.EntityType != entityType {
+		return ierr.NewError("invalid group type").
+			WithHintf("Group must be of type: %s", entityType.String()).
+			WithReportableDetails(map[string]any{
+				"group_id":    id,
+				"entity_type": entityType,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+	return nil
 }

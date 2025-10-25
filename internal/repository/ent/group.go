@@ -30,7 +30,7 @@ func NewGroupRepository(client postgres.IClient, log *logger.Logger, cache cache
 }
 
 func (r *groupRepository) Create(ctx context.Context, grp *domainGroup.Group) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 
@@ -57,7 +57,7 @@ func (r *groupRepository) Create(ctx context.Context, grp *domainGroup.Group) er
 }
 
 func (r *groupRepository) Get(ctx context.Context, id string) (*domainGroup.Group, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 
@@ -86,7 +86,7 @@ func (r *groupRepository) Get(ctx context.Context, id string) (*domainGroup.Grou
 }
 
 func (r *groupRepository) GetByName(ctx context.Context, name string) (*domainGroup.Group, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 
@@ -113,7 +113,7 @@ func (r *groupRepository) GetByName(ctx context.Context, name string) (*domainGr
 }
 
 func (r *groupRepository) GetByLookupKey(ctx context.Context, lookupKey string) (*domainGroup.Group, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 
@@ -142,7 +142,7 @@ func (r *groupRepository) GetByLookupKey(ctx context.Context, lookupKey string) 
 }
 
 func (r *groupRepository) List(ctx context.Context, filter *types.GroupFilter) ([]*domainGroup.Group, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "group", "list", map[string]interface{}{
@@ -179,7 +179,7 @@ func (r *groupRepository) List(ctx context.Context, filter *types.GroupFilter) (
 }
 
 func (r *groupRepository) Count(ctx context.Context, filter *types.GroupFilter) (int, error) {
-	client := r.client.Querier(ctx)
+	client := r.client.Reader(ctx)
 
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "group", "count", map[string]interface{}{
@@ -212,7 +212,7 @@ func (r *groupRepository) Count(ctx context.Context, filter *types.GroupFilter) 
 }
 
 func (r *groupRepository) Update(ctx context.Context, grp *domainGroup.Group) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 
@@ -236,7 +236,7 @@ func (r *groupRepository) Update(ctx context.Context, grp *domainGroup.Group) er
 }
 
 func (r *groupRepository) Delete(ctx context.Context, id string) error {
-	client := r.client.Querier(ctx)
+	client := r.client.Writer(ctx)
 	tenantID := types.GetTenantID(ctx)
 	environmentID := types.GetEnvironmentID(ctx)
 
