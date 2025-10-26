@@ -70,12 +70,13 @@ type CostsheetV2Service interface {
 	GetCostsheetV2s(ctx context.Context, filter *types.CostsheetV2Filter) (*dto.ListCostsheetV2Response, error)
 	UpdateCostsheetV2(ctx context.Context, id string, req dto.UpdateCostsheetV2Request) (*dto.UpdateCostsheetV2Response, error)
 	DeleteCostsheetV2(ctx context.Context, id string) (*dto.DeleteCostsheetV2Response, error)
+	GetActiveCostsheetForTenant(ctx context.Context) (*dto.GetCostsheetV2Response, error)
 }
 
 // CostsheetAnalyticsService defines the interface for costsheet analytics operations
 type CostsheetAnalyticsService interface {
 	// GetCostAnalytics retrieves cost analytics for customers and costsheets
-	GetCostAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error)
+	GetCostAnalytics(ctx context.Context, costsheetV2ID string, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error)
 
 	// GetDetailedCostAnalytics retrieves detailed cost analytics with derived metrics
 	GetDetailedCostAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetDetailedCostAnalyticsResponse, error)

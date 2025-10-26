@@ -30,7 +30,7 @@ func TestCostsheetAnalyticsService_GetCostAnalytics_Validation(t *testing.T) {
 			// No CostsheetV2ID, ExternalCustomerID, or CustomerIDs provided
 		}
 
-		_, err := service.GetCostAnalytics(ctx, req)
+		_, err := service.GetCostAnalytics(ctx, "test-costsheet-id", req)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "at least one of costsheet_v2_id, external_customer_id, or customer_ids must be provided")
 	})
@@ -38,7 +38,6 @@ func TestCostsheetAnalyticsService_GetCostAnalytics_Validation(t *testing.T) {
 	t.Run("should use default 7-day range when no time provided", func(t *testing.T) {
 		req := &dto.GetCostAnalyticsRequest{
 			// No StartTime or EndTime provided
-			CostsheetV2ID: "test-costsheet-id",
 		}
 
 		err := req.Validate()
@@ -58,7 +57,6 @@ func TestCostsheetAnalyticsService_GetCostAnalytics_Validation(t *testing.T) {
 		req := &dto.GetCostAnalyticsRequest{
 			StartTime: time.Now().Add(-24 * time.Hour),
 			// EndTime not provided
-			CostsheetV2ID: "test-costsheet-id",
 		}
 
 		err := req.Validate()
@@ -68,9 +66,8 @@ func TestCostsheetAnalyticsService_GetCostAnalytics_Validation(t *testing.T) {
 
 	t.Run("should pass validation when costsheet_v2_id is provided", func(t *testing.T) {
 		req := &dto.GetCostAnalyticsRequest{
-			StartTime:     time.Now().Add(-24 * time.Hour),
-			EndTime:       time.Now(),
-			CostsheetV2ID: "test-costsheet-id",
+			StartTime: time.Now().Add(-24 * time.Hour),
+			EndTime:   time.Now(),
 		}
 
 		err := req.Validate()

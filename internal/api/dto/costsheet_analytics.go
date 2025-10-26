@@ -17,8 +17,6 @@ type GetCostAnalyticsRequest struct {
 	StartTime time.Time `json:"start_time,omitempty"`
 	EndTime   time.Time `json:"end_time,omitempty"`
 
-	// Optional filters - at least one of these should be provided
-	CostsheetV2ID      string `json:"costsheet_v2_id,omitempty"`      // Optional - for specific costsheet
 	ExternalCustomerID string `json:"external_customer_id,omitempty"` // Optional - for specific customer
 
 	// Additional filters
@@ -46,12 +44,6 @@ func (r *GetCostAnalyticsRequest) Validate() error {
 	} else if r.StartTime.IsZero() || r.EndTime.IsZero() {
 		return ierr.NewError("both start_time and end_time must be provided if one is specified").
 			WithHint("Please provide both start_time and end_time, or omit both for default 7-day range").
-			Mark(ierr.ErrValidation)
-	}
-
-	if r.CostsheetV2ID == "" {
-		return ierr.NewError("costsheet_v2_id is required").
-			WithHint("costsheet_v2_id is required").
 			Mark(ierr.ErrValidation)
 	}
 

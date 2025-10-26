@@ -271,3 +271,29 @@ func (s *costsheetV2Service) DeleteCostsheetV2(ctx context.Context, id string) (
 
 	return response, nil
 }
+
+func (s *costsheetV2Service) GetActiveCostsheetForTenant(ctx context.Context) (*dto.GetCostsheetV2Response, error) {
+	// Create filter with no limit to get all costsheets
+	filter := types.NewNoLimitCostsheetV2Filter()
+
+	// List costsheets (automatically filtered by tenant and environment from context)
+	costsheets, err := s.CostSheetV2Repo.List(ctx, filter)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to retrieve active costsheet v2").
+			Mark(ierr.ErrDatabase)
+	}
+
+	if len(costsheets) == 0 {
+		return nil, ierr.NewError("no active costsheet v2 found").
+			WithHint("No active costsheet v2 found for this tenant").
+			Mark(ierr.ErrNotFound)
+	}
+
+	// Return the first (most recent) costsheet
+	response := &dto.GetCostsheetV2Response{
+		CostsheetV2: dto.ToCostsheetV2Response(costsheets[0]),
+	}
+
+	return response, nil
+}
