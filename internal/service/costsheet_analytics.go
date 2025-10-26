@@ -19,18 +19,21 @@ type CostsheetAnalyticsService = interfaces.CostsheetAnalyticsService
 type costsheetAnalyticsService struct {
 	ServiceParams
 	featureUsageTrackingService FeatureUsageTrackingV2Service
+	costsheetV2Service          CostsheetV2Service
 }
 
-func NewCostsheetAnalyticsService(params ServiceParams, featureUsageTrackingService FeatureUsageTrackingV2Service) CostsheetAnalyticsService {
+func NewCostsheetAnalyticsService(params ServiceParams, featureUsageTrackingService FeatureUsageTrackingV2Service, costsheetV2Service CostsheetV2Service) CostsheetAnalyticsService {
 	return &costsheetAnalyticsService{
 		ServiceParams:               params,
 		featureUsageTrackingService: featureUsageTrackingService,
+		costsheetV2Service:          costsheetV2Service,
 	}
 }
 
 // GetCostAnalytics retrieves cost analytics following the GetUsageBySubscription pattern
 func (s *costsheetAnalyticsService) GetCostAnalytics(
 	ctx context.Context,
+	costsheetV2ID string,
 	req *dto.GetCostAnalyticsRequest,
 ) (*dto.GetCostAnalyticsResponse, error) {
 	// 1. Validate request
@@ -41,14 +44,14 @@ func (s *costsheetAnalyticsService) GetCostAnalytics(
 	}
 
 	// 2. Fetch costsheet and associated prices (like subscription line items)
-	prices, err := s.fetchCostsheetPrices(ctx, req.CostsheetV2ID)
+	prices, err := s.fetchCostsheetPrices(ctx, costsheetV2ID)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(prices) == 0 {
-		s.Logger.Warnw("no prices found for costsheet", "costsheet_v2_id", req.CostsheetV2ID)
-		return s.buildEmptyResponse(req), nil
+		s.Logger.Warnw("no prices found for costsheet", "costsheet_v2_id", costsheetV2ID)
+		return s.buildEmptyResponse(costsheetV2ID, req), nil
 	}
 
 	priceMap := make(map[string]*price.Price)
@@ -62,8 +65,8 @@ func (s *costsheetAnalyticsService) GetCostAnalytics(
 	}
 
 	if len(meters) == 0 {
-		s.Logger.Warnw("no meters found for costsheet", "costsheet_v2_id", req.CostsheetV2ID)
-		return s.buildEmptyResponse(req), nil
+		s.Logger.Warnw("no meters found for costsheet", "costsheet_v2_id", costsheetV2ID)
+		return s.buildEmptyResponse(costsheetV2ID, req), nil
 	}
 
 	// 4. Build meter usage requests for each customer-price combination
@@ -71,7 +74,7 @@ func (s *costsheetAnalyticsService) GetCostAnalytics(
 
 	if len(meterUsageRequests) == 0 {
 		s.Logger.Warnw("no meter usage requests generated")
-		return s.buildEmptyResponse(req), nil
+		return s.buildEmptyResponse(costsheetV2ID, req), nil
 	}
 
 	// 5. Use existing BulkGetUsageByMeter (same as subscription billing)
@@ -87,7 +90,7 @@ func (s *costsheetAnalyticsService) GetCostAnalytics(
 	costAnalytics := s.calculateCostsFromUsage(ctx, usageMap, prices, meters, req)
 
 	// 7. Build response with prefetched data
-	return s.buildResponse(req, costAnalytics, meters, priceMap), nil
+	return s.buildResponse(costsheetV2ID, req, costAnalytics, meters, priceMap), nil
 }
 
 // GetDetailedCostAnalytics retrieves detailed cost analytics with derived metrics
@@ -95,8 +98,14 @@ func (s *costsheetAnalyticsService) GetDetailedCostAnalytics(
 	ctx context.Context,
 	req *dto.GetCostAnalyticsRequest,
 ) (*dto.GetDetailedCostAnalyticsResponse, error) {
+	// 0. Fetch active costsheet for tenant
+	costsheetV2, err := s.costsheetV2Service.GetActiveCostsheetForTenant(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	// 1. Fetch cost analytics
-	costAnalytics, err := s.GetCostAnalytics(ctx, req)
+	costAnalytics, err := s.GetCostAnalytics(ctx, costsheetV2.CostsheetV2.ID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -315,6 +324,7 @@ func (s *costsheetAnalyticsService) calculateCostsFromUsage(
 
 // buildResponse builds the final cost analytics response
 func (s *costsheetAnalyticsService) buildResponse(
+	costsheetV2ID string,
 	req *dto.GetCostAnalyticsRequest,
 	costAnalytics []dto.CostAnalyticItem,
 	meters map[string]*meter.Meter,
@@ -326,7 +336,7 @@ func (s *costsheetAnalyticsService) buildResponse(
 	}
 
 	response := &dto.GetCostAnalyticsResponse{
-		CostsheetV2ID: req.CostsheetV2ID,
+		CostsheetV2ID: costsheetV2ID,
 		StartTime:     req.StartTime,
 		EndTime:       req.EndTime,
 		CostAnalytics: costAnalytics,
@@ -356,9 +366,9 @@ func (s *costsheetAnalyticsService) buildResponse(
 }
 
 // buildEmptyResponse builds an empty response for cases with no data
-func (s *costsheetAnalyticsService) buildEmptyResponse(req *dto.GetCostAnalyticsRequest) *dto.GetCostAnalyticsResponse {
+func (s *costsheetAnalyticsService) buildEmptyResponse(costsheetV2ID string, req *dto.GetCostAnalyticsRequest) *dto.GetCostAnalyticsResponse {
 	return &dto.GetCostAnalyticsResponse{
-		CostsheetV2ID:      req.CostsheetV2ID,
+		CostsheetV2ID:      costsheetV2ID,
 		ExternalCustomerID: req.ExternalCustomerID,
 		StartTime:          req.StartTime,
 		EndTime:            req.EndTime,
