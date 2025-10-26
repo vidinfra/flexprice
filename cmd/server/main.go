@@ -142,6 +142,7 @@ func main() {
 			repository.NewSecretRepository,
 			repository.NewCreditGrantRepository,
 			repository.NewCostSheetRepository,
+			repository.NewCostSheetV2Repository,
 			repository.NewCreditGrantApplicationRepository,
 			repository.NewCreditNoteRepository,
 			repository.NewCreditNoteLineItemRepository,
@@ -205,6 +206,8 @@ func main() {
 			service.NewBillingService,
 			service.NewCreditGrantService,
 			service.NewCostSheetService,
+			service.NewCostsheetV2Service,
+			provideCostsheetAnalyticsService,
 			service.NewCreditNoteService,
 			service.NewConnectionService,
 			service.NewEntityIntegrationMappingService,
@@ -243,6 +246,14 @@ func main() {
 	app.Run()
 }
 
+// provideCostsheetAnalyticsService creates a costsheet analytics service with proper dependencies
+func provideCostsheetAnalyticsService(
+	params service.ServiceParams,
+	featureUsageTrackingService service.FeatureUsageTrackingService,
+) service.CostsheetAnalyticsService {
+	return service.NewCostsheetAnalyticsService(params, featureUsageTrackingService)
+}
+
 func provideHandlers(
 	cfg *config.Configuration,
 	logger *logger.Logger,
@@ -270,6 +281,8 @@ func provideHandlers(
 	billingService service.BillingService,
 	creditGrantService service.CreditGrantService,
 	costSheetService service.CostSheetService,
+	costsheetV2Service service.CostsheetV2Service,
+	costsheetAnalyticsService service.CostsheetAnalyticsService,
 	creditNoteService service.CreditNoteService,
 	connectionService service.ConnectionService,
 	entityIntegrationMappingService service.EntityIntegrationMappingService,
@@ -314,6 +327,8 @@ func provideHandlers(
 		CronInvoice:              cron.NewInvoiceHandler(invoiceService, subscriptionService, connectionService, tenantService, environmentService, integrationFactory, logger),
 		CreditGrant:              v1.NewCreditGrantHandler(creditGrantService, logger),
 		CostSheet:                v1.NewCostSheetHandler(costSheetService, logger),
+		CostsheetV2:              v1.NewCostsheetV2Handler(costsheetV2Service, logger),
+		CostsheetAnalytics:       v1.NewCostsheetAnalyticsHandler(costsheetAnalyticsService, cfg, logger),
 		CronCreditGrant:          cron.NewCreditGrantCronHandler(creditGrantService, logger),
 		CreditNote:               v1.NewCreditNoteHandler(creditNoteService, logger),
 		Connection:               v1.NewConnectionHandler(connectionService, logger),

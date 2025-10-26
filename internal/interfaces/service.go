@@ -63,6 +63,24 @@ type EntityIntegrationMappingService interface {
 	DeleteEntityIntegrationMapping(ctx context.Context, id string) error
 }
 
+// CostsheetV2Service defines the interface for costsheet v2 operations
+type CostsheetV2Service interface {
+	CreateCostsheetV2(ctx context.Context, req dto.CreateCostsheetV2Request) (*dto.CreateCostsheetV2Response, error)
+	GetCostsheetV2(ctx context.Context, id string) (*dto.GetCostsheetV2Response, error)
+	GetCostsheetV2s(ctx context.Context, filter *types.CostsheetV2Filter) (*dto.ListCostsheetV2Response, error)
+	UpdateCostsheetV2(ctx context.Context, id string, req dto.UpdateCostsheetV2Request) (*dto.UpdateCostsheetV2Response, error)
+	DeleteCostsheetV2(ctx context.Context, id string) (*dto.DeleteCostsheetV2Response, error)
+}
+
+// CostsheetAnalyticsService defines the interface for costsheet analytics operations
+type CostsheetAnalyticsService interface {
+	// GetCostAnalytics retrieves cost analytics for customers and costsheets
+	GetCostAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error)
+
+	// GetCombinedAnalytics combines cost and revenue analytics with derived metrics
+	GetCombinedAnalytics(ctx context.Context, req *dto.GetCombinedAnalyticsRequest) (*dto.GetCombinedAnalyticsResponse, error)
+}
+
 type SubscriptionService interface {
 	CreateSubscription(ctx context.Context, req dto.CreateSubscriptionRequest) (*dto.SubscriptionResponse, error)
 	GetSubscription(ctx context.Context, id string) (*dto.SubscriptionResponse, error)

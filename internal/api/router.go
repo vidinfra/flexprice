@@ -37,6 +37,8 @@ type Handlers struct {
 	Task                     *v1.TaskHandler
 	Secret                   *v1.SecretHandler
 	CostSheet                *v1.CostSheetHandler
+	CostsheetV2              *v1.CostsheetV2Handler
+	CostsheetAnalytics       *v1.CostsheetAnalyticsHandler
 	CreditNote               *v1.CreditNoteHandler
 	Tax                      *v1.TaxHandler
 	Coupon                   *v1.CouponHandler
@@ -124,6 +126,12 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			events.POST("/usage/meter", handlers.Events.GetUsageByMeter)
 			events.POST("/analytics", handlers.Events.GetUsageAnalytics)
 			events.POST("/analytics-v2", handlers.Events.GetUsageAnalyticsV2)
+		}
+
+		analytics := v1Private.Group("/analytics")
+		{
+			analytics.POST("/cost", handlers.CostsheetAnalytics.GetCostAnalytics)
+			analytics.POST("/combined", handlers.CostsheetAnalytics.GetCombinedAnalytics)
 		}
 
 		meters := v1Private.Group("/meters")
@@ -405,6 +413,17 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			costSheet.GET("/breakdown/:subscription_id", handlers.CostSheet.GetCostBreakDown)
 			costSheet.POST("/roi", handlers.CostSheet.CalculateROI)
 		}
+
+		// Cost sheet v2 routes
+		costSheetV2 := v1Private.Group("/costsheets-v2")
+		{
+			costSheetV2.POST("/search", handlers.CostsheetV2.ListCostsheetV2ByFilter)
+			costSheetV2.POST("", handlers.CostsheetV2.CreateCostsheetV2)
+			costSheetV2.GET("/:id", handlers.CostsheetV2.GetCostsheetV2)
+			costSheetV2.PUT("/:id", handlers.CostsheetV2.UpdateCostsheetV2)
+			costSheetV2.DELETE("/:id", handlers.CostsheetV2.DeleteCostsheetV2)
+		}
+
 		// Credit note routes
 		creditNotes := v1Private.Group("/creditnotes")
 		{

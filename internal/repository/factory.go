@@ -9,6 +9,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/auth"
 	"github.com/flexprice/flexprice/internal/domain/connection"
 	"github.com/flexprice/flexprice/internal/domain/costsheet"
+	"github.com/flexprice/flexprice/internal/domain/costsheet_v2"
 	"github.com/flexprice/flexprice/internal/domain/coupon"
 	"github.com/flexprice/flexprice/internal/domain/coupon_application"
 	"github.com/flexprice/flexprice/internal/domain/coupon_association"
@@ -145,6 +146,10 @@ func NewCreditGrantRepository(p RepositoryParams) creditgrant.Repository {
 
 func NewCostSheetRepository(p RepositoryParams) costsheet.Repository {
 	return entRepo.NewCostSheetRepository(p.EntClient, p.Logger)
+}
+
+func NewCostSheetV2Repository(p RepositoryParams) costsheet_v2.Repository {
+	return entRepo.NewCostSheetV2Repository(p.EntClient, p.Logger, p.Cache)
 }
 
 func NewCreditGrantApplicationRepository(p RepositoryParams) creditgrantapplication.Repository {

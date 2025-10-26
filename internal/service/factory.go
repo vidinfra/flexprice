@@ -8,6 +8,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/auth"
 	"github.com/flexprice/flexprice/internal/domain/connection"
 	costsheet "github.com/flexprice/flexprice/internal/domain/costsheet"
+	"github.com/flexprice/flexprice/internal/domain/costsheet_v2"
 	"github.com/flexprice/flexprice/internal/domain/coupon"
 	"github.com/flexprice/flexprice/internal/domain/coupon_application"
 	"github.com/flexprice/flexprice/internal/domain/coupon_association"
@@ -82,6 +83,7 @@ type ServiceParams struct {
 	TaskRepo                     task.Repository
 	CreditGrantRepo              creditgrant.Repository
 	CostSheetRepo                costsheet.Repository
+	CostSheetV2Repo              costsheet_v2.Repository
 	CreditNoteRepo               creditnote.Repository
 	CreditNoteLineItemRepo       creditnote.CreditNoteLineItemRepository
 	CreditGrantApplicationRepo   creditgrantapplication.Repository
@@ -147,6 +149,7 @@ func NewServiceParams(
 	taxConfigRepo taxassociation.Repository,
 	taskRepo task.Repository,
 	costSheetRepo costsheet.Repository,
+	costSheetV2Repo costsheet_v2.Repository,
 	taxAppliedRepo taxapplied.Repository,
 	taxRateRepo taxrate.Repository,
 	couponRepo coupon.Repository,
@@ -196,6 +199,7 @@ func NewServiceParams(
 		CreditGrantApplicationRepo:   creditGrantApplicationRepo,
 		TaskRepo:                     taskRepo,
 		CostSheetRepo:                costSheetRepo,
+		CostSheetV2Repo:              costSheetV2Repo,
 		CreditNoteRepo:               creditNoteRepo,
 		CreditNoteLineItemRepo:       creditNoteLineItemRepo,
 		TaxRateRepo:                  taxRateRepo,
