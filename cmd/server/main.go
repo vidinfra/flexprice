@@ -122,6 +122,7 @@ func main() {
 			repository.NewEventRepository,
 			repository.NewProcessedEventRepository,
 			repository.NewFeatureUsageRepository,
+			repository.NewFeatureUsageV2Repository,
 			repository.NewMeterRepository,
 			repository.NewUserRepository,
 			repository.NewAuthRepository,
@@ -190,6 +191,7 @@ func main() {
 			service.NewEventPostProcessingService,
 			service.NewEventConsumptionService,
 			service.NewFeatureUsageTrackingService,
+			service.NewFeatureUsageTrackingV2Service,
 			service.NewPriceService,
 			service.NewCustomerService,
 			service.NewPlanService,
@@ -207,7 +209,7 @@ func main() {
 			service.NewCreditGrantService,
 			service.NewCostSheetService,
 			service.NewCostsheetV2Service,
-			provideCostsheetAnalyticsService,
+			service.NewCostsheetAnalyticsService,
 			service.NewCreditNoteService,
 			service.NewConnectionService,
 			service.NewEntityIntegrationMappingService,
@@ -244,14 +246,6 @@ func main() {
 
 	app := fx.New(opts...)
 	app.Run()
-}
-
-// provideCostsheetAnalyticsService creates a costsheet analytics service with proper dependencies
-func provideCostsheetAnalyticsService(
-	params service.ServiceParams,
-	featureUsageTrackingService service.FeatureUsageTrackingService,
-) service.CostsheetAnalyticsService {
-	return service.NewCostsheetAnalyticsService(params, featureUsageTrackingService)
 }
 
 func provideHandlers(

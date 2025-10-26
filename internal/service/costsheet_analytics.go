@@ -18,10 +18,10 @@ type CostsheetAnalyticsService = interfaces.CostsheetAnalyticsService
 
 type costsheetAnalyticsService struct {
 	ServiceParams
-	featureUsageTrackingService FeatureUsageTrackingService
+	featureUsageTrackingService FeatureUsageTrackingV2Service
 }
 
-func NewCostsheetAnalyticsService(params ServiceParams, featureUsageTrackingService FeatureUsageTrackingService) CostsheetAnalyticsService {
+func NewCostsheetAnalyticsService(params ServiceParams, featureUsageTrackingService FeatureUsageTrackingV2Service) CostsheetAnalyticsService {
 	return &costsheetAnalyticsService{
 		ServiceParams:               params,
 		featureUsageTrackingService: featureUsageTrackingService,
@@ -107,7 +107,6 @@ func (s *costsheetAnalyticsService) GetCombinedAnalytics(
 	if req.IncludeRevenue {
 		revenueReq := s.buildRevenueRequest(req)
 		if revenueReq != nil {
-			s.Logger.Infow("fetching revenue analytics", "external_customer_id", revenueReq.ExternalCustomerID)
 			revenueAnalytics, err = s.featureUsageTrackingService.GetDetailedUsageAnalytics(ctx, revenueReq)
 			if err != nil {
 				s.Logger.Warnw("failed to fetch revenue analytics", "error", err)
@@ -406,11 +405,6 @@ func (s *costsheetAnalyticsService) buildEmptyResponse(req *dto.GetCostAnalytics
 
 // buildRevenueRequest builds a revenue analytics request from combined request
 func (s *costsheetAnalyticsService) buildRevenueRequest(req *dto.GetCombinedAnalyticsRequest) *dto.GetUsageAnalyticsRequest {
-	if req.ExternalCustomerID == "" {
-		// Revenue analytics requires a specific customer
-		return nil
-	}
-
 	return &dto.GetUsageAnalyticsRequest{
 		ExternalCustomerID: req.ExternalCustomerID,
 		StartTime:          req.StartTime,

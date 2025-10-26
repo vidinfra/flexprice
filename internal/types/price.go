@@ -41,6 +41,7 @@ const (
 	PRICE_ENTITY_TYPE_SUBSCRIPTION PriceEntityType = "SUBSCRIPTION"
 	PRICE_ENTITY_TYPE_ADDON        PriceEntityType = "ADDON"
 	PRICE_ENTITY_TYPE_PRICE        PriceEntityType = "PRICE"
+	PRICE_ENTITY_TYPE_COSTSHEET_V2 PriceEntityType = "COSTSHEET_V2"
 )
 
 func (p PriceEntityType) Validate() error {
