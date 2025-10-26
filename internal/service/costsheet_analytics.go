@@ -6,6 +6,7 @@ import (
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/events"
+	"github.com/flexprice/flexprice/internal/domain/meter"
 	"github.com/flexprice/flexprice/internal/domain/price"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/interfaces"
@@ -88,7 +89,8 @@ func (s *costsheetAnalyticsService) GetCostAnalytics(
 	}
 
 	// 8. Build response
-	return s.buildResponse(req, costAnalytics), nil
+	s.Logger.Infow("building response", "expand_options", req.Expand, "cost_analytics_count", len(costAnalytics))
+	return s.buildResponse(ctx, req, costAnalytics), nil
 }
 
 // GetCombinedAnalytics combines cost and revenue analytics with derived metrics
@@ -118,12 +120,11 @@ func (s *costsheetAnalyticsService) GetCombinedAnalytics(
 
 	// 3. Compute derived metrics
 	response := &dto.GetCombinedAnalyticsResponse{
-		CostAnalytics:    costAnalytics,
-		RevenueAnalytics: revenueAnalytics,
-		TotalCost:        costAnalytics.TotalCost,
-		Currency:         costAnalytics.Currency,
-		StartTime:        costAnalytics.StartTime,
-		EndTime:          costAnalytics.EndTime,
+		CostAnalytics: costAnalytics.CostAnalytics, // Flatten the cost analytics array
+		TotalCost:     costAnalytics.TotalCost,
+		Currency:      costAnalytics.Currency,
+		StartTime:     costAnalytics.StartTime,
+		EndTime:       costAnalytics.EndTime,
 	}
 
 	// Calculate derived metrics if revenue analytics is available
@@ -286,9 +287,6 @@ func (s *costsheetAnalyticsService) calculateCostsFromUsage(
 
 		// Find customer for this usage - we need to get it from the request since AggregationResult doesn't have ExternalCustomerID
 		// For now, we'll use the first customer if there's only one, otherwise skip
-		if len(customers) != 1 {
-			continue // Skip if we can't determine which customer this usage belongs to
-		}
 		customer := customers[0]
 
 		// Calculate cost (same logic as GetUsageBySubscription)
@@ -355,9 +353,15 @@ func (s *costsheetAnalyticsService) addTimeSeriesData(
 
 // buildResponse builds the final cost analytics response
 func (s *costsheetAnalyticsService) buildResponse(
+	ctx context.Context,
 	req *dto.GetCostAnalyticsRequest,
 	costAnalytics []dto.CostAnalyticItem,
 ) *dto.GetCostAnalyticsResponse {
+	// Apply expansion if requested
+	if len(req.Expand) > 0 {
+		costAnalytics = s.expandCostAnalyticsSimple(ctx, req, costAnalytics)
+	}
+
 	response := &dto.GetCostAnalyticsResponse{
 		CostsheetV2ID: req.CostsheetV2ID,
 		StartTime:     req.StartTime,
@@ -435,4 +439,78 @@ func containsString(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+// expandCostAnalyticsSimple expands meter and price data for cost analytics items using batch fetching and domain types
+func (s *costsheetAnalyticsService) expandCostAnalyticsSimple(
+	ctx context.Context,
+	req *dto.GetCostAnalyticsRequest,
+	costAnalytics []dto.CostAnalyticItem,
+) []dto.CostAnalyticItem {
+	// Collect meter and price IDs
+	meterIDs := make([]string, 0)
+	priceIDs := make([]string, 0)
+
+	for _, item := range costAnalytics {
+		if item.MeterID != "" {
+			meterIDs = append(meterIDs, item.MeterID)
+		}
+		if item.PriceID != "" {
+			priceIDs = append(priceIDs, item.PriceID)
+		}
+	}
+
+	// Batch fetch meters if requested
+	var meters map[string]*meter.Meter
+	if containsString(req.Expand, "meter") && len(meterIDs) > 0 {
+		meters = make(map[string]*meter.Meter)
+		meterFilter := types.NewNoLimitMeterFilter()
+		meterFilter.MeterIDs = meterIDs
+		meterList, err := s.MeterRepo.List(ctx, meterFilter)
+		if err != nil {
+			s.Logger.Warnw("failed to batch fetch meters for expansion", "meter_ids", meterIDs, "error", err)
+		} else {
+			for _, m := range meterList {
+				meters[m.ID] = m
+			}
+		}
+	}
+
+	// Batch fetch prices if requested
+	var prices map[string]*price.Price
+	if containsString(req.Expand, "price") && len(priceIDs) > 0 {
+		prices = make(map[string]*price.Price)
+		priceFilter := types.NewNoLimitPriceFilter()
+		priceFilter.PriceIDs = priceIDs
+		priceList, err := s.PriceRepo.List(ctx, priceFilter)
+		if err != nil {
+			s.Logger.Warnw("failed to batch fetch prices for expansion", "price_ids", priceIDs, "error", err)
+		} else {
+			for _, p := range priceList {
+				prices[p.ID] = p
+			}
+		}
+	}
+
+	// Expand the cost analytics items - use domain types directly
+	expandedItems := make([]dto.CostAnalyticItem, len(costAnalytics))
+	for i, item := range costAnalytics {
+		expandedItems[i] = item
+
+		// Expand meter data - use domain type directly
+		if meters != nil && item.MeterID != "" {
+			if m, exists := meters[item.MeterID]; exists {
+				expandedItems[i].Meter = m
+			}
+		}
+
+		// Expand price data - use domain type directly
+		if prices != nil && item.PriceID != "" {
+			if p, exists := prices[item.PriceID]; exists {
+				expandedItems[i].Price = p
+			}
+		}
+	}
+
+	return expandedItems
 }

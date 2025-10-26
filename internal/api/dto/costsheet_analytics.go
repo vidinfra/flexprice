@@ -3,6 +3,8 @@ package dto
 import (
 	"time"
 
+	"github.com/flexprice/flexprice/internal/domain/meter"
+	"github.com/flexprice/flexprice/internal/domain/price"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/flexprice/flexprice/internal/validator"
@@ -30,6 +32,9 @@ type GetCostAnalyticsRequest struct {
 	IncludeTimeSeries bool `json:"include_time_series,omitempty"`
 	IncludeBreakdown  bool `json:"include_breakdown,omitempty"`
 
+	// Expand options - specify which entities to expand
+	Expand []string `json:"expand,omitempty"` // "meter", "price"
+
 	// Pagination
 	Limit  int `json:"limit,omitempty"`
 	Offset int `json:"offset,omitempty"`
@@ -56,6 +61,19 @@ func (r *GetCostAnalyticsRequest) Validate() error {
 		return ierr.NewError("costsheet_v2_id is required").
 			WithHint("costsheet_v2_id is required").
 			Mark(ierr.ErrValidation)
+	}
+
+	// Validate expand options
+	validExpandOptions := map[string]bool{
+		"meter": true,
+		"price": true,
+	}
+	for _, expand := range r.Expand {
+		if !validExpandOptions[expand] {
+			return ierr.NewError("invalid expand option").
+				WithHint("valid expand options are: meter, price").
+				Mark(ierr.ErrValidation)
+		}
 	}
 
 	return nil
@@ -94,6 +112,10 @@ type CostAnalyticItem struct {
 	Currency      string `json:"currency"`
 	PriceID       string `json:"price_id,omitempty"`
 	CostsheetV2ID string `json:"costsheet_v2_id,omitempty"`
+
+	// Expanded data (populated when expand options are specified)
+	Meter *meter.Meter `json:"meter,omitempty"`
+	Price *price.Price `json:"price,omitempty"`
 }
 
 // CostPoint represents a single point in cost time-series data
@@ -130,11 +152,8 @@ type GetCostAnalyticsResponse struct {
 
 // GetCombinedAnalyticsResponse represents the response for combined cost and revenue analytics
 type GetCombinedAnalyticsResponse struct {
-	// Cost metrics
-	CostAnalytics *GetCostAnalyticsResponse `json:"cost_analytics"`
-
-	// Revenue metrics (from existing analytics)
-	RevenueAnalytics *GetUsageAnalyticsResponse `json:"revenue_analytics,omitempty"`
+	// Cost analytics array (flattened from nested structure)
+	CostAnalytics []CostAnalyticItem `json:"cost_analytics"`
 
 	// Derived metrics
 	TotalRevenue  decimal.Decimal `json:"total_revenue"`
