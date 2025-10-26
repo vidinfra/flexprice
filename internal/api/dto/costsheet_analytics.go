@@ -22,15 +22,7 @@ type GetCostAnalyticsRequest struct {
 	ExternalCustomerID string `json:"external_customer_id,omitempty"` // Optional - for specific customer
 
 	// Additional filters
-	MeterIDs        []string            `json:"meter_ids,omitempty"`
-	Sources         []string            `json:"sources,omitempty"`
-	WindowSize      types.WindowSize    `json:"window_size,omitempty"` // For time-series
-	GroupBy         []string            `json:"group_by,omitempty"`    // "meter_id", "source", "customer_id"
-	PropertyFilters map[string][]string `json:"property_filters,omitempty"`
-
-	// Additional options
-	IncludeTimeSeries bool `json:"include_time_series,omitempty"`
-	IncludeBreakdown  bool `json:"include_breakdown,omitempty"`
+	MeterIDs []string `json:"meter_ids,omitempty"`
 
 	// Expand options - specify which entities to expand
 	Expand []string `json:"expand,omitempty"` // "meter", "price"
@@ -77,18 +69,6 @@ func (r *GetCostAnalyticsRequest) Validate() error {
 	}
 
 	return nil
-}
-
-// GetCombinedAnalyticsRequest represents the request to get combined cost and revenue analytics
-type GetCombinedAnalyticsRequest struct {
-	GetCostAnalyticsRequest
-	// Revenue analytics options
-	IncludeRevenue bool `json:"include_revenue"`
-}
-
-// Validate validates the combined analytics request
-func (r *GetCombinedAnalyticsRequest) Validate() error {
-	return r.GetCostAnalyticsRequest.Validate()
 }
 
 // CostAnalyticItem represents a single cost analytics item
@@ -151,7 +131,7 @@ type GetCostAnalyticsResponse struct {
 }
 
 // GetCombinedAnalyticsResponse represents the response for combined cost and revenue analytics
-type GetCombinedAnalyticsResponse struct {
+type GetDetailedCostAnalyticsResponse struct {
 	// Cost analytics array (flattened from nested structure)
 	CostAnalytics []CostAnalyticItem `json:"cost_analytics"`
 

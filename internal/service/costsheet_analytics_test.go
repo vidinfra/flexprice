@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,16 +108,13 @@ func TestCostsheetAnalyticsService_GetCombinedAnalytics_Validation(t *testing.T)
 	ctx := context.Background()
 
 	t.Run("should inherit validation from GetCostAnalyticsRequest", func(t *testing.T) {
-		req := &dto.GetCombinedAnalyticsRequest{
-			GetCostAnalyticsRequest: dto.GetCostAnalyticsRequest{
-				StartTime: time.Now().Add(-24 * time.Hour),
-				EndTime:   time.Now(),
-				// No filters provided
-			},
-			IncludeRevenue: true,
+		req := &dto.GetCostAnalyticsRequest{
+			StartTime: time.Now().Add(-24 * time.Hour),
+			EndTime:   time.Now(),
+			// No filters provided
 		}
 
-		_, err := service.GetCombinedAnalytics(ctx, req)
+		_, err := service.GetDetailedCostAnalytics(ctx, req)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "at least one of costsheet_v2_id, external_customer_id, or customer_ids must be provided")
 	})
@@ -202,7 +200,7 @@ func TestGetCostAnalyticsResponse_Structure(t *testing.T) {
 
 func TestGetCombinedAnalyticsResponse_DerivedMetrics(t *testing.T) {
 	t.Run("should calculate derived metrics correctly", func(t *testing.T) {
-		response := dto.GetCombinedAnalyticsResponse{
+		response := dto.GetDetailedCostAnalyticsResponse{
 			TotalRevenue: decimal.NewFromFloat(1000.00),
 			TotalCost:    decimal.NewFromFloat(600.00),
 			Currency:     "USD",
@@ -221,7 +219,7 @@ func TestGetCombinedAnalyticsResponse_DerivedMetrics(t *testing.T) {
 	})
 
 	t.Run("should handle zero revenue gracefully", func(t *testing.T) {
-		response := dto.GetCombinedAnalyticsResponse{
+		response := dto.GetDetailedCostAnalyticsResponse{
 			TotalRevenue: decimal.Zero,
 			TotalCost:    decimal.NewFromFloat(100.00),
 			Currency:     "USD",
@@ -235,7 +233,7 @@ func TestGetCombinedAnalyticsResponse_DerivedMetrics(t *testing.T) {
 	})
 
 	t.Run("should handle zero cost gracefully", func(t *testing.T) {
-		response := dto.GetCombinedAnalyticsResponse{
+		response := dto.GetDetailedCostAnalyticsResponse{
 			TotalRevenue: decimal.NewFromFloat(100.00),
 			TotalCost:    decimal.Zero,
 			Currency:     "USD",
@@ -284,21 +282,21 @@ func TestCalculateTotalRevenue(t *testing.T) {
 func TestContainsString(t *testing.T) {
 	t.Run("should return true when string is in slice", func(t *testing.T) {
 		slice := []string{"apple", "banana", "cherry"}
-		assert.True(t, containsString(slice, "banana"))
+		assert.True(t, lo.Contains(slice, "banana"))
 	})
 
 	t.Run("should return false when string is not in slice", func(t *testing.T) {
 		slice := []string{"apple", "banana", "cherry"}
-		assert.False(t, containsString(slice, "grape"))
+		assert.False(t, lo.Contains(slice, "grape"))
 	})
 
 	t.Run("should return false for empty slice", func(t *testing.T) {
 		slice := []string{}
-		assert.False(t, containsString(slice, "apple"))
+		assert.False(t, lo.Contains(slice, "apple"))
 	})
 
 	t.Run("should handle empty string", func(t *testing.T) {
 		slice := []string{"", "banana", "cherry"}
-		assert.True(t, containsString(slice, ""))
+		assert.True(t, lo.Contains(slice, ""))
 	})
 }

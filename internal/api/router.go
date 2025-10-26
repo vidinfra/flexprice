@@ -128,12 +128,6 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			events.POST("/analytics-v2", handlers.Events.GetUsageAnalyticsV2)
 		}
 
-		analytics := v1Private.Group("/analytics")
-		{
-			analytics.POST("/cost", handlers.CostsheetAnalytics.GetCostAnalytics)
-			analytics.POST("/combined", handlers.CostsheetAnalytics.GetCombinedAnalytics)
-		}
-
 		meters := v1Private.Group("/meters")
 		{
 			meters.POST("", handlers.Meter.CreateMeter)
@@ -422,6 +416,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			costSheetV2.GET("/:id", handlers.CostsheetV2.GetCostsheetV2)
 			costSheetV2.PUT("/:id", handlers.CostsheetV2.UpdateCostsheetV2)
 			costSheetV2.DELETE("/:id", handlers.CostsheetV2.DeleteCostsheetV2)
+			costSheetV2.POST("/analytics", handlers.CostsheetAnalytics.GetDetailedCostAnalytics)
 		}
 
 		// Credit note routes

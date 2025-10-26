@@ -77,8 +77,8 @@ type CostsheetAnalyticsService interface {
 	// GetCostAnalytics retrieves cost analytics for customers and costsheets
 	GetCostAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error)
 
-	// GetCombinedAnalytics combines cost and revenue analytics with derived metrics
-	GetCombinedAnalytics(ctx context.Context, req *dto.GetCombinedAnalyticsRequest) (*dto.GetCombinedAnalyticsResponse, error)
+	// GetDetailedCostAnalytics retrieves detailed cost analytics with derived metrics
+	GetDetailedCostAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetDetailedCostAnalyticsResponse, error)
 }
 
 type SubscriptionService interface {
