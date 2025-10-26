@@ -105,7 +105,7 @@ func (s *costsheetAnalyticsService) GetDetailedCostAnalytics(
 	}
 
 	// 1. Fetch cost analytics
-	costAnalytics, err := s.GetCostAnalytics(ctx, costsheetV2.CostsheetV2.ID, req)
+	costAnalytics, err := s.GetCostAnalytics(ctx, costsheetV2.ID, req)
 	if err != nil {
 		return nil, err
 	}

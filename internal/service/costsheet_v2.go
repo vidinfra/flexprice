@@ -81,7 +81,7 @@ func (s *costsheetV2Service) CreateCostsheetV2(ctx context.Context, req dto.Crea
 	return response, nil
 }
 
-func (s *costsheetV2Service) GetCostsheetV2(ctx context.Context, id string) (*dto.GetCostsheetV2Response, error) {
+func (s *costsheetV2Service) GetCostsheetV2(ctx context.Context, id string) (*dto.CostsheetV2Response, error) {
 	if id == "" {
 		return nil, ierr.NewError("costsheet v2 ID is required").
 			WithHint("Please provide a valid costsheet v2 ID").
@@ -100,9 +100,7 @@ func (s *costsheetV2Service) GetCostsheetV2(ctx context.Context, id string) (*dt
 		return nil, err
 	}
 
-	response := &dto.GetCostsheetV2Response{
-		CostsheetV2: dto.ToCostsheetV2ResponseWithPrices(costsheet, pricesResponse.Items),
-	}
+	response := dto.ToCostsheetV2ResponseWithPrices(costsheet, pricesResponse.Items)
 
 	return response, nil
 }
@@ -272,7 +270,7 @@ func (s *costsheetV2Service) DeleteCostsheetV2(ctx context.Context, id string) (
 	return response, nil
 }
 
-func (s *costsheetV2Service) GetActiveCostsheetForTenant(ctx context.Context) (*dto.GetCostsheetV2Response, error) {
+func (s *costsheetV2Service) GetActiveCostsheetForTenant(ctx context.Context) (*dto.CostsheetV2Response, error) {
 	// Create filter with no limit to get all costsheets
 	filter := types.NewNoLimitCostsheetV2Filter()
 
@@ -291,9 +289,7 @@ func (s *costsheetV2Service) GetActiveCostsheetForTenant(ctx context.Context) (*
 	}
 
 	// Return the first (most recent) costsheet
-	response := &dto.GetCostsheetV2Response{
-		CostsheetV2: dto.ToCostsheetV2Response(costsheets[0]),
-	}
+	response := dto.ToCostsheetV2Response(costsheets[0])
 
 	return response, nil
 }
