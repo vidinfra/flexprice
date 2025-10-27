@@ -32,15 +32,15 @@ func NewRevenueAnalyticsHandler(
 // GetCombinedAnalytics retrieves combined cost and revenue analytics with derived metrics
 // @Summary Get combined revenue and cost analytics
 // @Description Retrieve combined analytics with ROI, margin, and detailed breakdowns. If start_time and end_time are not provided, defaults to last 7 days.
-// @Tags Analytics
+// @Tags Costs
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
-// @Param request body dto.GetCombinedAnalyticsRequest true "Combined analytics request (start_time/end_time optional - defaults to last 7 days)"
-// @Success 200 {object} dto.GetCombinedAnalyticsResponse
+// @Param request body dto.GetCostAnalyticsRequest true "Combined analytics request (start_time/end_time optional - defaults to last 7 days)"
+// @Success 200 {object} dto.GetDetailedCostAnalyticsResponse
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
-// @Router /costsheets-v2/analytics [post]
+// @Router /costs/analytics [post]
 func (h *RevenueAnalyticsHandler) GetDetailedCostAnalytics(c *gin.Context) {
 	ctx := c.Request.Context()
 

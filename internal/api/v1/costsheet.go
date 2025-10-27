@@ -29,7 +29,7 @@ func NewCostsheetHandler(service service.CostsheetService, log *logger.Logger) *
 
 // @Summary Create a new costsheet
 // @Description Create a new costsheet with the specified name
-// @Tags Costsheets
+// @Tags Costs
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
@@ -38,7 +38,7 @@ func NewCostsheetHandler(service service.CostsheetService, log *logger.Logger) *
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 409 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
-// @Router /costsheets [post]
+// @Router /costs [post]
 func (h *CostsheetHandler) CreateCostsheet(c *gin.Context) {
 	var req dto.CreateCostsheetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -61,7 +61,7 @@ func (h *CostsheetHandler) CreateCostsheet(c *gin.Context) {
 
 // @Summary Get a costsheet by ID
 // @Description Get a costsheet by ID with optional price expansion
-// @Tags Costsheets
+// @Tags Costs
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
@@ -71,7 +71,7 @@ func (h *CostsheetHandler) CreateCostsheet(c *gin.Context) {
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 404 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
-// @Router /costsheets/{id} [get]
+// @Router /costs/{id} [get]
 func (h *CostsheetHandler) GetCostsheet(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -93,7 +93,7 @@ func (h *CostsheetHandler) GetCostsheet(c *gin.Context) {
 
 // @Summary Update a costsheet
 // @Description Update a costsheet with the specified configuration
-// @Tags Costsheets
+// @Tags Costs
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
@@ -104,7 +104,7 @@ func (h *CostsheetHandler) GetCostsheet(c *gin.Context) {
 // @Failure 404 {object} ierr.ErrorResponse
 // @Failure 409 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
-// @Router /costsheets/{id} [put]
+// @Router /costs/{id} [put]
 func (h *CostsheetHandler) UpdateCostsheet(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -135,7 +135,7 @@ func (h *CostsheetHandler) UpdateCostsheet(c *gin.Context) {
 
 // @Summary Delete a costsheet
 // @Description Soft delete a costsheet by setting its status to deleted
-// @Tags Costsheets
+// @Tags Costs
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
@@ -144,7 +144,7 @@ func (h *CostsheetHandler) UpdateCostsheet(c *gin.Context) {
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 404 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
-// @Router /costsheets/{id} [delete]
+// @Router /costs/{id} [delete]
 func (h *CostsheetHandler) DeleteCostsheet(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -166,7 +166,7 @@ func (h *CostsheetHandler) DeleteCostsheet(c *gin.Context) {
 
 // @Summary List costsheets by filter
 // @Description List costsheet records by filter with POST body
-// @Tags Costsheets
+// @Tags Costs
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
@@ -174,7 +174,7 @@ func (h *CostsheetHandler) DeleteCostsheet(c *gin.Context) {
 // @Success 200 {object} dto.ListCostsheetResponse
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
-// @Router /costsheets/search [post]
+// @Router /costs/search [post]
 func (h *CostsheetHandler) ListCostsheetByFilter(c *gin.Context) {
 	var filter domainCostsheet.Filter
 	if err := c.ShouldBindJSON(&filter); err != nil {
@@ -205,14 +205,14 @@ func (h *CostsheetHandler) ListCostsheetByFilter(c *gin.Context) {
 
 // @Summary Get active costsheet for tenant
 // @Description Get the active costsheet for the current tenant
-// @Tags Costsheets
+// @Tags Costs
 // @Accept json
 // @Produce json
 // @Security ApiKeyAuth
 // @Success 200 {object} dto.CostsheetResponse
 // @Failure 404 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
-// @Router /costsheets/active [get]
+// @Router /costs/active [get]
 func (h *CostsheetHandler) GetActiveCostsheetForTenant(c *gin.Context) {
 	resp, err := h.service.GetActiveCostsheetForTenant(c.Request.Context())
 	if err != nil {
