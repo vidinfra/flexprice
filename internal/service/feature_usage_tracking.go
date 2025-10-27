@@ -47,7 +47,7 @@ type FeatureUsageTrackingService interface {
 	// Get detailed usage analytics with filtering, grouping, and time-series data
 	GetDetailedUsageAnalytics(ctx context.Context, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error)
 
-	// Get detailed usage analytics version 2with filtering, grouping, and time-series data
+	// Get detailed usage analytics version 2 with filtering, grouping, and time-series data
 	GetDetailedUsageAnalyticsV2(ctx context.Context, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error)
 
 	// Reprocess events for a specific customer or with other filters
