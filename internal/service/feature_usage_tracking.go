@@ -47,6 +47,9 @@ type FeatureUsageTrackingService interface {
 	// Get detailed usage analytics with filtering, grouping, and time-series data
 	GetDetailedUsageAnalytics(ctx context.Context, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error)
 
+	// Get detailed usage analytics version 2with filtering, grouping, and time-series data
+	GetDetailedUsageAnalyticsV2(ctx context.Context, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error)
+
 	// Reprocess events for a specific customer or with other filters
 	ReprocessEvents(ctx context.Context, params *events.ReprocessEventsParams) error
 }
@@ -1007,6 +1010,80 @@ func (s *featureUsageTrackingService) GetDetailedUsageAnalytics(ctx context.Cont
 	return s.buildAnalyticsResponse(ctx, data, req)
 }
 
+func (s *featureUsageTrackingService) GetDetailedUsageAnalyticsV2(ctx context.Context, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error) {
+	// 1. Validate request
+	if err := s.validateAnalyticsRequestV2(req); err != nil {
+		return nil, err
+	}
+
+	customers, err := s.fetchCustomers(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Initialize aggregated analytics slice
+	var allAnalytics []*events.DetailedUsageAnalytic
+	var aggregatedData *AnalyticsData
+	var currency string
+
+	// Process each customer and aggregate their analytics data
+	for i, customer := range customers {
+		// Create a customer-specific request
+		customerReq := *req
+		customerReq.ExternalCustomerID = customer.ExternalID
+
+		// Fetch analytics data for this customer
+		data, err := s.fetchAnalyticsData(ctx, &customerReq)
+		if err != nil {
+			s.Logger.Warnw("failed to fetch analytics data for customer, skipping",
+				"customer_id", customer.ID,
+				"external_customer_id", customer.ExternalID,
+				"error", err,
+			)
+			continue
+		}
+
+		// Append this customer's analytics to the aggregated list
+		allAnalytics = append(allAnalytics, data.Analytics...)
+
+		// Use the first customer's data structure as the base for aggregation
+		if i == 0 {
+			aggregatedData = data
+			currency = data.Currency
+		} else {
+			// Validate currency consistency across customers
+			if data.Currency != "" && currency != "" && data.Currency != currency {
+				return nil, ierr.NewError("multiple currencies detected across customers").
+					WithHint("Analytics V2 is only supported when all customers use the same currency").
+					WithReportableDetails(map[string]interface{}{
+						"expected_currency": currency,
+						"found_currency":    data.Currency,
+						"customer_id":       customer.ID,
+					}).
+					Mark(ierr.ErrValidation)
+			}
+			// Merge additional data into aggregated structure
+			s.mergeAnalyticsData(aggregatedData, data)
+		}
+	}
+
+	// If no data was collected, return empty response
+	if aggregatedData == nil {
+		return &dto.GetUsageAnalyticsResponse{
+			TotalCost: decimal.Zero,
+			Currency:  "",
+			Items:     []dto.UsageAnalyticItem{},
+		}, nil
+	}
+
+	// Update the aggregated data with all analytics
+	aggregatedData.Analytics = allAnalytics
+	aggregatedData.Currency = currency
+
+	// 3. Process and return response
+	return s.buildAnalyticsResponse(ctx, aggregatedData, req)
+}
+
 // validateAnalyticsRequest validates the analytics request
 func (s *featureUsageTrackingService) validateAnalyticsRequest(req *dto.GetUsageAnalyticsRequest) error {
 	if req.ExternalCustomerID == "" {
@@ -1015,6 +1092,14 @@ func (s *featureUsageTrackingService) validateAnalyticsRequest(req *dto.GetUsage
 			Mark(ierr.ErrValidation)
 	}
 
+	if req.WindowSize != "" {
+		return req.WindowSize.Validate()
+	}
+
+	return nil
+}
+
+func (s *featureUsageTrackingService) validateAnalyticsRequestV2(req *dto.GetUsageAnalyticsRequest) error {
 	if req.WindowSize != "" {
 		return req.WindowSize.Validate()
 	}
@@ -2103,4 +2188,78 @@ func (s *featureUsageTrackingService) fetchAddons(ctx context.Context, data *Ana
 	}
 
 	return addonMap, nil
+}
+
+// fetchCustomers fetches all customers when no external customer ID is provided
+func (s *featureUsageTrackingService) fetchCustomers(ctx context.Context, req *dto.GetUsageAnalyticsRequest) ([]*customer.Customer, error) {
+	if req.ExternalCustomerID != "" {
+		cust, err := s.fetchCustomer(ctx, req.ExternalCustomerID)
+		if err != nil {
+			return nil, err
+		}
+		return []*customer.Customer{cust}, nil
+	} else {
+		customers, err := s.CustomerRepo.List(ctx, types.NewNoLimitCustomerFilter())
+		if err != nil {
+			return nil, ierr.WithError(err).
+				WithHint("Failed to fetch customers").
+				Mark(ierr.ErrDatabase)
+		}
+		return customers, nil
+	}
+}
+
+// mergeAnalyticsData merges additional analytics data into the aggregated data structure
+func (s *featureUsageTrackingService) mergeAnalyticsData(aggregated *AnalyticsData, additional *AnalyticsData) {
+	// Merge customers (though in V2 we process multiple customers, we keep track of all)
+	// Note: We don't merge customers as each iteration processes a different customer
+
+	// Merge subscriptions
+	for _, sub := range additional.Subscriptions {
+		// Check if subscription already exists
+		if _, exists := aggregated.SubscriptionsMap[sub.ID]; !exists {
+			aggregated.Subscriptions = append(aggregated.Subscriptions, sub)
+			aggregated.SubscriptionsMap[sub.ID] = sub
+
+			// Add line items
+			for _, lineItem := range sub.LineItems {
+				aggregated.SubscriptionLineItems[lineItem.ID] = lineItem
+			}
+		}
+	}
+
+	// Merge features
+	for id, feature := range additional.Features {
+		if _, exists := aggregated.Features[id]; !exists {
+			aggregated.Features[id] = feature
+		}
+	}
+
+	// Merge meters
+	for id, meter := range additional.Meters {
+		if _, exists := aggregated.Meters[id]; !exists {
+			aggregated.Meters[id] = meter
+		}
+	}
+
+	// Merge prices
+	for id, price := range additional.Prices {
+		if _, exists := aggregated.Prices[id]; !exists {
+			aggregated.Prices[id] = price
+		}
+	}
+
+	// Merge plans
+	for id, plan := range additional.Plans {
+		if _, exists := aggregated.Plans[id]; !exists {
+			aggregated.Plans[id] = plan
+		}
+	}
+
+	// Merge addons
+	for id, addon := range additional.Addons {
+		if _, exists := aggregated.Addons[id]; !exists {
+			aggregated.Addons[id] = addon
+		}
+	}
 }

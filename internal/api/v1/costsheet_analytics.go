@@ -11,21 +11,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type CostsheetAnalyticsHandler struct {
-	costsheetAnalyticsService interfaces.CostsheetAnalyticsService
-	config                    *config.Configuration
-	Logger                    *logger.Logger
+type RevenueAnalyticsHandler struct {
+	revenueAnalyticsService interfaces.RevenueAnalyticsService
+	config                  *config.Configuration
+	Logger                  *logger.Logger
 }
 
-func NewCostsheetAnalyticsHandler(
-	costsheetAnalyticsService interfaces.CostsheetAnalyticsService,
+func NewRevenueAnalyticsHandler(
+	revenueAnalyticsService interfaces.RevenueAnalyticsService,
 	config *config.Configuration,
 	logger *logger.Logger,
-) *CostsheetAnalyticsHandler {
-	return &CostsheetAnalyticsHandler{
-		costsheetAnalyticsService: costsheetAnalyticsService,
-		config:                    config,
-		Logger:                    logger,
+) *RevenueAnalyticsHandler {
+	return &RevenueAnalyticsHandler{
+		revenueAnalyticsService: revenueAnalyticsService,
+		config:                  config,
+		Logger:                  logger,
 	}
 }
 
@@ -41,7 +41,7 @@ func NewCostsheetAnalyticsHandler(
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
 // @Router /costsheets-v2/analytics [post]
-func (h *CostsheetAnalyticsHandler) GetDetailedCostAnalytics(c *gin.Context) {
+func (h *RevenueAnalyticsHandler) GetDetailedCostAnalytics(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	var req dto.GetCostAnalyticsRequest
@@ -52,7 +52,7 @@ func (h *CostsheetAnalyticsHandler) GetDetailedCostAnalytics(c *gin.Context) {
 		return
 	}
 
-	response, err := h.costsheetAnalyticsService.GetDetailedCostAnalytics(ctx, &req)
+	response, err := h.revenueAnalyticsService.GetDetailedCostAnalytics(ctx, &req)
 	if err != nil {
 		c.Error(err)
 		return

@@ -37,7 +37,7 @@ type Handlers struct {
 	Task                     *v1.TaskHandler
 	Secret                   *v1.SecretHandler
 	Costsheet                *v1.CostsheetHandler
-	CostsheetAnalytics       *v1.CostsheetAnalyticsHandler
+	RevenueAnalytics         *v1.RevenueAnalyticsHandler
 	CreditNote               *v1.CreditNoteHandler
 	Tax                      *v1.TaxHandler
 	Coupon                   *v1.CouponHandler
@@ -396,7 +396,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 		}
 
 		// Costsheet routes
-		costsheets := v1Private.Group("/costsheets")
+		costsheets := v1Private.Group("/costs")
 		{
 			costsheets.POST("/search", handlers.Costsheet.ListCostsheetByFilter)
 			costsheets.POST("", handlers.Costsheet.CreateCostsheet)
@@ -404,15 +404,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			costsheets.PUT("/:id", handlers.Costsheet.UpdateCostsheet)
 			costsheets.DELETE("/:id", handlers.Costsheet.DeleteCostsheet)
 			costsheets.GET("/active", handlers.Costsheet.GetActiveCostsheetForTenant)
-			costsheets.POST("/analytics", handlers.CostsheetAnalytics.GetDetailedCostAnalytics)
-		}
-
-		// Legacy cost sheet routes (deprecated)
-		costSheet := v1Private.Group("/costs")
-		{
-			costSheet.POST("", handlers.Costsheet.CreateCostSheet)
-			costSheet.POST("/breakdown", handlers.Costsheet.GetInputCostForMargin)
-			costSheet.POST("/roi", handlers.Costsheet.CalculateROI)
+			costsheets.POST("/analytics", handlers.RevenueAnalytics.GetDetailedCostAnalytics)
 		}
 
 		// Credit note routes

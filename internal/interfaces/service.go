@@ -63,8 +63,8 @@ type EntityIntegrationMappingService interface {
 	DeleteEntityIntegrationMapping(ctx context.Context, id string) error
 }
 
-// CostsheetAnalyticsService defines the interface for costsheet analytics operations
-type CostsheetAnalyticsService interface {
+// RevenueAnalyticsService defines the interface for revenue analytics operations
+type RevenueAnalyticsService interface {
 	// GetCostAnalytics retrieves cost analytics for customers and costsheets
 	GetCostAnalytics(ctx context.Context, costsheetID string, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error)
 

@@ -21,7 +21,7 @@ type PriceService interface {
 	GetPricesByPlanID(ctx context.Context, planID string) (*dto.ListPricesResponse, error)
 	GetPricesBySubscriptionID(ctx context.Context, subscriptionID string) (*dto.ListPricesResponse, error)
 	GetPricesByAddonID(ctx context.Context, addonID string) (*dto.ListPricesResponse, error)
-	GetPricesByCostsheetV2ID(ctx context.Context, costsheetV2ID string) (*dto.ListPricesResponse, error)
+	GetPricesByCostsheetID(ctx context.Context, costsheetID string) (*dto.ListPricesResponse, error)
 	GetPrices(ctx context.Context, filter *types.PriceFilter) (*dto.ListPricesResponse, error)
 	UpdatePrice(ctx context.Context, id string, req dto.UpdatePriceRequest) (*dto.PriceResponse, error)
 	DeletePrice(ctx context.Context, id string, req dto.DeletePriceRequest) error
@@ -568,15 +568,15 @@ func (s *priceService) GetPricesByAddonID(ctx context.Context, addonID string) (
 	return response, nil
 }
 
-func (s *priceService) GetPricesByCostsheetV2ID(ctx context.Context, costsheetV2ID string) (*dto.ListPricesResponse, error) {
-	if costsheetV2ID == "" {
+func (s *priceService) GetPricesByCostsheetID(ctx context.Context, costsheetID string) (*dto.ListPricesResponse, error) {
+	if costsheetID == "" {
 		return nil, ierr.NewError("costsheet v2 id is required").
 			WithHint("Plan ID is required").
 			Mark(ierr.ErrValidation)
 	}
 
 	priceFilter := types.NewNoLimitPriceFilter().
-		WithEntityIDs([]string{costsheetV2ID}).
+		WithEntityIDs([]string{costsheetID}).
 		WithStatus(types.StatusPublished).
 		WithEntityType(types.PRICE_ENTITY_TYPE_COSTSHEET).
 		WithExpand(string(types.ExpandMeters) + "," + string(types.ExpandPriceUnit))

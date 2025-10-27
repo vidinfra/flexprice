@@ -14,16 +14,16 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-type CostsheetAnalyticsService = interfaces.CostsheetAnalyticsService
+type RevenueAnalyticsService = interfaces.RevenueAnalyticsService
 
-type costsheetAnalyticsService struct {
+type revenueAnalyticsService struct {
 	ServiceParams
-	featureUsageTrackingService FeatureUsageTrackingV2Service
+	featureUsageTrackingService FeatureUsageTrackingService
 	costsheetService            CostsheetService
 }
 
-func NewCostsheetAnalyticsService(params ServiceParams, featureUsageTrackingService FeatureUsageTrackingV2Service, costsheetService CostsheetService) CostsheetAnalyticsService {
-	return &costsheetAnalyticsService{
+func NewRevenueAnalyticsService(params ServiceParams, featureUsageTrackingService FeatureUsageTrackingService, costsheetService CostsheetService) RevenueAnalyticsService {
+	return &revenueAnalyticsService{
 		ServiceParams:               params,
 		featureUsageTrackingService: featureUsageTrackingService,
 		costsheetService:            costsheetService,
@@ -31,7 +31,7 @@ func NewCostsheetAnalyticsService(params ServiceParams, featureUsageTrackingServ
 }
 
 // GetCostAnalytics retrieves cost analytics following the GetUsageBySubscription pattern
-func (s *costsheetAnalyticsService) GetCostAnalytics(
+func (s *revenueAnalyticsService) GetCostAnalytics(
 	ctx context.Context,
 	costsheetV2ID string,
 	req *dto.GetCostAnalyticsRequest,
@@ -94,7 +94,7 @@ func (s *costsheetAnalyticsService) GetCostAnalytics(
 }
 
 // GetDetailedCostAnalytics retrieves detailed cost analytics with derived metrics
-func (s *costsheetAnalyticsService) GetDetailedCostAnalytics(
+func (s *revenueAnalyticsService) GetDetailedCostAnalytics(
 	ctx context.Context,
 	req *dto.GetCostAnalyticsRequest,
 ) (*dto.GetDetailedCostAnalyticsResponse, error) {
@@ -115,7 +115,7 @@ func (s *costsheetAnalyticsService) GetDetailedCostAnalytics(
 
 	revenueReq := s.buildRevenueRequest(req)
 	if revenueReq != nil {
-		revenueAnalytics, err = s.featureUsageTrackingService.GetDetailedUsageAnalytics(ctx, revenueReq)
+		revenueAnalytics, err = s.featureUsageTrackingService.GetDetailedUsageAnalyticsV2(ctx, revenueReq)
 		if err != nil {
 			s.Logger.Warnw("failed to fetch revenue analytics", "error", err)
 			revenueAnalytics = nil
@@ -149,7 +149,7 @@ func (s *costsheetAnalyticsService) GetDetailedCostAnalytics(
 }
 
 // fetchCostsheetPrices fetches prices associated with a costsheet
-func (s *costsheetAnalyticsService) fetchCostsheetPrices(ctx context.Context, costsheetV2ID string) ([]*price.Price, error) {
+func (s *revenueAnalyticsService) fetchCostsheetPrices(ctx context.Context, costsheetV2ID string) ([]*price.Price, error) {
 	if costsheetV2ID == "" {
 		// If no costsheet specified, we could fetch all prices, but for now return empty
 		return []*price.Price{}, nil
@@ -179,7 +179,7 @@ func (s *costsheetAnalyticsService) fetchCostsheetPrices(ctx context.Context, co
 }
 
 // fetchCostsheetPrices fetches prices associated with a costsheet
-func (s *costsheetAnalyticsService) fetchCostsheetMeters(ctx context.Context, prices []*price.Price) (map[string]*meter.Meter, error) {
+func (s *revenueAnalyticsService) fetchCostsheetMeters(ctx context.Context, prices []*price.Price) (map[string]*meter.Meter, error) {
 	meterIDs := make([]string, 0)
 	meterIDSet := make(map[string]bool)
 
@@ -211,7 +211,7 @@ func (s *costsheetAnalyticsService) fetchCostsheetMeters(ctx context.Context, pr
 }
 
 // buildMeterUsageRequests creates usage requests for each customer-price combination
-func (s *costsheetAnalyticsService) buildMeterUsageRequests(
+func (s *revenueAnalyticsService) buildMeterUsageRequests(
 	prices []*price.Price,
 	req *dto.GetCostAnalyticsRequest,
 ) []*dto.GetUsageByMeterRequest {
@@ -246,7 +246,7 @@ func (s *costsheetAnalyticsService) buildMeterUsageRequests(
 }
 
 // calculateCostsFromUsage processes usage results and calculates costs
-func (s *costsheetAnalyticsService) calculateCostsFromUsage(
+func (s *revenueAnalyticsService) calculateCostsFromUsage(
 	ctx context.Context,
 	usageMap map[string]*events.AggregationResult,
 	prices []*price.Price,
@@ -323,7 +323,7 @@ func (s *costsheetAnalyticsService) calculateCostsFromUsage(
 }
 
 // buildResponse builds the final cost analytics response
-func (s *costsheetAnalyticsService) buildResponse(
+func (s *revenueAnalyticsService) buildResponse(
 	costsheetV2ID string,
 	req *dto.GetCostAnalyticsRequest,
 	costAnalytics []dto.CostAnalyticItem,
@@ -366,7 +366,7 @@ func (s *costsheetAnalyticsService) buildResponse(
 }
 
 // buildEmptyResponse builds an empty response for cases with no data
-func (s *costsheetAnalyticsService) buildEmptyResponse(costsheetV2ID string, req *dto.GetCostAnalyticsRequest) *dto.GetCostAnalyticsResponse {
+func (s *revenueAnalyticsService) buildEmptyResponse(costsheetV2ID string, req *dto.GetCostAnalyticsRequest) *dto.GetCostAnalyticsResponse {
 	return &dto.GetCostAnalyticsResponse{
 		CostsheetV2ID:      costsheetV2ID,
 		ExternalCustomerID: req.ExternalCustomerID,
@@ -381,7 +381,7 @@ func (s *costsheetAnalyticsService) buildEmptyResponse(costsheetV2ID string, req
 }
 
 // buildRevenueRequest builds a revenue analytics request from combined request
-func (s *costsheetAnalyticsService) buildRevenueRequest(req *dto.GetCostAnalyticsRequest) *dto.GetUsageAnalyticsRequest {
+func (s *revenueAnalyticsService) buildRevenueRequest(req *dto.GetCostAnalyticsRequest) *dto.GetUsageAnalyticsRequest {
 	return &dto.GetUsageAnalyticsRequest{
 		ExternalCustomerID: req.ExternalCustomerID,
 		StartTime:          req.StartTime,
@@ -390,7 +390,7 @@ func (s *costsheetAnalyticsService) buildRevenueRequest(req *dto.GetCostAnalytic
 }
 
 // calculateTotalRevenue calculates total revenue from usage analytics response
-func (s *costsheetAnalyticsService) calculateTotalRevenue(revenueAnalytics *dto.GetUsageAnalyticsResponse) decimal.Decimal {
+func (s *revenueAnalyticsService) calculateTotalRevenue(revenueAnalytics *dto.GetUsageAnalyticsResponse) decimal.Decimal {
 	if revenueAnalytics == nil {
 		return decimal.Zero
 	}
@@ -403,7 +403,7 @@ func (s *costsheetAnalyticsService) calculateTotalRevenue(revenueAnalytics *dto.
 }
 
 // expandCostAnalyticsSimple expands meter and price data for cost analytics items using batch fetching and domain types
-func (s *costsheetAnalyticsService) expandCostAnalyticsSimple(
+func (s *revenueAnalyticsService) expandCostAnalyticsSimple(
 	req *dto.GetCostAnalyticsRequest,
 	costAnalytics []dto.CostAnalyticItem,
 	meters map[string]*meter.Meter,

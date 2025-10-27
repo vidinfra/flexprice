@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCostsheetAnalyticsService_GetCostAnalytics_Validation(t *testing.T) {
+func TestRevenueAnalyticsService_GetCostAnalytics_Validation(t *testing.T) {
 	// Create a mock service with minimal dependencies for validation testing
-	service := &costsheetAnalyticsService{
+	service := &revenueAnalyticsService{
 		ServiceParams: ServiceParams{
 			// Add minimal required params for validation
 		},
@@ -96,8 +96,8 @@ func TestCostsheetAnalyticsService_GetCostAnalytics_Validation(t *testing.T) {
 	})
 }
 
-func TestCostsheetAnalyticsService_GetCombinedAnalytics_Validation(t *testing.T) {
-	service := &costsheetAnalyticsService{
+func TestRevenueAnalyticsService_GetCombinedAnalytics_Validation(t *testing.T) {
+	service := &revenueAnalyticsService{
 		ServiceParams:               ServiceParams{},
 		featureUsageTrackingService: nil, // Not needed for validation tests
 	}
@@ -247,7 +247,7 @@ func TestGetCombinedAnalyticsResponse_DerivedMetrics(t *testing.T) {
 }
 
 func TestCalculateTotalRevenue(t *testing.T) {
-	service := &costsheetAnalyticsService{}
+	service := &revenueAnalyticsService{}
 
 	t.Run("should return zero for nil response", func(t *testing.T) {
 		result := service.calculateTotalRevenue(nil)

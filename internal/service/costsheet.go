@@ -26,10 +26,6 @@ type CostsheetService interface {
 	GetInputCostForMargin(ctx context.Context, req *dto.GetCostBreakdownRequest) (*dto.CostBreakdownResponse, error)
 	CalculateMargin(totalCost, totalRevenue decimal.Decimal) decimal.Decimal
 	CalculateMarkup(totalCost, totalRevenue decimal.Decimal) decimal.Decimal
-	CalculateROI(ctx context.Context, req *dto.CalculateROIRequest) (*dto.ROIResponse, error)
-
-	// GetServiceParams retrieves the service parameters
-	GetServiceParams() ServiceParams
 }
 
 // costsheetService implements the CostsheetService interface.
@@ -117,18 +113,12 @@ func (s *costsheetService) GetCostsheet(ctx context.Context, id string) (*dto.Co
 
 	// Fetch prices associated with this costsheet
 	priceService := NewPriceService(s.ServiceParams)
-	priceFilter := types.NewNoLimitPriceFilter().
-		WithEntityIDs([]string{id}).
-		WithStatus(types.StatusPublished).
-		WithEntityType(types.PRICE_ENTITY_TYPE_COSTSHEET)
-	pricesResponse, err := priceService.GetPrices(ctx, priceFilter)
+	pricesResponse, err := priceService.GetPricesByCostsheetID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	response := dto.ToCostsheetResponseWithPrices(costsheet, pricesResponse.Items)
-
-	return response, nil
+	return dto.ToCostsheetResponseWithPrices(costsheet, pricesResponse.Items), nil
 }
 
 func (s *costsheetService) GetCostsheets(ctx context.Context, filter *domainCostsheet.Filter) (*dto.ListCostsheetResponse, error) {
@@ -345,16 +335,4 @@ func (s *costsheetService) CalculateMarkup(totalCost, totalRevenue decimal.Decim
 		return decimal.Zero
 	}
 	return totalRevenue.Sub(totalCost).Div(totalCost).Mul(decimal.NewFromInt(100))
-}
-
-func (s *costsheetService) CalculateROI(ctx context.Context, req *dto.CalculateROIRequest) (*dto.ROIResponse, error) {
-	// Implementation for backward compatibility
-	// This would need to be implemented based on the original costsheet logic
-	return nil, ierr.NewError("method not implemented").
-		WithHint("This method needs to be implemented for the new costsheet structure").
-		Mark(ierr.ErrInvalidOperation)
-}
-
-func (s *costsheetService) GetServiceParams() ServiceParams {
-	return s.ServiceParams
 }

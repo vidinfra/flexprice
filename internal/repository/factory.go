@@ -214,7 +214,3 @@ func NewAlertLogsRepository(p RepositoryParams) alertlogs.Repository {
 func NewScheduledTaskRepository(p RepositoryParams) scheduledtask.Repository {
 	return entRepo.NewScheduledTaskRepository(p.EntClient, p.Logger)
 }
-
-func NewFeatureUsageV2Repository(p RepositoryParams) events.FeatureUsageV2Repository {
-	return clickhouseRepo.NewFeatureUsageV2Repository(p.ClickHouseDB, p.Logger)
-}
