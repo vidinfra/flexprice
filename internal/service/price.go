@@ -21,6 +21,7 @@ type PriceService interface {
 	GetPricesByPlanID(ctx context.Context, planID string) (*dto.ListPricesResponse, error)
 	GetPricesBySubscriptionID(ctx context.Context, subscriptionID string) (*dto.ListPricesResponse, error)
 	GetPricesByAddonID(ctx context.Context, addonID string) (*dto.ListPricesResponse, error)
+	GetPricesByCostsheetID(ctx context.Context, costsheetID string) (*dto.ListPricesResponse, error)
 	GetPrices(ctx context.Context, filter *types.PriceFilter) (*dto.ListPricesResponse, error)
 	UpdatePrice(ctx context.Context, id string, req dto.UpdatePriceRequest) (*dto.PriceResponse, error)
 	DeletePrice(ctx context.Context, id string, req dto.DeletePriceRequest) error
@@ -138,6 +139,16 @@ func (s *priceService) validateEntityExists(ctx context.Context, entityType type
 				WithHint("The specified subscription does not exist").
 				WithReportableDetails(map[string]interface{}{
 					"subscription_id": entityID,
+				}).
+				Mark(ierr.ErrNotFound)
+		}
+	case types.PRICE_ENTITY_TYPE_COSTSHEET:
+		costsheet, err := s.CostSheetRepo.GetByID(ctx, entityID)
+		if err != nil || costsheet == nil {
+			return ierr.NewError("costsheet not found").
+				WithHint("The specified costsheet  does not exist").
+				WithReportableDetails(map[string]interface{}{
+					"costsheet_id": entityID,
 				}).
 				Mark(ierr.ErrNotFound)
 		}
@@ -547,6 +558,27 @@ func (s *priceService) GetPricesByAddonID(ctx context.Context, addonID string) (
 		WithEntityIDs([]string{addonID}).
 		WithEntityType(types.PRICE_ENTITY_TYPE_ADDON).
 		WithStatus(types.StatusPublished).
+		WithExpand(string(types.ExpandMeters) + "," + string(types.ExpandPriceUnit))
+
+	response, err := s.GetPrices(ctx, priceFilter)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (s *priceService) GetPricesByCostsheetID(ctx context.Context, costsheetID string) (*dto.ListPricesResponse, error) {
+	if costsheetID == "" {
+		return nil, ierr.NewError("costsheet v2 id is required").
+			WithHint("Plan ID is required").
+			Mark(ierr.ErrValidation)
+	}
+
+	priceFilter := types.NewNoLimitPriceFilter().
+		WithEntityIDs([]string{costsheetID}).
+		WithStatus(types.StatusPublished).
+		WithEntityType(types.PRICE_ENTITY_TYPE_COSTSHEET).
 		WithExpand(string(types.ExpandMeters) + "," + string(types.ExpandPriceUnit))
 
 	response, err := s.GetPrices(ctx, priceFilter)
