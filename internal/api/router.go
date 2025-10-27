@@ -36,7 +36,8 @@ type Handlers struct {
 	Payment                  *v1.PaymentHandler
 	Task                     *v1.TaskHandler
 	Secret                   *v1.SecretHandler
-	CostSheet                *v1.CostSheetHandler
+	Costsheet                *v1.CostsheetHandler
+	RevenueAnalytics         *v1.RevenueAnalyticsHandler
 	CreditNote               *v1.CreditNoteHandler
 	Tax                      *v1.TaxHandler
 	Coupon                   *v1.CouponHandler
@@ -403,17 +404,18 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			connections.POST("/search", handlers.Connection.ListConnectionsByFilter)
 		}
 
-		// Cost sheet routes
-		costSheet := v1Private.Group("/costs")
+		// Costsheet routes
+		costsheets := v1Private.Group("/costs")
 		{
-			costSheet.POST("", handlers.CostSheet.CreateCostSheet)
-			costSheet.GET("", handlers.CostSheet.ListCostSheets)
-			costSheet.GET("/:id", handlers.CostSheet.GetCostSheet)
-			costSheet.PUT("/:id", handlers.CostSheet.UpdateCostSheet)
-			costSheet.DELETE("/:id", handlers.CostSheet.DeleteCostSheet)
-			costSheet.GET("/breakdown/:subscription_id", handlers.CostSheet.GetCostBreakDown)
-			costSheet.POST("/roi", handlers.CostSheet.CalculateROI)
+			costsheets.POST("/search", handlers.Costsheet.ListCostsheetByFilter)
+			costsheets.POST("", handlers.Costsheet.CreateCostsheet)
+			costsheets.GET("/:id", handlers.Costsheet.GetCostsheet)
+			costsheets.PUT("/:id", handlers.Costsheet.UpdateCostsheet)
+			costsheets.DELETE("/:id", handlers.Costsheet.DeleteCostsheet)
+			costsheets.GET("/active", handlers.Costsheet.GetActiveCostsheetForTenant)
+			costsheets.POST("/analytics", handlers.RevenueAnalytics.GetDetailedCostAnalytics)
 		}
+
 		// Credit note routes
 		creditNotes := v1Private.Group("/creditnotes")
 		{

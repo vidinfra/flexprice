@@ -216,7 +216,6 @@ func (Price) Fields() []ent.Field {
 // Edges of the Price.
 func (Price) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.To("costsheet", Costsheet.Type),
 		edge.To("price_unit_edge", PriceUnit.Type).
 			Field("price_unit_id").
 			Unique(),
