@@ -12,6 +12,7 @@ const (
 	ConnectionMetadataTypeStripe  ConnectionMetadataType = "stripe"
 	ConnectionMetadataTypeGeneric ConnectionMetadataType = "generic"
 	ConnectionMetadataTypeS3      ConnectionMetadataType = "s3"
+	ConnectionMetadataTypeHubSpot ConnectionMetadataType = "hubspot"
 )
 
 func (t ConnectionMetadataType) Validate() error {
@@ -19,10 +20,11 @@ func (t ConnectionMetadataType) Validate() error {
 		ConnectionMetadataTypeStripe,
 		ConnectionMetadataTypeGeneric,
 		ConnectionMetadataTypeS3,
+		ConnectionMetadataTypeHubSpot,
 	}
 	if !lo.Contains(allowedTypes, t) {
 		return ierr.NewError("invalid connection metadata type").
-			WithHint("Connection metadata type must be one of: stripe, generic, s3").
+			WithHint("Connection metadata type must be one of: stripe, generic, s3, hubspot").
 			Mark(ierr.ErrValidation)
 	}
 	return nil
@@ -54,6 +56,28 @@ func (s *S3ConnectionMetadata) Validate() error {
 	if s.AWSSecretAccessKey == "" {
 		return ierr.NewError("aws_secret_access_key is required").
 			WithHint("AWS secret access key is required").
+			Mark(ierr.ErrValidation)
+	}
+	return nil
+}
+
+// HubSpotConnectionMetadata represents HubSpot-specific connection metadata
+type HubSpotConnectionMetadata struct {
+	AccessToken  string `json:"access_token"`     // Private App Access Token (encrypted)
+	ClientSecret string `json:"client_secret"`    // Private App Client Secret for webhook verification (encrypted)
+	AppID        string `json:"app_id,omitempty"` // HubSpot App ID (optional, not encrypted)
+}
+
+// Validate validates the HubSpot connection metadata
+func (h *HubSpotConnectionMetadata) Validate() error {
+	if h.AccessToken == "" {
+		return ierr.NewError("access_token is required").
+			WithHint("HubSpot access token is required").
+			Mark(ierr.ErrValidation)
+	}
+	if h.ClientSecret == "" {
+		return ierr.NewError("client_secret is required").
+			WithHint("HubSpot client secret is required for webhook verification").
 			Mark(ierr.ErrValidation)
 	}
 	return nil
@@ -103,6 +127,7 @@ func (g *GenericConnectionMetadata) Validate() error {
 type ConnectionMetadata struct {
 	Stripe   *StripeConnectionMetadata  `json:"stripe,omitempty"`
 	S3       *S3ConnectionMetadata      `json:"s3,omitempty"`
+	HubSpot  *HubSpotConnectionMetadata `json:"hubspot,omitempty"`
 	Generic  *GenericConnectionMetadata `json:"generic,omitempty"`
 	Settings *ConnectionSettings        `json:"settings,omitempty"`
 }
@@ -124,6 +149,13 @@ func (c *ConnectionMetadata) Validate(providerType SecretProvider) error {
 				Mark(ierr.ErrValidation)
 		}
 		return c.S3.Validate()
+	case SecretProviderHubSpot:
+		if c.HubSpot == nil {
+			return ierr.NewError("hubspot metadata is required").
+				WithHint("HubSpot metadata is required for hubspot provider").
+				Mark(ierr.ErrValidation)
+		}
+		return c.HubSpot.Validate()
 	default:
 		// For other providers or unknown types, use generic format
 		if c.Generic == nil {

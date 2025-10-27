@@ -31,6 +31,7 @@ const (
 	SecretProviderFlexPrice SecretProvider = "flexprice"
 	SecretProviderStripe    SecretProvider = "stripe"
 	SecretProviderS3        SecretProvider = "s3"
+	SecretProviderHubSpot   SecretProvider = "hubspot"
 )
 
 func (p SecretProvider) Validate() error {
@@ -38,6 +39,7 @@ func (p SecretProvider) Validate() error {
 		SecretProviderFlexPrice,
 		SecretProviderStripe,
 		SecretProviderS3,
+		SecretProviderHubSpot,
 	}
 	if !lo.Contains(allowedSecretProviders, p) {
 		return ierr.NewError("invalid secret provider").

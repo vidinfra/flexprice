@@ -98,6 +98,20 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		return types.ConnectionMetadata{
 			S3: s3Metadata,
 		}
+	case types.SecretProviderHubSpot:
+		hubspotMetadata := &types.HubSpotConnectionMetadata{}
+		if accessToken, ok := metadata["access_token"].(string); ok {
+			hubspotMetadata.AccessToken = accessToken
+		}
+		if clientSecret, ok := metadata["client_secret"].(string); ok {
+			hubspotMetadata.ClientSecret = clientSecret
+		}
+		if appID, ok := metadata["app_id"].(string); ok {
+			hubspotMetadata.AppID = appID
+		}
+		return types.ConnectionMetadata{
+			HubSpot: hubspotMetadata,
+		}
 	default:
 		// For other providers or unknown types, use generic format
 		return types.ConnectionMetadata{

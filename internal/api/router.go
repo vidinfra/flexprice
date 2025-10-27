@@ -466,6 +466,8 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 	{
 		// Stripe webhook endpoint: POST /v1/webhooks/stripe/{tenant_id}/{environment_id}
 		webhooks.POST("/stripe/:tenant_id/:environment_id", handlers.Webhook.HandleStripeWebhook)
+		// HubSpot webhook endpoint: POST /v1/webhooks/hubspot/{tenant_id}/{environment_id}
+		webhooks.POST("/hubspot/:tenant_id/:environment_id", handlers.Webhook.HandleHubSpotWebhook)
 	}
 
 	// Cron routes

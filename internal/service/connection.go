@@ -87,6 +87,24 @@ func (s *connectionService) encryptMetadata(encryptedSecretData types.Connection
 			}
 		}
 
+	case types.SecretProviderHubSpot:
+		if encryptedSecretData.HubSpot != nil {
+			encryptedAccessToken, err := s.encryptionService.Encrypt(encryptedSecretData.HubSpot.AccessToken)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+			encryptedClientSecret, err := s.encryptionService.Encrypt(encryptedSecretData.HubSpot.ClientSecret)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+
+			encryptedMetadata.HubSpot = &types.HubSpotConnectionMetadata{
+				AccessToken:  encryptedAccessToken,
+				ClientSecret: encryptedClientSecret,
+				AppID:        encryptedSecretData.HubSpot.AppID, // App ID is not sensitive
+			}
+		}
+
 	default:
 		// For other providers or unknown types, use generic format
 		if encryptedSecretData.Generic != nil {
@@ -163,6 +181,24 @@ func (s *connectionService) decryptMetadata(encryptedSecretData types.Connection
 				AWSAccessKeyID:     decryptedAccessKeyID,
 				AWSSecretAccessKey: decryptedSecretAccessKey,
 				AWSSessionToken:    decryptedSessionToken,
+			}
+		}
+
+	case types.SecretProviderHubSpot:
+		if encryptedSecretData.HubSpot != nil {
+			decryptedAccessToken, err := s.encryptionService.Decrypt(encryptedSecretData.HubSpot.AccessToken)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+			decryptedClientSecret, err := s.encryptionService.Decrypt(encryptedSecretData.HubSpot.ClientSecret)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+
+			decryptedMetadata.HubSpot = &types.HubSpotConnectionMetadata{
+				AccessToken:  decryptedAccessToken,
+				ClientSecret: decryptedClientSecret,
+				AppID:        encryptedSecretData.HubSpot.AppID, // App ID is not sensitive
 			}
 		}
 
