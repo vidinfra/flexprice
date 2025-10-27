@@ -2,33 +2,33 @@ package types
 
 import ierr "github.com/flexprice/flexprice/internal/errors"
 
-// CostsheetV2Filter represents the filter options for costsheet v2
-type CostsheetV2Filter struct {
+// CostSheetFilter represents the filter options for costsheet
+type CostSheetFilter struct {
 	*QueryFilter
 	*TimeRangeFilter
 
 	// filters allows complex filtering based on multiple fields
-	Filters        []*FilterCondition `json:"filters,omitempty" form:"filters" validate:"omitempty"`
-	Sort           []*SortCondition   `json:"sort,omitempty" form:"sort" validate:"omitempty"`
-	CostsheetV2IDs []string           `json:"costsheet_v2_ids,omitempty" form:"costsheet_v2_ids" validate:"omitempty"`
+	Filters      []*FilterCondition `json:"filters,omitempty" form:"filters" validate:"omitempty"`
+	Sort         []*SortCondition   `json:"sort,omitempty" form:"sort" validate:"omitempty"`
+	CostSheetIDs []string           `json:"costsheet_ids,omitempty" form:"costsheet_ids" validate:"omitempty"`
 }
 
-// NewCostsheetV2Filter creates a new costsheet v2 filter with default options
-func NewCostsheetV2Filter() *CostsheetV2Filter {
-	return &CostsheetV2Filter{
+// NewCostSheetFilter creates a new costsheet filter with default options
+func NewCostSheetFilter() *CostSheetFilter {
+	return &CostSheetFilter{
 		QueryFilter: NewDefaultQueryFilter(),
 	}
 }
 
-// NewNoLimitCostsheetV2Filter creates a new costsheet v2 filter without pagination
-func NewNoLimitCostsheetV2Filter() *CostsheetV2Filter {
-	return &CostsheetV2Filter{
+// NewNoLimitCostSheetFilter creates a new costsheet filter without pagination
+func NewNoLimitCostSheetFilter() *CostSheetFilter {
+	return &CostSheetFilter{
 		QueryFilter: NewNoLimitQueryFilter(),
 	}
 }
 
 // Validate validates the filter options
-func (f *CostsheetV2Filter) Validate() error {
+func (f *CostSheetFilter) Validate() error {
 	if f.QueryFilter != nil {
 		if err := f.QueryFilter.Validate(); err != nil {
 			return err
@@ -40,10 +40,10 @@ func (f *CostsheetV2Filter) Validate() error {
 		}
 	}
 
-	for _, costsheetID := range f.CostsheetV2IDs {
+	for _, costsheetID := range f.CostSheetIDs {
 		if costsheetID == "" {
-			return ierr.NewError("costsheet v2 id can not be empty").
-				WithHint("Costsheet v2 id can not be empty").
+			return ierr.NewError("costsheet id can not be empty").
+				WithHint("Costsheet id can not be empty").
 				Mark(ierr.ErrValidation)
 		}
 	}
@@ -51,7 +51,7 @@ func (f *CostsheetV2Filter) Validate() error {
 }
 
 // GetLimit implements BaseFilter interface
-func (f *CostsheetV2Filter) GetLimit() int {
+func (f *CostSheetFilter) GetLimit() int {
 	if f.QueryFilter == nil {
 		return NewDefaultQueryFilter().GetLimit()
 	}
@@ -59,7 +59,7 @@ func (f *CostsheetV2Filter) GetLimit() int {
 }
 
 // GetOffset implements BaseFilter interface
-func (f *CostsheetV2Filter) GetOffset() int {
+func (f *CostSheetFilter) GetOffset() int {
 	if f.QueryFilter == nil {
 		return NewDefaultQueryFilter().GetOffset()
 	}
@@ -67,7 +67,7 @@ func (f *CostsheetV2Filter) GetOffset() int {
 }
 
 // GetStatus implements BaseFilter interface
-func (f *CostsheetV2Filter) GetStatus() string {
+func (f *CostSheetFilter) GetStatus() string {
 	if f.QueryFilter == nil {
 		return NewDefaultQueryFilter().GetStatus()
 	}
@@ -75,7 +75,7 @@ func (f *CostsheetV2Filter) GetStatus() string {
 }
 
 // GetSort implements BaseFilter interface
-func (f *CostsheetV2Filter) GetSort() string {
+func (f *CostSheetFilter) GetSort() string {
 	if f.QueryFilter == nil {
 		return NewDefaultQueryFilter().GetSort()
 	}
@@ -83,7 +83,7 @@ func (f *CostsheetV2Filter) GetSort() string {
 }
 
 // GetOrder implements BaseFilter interface
-func (f *CostsheetV2Filter) GetOrder() string {
+func (f *CostSheetFilter) GetOrder() string {
 	if f.QueryFilter == nil {
 		return NewDefaultQueryFilter().GetOrder()
 	}
@@ -91,14 +91,14 @@ func (f *CostsheetV2Filter) GetOrder() string {
 }
 
 // GetExpand implements BaseFilter interface
-func (f *CostsheetV2Filter) GetExpand() Expand {
+func (f *CostSheetFilter) GetExpand() Expand {
 	if f.QueryFilter == nil {
 		return NewDefaultQueryFilter().GetExpand()
 	}
 	return f.QueryFilter.GetExpand()
 }
 
-func (f *CostsheetV2Filter) IsUnlimited() bool {
+func (f *CostSheetFilter) IsUnlimited() bool {
 	if f.QueryFilter == nil {
 		return NewDefaultQueryFilter().IsUnlimited()
 	}

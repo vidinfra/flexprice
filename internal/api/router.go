@@ -36,8 +36,7 @@ type Handlers struct {
 	Payment                  *v1.PaymentHandler
 	Task                     *v1.TaskHandler
 	Secret                   *v1.SecretHandler
-	CostSheet                *v1.CostSheetHandler
-	CostsheetV2              *v1.CostsheetV2Handler
+	Costsheet                *v1.CostsheetHandler
 	CostsheetAnalytics       *v1.CostsheetAnalyticsHandler
 	CreditNote               *v1.CreditNoteHandler
 	Tax                      *v1.TaxHandler
@@ -396,27 +395,24 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			connections.POST("/search", handlers.Connection.ListConnectionsByFilter)
 		}
 
-		// Cost sheet routes
-		costSheet := v1Private.Group("/costs")
+		// Costsheet routes
+		costsheets := v1Private.Group("/costsheets")
 		{
-			costSheet.POST("", handlers.CostSheet.CreateCostSheet)
-			costSheet.GET("", handlers.CostSheet.ListCostSheets)
-			costSheet.GET("/:id", handlers.CostSheet.GetCostSheet)
-			costSheet.PUT("/:id", handlers.CostSheet.UpdateCostSheet)
-			costSheet.DELETE("/:id", handlers.CostSheet.DeleteCostSheet)
-			costSheet.GET("/breakdown/:subscription_id", handlers.CostSheet.GetCostBreakDown)
-			costSheet.POST("/roi", handlers.CostSheet.CalculateROI)
+			costsheets.POST("/search", handlers.Costsheet.ListCostsheetByFilter)
+			costsheets.POST("", handlers.Costsheet.CreateCostsheet)
+			costsheets.GET("/:id", handlers.Costsheet.GetCostsheet)
+			costsheets.PUT("/:id", handlers.Costsheet.UpdateCostsheet)
+			costsheets.DELETE("/:id", handlers.Costsheet.DeleteCostsheet)
+			costsheets.GET("/active", handlers.Costsheet.GetActiveCostsheetForTenant)
+			costsheets.POST("/analytics", handlers.CostsheetAnalytics.GetDetailedCostAnalytics)
 		}
 
-		// Cost sheet v2 routes
-		costSheetV2 := v1Private.Group("/costsheets-v2")
+		// Legacy cost sheet routes (deprecated)
+		costSheet := v1Private.Group("/costs")
 		{
-			costSheetV2.POST("/search", handlers.CostsheetV2.ListCostsheetV2ByFilter)
-			costSheetV2.POST("", handlers.CostsheetV2.CreateCostsheetV2)
-			costSheetV2.GET("/:id", handlers.CostsheetV2.GetCostsheetV2)
-			costSheetV2.PUT("/:id", handlers.CostsheetV2.UpdateCostsheetV2)
-			costSheetV2.DELETE("/:id", handlers.CostsheetV2.DeleteCostsheetV2)
-			costSheetV2.POST("/analytics", handlers.CostsheetAnalytics.GetDetailedCostAnalytics)
+			costSheet.POST("", handlers.Costsheet.CreateCostSheet)
+			costSheet.POST("/breakdown", handlers.Costsheet.GetInputCostForMargin)
+			costSheet.POST("/roi", handlers.Costsheet.CalculateROI)
 		}
 
 		// Credit note routes

@@ -142,13 +142,13 @@ func (s *priceService) validateEntityExists(ctx context.Context, entityType type
 				}).
 				Mark(ierr.ErrNotFound)
 		}
-	case types.PRICE_ENTITY_TYPE_COSTSHEET_V2:
-		costsheetV2, err := s.CostSheetV2Repo.GetByID(ctx, entityID)
-		if err != nil || costsheetV2 == nil {
-			return ierr.NewError("costsheet v2 not found").
-				WithHint("The specified costsheet v2 does not exist").
+	case types.PRICE_ENTITY_TYPE_COSTSHEET:
+		costsheet, err := s.CostSheetRepo.GetByID(ctx, entityID)
+		if err != nil || costsheet == nil {
+			return ierr.NewError("costsheet not found").
+				WithHint("The specified costsheet  does not exist").
 				WithReportableDetails(map[string]interface{}{
-					"costsheet_v2_id": entityID,
+					"costsheet_id": entityID,
 				}).
 				Mark(ierr.ErrNotFound)
 		}
@@ -578,7 +578,7 @@ func (s *priceService) GetPricesByCostsheetV2ID(ctx context.Context, costsheetV2
 	priceFilter := types.NewNoLimitPriceFilter().
 		WithEntityIDs([]string{costsheetV2ID}).
 		WithStatus(types.StatusPublished).
-		WithEntityType(types.PRICE_ENTITY_TYPE_COSTSHEET_V2).
+		WithEntityType(types.PRICE_ENTITY_TYPE_COSTSHEET).
 		WithExpand(string(types.ExpandMeters) + "," + string(types.ExpandPriceUnit))
 
 	response, err := s.GetPrices(ctx, priceFilter)

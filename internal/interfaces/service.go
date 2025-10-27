@@ -63,20 +63,10 @@ type EntityIntegrationMappingService interface {
 	DeleteEntityIntegrationMapping(ctx context.Context, id string) error
 }
 
-// CostsheetV2Service defines the interface for costsheet v2 operations
-type CostsheetV2Service interface {
-	CreateCostsheetV2(ctx context.Context, req dto.CreateCostsheetV2Request) (*dto.CreateCostsheetV2Response, error)
-	GetCostsheetV2(ctx context.Context, id string) (*dto.CostsheetV2Response, error)
-	GetCostsheetV2s(ctx context.Context, filter *types.CostsheetV2Filter) (*dto.ListCostsheetV2Response, error)
-	UpdateCostsheetV2(ctx context.Context, id string, req dto.UpdateCostsheetV2Request) (*dto.UpdateCostsheetV2Response, error)
-	DeleteCostsheetV2(ctx context.Context, id string) (*dto.DeleteCostsheetV2Response, error)
-	GetActiveCostsheetForTenant(ctx context.Context) (*dto.CostsheetV2Response, error)
-}
-
 // CostsheetAnalyticsService defines the interface for costsheet analytics operations
 type CostsheetAnalyticsService interface {
 	// GetCostAnalytics retrieves cost analytics for customers and costsheets
-	GetCostAnalytics(ctx context.Context, costsheetV2ID string, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error)
+	GetCostAnalytics(ctx context.Context, costsheetID string, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error)
 
 	// GetDetailedCostAnalytics retrieves detailed cost analytics with derived metrics
 	GetDetailedCostAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetDetailedCostAnalyticsResponse, error)

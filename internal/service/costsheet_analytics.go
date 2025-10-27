@@ -19,14 +19,14 @@ type CostsheetAnalyticsService = interfaces.CostsheetAnalyticsService
 type costsheetAnalyticsService struct {
 	ServiceParams
 	featureUsageTrackingService FeatureUsageTrackingV2Service
-	costsheetV2Service          CostsheetV2Service
+	costsheetService            CostsheetService
 }
 
-func NewCostsheetAnalyticsService(params ServiceParams, featureUsageTrackingService FeatureUsageTrackingV2Service, costsheetV2Service CostsheetV2Service) CostsheetAnalyticsService {
+func NewCostsheetAnalyticsService(params ServiceParams, featureUsageTrackingService FeatureUsageTrackingV2Service, costsheetService CostsheetService) CostsheetAnalyticsService {
 	return &costsheetAnalyticsService{
 		ServiceParams:               params,
 		featureUsageTrackingService: featureUsageTrackingService,
-		costsheetV2Service:          costsheetV2Service,
+		costsheetService:            costsheetService,
 	}
 }
 
@@ -99,13 +99,13 @@ func (s *costsheetAnalyticsService) GetDetailedCostAnalytics(
 	req *dto.GetCostAnalyticsRequest,
 ) (*dto.GetDetailedCostAnalyticsResponse, error) {
 	// 0. Fetch active costsheet for tenant
-	costsheetV2, err := s.costsheetV2Service.GetActiveCostsheetForTenant(ctx)
+	costsheet, err := s.costsheetService.GetActiveCostsheetForTenant(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	// 1. Fetch cost analytics
-	costAnalytics, err := s.GetCostAnalytics(ctx, costsheetV2.ID, req)
+	costAnalytics, err := s.GetCostAnalytics(ctx, costsheet.ID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func (s *costsheetAnalyticsService) fetchCostsheetPrices(ctx context.Context, co
 	priceService := NewPriceService(s.ServiceParams)
 	priceFilter := types.NewNoLimitPriceFilter()
 	priceFilter.EntityIDs = []string{costsheetV2ID}
-	priceFilter.EntityType = lo.ToPtr(types.PRICE_ENTITY_TYPE_COSTSHEET_V2)
+	priceFilter.EntityType = lo.ToPtr(types.PRICE_ENTITY_TYPE_COSTSHEET)
 	priceFilter.Status = lo.ToPtr(types.StatusPublished)
 	priceFilter.Expand = lo.ToPtr(string(types.ExpandMeters))
 
