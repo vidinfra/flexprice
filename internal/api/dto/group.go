@@ -57,17 +57,18 @@ func (r *AddEntityToGroupRequest) Validate() error {
 
 // GroupResponse represents the group response
 type GroupResponse struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	LookupKey  string    `json:"lookup_key"`
-	EntityType string    `json:"entity_type"`
-	EntityIDs  []string  `json:"entity_ids"`
-	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	LookupKey  string            `json:"lookup_key"`
+	EntityType string            `json:"entity_type"`
+	EntityIDs  []string          `json:"entity_ids"`
+	Status     string            `json:"status"`
+	Metadata   map[string]string `json:"metadata"`
+	CreatedAt  time.Time         `json:"created_at"`
+	UpdatedAt  time.Time         `json:"updated_at"`
 }
 
-// ListGroupsResponse represents the response for listing groupstype
+// ListGroupsResponse represents the response for listing groups
 type ListGroupsResponse = types.ListResponse[*GroupResponse]
 
 func ToGroupResponse(group *group.Group) *GroupResponse {
@@ -76,6 +77,11 @@ func ToGroupResponse(group *group.Group) *GroupResponse {
 		Name:       group.Name,
 		LookupKey:  group.LookupKey,
 		EntityType: string(group.EntityType),
+		EntityIDs:  []string{},
+		Status:     string(group.Status),
+		Metadata:   group.Metadata,
+		CreatedAt:  group.CreatedAt,
+		UpdatedAt:  group.UpdatedAt,
 	}
 }
 
@@ -86,5 +92,9 @@ func ToGroupResponseWithEntities(group *group.Group, entityIDs []string) *GroupR
 		LookupKey:  group.LookupKey,
 		EntityType: string(group.EntityType),
 		EntityIDs:  entityIDs,
+		Status:     string(group.Status),
+		Metadata:   group.Metadata,
+		CreatedAt:  group.CreatedAt,
+		UpdatedAt:  group.UpdatedAt,
 	}
 }

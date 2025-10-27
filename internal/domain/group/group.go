@@ -14,6 +14,7 @@ type Group struct {
 	EntityType    types.GroupEntityType `json:"entity_type"`
 	EnvironmentID string                `json:"environment_id"`
 	LookupKey     string                `json:"lookup_key,omitempty"`
+	Metadata      map[string]string     `json:"metadata,omitempty"`
 	types.BaseModel
 }
 
@@ -28,6 +29,7 @@ func FromEnt(e *ent.Group) *Group {
 		EntityType:    types.GroupEntityType(e.EntityType),
 		EnvironmentID: e.EnvironmentID,
 		LookupKey:     e.LookupKey,
+		Metadata:      e.Metadata,
 		BaseModel: types.BaseModel{
 			TenantID:  e.TenantID,
 			Status:    types.Status(e.Status),
