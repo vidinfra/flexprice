@@ -771,15 +771,17 @@ func (s *priceService) UpdatePrice(ctx context.Context, id string, req dto.Updat
 		if err := s.DB.WithTx(ctx, func(ctx context.Context) error {
 			// Terminate the existing price
 			existingPrice.EndDate = &terminationEndDate
-			if err := s.PriceRepo.Update(ctx, existingPrice); err != nil {
-				return err
-			}
 
 			// Validate group if provided
 			if req.GroupID != "" {
 				if err := s.validateGroup(ctx, []*price.Price{existingPrice}); err != nil {
 					return err
 				}
+				existingPrice.GroupID = req.GroupID
+			}
+
+			if err := s.PriceRepo.Update(ctx, existingPrice); err != nil {
+				return err
 			}
 
 			// Convert update request to create request - this handles all the field mapping
@@ -1217,10 +1219,18 @@ func (s *priceService) CalculateCostSheetPrice(ctx context.Context, price *price
 
 // validateGroup validates that a group exists and is of type "price"
 func (s *priceService) validateGroup(ctx context.Context, prices []*price.Price) error {
-	groupIDs := make([]string, len(prices))
-	for i, price := range prices {
-		groupIDs[i] = price.GroupID
+	// 1. Get all group IDs from prices
+	groupIDs := make([]string, 0)
+	for _, price := range prices {
+		groupIDs = append(groupIDs, price.GroupID)
 	}
+
+	// 2. Validate groups if any
+	if len(groupIDs) == 0 {
+		return nil
+	}
+
+	// 3. Validate group
 	groupService := NewGroupService(s.ServiceParams)
 	if err := groupService.ValidateGroupBulk(ctx, groupIDs, types.GroupEntityTypePrice); err != nil {
 		return err

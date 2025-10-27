@@ -679,3 +679,21 @@ func (r *priceRepository) ClearGroupIDsBulk(ctx context.Context, ids []string) e
 	}
 	return nil
 }
+
+func (r *priceRepository) ClearByGroupID(ctx context.Context, groupID string) error {
+	client := r.client.Writer(ctx)
+
+	_, err := client.Price.Update().
+		Where(price.GroupID(groupID)).
+		ClearGroupID().
+		Save(ctx)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to clear group ID").
+			WithReportableDetails(map[string]interface{}{
+				"group_id": groupID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	return nil
+}

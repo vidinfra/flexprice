@@ -50,12 +50,18 @@ func (s *groupService) CreateGroup(ctx context.Context, req dto.CreateGroupReque
 			return err
 		}
 
+		if err := s.GroupRepo.Create(txCtx, groupObj); err != nil {
+			return err
+		}
+
 		result = dto.ToGroupResponse(groupObj)
+
 		return nil
 	})
-
 	if err != nil {
-		return nil, err
+		return nil, ierr.WithError(err).
+			WithHint("Failed to create group").
+			Mark(ierr.ErrDatabase)
 	}
 	return result, nil
 }
@@ -86,7 +92,8 @@ func (s *groupService) DeleteGroup(ctx context.Context, id string) error {
 			s.Logger.Error("failed to fetch group for deletion", "error", err, "group_id", id)
 			return err
 		}
-		if err := s.disassociateEntities(txCtx, groupObj.EntityType, []string{id}); err != nil {
+
+		if err := s.disassociateEntitiesByGroupID(txCtx, groupObj.EntityType, id); err != nil {
 			return err
 		}
 
@@ -144,20 +151,6 @@ func (s *groupService) ListGroups(ctx context.Context, filter *types.GroupFilter
 
 // getAssociatedEntities gets entities associated with a group by querying the appropriate repository
 func (s *groupService) getAssociatedEntities(ctx context.Context, entityType types.GroupEntityType, groupID string) ([]string, error) {
-	group, err := s.GroupRepo.Get(ctx, groupID)
-	if err != nil {
-		return nil, err
-	}
-	if group.EntityType != entityType {
-		return nil, ierr.NewError("invalid group type").
-			WithHintf("Group must be of type: %s", entityType.String()).
-			WithReportableDetails(map[string]any{
-				"group_id":    group.ID,
-				"entity_type": entityType,
-			}).
-			Mark(ierr.ErrValidation)
-	}
-
 	// Query entities based on entity type
 	switch entityType {
 	case types.GroupEntityTypePrice:
@@ -225,6 +218,18 @@ func (s *groupService) disassociateEntities(ctx context.Context, entityType type
 	switch entityType {
 	case types.GroupEntityTypePrice:
 		return s.PriceRepo.ClearGroupIDsBulk(ctx, entityIDs)
+	default:
+		return ierr.NewError("unsupported entity type").
+			WithHint("Unsupported entity type: " + entityType.String()).
+			Mark(ierr.ErrValidation)
+	}
+}
+
+// disassociateEntitiesByGroupID removes group associations from all entities in a group
+func (s *groupService) disassociateEntitiesByGroupID(ctx context.Context, entityType types.GroupEntityType, groupID string) error {
+	switch entityType {
+	case types.GroupEntityTypePrice:
+		return s.PriceRepo.ClearByGroupID(ctx, groupID)
 	default:
 		return ierr.NewError("unsupported entity type").
 			WithHint("Unsupported entity type: " + entityType.String()).

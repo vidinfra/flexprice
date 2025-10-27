@@ -277,3 +277,23 @@ func (s *InMemoryPriceStore) ClearGroupIDsBulk(ctx context.Context, ids []string
 	}
 	return nil
 }
+
+// ClearByGroupID clears the group ID for all prices in a specific group
+func (s *InMemoryPriceStore) ClearByGroupID(ctx context.Context, groupID string) error {
+	// Get all prices in the group
+	prices, err := s.GetByGroupIDs(ctx, []string{groupID})
+	if err != nil {
+		return err
+	}
+
+	// Clear group ID for each price
+	for _, p := range prices {
+		p.GroupID = ""
+		if err := s.Update(ctx, p); err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to clear group ID by group ID").
+				Mark(ierr.ErrDatabase)
+		}
+	}
+	return nil
+}
