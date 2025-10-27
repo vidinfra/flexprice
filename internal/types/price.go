@@ -41,6 +41,7 @@ const (
 	PRICE_ENTITY_TYPE_SUBSCRIPTION PriceEntityType = "SUBSCRIPTION"
 	PRICE_ENTITY_TYPE_ADDON        PriceEntityType = "ADDON"
 	PRICE_ENTITY_TYPE_PRICE        PriceEntityType = "PRICE"
+	PRICE_ENTITY_TYPE_COSTSHEET    PriceEntityType = "COSTSHEET"
 )
 
 func (p PriceEntityType) Validate() error {
@@ -49,6 +50,7 @@ func (p PriceEntityType) Validate() error {
 		PRICE_ENTITY_TYPE_SUBSCRIPTION,
 		PRICE_ENTITY_TYPE_ADDON,
 		PRICE_ENTITY_TYPE_PRICE,
+		PRICE_ENTITY_TYPE_COSTSHEET,
 	}
 	if !lo.Contains(allowed, p) {
 		return ierr.NewError("invalid price entity type").

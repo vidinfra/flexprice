@@ -143,8 +143,8 @@ func NewCreditGrantRepository(p RepositoryParams) creditgrant.Repository {
 	return entRepo.NewCreditGrantRepository(p.EntClient, p.Logger, p.Cache)
 }
 
-func NewCostSheetRepository(p RepositoryParams) costsheet.Repository {
-	return entRepo.NewCostSheetRepository(p.EntClient, p.Logger)
+func NewCostsheetRepository(p RepositoryParams) costsheet.Repository {
+	return entRepo.NewCostsheetRepository(p.EntClient, p.Logger, p.Cache)
 }
 
 func NewCreditGrantApplicationRepository(p RepositoryParams) creditgrantapplication.Repository {
