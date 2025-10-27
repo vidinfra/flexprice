@@ -69,6 +69,18 @@ func (gu *GroupUpdate) ClearUpdatedBy() *GroupUpdate {
 	return gu
 }
 
+// SetMetadata sets the "metadata" field.
+func (gu *GroupUpdate) SetMetadata(m map[string]string) *GroupUpdate {
+	gu.mutation.SetMetadata(m)
+	return gu
+}
+
+// ClearMetadata clears the value of the "metadata" field.
+func (gu *GroupUpdate) ClearMetadata() *GroupUpdate {
+	gu.mutation.ClearMetadata()
+	return gu
+}
+
 // SetName sets the "name" field.
 func (gu *GroupUpdate) SetName(s string) *GroupUpdate {
 	gu.mutation.SetName(s)
@@ -220,6 +232,12 @@ func (gu *GroupUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	if gu.mutation.EnvironmentIDCleared() {
 		_spec.ClearField(group.FieldEnvironmentID, field.TypeString)
 	}
+	if value, ok := gu.mutation.Metadata(); ok {
+		_spec.SetField(group.FieldMetadata, field.TypeJSON, value)
+	}
+	if gu.mutation.MetadataCleared() {
+		_spec.ClearField(group.FieldMetadata, field.TypeJSON)
+	}
 	if value, ok := gu.mutation.Name(); ok {
 		_spec.SetField(group.FieldName, field.TypeString, value)
 	}
@@ -331,6 +349,18 @@ func (guo *GroupUpdateOne) SetNillableUpdatedBy(s *string) *GroupUpdateOne {
 // ClearUpdatedBy clears the value of the "updated_by" field.
 func (guo *GroupUpdateOne) ClearUpdatedBy() *GroupUpdateOne {
 	guo.mutation.ClearUpdatedBy()
+	return guo
+}
+
+// SetMetadata sets the "metadata" field.
+func (guo *GroupUpdateOne) SetMetadata(m map[string]string) *GroupUpdateOne {
+	guo.mutation.SetMetadata(m)
+	return guo
+}
+
+// ClearMetadata clears the value of the "metadata" field.
+func (guo *GroupUpdateOne) ClearMetadata() *GroupUpdateOne {
+	guo.mutation.ClearMetadata()
 	return guo
 }
 
@@ -514,6 +544,12 @@ func (guo *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error
 	}
 	if guo.mutation.EnvironmentIDCleared() {
 		_spec.ClearField(group.FieldEnvironmentID, field.TypeString)
+	}
+	if value, ok := guo.mutation.Metadata(); ok {
+		_spec.SetField(group.FieldMetadata, field.TypeJSON, value)
+	}
+	if guo.mutation.MetadataCleared() {
+		_spec.ClearField(group.FieldMetadata, field.TypeJSON)
 	}
 	if value, ok := guo.mutation.Name(); ok {
 		_spec.SetField(group.FieldName, field.TypeString, value)

@@ -111,6 +111,12 @@ func (gc *GroupCreate) SetNillableEnvironmentID(s *string) *GroupCreate {
 	return gc
 }
 
+// SetMetadata sets the "metadata" field.
+func (gc *GroupCreate) SetMetadata(m map[string]string) *GroupCreate {
+	gc.mutation.SetMetadata(m)
+	return gc
+}
+
 // SetName sets the "name" field.
 func (gc *GroupCreate) SetName(s string) *GroupCreate {
 	gc.mutation.SetName(s)
@@ -315,6 +321,10 @@ func (gc *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := gc.mutation.EnvironmentID(); ok {
 		_spec.SetField(group.FieldEnvironmentID, field.TypeString, value)
 		_node.EnvironmentID = value
+	}
+	if value, ok := gc.mutation.Metadata(); ok {
+		_spec.SetField(group.FieldMetadata, field.TypeJSON, value)
+		_node.Metadata = value
 	}
 	if value, ok := gc.mutation.Name(); ok {
 		_spec.SetField(group.FieldName, field.TypeString, value)

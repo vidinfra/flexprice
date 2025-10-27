@@ -550,6 +550,16 @@ func EnvironmentIDContainsFold(v string) predicate.Group {
 	return predicate.Group(sql.FieldContainsFold(FieldEnvironmentID, v))
 }
 
+// MetadataIsNil applies the IsNil predicate on the "metadata" field.
+func MetadataIsNil() predicate.Group {
+	return predicate.Group(sql.FieldIsNull(FieldMetadata))
+}
+
+// MetadataNotNil applies the NotNil predicate on the "metadata" field.
+func MetadataNotNil() predicate.Group {
+	return predicate.Group(sql.FieldNotNull(FieldMetadata))
+}
+
 // NameEQ applies the EQ predicate on the "name" field.
 func NameEQ(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldName, v))

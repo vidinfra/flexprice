@@ -900,6 +900,7 @@ var (
 		{Name: "created_by", Type: field.TypeString, Nullable: true},
 		{Name: "updated_by", Type: field.TypeString, Nullable: true},
 		{Name: "environment_id", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "metadata", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
 		{Name: "name", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(255)"}},
 		{Name: "entity_type", Type: field.TypeString, Default: "price", SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "lookup_key", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
@@ -911,25 +912,17 @@ var (
 		PrimaryKey: []*schema.Column{GroupsColumns[0]},
 		Indexes: []*schema.Index{
 			{
-				Name:    "group_tenant_id_environment_id_name",
+				Name:    "idx_group_tenant_environment_lookup_key",
 				Unique:  true,
-				Columns: []*schema.Column{GroupsColumns[1], GroupsColumns[7], GroupsColumns[8]},
+				Columns: []*schema.Column{GroupsColumns[1], GroupsColumns[7], GroupsColumns[11]},
 				Annotation: &entsql.IndexAnnotation{
-					Where: "status = 'published'",
+					Where: "status = 'published' AND lookup_key IS NOT NULL AND lookup_key != ''",
 				},
 			},
 			{
-				Name:    "group_tenant_id_environment_id_entity_type",
+				Name:    "group_tenant_id_environment_id",
 				Unique:  false,
-				Columns: []*schema.Column{GroupsColumns[1], GroupsColumns[7], GroupsColumns[9]},
-			},
-			{
-				Name:    "group_tenant_id_environment_id_lookup_key",
-				Unique:  true,
-				Columns: []*schema.Column{GroupsColumns[1], GroupsColumns[7], GroupsColumns[10]},
-				Annotation: &entsql.IndexAnnotation{
-					Where: "lookup_key IS NOT NULL AND status = 'published'",
-				},
+				Columns: []*schema.Column{GroupsColumns[1], GroupsColumns[7]},
 			},
 		},
 	}
