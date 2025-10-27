@@ -11,10 +11,9 @@ import (
 
 // CreateGroupRequest represents the request to create a group
 type CreateGroupRequest struct {
-	Name       string   `json:"name" validate:"required"`
-	EntityType string   `json:"entity_type" validate:"required"`
-	EntityIDs  []string `json:"entity_ids,omitempty"`
-	LookupKey  string   `json:"lookup_key" validate:"required"`
+	Name       string `json:"name" validate:"required"`
+	EntityType string `json:"entity_type" validate:"required"`
+	LookupKey  string `json:"lookup_key" validate:"required"`
 }
 
 func (r *CreateGroupRequest) Validate() error {
@@ -68,19 +67,24 @@ type GroupResponse struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-// NewGroupResponse creates a new group response
-func NewGroupResponse(group *group.Group, entityIDs []string) *GroupResponse {
+// ListGroupsResponse represents the response for listing groupstype
+type ListGroupsResponse = types.ListResponse[*GroupResponse]
+
+func ToGroupResponse(group *group.Group) *GroupResponse {
+	return &GroupResponse{
+		ID:         group.ID,
+		Name:       group.Name,
+		LookupKey:  group.LookupKey,
+		EntityType: string(group.EntityType),
+	}
+}
+
+func ToGroupResponseWithEntities(group *group.Group, entityIDs []string) *GroupResponse {
 	return &GroupResponse{
 		ID:         group.ID,
 		Name:       group.Name,
 		LookupKey:  group.LookupKey,
 		EntityType: string(group.EntityType),
 		EntityIDs:  entityIDs,
-		Status:     string(group.Status),
-		CreatedAt:  group.CreatedAt,
-		UpdatedAt:  group.UpdatedAt,
 	}
 }
-
-// ListGroupsResponse represents the response for listing groupstype
-type ListGroupsResponse = types.ListResponse[*GroupResponse]

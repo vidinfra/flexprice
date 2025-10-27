@@ -38,7 +38,7 @@ func (s *planService) CreatePlan(ctx context.Context, req dto.CreatePlanRequest)
 	}
 
 	plan := req.ToPlan(ctx)
-	groupService := NewGroupService(s.ServiceParams, s.PriceRepo, s.Logger)
+	groupService := NewGroupService(s.ServiceParams)
 	// Start a transaction to create plan, prices, and entitlements
 	err := s.DB.WithTx(ctx, func(ctx context.Context) error {
 		// 1. Create the plan
@@ -423,7 +423,7 @@ func (s *planService) UpdatePlan(ctx context.Context, id string, req dto.UpdateP
 			// Create new prices
 			bulkCreatePrices := make([]*price.Price, 0) // Slice for bulk creation
 
-			groupService := NewGroupService(s.ServiceParams, s.PriceRepo, s.Logger)
+			groupService := NewGroupService(s.ServiceParams)
 			for _, reqPrice := range req.Prices {
 				if reqPrice.ID == "" {
 					var newPrice *price.Price

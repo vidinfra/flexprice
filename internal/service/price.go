@@ -86,30 +86,30 @@ func (s *priceService) CreatePrice(ctx context.Context, req dto.CreatePriceReque
 		return s.createPriceWithUnitConfig(ctx, req)
 	}
 
-	// Validate group if provided
-	if req.GroupID != "" {
-		if err := s.validateGroup(ctx, req.GroupID); err != nil {
-			return nil, err
-		}
-	}
-
 	// Handle regular price case
-	price, err := req.ToPrice(ctx)
+	p, err := req.ToPrice(ctx)
 	if err != nil {
 		return nil, ierr.WithError(err).
 			WithHint("Failed to parse price data").
 			Mark(ierr.ErrValidation)
 	}
 
-	if err := s.PriceRepo.Create(ctx, price); err != nil {
+	// Validate group if provided
+	if req.GroupID != "" {
+		if err := s.validateGroup(ctx, []*price.Price{p}); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := s.PriceRepo.Create(ctx, p); err != nil {
 		return nil, err
 	}
 
-	response := &dto.PriceResponse{Price: price}
+	response := &dto.PriceResponse{Price: p}
 
 	// TODO: !REMOVE after migration
-	if price.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
-		response.PlanID = price.EntityID
+	if p.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
+		response.PlanID = p.EntityID
 	}
 
 	return response, nil
@@ -193,6 +193,10 @@ func (s *priceService) CreateBulkPrice(ctx context.Context, req dto.CreateBulkPr
 
 		// Create regular prices in bulk if any exist
 		if len(regularPrices) > 0 {
+			// Validate groups if provided
+			if err := s.validateGroup(txCtx, regularPrices); err != nil {
+				return err
+			}
 			if err := s.PriceRepo.CreateBulk(txCtx, regularPrices); err != nil {
 				return ierr.WithError(err).
 					WithHint("Failed to create prices in bulk").
@@ -773,7 +777,7 @@ func (s *priceService) UpdatePrice(ctx context.Context, id string, req dto.Updat
 
 			// Validate group if provided
 			if req.GroupID != "" {
-				if err := s.validateGroup(ctx, req.GroupID); err != nil {
+				if err := s.validateGroup(ctx, []*price.Price{existingPrice}); err != nil {
 					return err
 				}
 			}
@@ -819,10 +823,9 @@ func (s *priceService) UpdatePrice(ctx context.Context, id string, req dto.Updat
 		}
 
 		if req.GroupID != "" {
-			if err := s.validateGroup(ctx, req.GroupID); err != nil {
+			if err := s.validateGroup(ctx, []*price.Price{existingPrice}); err != nil {
 				return nil, err
 			}
-			existingPrice.GroupID = req.GroupID
 		}
 
 		// Update the price in database
@@ -1213,7 +1216,14 @@ func (s *priceService) CalculateCostSheetPrice(ctx context.Context, price *price
 }
 
 // validateGroup validates that a group exists and is of type "price"
-func (s *priceService) validateGroup(ctx context.Context, groupID string) error {
-	groupService := NewGroupService(s.ServiceParams, s.PriceRepo, s.Logger)
-	return groupService.ValidateGroup(ctx, groupID, types.GroupEntityTypePrice)
+func (s *priceService) validateGroup(ctx context.Context, prices []*price.Price) error {
+	groupIDs := make([]string, len(prices))
+	for i, price := range prices {
+		groupIDs[i] = price.GroupID
+	}
+	groupService := NewGroupService(s.ServiceParams)
+	if err := groupService.ValidateGroupBulk(ctx, groupIDs, types.GroupEntityTypePrice); err != nil {
+		return err
+	}
+	return nil
 }

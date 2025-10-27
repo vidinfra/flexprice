@@ -97,36 +97,6 @@ func (h *GroupHandler) DeleteGroup(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// @Summary Add entity to group
-// @Description Add an entity to a group
-// @Tags Groups
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @Param id path string true "Group ID"
-// @Param entity_id path string true "Entity ID"
-// @Success 200 {object} dto.GroupResponse
-// @Failure 400 {object} ierr.ErrorResponse
-// @Failure 500 {object} ierr.ErrorResponse
-// @Router /groups/{id}/add [post]
-func (h *GroupHandler) AddEntityToGroup(c *gin.Context) {
-	id := c.Param("id")
-	var req dto.AddEntityToGroupRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.Error(ierr.WithError(err).
-			WithHint("Invalid request format").
-			Mark(ierr.ErrValidation))
-		return
-	}
-	err := h.service.AddEntityToGroup(c.Request.Context(), id, req)
-	if err != nil {
-		c.Error(err)
-		return
-	}
-
-	c.Status(http.StatusOK)
-}
-
 // @Summary Get groups
 // @Description Get groups with optional filtering via query parameters
 // @Tags Groups

@@ -218,8 +218,6 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			group.POST("/search", handlers.Group.ListGroups)
 			group.GET("/:id", handlers.Group.GetGroup)
 			group.DELETE("/:id", handlers.Group.DeleteGroup)
-			group.POST("/:id/add", handlers.Group.AddEntityToGroup)
-
 		}
 
 		subscription := v1Private.Group("/subscriptions")

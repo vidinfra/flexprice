@@ -3,13 +3,9 @@ package service
 import (
 	"context"
 
-	"github.com/flexprice/flexprice/ent"
 	"github.com/flexprice/flexprice/internal/api/dto"
 	domainGroup "github.com/flexprice/flexprice/internal/domain/group"
-	"github.com/flexprice/flexprice/internal/domain/price"
 	ierr "github.com/flexprice/flexprice/internal/errors"
-	"github.com/flexprice/flexprice/internal/logger"
-	"github.com/flexprice/flexprice/internal/service/group"
 	"github.com/flexprice/flexprice/internal/types"
 )
 
@@ -19,24 +15,17 @@ type GroupService interface {
 	GetGroup(ctx context.Context, id string) (*dto.GroupResponse, error)
 	DeleteGroup(ctx context.Context, id string) error
 	ListGroups(ctx context.Context, filter *types.GroupFilter) (*dto.ListGroupsResponse, error)
-	AddEntityToGroup(ctx context.Context, id string, req dto.AddEntityToGroupRequest) error
 	ValidateGroup(ctx context.Context, id string, entityType types.GroupEntityType) error
+	ValidateGroupBulk(ctx context.Context, groupIDs []string, entityType types.GroupEntityType) error
 }
 
 type groupService struct {
 	ServiceParams
-	validators map[types.GroupEntityType]group.GroupEntityManager
-	log        *logger.Logger
 }
 
-func NewGroupService(params ServiceParams, priceRepo price.Repository, log *logger.Logger) GroupService {
-	validators := make(map[types.GroupEntityType]group.GroupEntityManager)
-	validators[types.GroupEntityTypePrice] = group.NewPriceGroupManager(priceRepo, log)
-
+func NewGroupService(params ServiceParams) GroupService {
 	return &groupService{
 		ServiceParams: params,
-		validators:    validators,
-		log:           log,
 	}
 }
 
@@ -44,7 +33,7 @@ func NewGroupService(params ServiceParams, priceRepo price.Repository, log *logg
 func (s *groupService) CreateGroup(ctx context.Context, req dto.CreateGroupRequest) (*dto.GroupResponse, error) {
 
 	if err := req.Validate(); err != nil {
-		s.log.Warn("invalid group creation request",
+		s.Logger.Warn("invalid group creation request",
 			"error", err,
 			"name", req.Name,
 		)
@@ -55,49 +44,13 @@ func (s *groupService) CreateGroup(ctx context.Context, req dto.CreateGroupReque
 
 	// Execute all operations within a transaction for atomicity
 	err := s.DB.WithTx(ctx, func(txCtx context.Context) error {
-		// Check if group with same lookup key already exists
-		existingByLookup, err := s.GroupRepo.GetByLookupKey(txCtx, req.LookupKey)
-		if err != nil && !ent.IsNotFound(err) {
-			return err
-		}
-		if existingByLookup != nil {
-			return ierr.NewError("group with lookup key already exists").
-				WithHint("A group with this lookup key already exists").
-				WithReportableDetails(map[string]interface{}{
-					"lookup_key":        req.LookupKey,
-					"existing_group_id": existingByLookup.ID,
-				}).
-				Mark(ierr.ErrAlreadyExists)
-		}
-
 		// Convert request to group domain object
 		groupObj, err := req.ToGroup(txCtx)
 		if err != nil {
 			return err
 		}
 
-		// Validate and associate entities based on type
-		var entityIDs []string
-		if len(req.EntityIDs) > 0 {
-			entityIDs, err = s.validateEntities(txCtx, groupObj.EntityType, req.EntityIDs, "")
-			if err != nil {
-				return err
-			}
-		}
-
-		// Create group
-		if err := s.GroupRepo.Create(txCtx, groupObj); err != nil {
-			return err
-		}
-
-		// Associate entities with group if provided
-		if len(req.EntityIDs) > 0 {
-			if err := s.associateEntities(txCtx, groupObj.EntityType, groupObj.ID, req.EntityIDs); err != nil {
-				return err
-			}
-		}
-
-		result = dto.NewGroupResponse(groupObj, entityIDs)
+		result = dto.ToGroupResponse(groupObj)
 		return nil
 	})
 
@@ -120,7 +73,7 @@ func (s *groupService) GetGroup(ctx context.Context, id string) (*dto.GroupRespo
 		return nil, err
 	}
 
-	return dto.NewGroupResponse(groupObj, entityIDs), nil
+	return dto.ToGroupResponseWithEntities(groupObj, entityIDs), nil
 }
 
 // DeleteGroup deletes a group (entity associations are automatically removed by foreign key constraint)
@@ -130,19 +83,11 @@ func (s *groupService) DeleteGroup(ctx context.Context, id string) error {
 	err := s.DB.WithTx(ctx, func(txCtx context.Context) error {
 		groupObj, err := s.GroupRepo.Get(txCtx, id)
 		if err != nil {
-			s.log.Error("failed to fetch group for deletion", "error", err, "group_id", id)
+			s.Logger.Error("failed to fetch group for deletion", "error", err, "group_id", id)
 			return err
 		}
-
-		entityIDs, err := s.getAssociatedEntities(txCtx, groupObj.EntityType, id)
-		if err != nil {
-			s.log.Error("failed to get associated entities", "error", err, "group_id", id)
+		if err := s.disassociateEntities(txCtx, groupObj.EntityType, []string{id}); err != nil {
 			return err
-		}
-		if len(entityIDs) > 0 {
-			if err := s.disassociateEntities(txCtx, groupObj.EntityType, entityIDs); err != nil {
-				return err
-			}
 		}
 
 		return s.GroupRepo.Delete(txCtx, id)
@@ -188,7 +133,7 @@ func (s *groupService) ListGroups(ctx context.Context, filter *types.GroupFilter
 	responses := make([]*dto.GroupResponse, len(groups))
 	for i, groupObj := range groups {
 		entityIDs := entityMap[groupObj.ID] // O(1) lookup
-		responses[i] = dto.NewGroupResponse(groupObj, entityIDs)
+		responses[i] = dto.ToGroupResponseWithEntities(groupObj, entityIDs)
 	}
 
 	return &dto.ListGroupsResponse{
@@ -197,48 +142,39 @@ func (s *groupService) ListGroups(ctx context.Context, filter *types.GroupFilter
 	}, nil
 }
 
-// AddEntityToGroup adds an entity to a group
-func (s *groupService) AddEntityToGroup(ctx context.Context, groupID string, req dto.AddEntityToGroupRequest) error {
-
-	if err := req.Validate(); err != nil {
-		return err
-	}
-
-	groupObj, err := s.GroupRepo.Get(ctx, groupID)
-	if err != nil {
-		return err
-	}
-
-	entityIDs, err := s.validateEntities(ctx, groupObj.EntityType, req.EntityIDs, groupID)
-	if err != nil {
-		return err
-	}
-
-	return s.associateEntities(ctx, groupObj.EntityType, groupID, entityIDs)
-}
-
-// validateEntities validates entities using the appropriate validator
-func (s *groupService) validateEntities(ctx context.Context, entityType types.GroupEntityType, entityIDs []string, excludeGroupID string) ([]string, error) {
-	validator, exists := s.validators[entityType]
-	if !exists {
-		return nil, ierr.NewError("unsupported entity type").
-			WithHint("Unsupported entity type: " + entityType.String()).
-			Mark(ierr.ErrValidation)
-	}
-
-	return validator.ValidateForGroup(ctx, entityIDs, excludeGroupID)
-}
-
-// getAssociatedEntities gets entities associated with a group using the appropriate validator
+// getAssociatedEntities gets entities associated with a group by querying the appropriate repository
 func (s *groupService) getAssociatedEntities(ctx context.Context, entityType types.GroupEntityType, groupID string) ([]string, error) {
-	validator, exists := s.validators[entityType]
-	if !exists {
+	group, err := s.GroupRepo.Get(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+	if group.EntityType != entityType {
+		return nil, ierr.NewError("invalid group type").
+			WithHintf("Group must be of type: %s", entityType.String()).
+			WithReportableDetails(map[string]any{
+				"group_id":    group.ID,
+				"entity_type": entityType,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Query entities based on entity type
+	switch entityType {
+	case types.GroupEntityTypePrice:
+		prices, err := s.PriceRepo.GetByGroupIDs(ctx, []string{groupID})
+		if err != nil {
+			return nil, err
+		}
+		entityIDs := make([]string, len(prices))
+		for i, price := range prices {
+			entityIDs[i] = price.ID
+		}
+		return entityIDs, nil
+	default:
 		return nil, ierr.NewError("unsupported entity type").
 			WithHint("Unsupported entity type: " + entityType.String()).
 			Mark(ierr.ErrValidation)
 	}
-
-	return validator.GetEntitiesInGroup(ctx, groupID)
 }
 
 // getAssociatedEntitiesBulk gets entities associated with multiple groups in bulk
@@ -247,7 +183,7 @@ func (s *groupService) getAssociatedEntitiesBulk(ctx context.Context, groups []*
 		return make(map[string][]string), nil
 	}
 
-	// Group by entity type to handle different validators
+	// Group by entity type to handle different entity types
 	groupsByType := make(map[types.GroupEntityType][]string)
 	for _, group := range groups {
 		groupsByType[group.EntityType] = append(groupsByType[group.EntityType], group.ID)
@@ -256,50 +192,44 @@ func (s *groupService) getAssociatedEntitiesBulk(ctx context.Context, groups []*
 	// Fetch entities for each type in bulk
 	result := make(map[string][]string)
 	for entityType, groupIDs := range groupsByType {
-		validator, exists := s.validators[entityType]
-		if !exists {
+		switch entityType {
+		case types.GroupEntityTypePrice:
+			prices, err := s.PriceRepo.GetByGroupIDs(ctx, groupIDs)
+			if err != nil {
+				return nil, err
+			}
+			// Group prices by group ID
+			entityIDsByGroup := make(map[string][]string)
+			for _, price := range prices {
+				// Get the group ID from the price
+				// Note: This requires the Price domain to have a GroupID field
+				groupID := price.GroupID
+				entityIDsByGroup[groupID] = append(entityIDsByGroup[groupID], price.ID)
+			}
+			// Merge results
+			for groupID, entityIDs := range entityIDsByGroup {
+				result[groupID] = entityIDs
+			}
+		default:
 			return nil, ierr.NewError("unsupported entity type").
 				WithHint("Unsupported entity type: " + entityType.String()).
 				Mark(ierr.ErrValidation)
-		}
-
-		typeResult, err := validator.GetEntitiesInGroups(ctx, groupIDs)
-		if err != nil {
-			return nil, err
-		}
-
-		// Merge results
-		for groupID, entityIDs := range typeResult {
-			result[groupID] = entityIDs
 		}
 	}
 
 	return result, nil
 }
 
-// associateEntities associates entities with a group using the appropriate validator
-func (s *groupService) associateEntities(ctx context.Context, entityType types.GroupEntityType, groupID string, entityIDs []string) error {
-	validator, exists := s.validators[entityType]
-	if !exists {
-		s.log.Error("unsupported entity type", "entity_type", entityType)
-		return ierr.NewError("unsupported entity type").
-			WithHint("Unsupported entity type: " + entityType.String()).
-			Mark(ierr.ErrValidation)
-	}
-
-	return validator.AddToGroup(ctx, groupID, entityIDs)
-}
-
-// disassociateEntities removes group associations from entities using the appropriate validator
+// disassociateEntities removes group associations from entities
 func (s *groupService) disassociateEntities(ctx context.Context, entityType types.GroupEntityType, entityIDs []string) error {
-	validator, exists := s.validators[entityType]
-	if !exists {
+	switch entityType {
+	case types.GroupEntityTypePrice:
+		return s.PriceRepo.ClearGroupIDsBulk(ctx, entityIDs)
+	default:
 		return ierr.NewError("unsupported entity type").
 			WithHint("Unsupported entity type: " + entityType.String()).
 			Mark(ierr.ErrValidation)
 	}
-
-	return validator.RemoveFromGroup(ctx, entityIDs)
 }
 
 func (s *groupService) ValidateGroup(ctx context.Context, id string, entityType types.GroupEntityType) error {
@@ -316,6 +246,38 @@ func (s *groupService) ValidateGroup(ctx context.Context, id string, entityType 
 				"group_id":    id,
 				"entity_type": entityType,
 			}).
+			Mark(ierr.ErrValidation)
+	}
+	return nil
+}
+
+func (s *groupService) ValidateGroupBulk(ctx context.Context, groupIDs []string, entityType types.GroupEntityType) error {
+	groups, err := s.GroupRepo.List(ctx, &types.GroupFilter{
+		QueryFilter: types.NewDefaultQueryFilter(),
+		GroupIDs:    groupIDs,
+	})
+	if err != nil {
+		return err
+	}
+	if len(groups) != len(groupIDs) {
+		return ierr.NewError("some groups not found").
+			WithHint("Some groups not found").
+			Mark(ierr.ErrValidation)
+	}
+	for _, group := range groups {
+		if group.EntityType != entityType {
+			return ierr.NewError("invalid group type").
+				WithHintf("Group must be of type: %s", entityType.String()).
+				WithReportableDetails(map[string]any{
+					"group_id":    group.ID,
+					"entity_type": entityType,
+				}).
+				Mark(ierr.ErrValidation)
+		}
+	}
+	if len(groups) == 0 {
+		return ierr.NewError("no groups found").
+			WithHint("No groups found").
 			Mark(ierr.ErrValidation)
 	}
 	return nil

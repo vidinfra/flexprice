@@ -237,84 +237,6 @@ func (s *InMemoryPriceStore) Clear() {
 	s.InMemoryStore.Clear()
 }
 
-func (s *InMemoryPriceStore) CountNotInGroup(ctx context.Context, ids []string, excludeGroupID string) (int, error) {
-	count, err := s.InMemoryStore.Count(ctx, nil, func(ctx context.Context, p *price.Price, filter interface{}) bool {
-		if p == nil {
-			return false
-		}
-		// Check tenant and environment filters
-		if !CheckTenantFilter(ctx, p.TenantID) || !CheckEnvironmentFilter(ctx, p.EnvironmentID) {
-			return false
-		}
-		// Check if price ID is in the provided list
-		if !lo.Contains(ids, p.ID) {
-			return false
-		}
-		// Check if price has a group ID and it's not the excluded group
-		if p.GroupID == "" {
-			return false // Only count prices that have a group
-		}
-		return p.GroupID != excludeGroupID
-	})
-
-	if err != nil {
-		return 0, ierr.WithError(err).
-			WithHint("Failed to count prices not in group").
-			Mark(ierr.ErrDatabase)
-	}
-	return count, nil
-}
-
-func (s *InMemoryPriceStore) CountByIDs(ctx context.Context, ids []string) (int, error) {
-	count, err := s.InMemoryStore.Count(ctx, nil, func(ctx context.Context, p *price.Price, filter interface{}) bool {
-		if p == nil {
-			return false
-		}
-		// Check tenant and environment filters
-		if !CheckTenantFilter(ctx, p.TenantID) || !CheckEnvironmentFilter(ctx, p.EnvironmentID) {
-			return false
-		}
-		// Check if price ID is in the provided list
-		return lo.Contains(ids, p.ID)
-	})
-
-	if err != nil {
-		return 0, ierr.WithError(err).
-			WithHint("Failed to count prices by IDs").
-			Mark(ierr.ErrDatabase)
-	}
-	return count, nil
-}
-
-func (s *InMemoryPriceStore) UpdateGroupIDBulk(ctx context.Context, ids []string, groupID *string) error {
-	// Update each price's group ID individually
-	for _, id := range ids {
-		p, err := s.Get(ctx, id)
-		if err != nil {
-			return err
-		}
-
-		if groupID != nil {
-			p.GroupID = *groupID
-		} else {
-			p.GroupID = ""
-		}
-
-		if err := s.Update(ctx, p); err != nil {
-			return ierr.WithError(err).
-				WithHint("Failed to update price group IDs in bulk").
-				Mark(ierr.ErrDatabase)
-		}
-	}
-
-	return nil
-}
-
-func (s *InMemoryPriceStore) ClearGroupIDBulk(ctx context.Context, ids []string) error {
-	// Update all prices to have nil group ID
-	return s.UpdateGroupIDBulk(ctx, ids, nil)
-}
-
 func (s *InMemoryPriceStore) GetByGroupIDs(ctx context.Context, groupIDs []string) ([]*price.Price, error) {
 	prices, err := s.InMemoryStore.List(ctx, nil, func(ctx context.Context, p *price.Price, filter interface{}) bool {
 		if p == nil {
@@ -337,4 +259,21 @@ func (s *InMemoryPriceStore) GetByGroupIDs(ctx context.Context, groupIDs []strin
 			Mark(ierr.ErrDatabase)
 	}
 	return prices, nil
+}
+
+// ClearGroupIDsBulk clears the group ID for multiple prices
+func (s *InMemoryPriceStore) ClearGroupIDsBulk(ctx context.Context, ids []string) error {
+	for _, id := range ids {
+		p, err := s.Get(ctx, id)
+		if err != nil {
+			return err
+		}
+		p.GroupID = ""
+		if err := s.Update(ctx, p); err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to clear group IDs in bulk").
+				Mark(ierr.ErrDatabase)
+		}
+	}
+	return nil
 }
