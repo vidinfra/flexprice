@@ -203,6 +203,37 @@ stop-flexprice:
 restart-flexprice: stop-flexprice start-flexprice
 	@echo "Flexprice services restarted successfully"
 
+# Log viewing targets
+.PHONY: logs logs-api logs-consumer logs-worker logs-all logs-follow
+
+# View logs for all flexprice services with follow
+logs: logs-follow
+
+# Follow logs for all flexprice services
+logs-follow:
+	@echo "Following logs for all FlexPrice services (Ctrl+C to stop)..."
+	@docker compose logs -f -t flexprice-api flexprice-consumer flexprice-worker
+
+# View logs for API service
+logs-api:
+	@echo "Following API service logs (Ctrl+C to stop)..."
+	@docker compose logs -f -t flexprice-api
+
+# View logs for consumer service  
+logs-consumer:
+	@echo "Following consumer service logs (Ctrl+C to stop)..."
+	@docker compose logs -f -t flexprice-consumer
+
+# View logs for worker service
+logs-worker:
+	@echo "Following worker service logs (Ctrl+C to stop)..."
+	@docker compose logs -f -t flexprice-worker
+
+# View logs for all services (including infrastructure)
+logs-all:
+	@echo "Following logs for all services (Ctrl+C to stop)..."
+	@docker compose logs -f -t
+
 # Full developer setup with clear instructions
 .PHONY: dev-setup
 dev-setup:
@@ -335,3 +366,17 @@ test-github-workflow:
 	 --action-offline-mode
 
 .PHONY: sdk-publish-js sdk-publish-py sdk-publish-go sdk-publish-all sdk-publish-all-with-version test-github-workflow
+
+# Deploy code changes (swagger + build + restart)
+.PHONY: deploy
+deploy: swagger build-image restart-flexprice
+	@echo "Deployment complete! Services updated with latest code changes"
+
+# Quick deployment with git pull
+.PHONY: deploy-from-git
+deploy-from-git:
+	@echo "Pulling latest code and deploying..."
+	@git fetch origin
+	@git rebase origin/main
+	@make deploy
+	@echo "Git pull and deployment complete!"

@@ -3100,6 +3100,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/customers/{id}/payment-methods": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get customer payment methods",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Customers"
+                ],
+                "summary": "Get customer payment methods",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Customer ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.PaymentMethodResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/customers/{id}/usage": {
             "get": {
                 "security": [
@@ -11279,6 +11328,26 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.CardDetails": {
+            "type": "object",
+            "properties": {
+                "brand": {
+                    "type": "string"
+                },
+                "exp_month": {
+                    "type": "integer"
+                },
+                "exp_year": {
+                    "type": "integer"
+                },
+                "fingerprint": {
+                    "type": "string"
+                },
+                "last4": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.ConnectionResponse": {
             "type": "object",
             "properties": {
@@ -15337,6 +15406,30 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.PaymentMethodResponse": {
+            "type": "object",
+            "properties": {
+                "card": {
+                    "$ref": "#/definitions/dto.CardDetails"
+                },
+                "created": {
+                    "type": "integer"
+                },
+                "customer": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.PaymentResponse": {
             "type": "object",
             "properties": {
@@ -18833,12 +18926,25 @@ const docTemplate = `{
             "properties": {
                 "type": {
                     "description": "amount",
-                    "type": "string"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.AlertThresholdType"
+                        }
+                    ]
                 },
                 "value": {
                     "type": "number"
                 }
             }
+        },
+        "types.AlertThresholdType": {
+            "type": "string",
+            "enum": [
+                "amount"
+            ],
+            "x-enum-varnames": [
+                "AlertThresholdTypeAmount"
+            ]
         },
         "types.AutoTopupTrigger": {
             "type": "string",

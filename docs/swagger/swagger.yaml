@@ -434,6 +434,19 @@ definitions:
       total_credit_amount:
         type: number
     type: object
+  dto.CardDetails:
+    properties:
+      brand:
+        type: string
+      exp_month:
+        type: integer
+      exp_year:
+        type: integer
+      fingerprint:
+        type: string
+      last4:
+        type: string
+    type: object
   dto.ConnectionResponse:
     properties:
       created_at:
@@ -3436,6 +3449,22 @@ definitions:
       updated_by:
         type: string
     type: object
+  dto.PaymentMethodResponse:
+    properties:
+      card:
+        $ref: '#/definitions/dto.CardDetails'
+      created:
+        type: integer
+      customer:
+        type: string
+      id:
+        type: string
+      metadata:
+        additionalProperties: true
+        type: object
+      type:
+        type: string
+    type: object
   dto.PaymentResponse:
     properties:
       amount:
@@ -5916,11 +5945,18 @@ definitions:
   types.AlertThreshold:
     properties:
       type:
+        allOf:
+        - $ref: '#/definitions/types.AlertThresholdType'
         description: amount
-        type: string
       value:
         type: number
     type: object
+  types.AlertThresholdType:
+    enum:
+    - amount
+    type: string
+    x-enum-varnames:
+    - AlertThresholdTypeAmount
   types.AutoTopupTrigger:
     enum:
     - disabled
@@ -9027,6 +9063,37 @@ paths:
       summary: Get a customer invoice summary
       tags:
       - Invoices
+  /customers/{id}/payment-methods:
+    get:
+      consumes:
+      - application/json
+      description: Get customer payment methods
+      parameters:
+      - description: Customer ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.PaymentMethodResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get customer payment methods
+      tags:
+      - Customers
   /customers/{id}/usage:
     get:
       consumes:
