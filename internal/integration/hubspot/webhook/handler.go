@@ -105,8 +105,7 @@ func (h *Handler) handleDealClosedWon(
 	}
 
 	h.logger.Infow("fetched deal from HubSpot",
-		"deal_id", deal.ID,
-		"deal_properties", deal.Properties)
+		"deal_id", deal.ID)
 
 	// Step 2: Fetch associated contacts for the deal
 	associations, err := h.client.GetDealAssociations(ctx, dealID)
@@ -145,8 +144,7 @@ func (h *Handler) handleDealClosedWon(
 
 		h.logger.Infow("fetched contact from HubSpot",
 			"contact_id", contact.ID,
-			"email", contact.Properties.Email,
-			"name", contact.Properties.FirstName+" "+contact.Properties.LastName)
+			"deal_id", dealID)
 
 		// Create customer in FlexPrice
 		if err := h.customerSvc.CreateCustomerFromHubSpot(ctx, contact, dealID, services.CustomerService); err != nil {
@@ -160,7 +158,6 @@ func (h *Handler) handleDealClosedWon(
 
 		h.logger.Infow("successfully created customer from HubSpot contact",
 			"contact_id", contactID,
-			"email", contact.Properties.Email,
 			"deal_id", dealID)
 	}
 

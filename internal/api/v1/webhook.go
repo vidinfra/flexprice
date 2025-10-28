@@ -238,7 +238,7 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 // @Produce json
 // @Param tenant_id path string true "Tenant ID"
 // @Param environment_id path string true "Environment ID"
-// @Param X-HubSpot-Signature header string true "HubSpot webhook signature"
+// @Param X-HubSpot-Signature-v3 header string true "HubSpot webhook signature"
 // @Success 200 {object} map[string]interface{} "Webhook received (always returns 200)"
 // @Router /webhooks/hubspot/{tenant_id}/{environment_id} [post]
 func (h *WebhookHandler) HandleHubSpotWebhook(c *gin.Context) {

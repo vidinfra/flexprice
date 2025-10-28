@@ -154,14 +154,14 @@ func (s *DealSyncService) createHubSpotLineItem(
 	// Fetch the price to get the actual amount
 	priceObj, err := s.priceRepo.Get(ctx, lineItem.PriceID)
 	if err != nil {
-		s.logger.Errorw("failed to fetch price for line item",
+		s.logger.Errorw("failed to fetch price for line item; cannot create accurate HubSpot line item",
 			"error", err,
 			"price_id", lineItem.PriceID,
-			"line_item_id", lineItem.ID)
-		// Use a default price if we can't fetch it
-		priceObj = &price.Price{
-			Amount: decimal.NewFromInt(10), // Default fallback
-		}
+			"line_item_id", lineItem.ID,
+			"deal_id", dealID)
+		return ierr.WithError(err).
+			WithHint("Price not found; cannot create accurate HubSpot line item").
+			Mark(ierr.ErrInternal)
 	}
 
 	// Calculate unit price and total amount

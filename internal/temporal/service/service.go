@@ -418,7 +418,7 @@ func (s *temporalService) buildHubSpotDealSyncInput(_ context.Context, tenantID,
 		return *input, nil
 	}
 
-	// Handle pointer type as well
+	// Handle value type as well
 	if input, ok := params.(models.HubSpotDealSyncWorkflowInput); ok {
 		input.TenantID = tenantID
 		input.EnvironmentID = environmentID

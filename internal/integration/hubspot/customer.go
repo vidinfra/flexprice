@@ -54,6 +54,12 @@ func (s *CustomerService) CreateCustomerFromHubSpot(
 	dealID string,
 	customerService interfaces.CustomerService,
 ) error {
+	if hubspotContact == nil {
+		return ierr.NewError("nil hubspot contact").Mark(ierr.ErrValidation)
+	}
+	if customerService == nil {
+		return ierr.NewError("nil customer service").Mark(ierr.ErrInternal)
+	}
 	// Check if customer already exists by HubSpot contact ID in entity integration mapping
 	if s.entityIntegrationMappingRepo != nil {
 		filter := &types.EntityIntegrationMappingFilter{
@@ -82,7 +88,6 @@ func (s *CustomerService) CreateCustomerFromHubSpot(
 		if err == nil && existingCustomers != nil && len(existingCustomers.Items) > 0 {
 			existingCustomer := existingCustomers.Items[0]
 			s.logger.Infow("customer with same email already exists, creating mapping",
-				"email", hubspotContact.Properties.Email,
 				"customer_id", existingCustomer.ID,
 				"hubspot_contact_id", hubspotContact.ID)
 
@@ -140,8 +145,7 @@ func (s *CustomerService) CreateCustomerFromHubSpot(
 
 	s.logger.Infow("successfully created customer from HubSpot contact",
 		"customer_id", customerResp.ID,
-		"hubspot_contact_id", hubspotContact.ID,
-		"email", hubspotContact.Properties.Email)
+		"hubspot_contact_id", hubspotContact.ID)
 
 	// Create entity mapping for new customer
 	if err := s.createEntityIntegrationMapping(ctx, customerResp.ID, hubspotContact, dealID); err != nil {
@@ -172,11 +176,9 @@ func (s *CustomerService) createEntityIntegrationMapping(
 		ProviderType:     string(types.SecretProviderHubSpot),
 		ProviderEntityID: hubspotContact.ID,
 		Metadata: map[string]interface{}{
-			"created_via":           "provider_to_flexprice",
-			"hubspot_contact_email": hubspotContact.Properties.Email,
-			"hubspot_contact_name":  fmt.Sprintf("%s %s", hubspotContact.Properties.FirstName, hubspotContact.Properties.LastName),
-			"hubspot_deal_id":       dealID,
-			"synced_at":             time.Now().UTC().Format(time.RFC3339),
+			"created_via":     "provider_to_flexprice",
+			"hubspot_deal_id": dealID,
+			"synced_at":       time.Now().UTC().Format(time.RFC3339),
 		},
 		EnvironmentID: types.GetEnvironmentID(ctx),
 		BaseModel:     types.GetDefaultBaseModel(ctx),

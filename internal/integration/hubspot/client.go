@@ -89,6 +89,23 @@ func (c *Client) GetHubSpotConfig(ctx context.Context) (*HubSpotConfig, error) {
 			Mark(ierr.ErrValidation)
 	}
 
+	// Validate required fields - CRITICAL for preventing API call failures
+	if hubspotConfig.AccessToken == "" {
+		c.logger.Errorw("missing HubSpot access token",
+			"connection_id", conn.ID,
+			"environment_id", conn.EnvironmentID)
+		return nil, ierr.NewError("missing HubSpot access token").
+			WithHint("Configure HubSpot access token in the connection settings").
+			Mark(ierr.ErrValidation)
+	}
+
+	if hubspotConfig.ClientSecret == "" {
+		c.logger.Warnw("missing HubSpot client secret (required for webhook verification)",
+			"connection_id", conn.ID,
+			"environment_id", conn.EnvironmentID)
+		// Don't fail - client secret is only needed for webhooks, not API calls
+	}
+
 	return hubspotConfig, nil
 }
 
@@ -344,18 +361,15 @@ func (c *Client) CreateInvoice(ctx context.Context, req *InvoiceCreateRequest) (
 		if httpErr, ok := httpclient.IsHTTPError(err); ok {
 			c.logger.Errorw("HubSpot API error creating invoice",
 				"status_code", httpErr.StatusCode,
-				"response_body", string(httpErr.Response),
-				"url", url,
-				"request_body", string(reqBody))
+				"url", url)
 			return nil, ierr.NewError("failed to create invoice in HubSpot").
-				WithHint(fmt.Sprintf("HubSpot API returned status %d: %s", httpErr.StatusCode, string(httpErr.Response))).
+				WithHint(fmt.Sprintf("HubSpot API returned status %d", httpErr.StatusCode)).
 				Mark(ierr.ErrHTTPClient)
 		}
 		// Generic HTTP client error
 		c.logger.Errorw("http client error creating invoice",
 			"error", err,
-			"url", url,
-			"request_body", string(reqBody))
+			"url", url)
 		return nil, ierr.NewError("failed to create invoice in HubSpot").
 			WithHint("Check HubSpot API connectivity and access token").
 			Mark(ierr.ErrHTTPClient)
@@ -364,8 +378,7 @@ func (c *Client) CreateInvoice(ctx context.Context, req *InvoiceCreateRequest) (
 	if resp.StatusCode != http.StatusCreated {
 		c.logger.Errorw("hubspot create invoice error",
 			"status", resp.StatusCode,
-			"body", string(resp.Body),
-			"request_body", string(reqBody))
+			"url", url)
 		return nil, ierr.NewError("failed to create invoice in HubSpot").
 			WithHint(fmt.Sprintf("HubSpot API returned status %d", resp.StatusCode)).
 			Mark(ierr.ErrHTTPClient)
@@ -411,12 +424,10 @@ func (c *Client) UpdateInvoice(ctx context.Context, invoiceID string, properties
 		if httpErr, ok := httpclient.IsHTTPError(err); ok {
 			c.logger.Errorw("HubSpot API error updating invoice",
 				"status_code", httpErr.StatusCode,
-				"response_body", string(httpErr.Response),
 				"url", url,
-				"invoice_id", invoiceID,
-				"request_body", string(reqBody))
+				"invoice_id", invoiceID)
 			return nil, ierr.NewError("failed to update invoice in HubSpot").
-				WithHint(fmt.Sprintf("HubSpot API returned status %d: %s", httpErr.StatusCode, string(httpErr.Response))).
+				WithHint(fmt.Sprintf("HubSpot API returned status %d", httpErr.StatusCode)).
 				Mark(ierr.ErrHTTPClient)
 		}
 
@@ -424,8 +435,7 @@ func (c *Client) UpdateInvoice(ctx context.Context, invoiceID string, properties
 		c.logger.Errorw("http client error updating invoice",
 			"error", err,
 			"url", url,
-			"invoice_id", invoiceID,
-			"request_body", string(reqBody))
+			"invoice_id", invoiceID)
 		return nil, ierr.NewError("failed to update invoice in HubSpot").
 			WithHint("Check HubSpot API connectivity").
 			Mark(ierr.ErrHTTPClient)
@@ -434,9 +444,8 @@ func (c *Client) UpdateInvoice(ctx context.Context, invoiceID string, properties
 	if resp.StatusCode != http.StatusOK {
 		c.logger.Errorw("hubspot update invoice error",
 			"status", resp.StatusCode,
-			"body", string(resp.Body),
-			"invoice_id", invoiceID,
-			"request_body", string(reqBody))
+			"url", url,
+			"invoice_id", invoiceID)
 		return nil, ierr.NewError("failed to update invoice in HubSpot").
 			WithHint(fmt.Sprintf("HubSpot API returned status %d", resp.StatusCode)).
 			Mark(ierr.ErrHTTPClient)
@@ -481,11 +490,10 @@ func (c *Client) UpdateDeal(ctx context.Context, dealID string, properties map[s
 		if httpErr, ok := httpclient.IsHTTPError(err); ok {
 			c.logger.Errorw("HubSpot API error updating deal",
 				"status_code", httpErr.StatusCode,
-				"response_body", string(httpErr.Response),
 				"url", url,
 				"deal_id", dealID)
 			return nil, ierr.NewError("failed to update deal in HubSpot").
-				WithHint(fmt.Sprintf("HubSpot API returned status %d: %s", httpErr.StatusCode, string(httpErr.Response))).
+				WithHint(fmt.Sprintf("HubSpot API returned status %d", httpErr.StatusCode)).
 				Mark(ierr.ErrHTTPClient)
 		}
 
@@ -501,7 +509,7 @@ func (c *Client) UpdateDeal(ctx context.Context, dealID string, properties map[s
 	if resp.StatusCode != http.StatusOK {
 		c.logger.Errorw("hubspot update deal error",
 			"status", resp.StatusCode,
-			"body", string(resp.Body),
+			"url", url,
 			"deal_id", dealID)
 		return nil, ierr.NewError("failed to update deal in HubSpot").
 			WithHint(fmt.Sprintf("HubSpot API returned status %d", resp.StatusCode)).
@@ -544,8 +552,7 @@ func (c *Client) CreateLineItem(ctx context.Context, req *LineItemCreateRequest)
 	if err != nil {
 		c.logger.Errorw("http client error creating line item",
 			"error", err,
-			"url", url,
-			"request_body", string(reqBody))
+			"url", url)
 		return nil, ierr.NewError("failed to create line item in HubSpot").
 			WithHint("Check HubSpot API connectivity").
 			Mark(ierr.ErrHTTPClient)
@@ -554,8 +561,7 @@ func (c *Client) CreateLineItem(ctx context.Context, req *LineItemCreateRequest)
 	if resp.StatusCode != http.StatusCreated {
 		c.logger.Errorw("hubspot create line item error",
 			"status", resp.StatusCode,
-			"body", string(resp.Body),
-			"request_body", string(reqBody))
+			"url", url)
 		return nil, ierr.NewError("failed to create line item in HubSpot").
 			WithHint(fmt.Sprintf("HubSpot API returned status %d", resp.StatusCode)).
 			Mark(ierr.ErrHTTPClient)
@@ -682,10 +688,9 @@ func (c *Client) CreateDealLineItem(ctx context.Context, req *DealLineItemCreate
 		if httpErr, ok := httpclient.IsHTTPError(err); ok {
 			c.logger.Errorw("HubSpot API error creating line item",
 				"status_code", httpErr.StatusCode,
-				"response_body", string(httpErr.Response),
 				"url", url)
 			return nil, ierr.NewError("failed to create line item in HubSpot").
-				WithHint(fmt.Sprintf("HubSpot API returned status %d: %s", httpErr.StatusCode, string(httpErr.Response))).
+				WithHint(fmt.Sprintf("HubSpot API returned status %d", httpErr.StatusCode)).
 				Mark(ierr.ErrHTTPClient)
 		}
 
@@ -700,7 +705,7 @@ func (c *Client) CreateDealLineItem(ctx context.Context, req *DealLineItemCreate
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		c.logger.Errorw("hubspot create line item error",
 			"status", resp.StatusCode,
-			"body", string(resp.Body))
+			"url", url)
 		return nil, ierr.NewError("failed to create line item in HubSpot").
 			WithHint(fmt.Sprintf("HubSpot API returned status %d", resp.StatusCode)).
 			Mark(ierr.ErrHTTPClient)
