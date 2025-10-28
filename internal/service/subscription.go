@@ -357,8 +357,71 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 	if invoice != nil {
 		response.LatestInvoice = invoice
 	}
+
+	// Sync subscription to HubSpot deal (if HubSpot connection is configured)
+	go s.syncSubscriptionToHubSpotDeal(ctx, sub.ID)
+
 	s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionCreated, sub.ID)
 	return response, nil
+}
+
+// syncSubscriptionToHubSpotDeal syncs subscription line items to HubSpot deal asynchronously
+func (s *subscriptionService) syncSubscriptionToHubSpotDeal(ctx context.Context, subscriptionID string) {
+	// Create a new context with timeout to prevent long-running operations
+	syncCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Copy necessary context values (tenant_id and environment_id)
+	tenantID := types.GetTenantID(ctx)
+	envID := types.GetEnvironmentID(ctx)
+	syncCtx = types.SetTenantID(syncCtx, tenantID)
+	syncCtx = types.SetEnvironmentID(syncCtx, envID)
+
+	s.Logger.Infow("attempting to sync subscription to HubSpot deal",
+		"subscription_id", subscriptionID,
+		"tenant_id", tenantID,
+		"environment_id", envID)
+
+	// Check if HubSpot integration is available
+	if s.IntegrationFactory == nil {
+		s.Logger.Warnw("integration factory not available for deal sync",
+			"subscription_id", subscriptionID)
+		return
+	}
+
+	hubspotIntegration, err := s.IntegrationFactory.GetHubSpotIntegration(syncCtx)
+	if err != nil {
+		s.Logger.Warnw("failed to get HubSpot integration for deal sync",
+			"error", err,
+			"subscription_id", subscriptionID)
+		return
+	}
+
+	if hubspotIntegration == nil {
+		s.Logger.Warnw("HubSpot integration is nil",
+			"subscription_id", subscriptionID)
+		return
+	}
+
+	if !hubspotIntegration.Client.HasHubSpotConnection(syncCtx) {
+		s.Logger.Infow("no HubSpot connection available, skipping deal sync",
+			"subscription_id", subscriptionID)
+		return
+	}
+
+	// Perform the sync
+	s.Logger.Infow("starting HubSpot deal sync",
+		"subscription_id", subscriptionID)
+
+	if err := hubspotIntegration.DealSyncSvc.SyncSubscriptionToDeal(syncCtx, subscriptionID); err != nil {
+		s.Logger.Errorw("failed to sync subscription to HubSpot deal",
+			"error", err,
+			"subscription_id", subscriptionID)
+		// Don't fail the subscription creation - just log the error
+	} else {
+		s.Logger.Infow("completed HubSpot deal sync",
+			"subscription_id", subscriptionID)
+	}
 }
 
 func (s *subscriptionService) handleTaxRateLinking(ctx context.Context, sub *subscription.Subscription, req dto.CreateSubscriptionRequest) error {

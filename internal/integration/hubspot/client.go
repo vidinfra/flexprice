@@ -37,6 +37,10 @@ type HubSpotClient interface {
 	CreateLineItem(ctx context.Context, req *LineItemCreateRequest) (*LineItemResponse, error)
 	AssociateLineItemToInvoice(ctx context.Context, lineItemID, invoiceID string) error
 	AssociateInvoiceToContact(ctx context.Context, invoiceID, contactID string) error
+
+	// Deal operations
+	UpdateDeal(ctx context.Context, dealID string, properties map[string]string) (*DealUpdateResponse, error)
+	CreateDealLineItem(ctx context.Context, req *DealLineItemCreateRequest) (*DealLineItemResponse, error)
 }
 
 // Client handles HubSpot API client setup and configuration
@@ -188,7 +192,7 @@ func (c *Client) GetDeal(ctx context.Context, dealID string) (*DealResponse, err
 		return nil, err
 	}
 
-	url := fmt.Sprintf("%s/crm/v3/objects/deals/%s?associations=contacts", HubSpotAPIBaseURL, dealID)
+	url := fmt.Sprintf("%s/crm/v3/objects/deals/%s?associations=contacts&properties=hs_acv,hs_arr,hs_mrr,hs_tcv,amount,dealname,dealstage", HubSpotAPIBaseURL, dealID)
 
 	req := &httpclient.Request{
 		Method: "GET",
@@ -446,6 +450,72 @@ func (c *Client) UpdateInvoice(ctx context.Context, invoiceID string, properties
 	return &invoice, nil
 }
 
+// UpdateDeal updates a HubSpot deal with the given properties
+func (c *Client) UpdateDeal(ctx context.Context, dealID string, properties map[string]string) (*DealUpdateResponse, error) {
+	config, err := c.GetHubSpotConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	url := fmt.Sprintf("%s/crm/v3/objects/deals/%s", HubSpotAPIBaseURL, dealID)
+
+	reqBody, err := json.Marshal(&DealUpdateRequest{
+		Properties: properties,
+	})
+	if err != nil {
+		return nil, ierr.NewError("failed to marshal deal update request").Mark(ierr.ErrInternal)
+	}
+
+	httpReq := &httpclient.Request{
+		Method: http.MethodPatch,
+		URL:    url,
+		Headers: map[string]string{
+			"Authorization": fmt.Sprintf("Bearer %s", config.AccessToken),
+			"Content-Type":  "application/json",
+		},
+		Body: reqBody,
+	}
+
+	resp, err := c.httpClient.Send(ctx, httpReq)
+	if err != nil {
+		if httpErr, ok := httpclient.IsHTTPError(err); ok {
+			c.logger.Errorw("HubSpot API error updating deal",
+				"status_code", httpErr.StatusCode,
+				"response_body", string(httpErr.Response),
+				"url", url,
+				"deal_id", dealID)
+			return nil, ierr.NewError("failed to update deal in HubSpot").
+				WithHint(fmt.Sprintf("HubSpot API returned status %d: %s", httpErr.StatusCode, string(httpErr.Response))).
+				Mark(ierr.ErrHTTPClient)
+		}
+
+		c.logger.Errorw("http client error updating deal",
+			"error", err,
+			"url", url,
+			"deal_id", dealID)
+		return nil, ierr.NewError("failed to update deal in HubSpot").
+			WithHint("Check HubSpot API connectivity").
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		c.logger.Errorw("hubspot update deal error",
+			"status", resp.StatusCode,
+			"body", string(resp.Body),
+			"deal_id", dealID)
+		return nil, ierr.NewError("failed to update deal in HubSpot").
+			WithHint(fmt.Sprintf("HubSpot API returned status %d", resp.StatusCode)).
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	var deal DealUpdateResponse
+	if err := json.Unmarshal(resp.Body, &deal); err != nil {
+		return nil, ierr.NewError("failed to decode deal response").Mark(ierr.ErrInternal)
+	}
+
+	return &deal, nil
+}
+
 // CreateLineItem creates a line item in HubSpot
 func (c *Client) CreateLineItem(ctx context.Context, req *LineItemCreateRequest) (*LineItemResponse, error) {
 	config, err := c.GetHubSpotConfig(ctx)
@@ -581,4 +651,65 @@ func (c *Client) AssociateInvoiceToContact(ctx context.Context, invoiceID, conta
 func (c *Client) HasHubSpotConnection(ctx context.Context) bool {
 	conn, err := c.connectionRepo.GetByProvider(ctx, types.SecretProviderHubSpot)
 	return err == nil && conn != nil && conn.Status == types.StatusPublished
+}
+
+// CreateDealLineItem creates a new line item in HubSpot and associates it with a deal
+func (c *Client) CreateDealLineItem(ctx context.Context, req *DealLineItemCreateRequest) (*DealLineItemResponse, error) {
+	config, err := c.GetHubSpotConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	url := fmt.Sprintf("%s/crm/v3/objects/line_items", HubSpotAPIBaseURL)
+
+	reqBody, err := json.Marshal(req)
+	if err != nil {
+		return nil, ierr.NewError("failed to marshal line item create request").Mark(ierr.ErrInternal)
+	}
+
+	httpReq := &httpclient.Request{
+		Method: http.MethodPost,
+		URL:    url,
+		Headers: map[string]string{
+			"Authorization": fmt.Sprintf("Bearer %s", config.AccessToken),
+			"Content-Type":  "application/json",
+		},
+		Body: reqBody,
+	}
+
+	resp, err := c.httpClient.Send(ctx, httpReq)
+	if err != nil {
+		if httpErr, ok := httpclient.IsHTTPError(err); ok {
+			c.logger.Errorw("HubSpot API error creating line item",
+				"status_code", httpErr.StatusCode,
+				"response_body", string(httpErr.Response),
+				"url", url)
+			return nil, ierr.NewError("failed to create line item in HubSpot").
+				WithHint(fmt.Sprintf("HubSpot API returned status %d: %s", httpErr.StatusCode, string(httpErr.Response))).
+				Mark(ierr.ErrHTTPClient)
+		}
+
+		c.logger.Errorw("http client error creating line item",
+			"error", err,
+			"url", url)
+		return nil, ierr.NewError("failed to create line item in HubSpot").
+			WithHint("Check HubSpot API connectivity").
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		c.logger.Errorw("hubspot create line item error",
+			"status", resp.StatusCode,
+			"body", string(resp.Body))
+		return nil, ierr.NewError("failed to create line item in HubSpot").
+			WithHint(fmt.Sprintf("HubSpot API returned status %d", resp.StatusCode)).
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	var lineItem DealLineItemResponse
+	if err := json.Unmarshal(resp.Body, &lineItem); err != nil {
+		return nil, ierr.NewError("failed to decode line item response").Mark(ierr.ErrInternal)
+	}
+
+	return &lineItem, nil
 }
