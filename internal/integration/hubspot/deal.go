@@ -2,7 +2,6 @@ package hubspot
 
 import (
 	"context"
-	"time"
 
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/price"
@@ -123,19 +122,53 @@ func (s *DealSyncService) SyncSubscriptionToDeal(ctx context.Context, subscripti
 		"deal_id", dealID,
 		"synced_items", len(flatRateLineItems))
 
-	// Wait for HubSpot to recalculate ACV after line items are added
-	s.logger.Infow("waiting for HubSpot to recalculate ACV",
-		"deal_id", dealID,
-		"wait_seconds", 5)
-	time.Sleep(5 * time.Second)
+	return nil
+}
 
-	// Update deal amount based on ACV
-	if err := s.updateDealAmount(ctx, dealID, sub); err != nil {
+// UpdateDealAmountFromACV updates the deal amount based on HubSpot's calculated ACV
+// This should be called after line items are created and HubSpot has recalculated ACV
+func (s *DealSyncService) UpdateDealAmountFromACV(ctx context.Context, subscriptionID string) error {
+	s.logger.Infow("updating deal amount from ACV",
+		"subscription_id", subscriptionID)
+
+	// We only need to fetch the subscription to get customer ID
+	sub, _, err := s.subscriptionRepo.GetWithLineItems(ctx, subscriptionID)
+	if err != nil {
+		s.logger.Errorw("failed to fetch subscription",
+			"error", err,
+			"subscription_id", subscriptionID)
+		return ierr.WithError(err).
+			WithHint("Failed to fetch subscription").
+			Mark(ierr.ErrInternal)
+	}
+
+	// Fetch customer to get deal ID
+	cust, err := s.customerRepo.Get(ctx, sub.CustomerID)
+	if err != nil {
+		s.logger.Errorw("failed to fetch customer",
+			"error", err,
+			"customer_id", sub.CustomerID)
+		return ierr.WithError(err).
+			WithHint("Failed to fetch customer").
+			Mark(ierr.ErrInternal)
+	}
+
+	// Get deal ID from customer metadata
+	dealID, ok := cust.Metadata["hubspot_deal_id"]
+	if !ok || dealID == "" {
+		s.logger.Warnw("no HubSpot deal ID found in customer metadata",
+			"customer_id", cust.ID,
+			"subscription_id", subscriptionID)
+		return nil // Not an error
+	}
+
+	// Update deal amount based on ACV - just fetch and update, don't calculate
+	if err := s.updateDealAmountFromHubSpot(ctx, dealID); err != nil {
 		s.logger.Errorw("failed to update deal amount",
 			"error", err,
 			"deal_id", dealID,
 			"subscription_id", subscriptionID)
-		// Don't return error - line items were created successfully
+		return err
 	}
 
 	return nil
@@ -240,11 +273,11 @@ func (s *DealSyncService) mapBillingFrequency(period types.BillingPeriod) string
 	}
 }
 
-// updateDealAmount fetches the deal's ACV and updates the deal amount to match it
-func (s *DealSyncService) updateDealAmount(ctx context.Context, dealID string, sub *subscription.Subscription) error {
+// updateDealAmountFromHubSpot fetches the deal's ACV from HubSpot and updates the deal amount
+// This function only reads ACV calculated by HubSpot, never calculates manually
+func (s *DealSyncService) updateDealAmountFromHubSpot(ctx context.Context, dealID string) error {
 	s.logger.Infow("fetching deal to get ACV",
-		"deal_id", dealID,
-		"subscription_id", sub.ID)
+		"deal_id", dealID)
 
 	// Get the deal to read its ACV
 	deal, err := s.client.GetDeal(ctx, dealID)
@@ -272,43 +305,21 @@ func (s *DealSyncService) updateDealAmount(ctx context.Context, dealID string, s
 			s.logger.Warnw("hs_acv property not found or empty",
 				"deal_id", dealID,
 				"available_properties", deal.Properties)
+			return ierr.NewError("ACV not found in HubSpot deal").
+				WithHint("HubSpot has not calculated ACV yet or line items were not synced").
+				Mark(ierr.ErrHTTPClient)
 		}
 	}
 
-	// If no ACV found, calculate from subscription
 	if acv == "" {
-		s.logger.Warnw("no ACV found in deal, calculating from subscription",
-			"deal_id", dealID,
-			"subscription_id", sub.ID)
-
-		// Calculate annual value from subscription
-		totalAmount := decimal.Zero
-		for _, lineItem := range sub.LineItems {
-			if lineItem.PriceType == "FIXED" {
-				priceObj, err := s.priceRepo.Get(ctx, lineItem.PriceID)
-				if err == nil {
-					totalAmount = totalAmount.Add(priceObj.Amount.Mul(lineItem.Quantity))
-				}
-			}
-		}
-
-		// Convert to annual based on billing period
-		switch sub.BillingPeriod {
-		case types.BILLING_PERIOD_MONTHLY:
-			totalAmount = totalAmount.Mul(decimal.NewFromInt(12))
-		case types.BILLING_PERIOD_QUARTER:
-			totalAmount = totalAmount.Mul(decimal.NewFromInt(4))
-		case types.BILLING_PERIOD_WEEKLY:
-			totalAmount = totalAmount.Mul(decimal.NewFromInt(52))
-		}
-
-		acv = totalAmount.String()
+		return ierr.NewError("ACV is empty").
+			WithHint("HubSpot ACV calculation may have failed").
+			Mark(ierr.ErrHTTPClient)
 	}
 
 	s.logger.Infow("updating deal amount with ACV",
 		"deal_id", dealID,
-		"acv", acv,
-		"subscription_id", sub.ID)
+		"acv", acv)
 
 	// Update the deal amount
 	updateProps := map[string]string{
@@ -324,8 +335,7 @@ func (s *DealSyncService) updateDealAmount(ctx context.Context, dealID string, s
 
 	s.logger.Infow("successfully updated deal amount",
 		"deal_id", dealID,
-		"amount", acv,
-		"subscription_id", sub.ID)
+		"amount", acv)
 
 	return nil
 }

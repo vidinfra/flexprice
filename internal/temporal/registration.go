@@ -5,6 +5,7 @@ import (
 
 	"github.com/flexprice/flexprice/internal/service"
 	exportActivities "github.com/flexprice/flexprice/internal/temporal/activities/export"
+	hubspotActivities "github.com/flexprice/flexprice/internal/temporal/activities/hubspot"
 	planActivities "github.com/flexprice/flexprice/internal/temporal/activities/plan"
 	taskActivities "github.com/flexprice/flexprice/internal/temporal/activities/task"
 	temporalService "github.com/flexprice/flexprice/internal/temporal/service"
@@ -48,9 +49,15 @@ func RegisterWorkflowsAndActivities(temporalService temporalService.TemporalServ
 	)
 	exportActivity := exportActivities.NewExportActivity(params.FeatureUsageRepo, params.InvoiceRepo, params.ConnectionRepo, params.IntegrationFactory, params.Logger)
 
+	// HubSpot activities - clean and simple, delegates to existing DealSyncService
+	hubspotDealSyncActivities := hubspotActivities.NewDealSyncActivities(
+		params.IntegrationFactory,
+		params.Logger,
+	)
+
 	// Get all task queues and register workflows/activities for each
 	for _, taskQueue := range types.GetAllTaskQueues() {
-		config := buildWorkerConfig(taskQueue, planActivities, taskActivities, taskActivity, scheduledTaskActivity, exportActivity)
+		config := buildWorkerConfig(taskQueue, planActivities, taskActivities, taskActivity, scheduledTaskActivity, exportActivity, hubspotDealSyncActivities)
 		if err := registerWorker(temporalService, config); err != nil {
 			return fmt.Errorf("failed to register worker for task queue %s: %w", taskQueue, err)
 		}
@@ -67,14 +74,22 @@ func buildWorkerConfig(
 	taskActivity *exportActivities.TaskActivity,
 	scheduledTaskActivity *exportActivities.ScheduledTaskActivity,
 	exportActivity *exportActivities.ExportActivity,
+	hubspotDealSyncActivities *hubspotActivities.DealSyncActivities,
 ) WorkerConfig {
 	workflowsList := []interface{}{}
 	activitiesList := []interface{}{}
 
 	switch taskQueue {
 	case types.TemporalTaskQueueTask:
-		workflowsList = append(workflowsList, workflows.TaskProcessingWorkflow)
-		activitiesList = append(activitiesList, taskActivities.ProcessTask)
+		workflowsList = append(workflowsList,
+			workflows.TaskProcessingWorkflow,
+			workflows.HubSpotDealSyncWorkflow,
+		)
+		activitiesList = append(activitiesList,
+			taskActivities.ProcessTask,
+			hubspotDealSyncActivities.CreateLineItems,
+			hubspotDealSyncActivities.UpdateDealAmount,
+		)
 
 	case types.TemporalTaskQueuePrice:
 		workflowsList = append(workflowsList, workflows.PriceSyncWorkflow)

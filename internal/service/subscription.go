@@ -17,6 +17,8 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/proration"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
 	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/temporal/models"
+	temporalservice "github.com/flexprice/flexprice/internal/temporal/service"
 	"github.com/flexprice/flexprice/internal/types"
 	webhookDto "github.com/flexprice/flexprice/internal/webhook/dto"
 	"github.com/samber/lo"
@@ -358,70 +360,64 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		response.LatestInvoice = invoice
 	}
 
-	// Sync subscription to HubSpot deal (if HubSpot connection is configured)
-	go s.syncSubscriptionToHubSpotDeal(ctx, sub.ID)
+	// Sync subscription to HubSpot deal (async via Temporal - no goroutine needed)
+	s.triggerHubSpotDealSyncWorkflow(ctx, sub.ID)
 
 	s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionCreated, sub.ID)
 	return response, nil
 }
 
-// syncSubscriptionToHubSpotDeal syncs subscription line items to HubSpot deal asynchronously
-func (s *subscriptionService) syncSubscriptionToHubSpotDeal(ctx context.Context, subscriptionID string) {
-	// Create a new context with timeout to prevent long-running operations
-	syncCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Copy necessary context values (tenant_id and environment_id)
+// triggerHubSpotDealSyncWorkflow triggers the Temporal workflow to sync subscription to HubSpot deal
+func (s *subscriptionService) triggerHubSpotDealSyncWorkflow(ctx context.Context, subscriptionID string) {
+	// Copy necessary context values
 	tenantID := types.GetTenantID(ctx)
 	envID := types.GetEnvironmentID(ctx)
-	syncCtx = types.SetTenantID(syncCtx, tenantID)
-	syncCtx = types.SetEnvironmentID(syncCtx, envID)
 
-	s.Logger.Infow("attempting to sync subscription to HubSpot deal",
+	s.Logger.Infow("triggering HubSpot deal sync workflow",
 		"subscription_id", subscriptionID,
 		"tenant_id", tenantID,
 		"environment_id", envID)
 
-	// Check if HubSpot integration is available
-	if s.IntegrationFactory == nil {
-		s.Logger.Warnw("integration factory not available for deal sync",
+	// Prepare workflow input
+	input := &models.HubSpotDealSyncWorkflowInput{
+		SubscriptionID: subscriptionID,
+		TenantID:       tenantID,
+		EnvironmentID:  envID,
+	}
+
+	// Validate input
+	if err := input.Validate(); err != nil {
+		s.Logger.Errorw("invalid workflow input for HubSpot deal sync",
+			"error", err,
 			"subscription_id", subscriptionID)
 		return
 	}
 
-	hubspotIntegration, err := s.IntegrationFactory.GetHubSpotIntegration(syncCtx)
+	// Get global temporal service
+	temporalSvc := temporalservice.GetGlobalTemporalService()
+	if temporalSvc == nil {
+		s.Logger.Warnw("temporal service not available for HubSpot deal sync",
+			"subscription_id", subscriptionID)
+		return
+	}
+
+	// Start workflow - Temporal handles async execution, no need for goroutines
+	workflowRun, err := temporalSvc.ExecuteWorkflow(
+		ctx,
+		types.TemporalHubSpotDealSyncWorkflow,
+		input,
+	)
 	if err != nil {
-		s.Logger.Warnw("failed to get HubSpot integration for deal sync",
+		s.Logger.Errorw("failed to start HubSpot deal sync workflow",
 			"error", err,
 			"subscription_id", subscriptionID)
 		return
 	}
 
-	if hubspotIntegration == nil {
-		s.Logger.Warnw("HubSpot integration is nil",
-			"subscription_id", subscriptionID)
-		return
-	}
-
-	if !hubspotIntegration.Client.HasHubSpotConnection(syncCtx) {
-		s.Logger.Infow("no HubSpot connection available, skipping deal sync",
-			"subscription_id", subscriptionID)
-		return
-	}
-
-	// Perform the sync
-	s.Logger.Infow("starting HubSpot deal sync",
-		"subscription_id", subscriptionID)
-
-	if err := hubspotIntegration.DealSyncSvc.SyncSubscriptionToDeal(syncCtx, subscriptionID); err != nil {
-		s.Logger.Errorw("failed to sync subscription to HubSpot deal",
-			"error", err,
-			"subscription_id", subscriptionID)
-		// Don't fail the subscription creation - just log the error
-	} else {
-		s.Logger.Infow("completed HubSpot deal sync",
-			"subscription_id", subscriptionID)
-	}
+	s.Logger.Infow("HubSpot deal sync workflow started successfully",
+		"subscription_id", subscriptionID,
+		"workflow_id", workflowRun.GetID(),
+		"run_id", workflowRun.GetRunID())
 }
 
 func (s *subscriptionService) handleTaxRateLinking(ctx context.Context, sub *subscription.Subscription, req dto.CreateSubscriptionRequest) error {
