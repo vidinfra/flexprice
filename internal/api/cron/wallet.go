@@ -20,6 +20,8 @@ type WalletCronHandler struct {
 	tenantService      service.TenantService
 	environmentService service.EnvironmentService
 	alertLogsService   service.AlertLogsService
+	paymentService     service.PaymentService
+	invoiceService     service.InvoiceService
 }
 
 func NewWalletCronHandler(logger *logger.Logger,
@@ -27,6 +29,8 @@ func NewWalletCronHandler(logger *logger.Logger,
 	tenantService service.TenantService,
 	environmentService service.EnvironmentService,
 	alertLogsService service.AlertLogsService,
+	paymentService service.PaymentService,
+	invoiceService service.InvoiceService,
 ) *WalletCronHandler {
 	return &WalletCronHandler{
 		logger:             logger,
@@ -34,6 +38,8 @@ func NewWalletCronHandler(logger *logger.Logger,
 		tenantService:      tenantService,
 		environmentService: environmentService,
 		alertLogsService:   alertLogsService,
+		paymentService:     paymentService,
+		invoiceService:     invoiceService,
 	}
 }
 
@@ -274,6 +280,40 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 					continue
 				}
 
+				// Create an invoice
+				invoice, err := h.invoiceService.CreateInvoice(ctx, dto.CreateInvoiceRequest{
+					CustomerID: wallet.CustomerID,
+					Currency:   wallet.Currency,
+					LineItems: []dto.CreateInvoiceLineItemRequest{
+						{
+							DisplayName: ptr("Wallet Auto Top-up"),
+							Quantity:    decimal.NewFromInt(1),
+							Amount:      wallet.AutoTopupAmount,
+						},
+					},
+					InvoiceType: types.InvoiceTypeOneOff,
+					AmountDue:   wallet.AutoTopupAmount,
+					Subtotal:    wallet.AutoTopupAmount,
+					Total:       wallet.AutoTopupAmount,
+					AmountPaid:  &decimal.Zero,
+				})
+				if err != nil {
+					h.logger.Errorw("failed to create wallet invoice",
+						"wallet_id", wallet.ID,
+						"error", err,
+					)
+				}
+
+				h.paymentService.CreatePayment(ctx, &dto.CreatePaymentRequest{
+					PaymentMethodType: types.PaymentMethodTypeCard,
+					DestinationType:   types.PaymentDestinationTypeInvoice,
+					ProcessPayment:    true,
+					PaymentGateway:    ptr(types.PaymentGatewayTypeStripe),
+					Amount:            wallet.AutoTopupAmount,
+					Currency:          wallet.Currency,
+					DestinationID:     invoice.ID,
+				})
+
 				// Update wallet alert state to match the logged status (if it changed)
 				if wallet.AlertState != string(alertStatus) {
 					if err := h.walletService.UpdateWalletAlertState(ctx, wallet.ID, alertStatus); err != nil {
@@ -295,4 +335,9 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 	}
 	h.logger.Infow("completed wallet balance alert check cron job")
 	c.JSON(http.StatusOK, gin.H{"status": "completed"})
+}
+
+// TODO: for now temporary
+func ptr[T any](v T) *T {
+	return &v
 }

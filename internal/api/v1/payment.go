@@ -10,16 +10,18 @@ import (
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
+	"github.com/shopspring/decimal"
 )
 
 type PaymentHandler struct {
-	service   service.PaymentService
-	processor service.PaymentProcessorService
-	log       *logger.Logger
+	service        service.PaymentService
+	invoiceService service.InvoiceService
+	processor      service.PaymentProcessorService
+	log            *logger.Logger
 }
 
-func NewPaymentHandler(service service.PaymentService, processor service.PaymentProcessorService, log *logger.Logger) *PaymentHandler {
-	return &PaymentHandler{service: service, processor: processor, log: log}
+func NewPaymentHandler(service service.PaymentService, invoiceService service.InvoiceService, processor service.PaymentProcessorService, log *logger.Logger) *PaymentHandler {
+	return &PaymentHandler{service: service, invoiceService: invoiceService, processor: processor, log: log}
 }
 
 // @Summary Create a new payment
@@ -44,6 +46,57 @@ func (h *PaymentHandler) CreatePayment(c *gin.Context) {
 	}
 
 	resp, err := h.service.CreatePayment(c.Request.Context(), &req)
+	if err != nil {
+		h.log.Error("Failed to create payment", "error", err)
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, resp)
+}
+
+func ptr[T any](v T) *T {
+	return &v
+}
+
+// TODO: this is for testing purposes only, remove it later
+func (h *PaymentHandler) TestPayment(c *gin.Context) {
+	toptupAmount := decimal.NewFromInt(50) // 50.00 USD
+	currency := "USD"
+	customerID := "cust_01K8JDHC2T8M5Z2MVD9Q4PDGPY"
+
+	// Create an invoice
+	invoice, err := h.invoiceService.CreateInvoice(c.Request.Context(), dto.CreateInvoiceRequest{
+		CustomerID: customerID,
+		Currency:   currency,
+		LineItems: []dto.CreateInvoiceLineItemRequest{
+			{
+				DisplayName: ptr("Wallet Auto Top-up"),
+				Quantity:    decimal.NewFromInt(1),
+				Amount:      toptupAmount,
+			},
+		},
+		InvoiceType: types.InvoiceTypeOneOff,
+		AmountDue:   toptupAmount,
+		Subtotal:    toptupAmount,
+		Total:       toptupAmount,
+		AmountPaid:  &decimal.Zero,
+	})
+	if err != nil {
+		h.log.Error("Failed to create invoice", "error", err)
+		c.Error(err)
+		return
+	}
+
+	resp, err := h.service.CreatePayment(c.Request.Context(), &dto.CreatePaymentRequest{
+		PaymentMethodType: types.PaymentMethodTypeCard,
+		DestinationType:   types.PaymentDestinationTypeInvoice,
+		ProcessPayment:    true,
+		PaymentGateway:    ptr(types.PaymentGatewayTypeStripe),
+		Amount:            toptupAmount,
+		Currency:          currency,
+		DestinationID:     invoice.ID,
+	})
 	if err != nil {
 		h.log.Error("Failed to create payment", "error", err)
 		c.Error(err)

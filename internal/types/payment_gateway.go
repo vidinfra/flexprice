@@ -48,6 +48,7 @@ const (
 	WebhookEventTypeCheckoutSessionExpired               WebhookEventType = "checkout.session.expired"
 	WebhookEventTypeCustomerCreated                      WebhookEventType = "customer.created"
 	WebhookEventTypePaymentIntentPaymentFailed           WebhookEventType = "payment_intent.payment_failed"
+	WebhookEventTypePaymentIntentPaymentSucceeded        WebhookEventType = "payment_intent.succeeded"
 	WebhookEventTypeInvoicePaymentPaid                   WebhookEventType = "invoice_payment.paid"
 	WebhookEventTypeSetupIntentSucceeded                 WebhookEventType = "setup_intent.succeeded"
 )

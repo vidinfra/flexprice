@@ -312,6 +312,8 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 		payments := v1Private.Group("/payments")
 		{
 			payments.POST("", handlers.Payment.CreatePayment)
+			// TODO: for testing, remove later
+			payments.POST("/test", handlers.Payment.TestPayment)
 			payments.GET("", handlers.Payment.ListPayments)
 			payments.GET("/:id", handlers.Payment.GetPayment)
 			payments.PUT("/:id", handlers.Payment.UpdatePayment)
