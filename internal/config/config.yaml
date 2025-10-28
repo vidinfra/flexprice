@@ -91,7 +91,7 @@ webhook:
   tenants:
     "tenant_01K83C1K1MJ57VTS9QPM1RK3W1": # I can find this in my FlexPrice dashboard or API
       enabled: true
-      endpoint: "http://localhost:8080/v1/webhooks/flexprice/balance-alert" # My webhook URL - That one I defined
+      endpoint: "https://api-staging.tenbyte.io/v1/webhooks/flexprice/balance-alert" # My webhook URL - That one I defined
       headers:
         "X-Api-Key": "api-key-provided-by-tenant"
       excluded_events:
