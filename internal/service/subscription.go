@@ -361,26 +361,48 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 	}
 
 	// Sync subscription to HubSpot deal (async via Temporal - no goroutine needed)
-	s.triggerHubSpotDealSyncWorkflow(ctx, sub.ID)
+	s.triggerHubSpotDealSyncWorkflow(ctx, sub.ID, customer.ID)
 
 	s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionCreated, sub.ID)
 	return response, nil
 }
 
 // triggerHubSpotDealSyncWorkflow triggers the Temporal workflow to sync subscription to HubSpot deal
-func (s *subscriptionService) triggerHubSpotDealSyncWorkflow(ctx context.Context, subscriptionID string) {
+func (s *subscriptionService) triggerHubSpotDealSyncWorkflow(ctx context.Context, subscriptionID, customerID string) {
 	// Copy necessary context values
 	tenantID := types.GetTenantID(ctx)
 	envID := types.GetEnvironmentID(ctx)
 
 	s.Logger.Infow("triggering HubSpot deal sync workflow",
 		"subscription_id", subscriptionID,
+		"customer_id", customerID,
 		"tenant_id", tenantID,
 		"environment_id", envID)
 
-	// Prepare workflow input
+	// Fetch customer to check for HubSpot deal ID
+	cust, err := s.CustomerRepo.Get(ctx, customerID)
+	if err != nil {
+		s.Logger.Errorw("failed to fetch customer for HubSpot deal sync",
+			"error", err,
+			"customer_id", customerID,
+			"subscription_id", subscriptionID)
+		return
+	}
+
+	// Check if customer has HubSpot deal ID in metadata
+	dealID, ok := cust.Metadata["hubspot_deal_id"]
+	if !ok || dealID == "" {
+		s.Logger.Debugw("customer does not have HubSpot deal ID, skipping sync",
+			"customer_id", customerID,
+			"subscription_id", subscriptionID)
+		return // Not an error - customer might not be from HubSpot
+	}
+
+	// Prepare workflow input with all necessary IDs
 	input := &models.HubSpotDealSyncWorkflowInput{
 		SubscriptionID: subscriptionID,
+		CustomerID:     customerID,
+		DealID:         dealID,
 		TenantID:       tenantID,
 		EnvironmentID:  envID,
 	}
@@ -389,7 +411,9 @@ func (s *subscriptionService) triggerHubSpotDealSyncWorkflow(ctx context.Context
 	if err := input.Validate(); err != nil {
 		s.Logger.Errorw("invalid workflow input for HubSpot deal sync",
 			"error", err,
-			"subscription_id", subscriptionID)
+			"subscription_id", subscriptionID,
+			"customer_id", customerID,
+			"deal_id", dealID)
 		return
 	}
 
@@ -410,12 +434,16 @@ func (s *subscriptionService) triggerHubSpotDealSyncWorkflow(ctx context.Context
 	if err != nil {
 		s.Logger.Errorw("failed to start HubSpot deal sync workflow",
 			"error", err,
-			"subscription_id", subscriptionID)
+			"subscription_id", subscriptionID,
+			"customer_id", customerID,
+			"deal_id", dealID)
 		return
 	}
 
 	s.Logger.Infow("HubSpot deal sync workflow started successfully",
 		"subscription_id", subscriptionID,
+		"customer_id", customerID,
+		"deal_id", dealID,
 		"workflow_id", workflowRun.GetID(),
 		"run_id", workflowRun.GetRunID())
 }

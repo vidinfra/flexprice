@@ -72,7 +72,8 @@ func (a *DealSyncActivities) UpdateDealAmount(
 	input models.HubSpotDealSyncWorkflowInput,
 ) error {
 	a.logger.Infow("updating HubSpot deal amount",
-		"subscription_id", input.SubscriptionID,
+		"customer_id", input.CustomerID,
+		"deal_id", input.DealID,
 		"tenant_id", input.TenantID,
 		"environment_id", input.EnvironmentID)
 
@@ -85,21 +86,25 @@ func (a *DealSyncActivities) UpdateDealAmount(
 	if err != nil {
 		a.logger.Errorw("failed to get HubSpot integration",
 			"error", err,
-			"subscription_id", input.SubscriptionID)
+			"customer_id", input.CustomerID,
+			"deal_id", input.DealID)
 		return err
 	}
 
 	// Update deal amount - uses existing DealSyncService logic
-	err = hubspotIntegration.DealSyncSvc.UpdateDealAmountFromACV(ctx, input.SubscriptionID)
+	// Now we pass customerID and dealID directly instead of fetching subscription
+	err = hubspotIntegration.DealSyncSvc.UpdateDealAmountFromACV(ctx, input.CustomerID, input.DealID)
 	if err != nil {
 		a.logger.Errorw("failed to update deal amount",
 			"error", err,
-			"subscription_id", input.SubscriptionID)
+			"customer_id", input.CustomerID,
+			"deal_id", input.DealID)
 		return err
 	}
 
 	a.logger.Infow("successfully updated HubSpot deal amount",
-		"subscription_id", input.SubscriptionID)
+		"customer_id", input.CustomerID,
+		"deal_id", input.DealID)
 
 	return nil
 }

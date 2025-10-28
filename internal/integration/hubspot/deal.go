@@ -92,7 +92,7 @@ func (s *DealSyncService) SyncSubscriptionToDeal(ctx context.Context, subscripti
 	// Filter for FIXED pricing only (flat rate)
 	var flatRateLineItems []*subscription.SubscriptionLineItem
 	for _, lineItem := range sub.LineItems {
-		if lineItem.PriceType == "FIXED" {
+		if lineItem.PriceType == types.PRICE_TYPE_FIXED {
 			flatRateLineItems = append(flatRateLineItems, lineItem)
 		}
 	}
@@ -127,47 +127,17 @@ func (s *DealSyncService) SyncSubscriptionToDeal(ctx context.Context, subscripti
 
 // UpdateDealAmountFromACV updates the deal amount based on HubSpot's calculated ACV
 // This should be called after line items are created and HubSpot has recalculated ACV
-func (s *DealSyncService) UpdateDealAmountFromACV(ctx context.Context, subscriptionID string) error {
+func (s *DealSyncService) UpdateDealAmountFromACV(ctx context.Context, customerID, dealID string) error {
 	s.logger.Infow("updating deal amount from ACV",
-		"subscription_id", subscriptionID)
-
-	// We only need to fetch the subscription to get customer ID
-	sub, _, err := s.subscriptionRepo.GetWithLineItems(ctx, subscriptionID)
-	if err != nil {
-		s.logger.Errorw("failed to fetch subscription",
-			"error", err,
-			"subscription_id", subscriptionID)
-		return ierr.WithError(err).
-			WithHint("Failed to fetch subscription").
-			Mark(ierr.ErrInternal)
-	}
-
-	// Fetch customer to get deal ID
-	cust, err := s.customerRepo.Get(ctx, sub.CustomerID)
-	if err != nil {
-		s.logger.Errorw("failed to fetch customer",
-			"error", err,
-			"customer_id", sub.CustomerID)
-		return ierr.WithError(err).
-			WithHint("Failed to fetch customer").
-			Mark(ierr.ErrInternal)
-	}
-
-	// Get deal ID from customer metadata
-	dealID, ok := cust.Metadata["hubspot_deal_id"]
-	if !ok || dealID == "" {
-		s.logger.Warnw("no HubSpot deal ID found in customer metadata",
-			"customer_id", cust.ID,
-			"subscription_id", subscriptionID)
-		return nil // Not an error
-	}
+		"customer_id", customerID,
+		"deal_id", dealID)
 
 	// Update deal amount based on ACV - just fetch and update, don't calculate
 	if err := s.updateDealAmountFromHubSpot(ctx, dealID); err != nil {
 		s.logger.Errorw("failed to update deal amount",
 			"error", err,
 			"deal_id", dealID,
-			"subscription_id", subscriptionID)
+			"customer_id", customerID)
 		return err
 	}
 
