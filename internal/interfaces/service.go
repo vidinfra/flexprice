@@ -65,9 +65,6 @@ type EntityIntegrationMappingService interface {
 
 // RevenueAnalyticsService defines the interface for revenue analytics operations
 type RevenueAnalyticsService interface {
-	// GetCostAnalytics retrieves cost analytics for customers and costsheets
-	GetCostAnalytics(ctx context.Context, costsheetID string, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error)
-
 	// GetDetailedCostAnalytics retrieves detailed cost analytics with derived metrics
 	GetDetailedCostAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetDetailedCostAnalyticsResponse, error)
 }

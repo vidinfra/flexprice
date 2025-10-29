@@ -81,9 +81,9 @@ type CostAnalyticItem struct {
 	CostByPeriod []CostPoint `json:"cost_by_period,omitempty"` // Time-series
 
 	// Metadata
-	Currency      string `json:"currency"`
-	PriceID       string `json:"price_id,omitempty"`
-	CostsheetV2ID string `json:"costsheet_v2_id,omitempty"`
+	Currency    string `json:"currency"`
+	PriceID     string `json:"price_id,omitempty"`
+	CostsheetID string `json:"costsheet_id,omitempty"`
 
 	// Expanded data (populated when expand options are specified)
 	Meter *meter.Meter `json:"meter,omitempty"`
@@ -102,7 +102,7 @@ type CostPoint struct {
 type GetCostAnalyticsResponse struct {
 	CustomerID         string    `json:"customer_id,omitempty"`
 	ExternalCustomerID string    `json:"external_customer_id,omitempty"`
-	CostsheetV2ID      string    `json:"costsheet_v2_id,omitempty"`
+	CostsheetID        string    `json:"costsheet_id,omitempty"`
 	StartTime          time.Time `json:"start_time"`
 	EndTime            time.Time `json:"end_time"`
 	Currency           string    `json:"currency"`
