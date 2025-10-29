@@ -376,6 +376,7 @@ deploy: swagger build-image restart-flexprice
 .PHONY: deploy-from-git
 deploy-from-git:
 	@echo "Pulling latest code and deploying..."
+	@git restore .
 	@git fetch origin
 	@git rebase origin/main
 	@make deploy
