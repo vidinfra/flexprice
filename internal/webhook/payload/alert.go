@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/flexprice/flexprice/internal/api/dto"
 	webhookDto "github.com/flexprice/flexprice/internal/webhook/dto"
 )
 
@@ -37,10 +38,25 @@ func (b *AlertPayloadBuilder) BuildPayload(ctx context.Context, eventType string
 			return nil, err
 		}
 
-		// Build the complete alert webhook payload with both entities
+		// Fetch customer data
+		var customer *dto.CustomerResponse
+		if wallet.CustomerID != "" {
+			customerData, err := b.services.CustomerService.GetCustomer(ctx, wallet.CustomerID)
+			if err != nil {
+				// Log error but don't fail the webhook if customer fetch fails
+				// Customer is optional in the payload
+				b.services.Sentry.CaptureException(err)
+				customer = nil
+			} else {
+				customer = customerData
+			}
+		}
+
+		// Build the complete alert webhook payload with both entities and customer
 		payload := webhookDto.NewAlertWebhookPayload(
 			feature,
 			wallet,
+			customer,
 			internalEvent.AlertType,   // alert_type from internal event
 			internalEvent.AlertStatus, // alert_status from internal event
 			eventType,

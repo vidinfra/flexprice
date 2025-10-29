@@ -10,13 +10,14 @@ type InternalAlertEvent struct {
 }
 
 type AlertWebhookPayload struct {
-	EventType   string               `json:"event_type"`
-	AlertType   string               `json:"alert_type"`
-	AlertStatus string               `json:"alert_status"`
-	Feature     *dto.FeatureResponse `json:"feature,omitempty"`
-	Wallet      *dto.WalletResponse  `json:"wallet,omitempty"`
+	EventType   string                `json:"event_type"`
+	AlertType   string                `json:"alert_type"`
+	AlertStatus string                `json:"alert_status"`
+	Feature     *dto.FeatureResponse  `json:"feature,omitempty"`
+	Wallet      *dto.WalletResponse   `json:"wallet,omitempty"`
+	Customer    *dto.CustomerResponse `json:"customer,omitempty"`
 }
 
-func NewAlertWebhookPayload(feature *dto.FeatureResponse, wallet *dto.WalletResponse, alertType string, alertStatus string, eventType string) *AlertWebhookPayload {
-	return &AlertWebhookPayload{EventType: eventType, AlertType: alertType, AlertStatus: alertStatus, Feature: feature, Wallet: wallet}
+func NewAlertWebhookPayload(feature *dto.FeatureResponse, wallet *dto.WalletResponse, customer *dto.CustomerResponse, alertType string, alertStatus string, eventType string) *AlertWebhookPayload {
+	return &AlertWebhookPayload{EventType: eventType, AlertType: alertType, AlertStatus: alertStatus, Feature: feature, Wallet: wallet, Customer: customer}
 }
