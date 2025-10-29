@@ -13,14 +13,13 @@ import (
 )
 
 type PaymentHandler struct {
-	service        service.PaymentService
-	invoiceService service.InvoiceService
-	processor      service.PaymentProcessorService
-	log            *logger.Logger
+	service   service.PaymentService
+	processor service.PaymentProcessorService
+	log       *logger.Logger
 }
 
-func NewPaymentHandler(service service.PaymentService, invoiceService service.InvoiceService, processor service.PaymentProcessorService, log *logger.Logger) *PaymentHandler {
-	return &PaymentHandler{service: service, invoiceService: invoiceService, processor: processor, log: log}
+func NewPaymentHandler(service service.PaymentService, processor service.PaymentProcessorService, log *logger.Logger) *PaymentHandler {
+	return &PaymentHandler{service: service, processor: processor, log: log}
 }
 
 // @Summary Create a new payment

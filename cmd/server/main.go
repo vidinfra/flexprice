@@ -306,7 +306,7 @@ func provideHandlers(
 		Invoice:                  v1.NewInvoiceHandler(invoiceService, logger),
 		Feature:                  v1.NewFeatureHandler(featureService, logger),
 		Entitlement:              v1.NewEntitlementHandler(entitlementService, logger),
-		Payment:                  v1.NewPaymentHandler(paymentService, invoiceService, paymentProcessorService, logger),
+		Payment:                  v1.NewPaymentHandler(paymentService, paymentProcessorService, logger),
 		Task:                     v1.NewTaskHandler(taskService, temporalService, logger),
 		Secret:                   v1.NewSecretHandler(secretService, logger),
 		Tax:                      v1.NewTaxHandler(taxService, logger),
