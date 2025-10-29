@@ -254,14 +254,6 @@ func (h *CustomerHandler) GetCustomerUsageSummary(c *gin.Context) {
 	// Check if the deprecated path parameter route was used
 	pathParamID := c.Param("id")
 	if pathParamID != "" {
-		// Deprecated route: /customers/:id/usage
-		c.Header("Deprecation", "true")
-		c.Header("Sunset", "2026-04-01")
-		c.Header("Warning", "299 - \"Deprecated endpoint. Please use GET /v1/customers/usage with query parameters instead.\"")
-		h.log.Warnw("Deprecated endpoint used",
-			"path", c.Request.URL.Path,
-			"deprecation_notice", "GET /v1/customers/:id/usage is deprecated",
-		)
 
 		// Still bind query parameters for other fields (feature_ids, subscription_ids, etc)
 		if err := c.ShouldBindQuery(&req); err != nil {

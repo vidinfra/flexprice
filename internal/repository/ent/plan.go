@@ -468,6 +468,10 @@ func (o PlanQueryOptions) applyEntityQueryOptions(_ context.Context, f *types.Pl
 		query = query.Where(plan.IDIn(f.PlanIDs...))
 	}
 
+	if f.LookupKey != nil {
+		query = query.Where(plan.LookupKeyEQ(*f.LookupKey))
+	}
+
 	if f.Filters != nil {
 		query, err = dsl.ApplyFilters[PlanQuery, predicate.Plan](
 			query,
