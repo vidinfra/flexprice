@@ -1309,6 +1309,8 @@ func (s *priceService) validateGroup(ctx context.Context, prices []*price.Price)
 		groupIDs = append(groupIDs, price.GroupID)
 	}
 
+	groupIDs = lo.Uniq(groupIDs)
+
 	// 2. Validate groups if any
 	if len(groupIDs) == 0 {
 		return nil

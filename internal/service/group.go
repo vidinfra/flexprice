@@ -131,16 +131,9 @@ func (s *groupService) ListGroups(ctx context.Context, filter *types.GroupFilter
 		return nil, err
 	}
 
-	// Get associated entities for all groups in bulk (single query instead of N queries)
-	entityMap, err := s.getAssociatedEntitiesBulk(ctx, groups)
-	if err != nil {
-		return nil, err
-	}
-
 	responses := make([]*dto.GroupResponse, len(groups))
 	for i, groupObj := range groups {
-		entityIDs := entityMap[groupObj.ID] // O(1) lookup
-		responses[i] = dto.ToGroupResponseWithEntities(groupObj, entityIDs)
+		responses[i] = dto.ToGroupResponse(groupObj)
 	}
 
 	return &dto.ListGroupsResponse{
@@ -246,7 +239,7 @@ func (s *groupService) ValidateGroup(ctx context.Context, id string, entityType 
 
 func (s *groupService) ValidateGroupBulk(ctx context.Context, groupIDs []string, entityType types.GroupEntityType) error {
 	groups, err := s.GroupRepo.List(ctx, &types.GroupFilter{
-		QueryFilter: types.NewDefaultQueryFilter(),
+		QueryFilter: types.NewNoLimitQueryFilter(),
 		GroupIDs:    groupIDs,
 	})
 	if err != nil {
