@@ -121,7 +121,6 @@ func (h *WalletCronHandler) ExpireCredits(c *gin.Context) {
 // CheckAlerts checks wallet balances and triggers alerts based on thresholds
 func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 	h.logger.Infow("starting wallet balance alert check cron job", "time", time.Now().UTC().Format(time.RFC3339))
-
 	// parse request body
 	var req types.CheckAlertsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -280,6 +279,36 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 					continue
 				}
 
+				// Update wallet alert state to match the logged status (if it changed)
+				if wallet.AlertState != string(alertStatus) {
+					if err := h.walletService.UpdateWalletAlertState(ctx, wallet.ID, alertStatus); err != nil {
+						h.logger.Errorw("failed to update wallet alert state",
+							"wallet_id", wallet.ID,
+							"new_state", alertStatus,
+							"error", err,
+						)
+					} else {
+						h.logger.Infow("updated wallet alert state",
+							"wallet_id", wallet.ID,
+							"old_state", wallet.AlertState,
+							"new_state", alertStatus,
+						)
+					}
+				}
+
+				if !ongoingBalance.LessThanOrEqual(wallet.AutoTopupMinBalance) ||
+					wallet.AutoTopupTrigger == types.AutoTopupTriggerDisabled ||
+					wallet.AutoTopupAmount.LessThanOrEqual(decimal.Zero) {
+					// No auto top-up needed, continue to next wallet
+					continue
+				}
+
+				// Proceed with auto top-up
+				h.logger.Infow("initiating auto top-up for wallet",
+					"wallet_id", wallet.ID,
+					"auto_topup_amount", wallet.AutoTopupAmount,
+				)
+
 				// Create an invoice
 				invoice, err := h.invoiceService.CreateInvoice(ctx, dto.CreateInvoiceRequest{
 					CustomerID: wallet.CustomerID,
@@ -304,7 +333,7 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 					)
 				}
 
-				h.paymentService.CreatePayment(ctx, &dto.CreatePaymentRequest{
+				_, err = h.paymentService.CreatePayment(ctx, &dto.CreatePaymentRequest{
 					PaymentMethodType: types.PaymentMethodTypeCard,
 					DestinationType:   types.PaymentDestinationTypeInvoice,
 					ProcessPayment:    true,
@@ -313,22 +342,11 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 					Currency:          wallet.Currency,
 					DestinationID:     invoice.ID,
 				})
-
-				// Update wallet alert state to match the logged status (if it changed)
-				if wallet.AlertState != string(alertStatus) {
-					if err := h.walletService.UpdateWalletAlertState(ctx, wallet.ID, alertStatus); err != nil {
-						h.logger.Errorw("failed to update wallet alert state",
-							"wallet_id", wallet.ID,
-							"new_state", alertStatus,
-							"error", err,
-						)
-					} else {
-						h.logger.Infow("updated wallet alert state",
-							"wallet_id", wallet.ID,
-							"old_state", wallet.AlertState,
-							"new_state", alertStatus,
-						)
-					}
+				if err != nil {
+					h.logger.Errorw("failed to create payment for wallet auto top-up",
+						"wallet_id", wallet.ID,
+						"error", err,
+					)
 				}
 			}
 		}

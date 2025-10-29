@@ -310,7 +310,7 @@ func (h *WebhookHandler) findPaymentByPaymentIntentID(ctx context.Context, payme
 		return nil, err
 	}
 
-	// Filter by gateway_tracking_id (which contains session ID)
+	// Filter by gateway_payment_id (which contains payment intent ID)
 	for _, payment := range payments.Items {
 		if payment.GatewayPaymentID != nil && *payment.GatewayPaymentID == paymentIntentID {
 			return payment, nil
@@ -677,19 +677,8 @@ func (h *WebhookHandler) handlePaymentIntentPaymentSucceeded(c *gin.Context, eve
 			}
 		}
 	}
-	// Reconcile payment with invoice if payment succeeded or if payment was already succeeded
-	// This handles both new payments and duplicate payments that should result in overpayment
-	if paymentStatus == string(types.PaymentStatusSucceeded) || payment.PaymentStatus == types.PaymentStatusSucceeded {
-		if err := h.stripeService.ReconcilePaymentWithInvoice(c.Request.Context(), payment.ID, payment.Amount); err != nil {
-			h.logger.Errorw("failed to reconcile payment with invoice",
-				"error", err,
-				"payment_id", payment.ID,
-				"invoice_id", payment.DestinationID,
-			)
-			// Don't fail the webhook if reconciliation fails, but log the error
-			// The payment is still marked as succeeded
-		}
 
+	if paymentStatus == string(types.PaymentStatusSucceeded) || payment.PaymentStatus == types.PaymentStatusSucceeded {
 		// Attach payment to Stripe invoice if payment succeeded and invoice is synced to Stripe
 		if paymentStatus == string(types.PaymentStatusSucceeded) {
 			if err := h.attachPaymentIntentToStripeInvoice(c.Request.Context(), paymentStatusResp.PaymentIntentID, payment); err != nil {
