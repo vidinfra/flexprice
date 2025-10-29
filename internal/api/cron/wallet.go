@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
+	"github.com/vidinfra/typeshift"
 )
 
 type WalletCronHandler struct {
@@ -20,6 +21,8 @@ type WalletCronHandler struct {
 	tenantService      service.TenantService
 	environmentService service.EnvironmentService
 	alertLogsService   service.AlertLogsService
+	paymentService     service.PaymentService
+	invoiceService     service.InvoiceService
 }
 
 func NewWalletCronHandler(logger *logger.Logger,
@@ -27,6 +30,8 @@ func NewWalletCronHandler(logger *logger.Logger,
 	tenantService service.TenantService,
 	environmentService service.EnvironmentService,
 	alertLogsService service.AlertLogsService,
+	paymentService service.PaymentService,
+	invoiceService service.InvoiceService,
 ) *WalletCronHandler {
 	return &WalletCronHandler{
 		logger:             logger,
@@ -34,6 +39,8 @@ func NewWalletCronHandler(logger *logger.Logger,
 		tenantService:      tenantService,
 		environmentService: environmentService,
 		alertLogsService:   alertLogsService,
+		paymentService:     paymentService,
+		invoiceService:     invoiceService,
 	}
 }
 
@@ -115,7 +122,6 @@ func (h *WalletCronHandler) ExpireCredits(c *gin.Context) {
 // CheckAlerts checks wallet balances and triggers alerts based on thresholds
 func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 	h.logger.Infow("starting wallet balance alert check cron job", "time", time.Now().UTC().Format(time.RFC3339))
-
 	// parse request body
 	var req types.CheckAlertsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -250,30 +256,6 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 					"ongoing_balance_alert_state", wallet.AlertState,
 				)
 
-				// Use AlertLogsService to handle alert logging and webhook publishing
-				err = h.alertLogsService.LogAlert(ctx, &service.LogAlertRequest{
-					EntityType:  types.AlertEntityTypeWallet,
-					EntityID:    wallet.ID,
-					AlertType:   types.AlertTypeLowOngoingBalance,
-					AlertStatus: alertStatus,
-					AlertInfo: types.AlertInfo{
-						Threshold: types.AlertThreshold{
-							Type:  types.AlertThresholdTypeAmount,
-							Value: threshold,
-						},
-						ValueAtTime: *ongoingBalance,
-						Timestamp:   time.Now().UTC(),
-					},
-				})
-				if err != nil {
-					h.logger.Errorw("failed to log alert",
-						"wallet_id", wallet.ID,
-						"alert_status", alertStatus,
-						"error", err,
-					)
-					continue
-				}
-
 				// Update wallet alert state to match the logged status (if it changed)
 				if wallet.AlertState != string(alertStatus) {
 					if err := h.walletService.UpdateWalletAlertState(ctx, wallet.ID, alertStatus); err != nil {
@@ -289,6 +271,81 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 							"new_state", alertStatus,
 						)
 					}
+				}
+
+				if !ongoingBalance.LessThanOrEqual(wallet.AutoTopupMinBalance) ||
+					wallet.AutoTopupTrigger == types.AutoTopupTriggerDisabled ||
+					wallet.AutoTopupAmount.LessThanOrEqual(decimal.Zero) {
+
+					err = h.alertLogsService.LogAlert(ctx, &service.LogAlertRequest{
+						EntityType:  types.AlertEntityTypeWallet,
+						EntityID:    wallet.ID,
+						AlertType:   types.AlertTypeLowOngoingBalance,
+						AlertStatus: alertStatus,
+						AlertInfo: types.AlertInfo{
+							Threshold: types.AlertThreshold{
+								Type:  types.AlertThresholdTypeAmount,
+								Value: threshold,
+							},
+							ValueAtTime: *ongoingBalance,
+							Timestamp:   time.Now().UTC(),
+						},
+					})
+					if err != nil {
+						h.logger.Errorw("failed to log alert",
+							"wallet_id", wallet.ID,
+							"alert_status", alertStatus,
+							"error", err,
+						)
+						continue
+					}
+					continue
+				}
+
+				// Proceed with auto top-up
+				h.logger.Infow("initiating auto top-up for wallet",
+					"wallet_id", wallet.ID,
+					"auto_topup_amount", wallet.AutoTopupAmount,
+				)
+
+				// Create an invoice
+				invoice, err := h.invoiceService.CreateInvoice(ctx, dto.CreateInvoiceRequest{
+					CustomerID: wallet.CustomerID,
+					Currency:   wallet.Currency,
+					LineItems: []dto.CreateInvoiceLineItemRequest{
+						{
+							DisplayName: typeshift.Ptr("Wallet Auto Top-up"),
+							Quantity:    decimal.NewFromInt(1),
+							Amount:      wallet.AutoTopupAmount,
+						},
+					},
+					InvoiceType: types.InvoiceTypeOneOff,
+					AmountDue:   wallet.AutoTopupAmount,
+					Subtotal:    wallet.AutoTopupAmount,
+					Total:       wallet.AutoTopupAmount,
+					AmountPaid:  &decimal.Zero,
+				})
+				if err != nil {
+					h.logger.Errorw("failed to create wallet invoice",
+						"wallet_id", wallet.ID,
+						"error", err,
+					)
+				}
+
+				_, err = h.paymentService.CreatePayment(ctx, &dto.CreatePaymentRequest{
+					PaymentMethodType: types.PaymentMethodTypeCard,
+					DestinationType:   types.PaymentDestinationTypeInvoice,
+					ProcessPayment:    true,
+					PaymentGateway:    typeshift.Ptr(types.PaymentGatewayTypeStripe),
+					Amount:            wallet.AutoTopupAmount,
+					Currency:          wallet.Currency,
+					DestinationID:     invoice.ID,
+				})
+				if err != nil {
+					h.logger.Errorw("failed to create payment for wallet auto top-up",
+						"wallet_id", wallet.ID,
+						"error", err,
+					)
 				}
 			}
 		}
