@@ -300,6 +300,26 @@ func (h *WebhookHandler) findPaymentBySessionID(ctx context.Context, sessionID s
 	return nil, nil
 }
 
+// findPaymentBySessionID finds a payment record by Stripe session ID
+func (h *WebhookHandler) findPaymentByPaymentIntentID(ctx context.Context, paymentIntentID string) (*dto.PaymentResponse, error) {
+	paymentService := service.NewPaymentService(h.stripeService.ServiceParams)
+	payments, err := paymentService.ListPayments(ctx, &types.PaymentFilter{
+		QueryFilter: types.NewNoLimitQueryFilter(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter by gateway_tracking_id (which contains session ID)
+	for _, payment := range payments.Items {
+		if payment.GatewayPaymentID != nil && *payment.GatewayPaymentID == paymentIntentID {
+			return payment, nil
+		}
+	}
+
+	return nil, nil
+}
+
 // getSessionIDFromPaymentIntent gets the session ID by looking up checkout sessions with the payment intent ID
 func (h *WebhookHandler) getSessionIDFromPaymentIntent(ctx context.Context, paymentIntentID string, environmentID string) (string, error) {
 	// Get Stripe connection using the stripe service connection repo
@@ -488,7 +508,6 @@ func (h *WebhookHandler) isPaymentFromCheckoutSession(ctx context.Context, payme
 	return false
 }
 
-// TODO: Implement this
 // handlePaymentIntentPaymentSucceeded handles payment_intent.payment_succeeded webhook
 func (h *WebhookHandler) handlePaymentIntentPaymentSucceeded(c *gin.Context, event *stripe.Event, environmentID string) {
 	var paymentIntent stripe.PaymentIntent
@@ -510,8 +529,8 @@ func (h *WebhookHandler) handlePaymentIntentPaymentSucceeded(c *gin.Context, eve
 		"event_type", event.Type,
 	)
 
-	// Find payment record by session ID
-	payment, err := h.findPaymentBySessionID(c.Request.Context(), paymentIntent.ID)
+	// Find payment record by payment intent ID
+	payment, err := h.findPaymentByPaymentIntentID(c.Request.Context(), paymentIntent.ID)
 	if err != nil {
 		h.logger.Errorw("failed to find payment record", "error", err, "payment_intent_id", paymentIntent.ID)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -538,7 +557,7 @@ func (h *WebhookHandler) handlePaymentIntentPaymentSucceeded(c *gin.Context, eve
 	}
 
 	// Make a separate Stripe API call to get current status
-	paymentStatusResp, err := h.stripeService.GetPaymentStatus(c.Request.Context(), paymentIntent.ID, environmentID)
+	paymentStatusResp, err := h.stripeService.GetPaymentStatusByPaymentIntent(c.Request.Context(), paymentIntent.ID, environmentID)
 	if err != nil {
 		h.logger.Errorw("failed to get payment status from Stripe API",
 			"error", err,
@@ -685,11 +704,6 @@ func (h *WebhookHandler) handlePaymentIntentPaymentSucceeded(c *gin.Context, eve
 			}
 		}
 	}
-
-	fmt.Println("...............................................")
-	fmt.Println("... Payment Intent Succeeded Webhook Processed ...")
-	fmt.Println(paymentStatus)
-	fmt.Println("...............................................")
 
 	if paymentStatus == string(types.PaymentStatusSucceeded) {
 		h.topUpWallet(c, payment)
