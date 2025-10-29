@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
+	"github.com/vidinfra/typeshift"
 )
 
 type WalletCronHandler struct {
@@ -313,7 +314,7 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 					Currency:   wallet.Currency,
 					LineItems: []dto.CreateInvoiceLineItemRequest{
 						{
-							DisplayName: ptr("Wallet Auto Top-up"),
+							DisplayName: typeshift.Ptr("Wallet Auto Top-up"),
 							Quantity:    decimal.NewFromInt(1),
 							Amount:      wallet.AutoTopupAmount,
 						},
@@ -335,7 +336,7 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 					PaymentMethodType: types.PaymentMethodTypeCard,
 					DestinationType:   types.PaymentDestinationTypeInvoice,
 					ProcessPayment:    true,
-					PaymentGateway:    ptr(types.PaymentGatewayTypeStripe),
+					PaymentGateway:    typeshift.Ptr(types.PaymentGatewayTypeStripe),
 					Amount:            wallet.AutoTopupAmount,
 					Currency:          wallet.Currency,
 					DestinationID:     invoice.ID,
@@ -351,9 +352,4 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 	}
 	h.logger.Infow("completed wallet balance alert check cron job")
 	c.JSON(http.StatusOK, gin.H{"status": "completed"})
-}
-
-// TODO: for now temporary
-func ptr[T any](v T) *T {
-	return &v
 }
