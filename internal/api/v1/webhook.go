@@ -208,7 +208,7 @@ func (h *WebhookHandler) HandleStripeWebhook(c *gin.Context) {
 	case string(types.WebhookEventTypeSetupIntentSucceeded):
 		h.handleSetupIntentSucceeded(c, event, environmentID)
 	case string(types.WebhookEventTypePaymentIntentPaymentSucceeded):
-		h.handlePaymentIntentPaymentSucceeded(c, event, environmentID)
+		h.handleIntentPaymentSucceeded(c, event, environmentID)
 
 	default:
 		h.logger.Infow("unhandled Stripe webhook event type", "type", event.Type)
@@ -509,7 +509,7 @@ func (h *WebhookHandler) isPaymentFromCheckoutSession(ctx context.Context, payme
 }
 
 // handlePaymentIntentPaymentSucceeded handles payment_intent.payment_succeeded webhook
-func (h *WebhookHandler) handlePaymentIntentPaymentSucceeded(c *gin.Context, event *stripe.Event, environmentID string) {
+func (h *WebhookHandler) handleIntentPaymentSucceeded(c *gin.Context, event *stripe.Event, environmentID string) {
 	var paymentIntent stripe.PaymentIntent
 	err := json.Unmarshal(event.Data.Raw, &paymentIntent)
 	if err != nil {
@@ -545,15 +545,6 @@ func (h *WebhookHandler) handlePaymentIntentPaymentSucceeded(c *gin.Context, eve
 			"message": "No payment record found for session",
 		})
 		return
-	}
-
-	// Check if payment is already successful - but allow processing for overpayment reconciliation
-	if payment.PaymentStatus == types.PaymentStatusSucceeded {
-		h.logger.Infow("payment is already successful, but will proceed to check for overpayment",
-			"payment_id", payment.ID,
-			"payment_intent_id", paymentIntent.ID,
-			"current_status", payment.PaymentStatus)
-		// Continue processing to handle potential overpayment instead of returning
 	}
 
 	// Make a separate Stripe API call to get current status
@@ -688,8 +679,6 @@ func (h *WebhookHandler) handlePaymentIntentPaymentSucceeded(c *gin.Context, eve
 					"invoice_id", payment.DestinationID,
 					"payment_intent_id", paymentStatusResp.PaymentIntentID,
 				)
-				// Don't fail the webhook if attachment fails, but log the error
-				// The payment reconciliation was successful
 			}
 		}
 	}
