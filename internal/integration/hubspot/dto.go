@@ -1,0 +1,117 @@
+package hubspot
+
+import "time"
+
+// WebhookEvent represents a HubSpot webhook event payload
+type WebhookEvent struct {
+	EventID          int64  `json:"eventId"`
+	SubscriptionID   int64  `json:"subscriptionId"`
+	PortalID         int64  `json:"portalId"`
+	AppID            int64  `json:"appId"`
+	OccurredAt       int64  `json:"occurredAt"`
+	SubscriptionType string `json:"subscriptionType"`
+	AttemptNumber    int    `json:"attemptNumber"`
+	ObjectID         int64  `json:"objectId"`
+	PropertyName     string `json:"propertyName,omitempty"`
+	PropertyValue    string `json:"propertyValue,omitempty"`
+	ChangeSource     string `json:"changeSource,omitempty"`
+	SourceID         string `json:"sourceId,omitempty"`
+	ChangeFlag       string `json:"changeFlag,omitempty"`
+}
+
+// WebhookPayload represents the array of webhook events
+type WebhookPayload []WebhookEvent
+
+// DealResponse represents a HubSpot deal object from the API
+type DealResponse struct {
+	ID         string                 `json:"id"`
+	Properties map[string]interface{} `json:"properties"`
+	CreatedAt  time.Time              `json:"createdAt"`
+	UpdatedAt  time.Time              `json:"updatedAt"`
+	Archived   bool                   `json:"archived"`
+}
+
+// ContactResponse represents a HubSpot contact object from the API
+type ContactResponse struct {
+	ID         string            `json:"id"`
+	Properties ContactProperties `json:"properties"`
+	CreatedAt  time.Time         `json:"createdAt"`
+	UpdatedAt  time.Time         `json:"updatedAt"`
+	Archived   bool              `json:"archived"`
+}
+
+// ContactProperties represents HubSpot contact properties
+type ContactProperties struct {
+	Email     string `json:"email"`
+	FirstName string `json:"firstname"`
+	LastName  string `json:"lastname"`
+	Phone     string `json:"phone"`
+	Company   string `json:"company"`
+	City      string `json:"city"`
+	State     string `json:"state"`
+	Country   string `json:"country"`
+	Zip       string `json:"zip"`
+	Address   string `json:"address"`
+}
+
+// AssociationResponse represents HubSpot deal-contact associations
+type AssociationResponse struct {
+	Results []AssociationResult `json:"results"`
+}
+
+// AssociationResult represents a single association between objects
+type AssociationResult struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
+}
+
+// Invoice DTOs
+
+// InvoiceCreateRequest represents a request to create a HubSpot invoice
+type InvoiceCreateRequest struct {
+	Properties InvoiceProperties `json:"properties"`
+}
+
+// InvoiceProperties represents HubSpot invoice properties
+type InvoiceProperties struct {
+	Currency            string `json:"hs_currency"`                        // Required: ISO 4217 currency code (UPPERCASE, e.g., "USD")
+	PurchaseOrderNumber string `json:"hs_purchase_order_number,omitempty"` // Optional: PO number (use this for invoice number)
+	InvoiceDate         string `json:"hs_invoice_date,omitempty"`          // Unix timestamp in milliseconds
+	DueDate             string `json:"hs_due_date,omitempty"`              // Unix timestamp in milliseconds
+	AmountBilled        string `json:"hs_amount_billed,omitempty"`         // Amount as decimal string (e.g., "10.00")
+	Tax                 string `json:"hs_tax,omitempty"`                   // Tax amount as decimal string
+	Terms               string `json:"hs_terms,omitempty"`                 // Payment terms (e.g., "Net 30")
+	InvoiceStatus       string `json:"hs_invoice_status,omitempty"`        // "draft" or "open"
+	// Note: hs_balance_due is READ-ONLY and calculated by HubSpot automatically
+	// Note: hs_invoice_number property doesn't exist, use hs_purchase_order_number instead
+}
+
+// InvoiceResponse represents a HubSpot invoice response
+type InvoiceResponse struct {
+	ID         string                 `json:"id"`
+	Properties map[string]interface{} `json:"properties"`
+	CreatedAt  time.Time              `json:"createdAt"`
+	UpdatedAt  time.Time              `json:"updatedAt"`
+}
+
+// LineItemCreateRequest represents a request to create a HubSpot line item
+type LineItemCreateRequest struct {
+	Properties LineItemProperties `json:"properties"`
+}
+
+// LineItemProperties represents HubSpot line item properties
+type LineItemProperties struct {
+	Name        string `json:"name"`                  // Product/service name
+	Quantity    string `json:"quantity"`              // Quantity as string (e.g., "1", "2.5")
+	Price       string `json:"price"`                 // Price per unit as decimal (e.g., "10.00")
+	Amount      string `json:"amount,omitempty"`      // Total amount as decimal (quantity * price)
+	Description string `json:"description,omitempty"` // Optional description
+}
+
+// LineItemResponse represents a HubSpot line item response
+type LineItemResponse struct {
+	ID         string                 `json:"id"`
+	Properties map[string]interface{} `json:"properties"`
+	CreatedAt  time.Time              `json:"createdAt"`
+	UpdatedAt  time.Time              `json:"updatedAt"`
+}

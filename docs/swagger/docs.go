@@ -573,13 +573,13 @@ const docTemplate = `{
                         "enum": [
                             "flexprice",
                             "stripe",
-                            "razorpay"
+                            "s3"
                         ],
                         "type": "string",
                         "x-enum-varnames": [
                             "SecretProviderFlexPrice",
                             "SecretProviderStripe",
-                            "SecretProviderRazorpay"
+                            "SecretProviderS3"
                         ],
                         "name": "provider_type",
                         "in": "query"
@@ -894,112 +894,14 @@ const docTemplate = `{
                 }
             }
         },
-        "/cost": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "List cost sheets with optional filtering",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "CostSheets"
-                ],
-                "summary": "List cost sheets",
-                "parameters": [
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "CostsheetIDs allows filtering by specific costsheet IDs",
-                        "name": "costsheetIDs",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "EnvironmentID filters by specific environment ID",
-                        "name": "environmentID",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "MeterIDs filters by specific meter IDs",
-                        "name": "meterIDs",
-                        "in": "query"
-                    },
-                    {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "PriceIDs filters by specific price IDs",
-                        "name": "priceIDs",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "published",
-                            "deleted",
-                            "archived"
-                        ],
-                        "type": "string",
-                        "x-enum-varnames": [
-                            "StatusPublished",
-                            "StatusDeleted",
-                            "StatusArchived"
-                        ],
-                        "description": "Status filters by costsheet status",
-                        "name": "status",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "TenantID filters by specific tenant ID",
-                        "name": "tenantID",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ListCostSheetsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/errors.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/errors.ErrorResponse"
-                        }
-                    }
-                }
-            },
+        "/costs": {
             "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Create a new cost sheet with the specified configuration",
+                "description": "Create a new costsheet with the specified name",
                 "consumes": [
                     "application/json"
                 ],
@@ -1007,17 +909,17 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CostSheets"
+                    "Costs"
                 ],
-                "summary": "Create a new cost sheet",
+                "summary": "Create a new costsheet",
                 "parameters": [
                     {
-                        "description": "Cost sheet configuration",
+                        "description": "Costsheet configuration",
                         "name": "costsheet",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.CreateCostSheetRequest"
+                            "$ref": "#/definitions/dto.CreateCostsheetRequest"
                         }
                     }
                 ],
@@ -1025,7 +927,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/dto.CostSheetResponse"
+                            "$ref": "#/definitions/dto.CreateCostsheetResponse"
                         }
                     },
                     "400": {
@@ -1049,14 +951,14 @@ const docTemplate = `{
                 }
             }
         },
-        "/cost/breakdown/{subscription_id}": {
+        "/costs/active": {
             "get": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Get cost breakdown for a time period",
+                "description": "Get the active costsheet for the current tenant",
                 "consumes": [
                     "application/json"
                 ],
@@ -1064,39 +966,18 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CostSheets"
+                    "Costs"
                 ],
-                "summary": "Get cost breakdown",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Subscription ID",
-                        "name": "subscription_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Start time (RFC3339)",
-                        "name": "start_time",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "End time (RFC3339)",
-                        "name": "end_time",
-                        "in": "query"
-                    }
-                ],
+                "summary": "Get active costsheet for tenant",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/dto.CostBreakdownResponse"
+                            "$ref": "#/definitions/dto.CostsheetResponse"
                         }
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/errors.ErrorResponse"
                         }
@@ -1110,14 +991,14 @@ const docTemplate = `{
                 }
             }
         },
-        "/cost/roi": {
+        "/costs/analytics": {
             "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Calculate ROI (Return on Investment) for a given cost sheet",
+                "description": "Retrieve combined analytics with ROI, margin, and detailed breakdowns. If start_time and end_time are not provided, defaults to last 7 days.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1125,17 +1006,17 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CostSheets"
+                    "Costs"
                 ],
-                "summary": "Calculate ROI for cost sheet",
+                "summary": "Get combined revenue and cost analytics",
                 "parameters": [
                     {
-                        "description": "ROI calculation request",
+                        "description": "Combined analytics request (start_time/end_time optional - defaults to last 7 days)",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.CalculateROIRequest"
+                            "$ref": "#/definitions/dto.GetCostAnalyticsRequest"
                         }
                     }
                 ],
@@ -1143,7 +1024,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/dto.ROIResponse"
+                            "$ref": "#/definitions/dto.GetDetailedCostAnalyticsResponse"
                         }
                     },
                     "400": {
@@ -1161,14 +1042,14 @@ const docTemplate = `{
                 }
             }
         },
-        "/cost/{id}": {
-            "get": {
+        "/costs/search": {
+            "post": {
                 "security": [
                     {
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Get a cost sheet by ID",
+                "description": "List costsheet records by filter with POST body",
                 "consumes": [
                     "application/json"
                 ],
@@ -1176,27 +1057,90 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CostSheets"
+                    "Costs"
                 ],
-                "summary": "Get a cost sheet by ID",
+                "summary": "List costsheets by filter",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "Cost Sheet ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
+                        "description": "Filter",
+                        "name": "filter",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/costsheet.Filter"
+                        }
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/dto.CostSheetResponse"
+                            "$ref": "#/definitions/dto.ListCostsheetResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/costs/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get a costsheet by ID with optional price expansion",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Costs"
+                ],
+                "summary": "Get a costsheet by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Costsheet ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Comma-separated list of fields to expand (e.g., 'prices')",
+                        "name": "expand",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.GetCostsheetResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/errors.ErrorResponse"
                         }
@@ -1215,7 +1159,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Update a cost sheet with the specified configuration",
+                "description": "Update a costsheet with the specified configuration",
                 "consumes": [
                     "application/json"
                 ],
@@ -1223,24 +1167,24 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CostSheets"
+                    "Costs"
                 ],
-                "summary": "Update a cost sheet",
+                "summary": "Update a costsheet",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Cost Sheet ID",
+                        "description": "Costsheet ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     },
                     {
-                        "description": "Cost sheet configuration",
+                        "description": "Costsheet configuration",
                         "name": "costsheet",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/dto.UpdateCostSheetRequest"
+                            "$ref": "#/definitions/dto.UpdateCostsheetRequest"
                         }
                     }
                 ],
@@ -1248,11 +1192,23 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/dto.CostSheetResponse"
+                            "$ref": "#/definitions/dto.UpdateCostsheetResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/errors.ErrorResponse"
                         }
@@ -1271,7 +1227,7 @@ const docTemplate = `{
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Delete a cost sheet. If status is published/draft, it will be archived. If already archived, it will be deleted from database.",
+                "description": "Soft delete a costsheet by setting its status to deleted",
                 "consumes": [
                     "application/json"
                 ],
@@ -1279,21 +1235,24 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "CostSheets"
+                    "Costs"
                 ],
-                "summary": "Delete a cost sheet",
+                "summary": "Delete a costsheet",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Cost Sheet ID",
+                        "description": "Costsheet ID",
                         "name": "id",
                         "in": "path",
                         "required": true
                     }
                 ],
                 "responses": {
-                    "204": {
-                        "description": "No Content"
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.DeleteCostsheetResponse"
+                        }
                     },
                     "400": {
                         "description": "Bad Request",
@@ -4887,115 +4846,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/integration/providers": {
-            "get": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Get all available payment providers for the current tenant",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Integration"
-                ],
-                "summary": "Get available providers",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/dto.ListConnectionsResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/errors.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/errors.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/integration/sync/{entity_type}/{entity_id}": {
-            "post": {
-                "security": [
-                    {
-                        "ApiKeyAuth": []
-                    }
-                ],
-                "description": "Sync an entity to all available payment providers for the current tenant",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Integration"
-                ],
-                "summary": "Sync entity to all available providers",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Entity type (e.g., customer, invoice, tax)",
-                        "name": "entity_type",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Entity ID",
-                        "name": "entity_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/errors.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/errors.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/errors.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/errors.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/invoices": {
             "get": {
                 "security": [
@@ -6271,30 +6121,6 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "name": "entity_ids",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "PLAN",
-                            "SUBSCRIPTION",
-                            "ADDON"
-                        ],
-                        "type": "string",
-                        "x-enum-varnames": [
-                            "ENTITLEMENT_ENTITY_TYPE_PLAN",
-                            "ENTITLEMENT_ENTITY_TYPE_SUBSCRIPTION",
-                            "ENTITLEMENT_ENTITY_TYPE_ADDON"
-                        ],
-                        "name": "entity_type",
-                        "in": "query"
-                    },
-                    {
                         "type": "string",
                         "name": "expand",
                         "in": "query"
@@ -6858,14 +6684,16 @@ const docTemplate = `{
                             "PLAN",
                             "SUBSCRIPTION",
                             "ADDON",
-                            "PRICE"
+                            "PRICE",
+                            "COSTSHEET"
                         ],
                         "type": "string",
                         "x-enum-varnames": [
                             "PRICE_ENTITY_TYPE_PLAN",
                             "PRICE_ENTITY_TYPE_SUBSCRIPTION",
                             "PRICE_ENTITY_TYPE_ADDON",
-                            "PRICE_ENTITY_TYPE_PRICE"
+                            "PRICE_ENTITY_TYPE_PRICE",
+                            "PRICE_ENTITY_TYPE_COSTSHEET"
                         ],
                         "name": "entity_type",
                         "in": "query"
@@ -8261,6 +8089,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/subscriptions/lineitems/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Update a subscription line item by terminating the existing one and creating a new one",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Subscriptions"
+                ],
+                "summary": "Update subscription line item",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Line Item ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update Line Item Request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateSubscriptionLineItemRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.SubscriptionLineItemResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/subscriptions/search": {
             "post": {
                 "security": [
@@ -8904,6 +8790,11 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "name": "scheduled_task_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "name": "sort",
                         "in": "query"
                     },
@@ -9061,6 +8952,363 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/models.TemporalWorkflowResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/scheduled": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get a list of scheduled tasks with optional filters",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ScheduledTasks"
+                ],
+                "summary": "List scheduled tasks",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Offset",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by connection ID",
+                        "name": "connection_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by entity type",
+                        "name": "entity_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by interval",
+                        "name": "interval",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by enabled status",
+                        "name": "enabled",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ListScheduledTasksResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Create a new scheduled task for data export",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ScheduledTasks"
+                ],
+                "summary": "Create a scheduled task",
+                "parameters": [
+                    {
+                        "description": "Scheduled Task",
+                        "name": "scheduled_task",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.CreateScheduledTaskRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ScheduledTaskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/scheduled/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get a scheduled task by ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ScheduledTasks"
+                ],
+                "summary": "Get a scheduled task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Scheduled Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ScheduledTaskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Update a scheduled task by ID - Only enabled field can be changed (pause/resume)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ScheduledTasks"
+                ],
+                "summary": "Update a scheduled task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Scheduled Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update request (enabled: true/false to pause/resume)",
+                        "name": "scheduled_task",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.UpdateScheduledTaskRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.ScheduledTaskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request or task is archived",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Scheduled task not found",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to update Temporal schedule",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Archive a scheduled task by ID (soft delete) - Sets status to archived and deletes from Temporal",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ScheduledTasks"
+                ],
+                "summary": "Delete a scheduled task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Scheduled Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Scheduled task archived successfully"
+                    },
+                    "400": {
+                        "description": "Task already archived",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Scheduled task not found",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to archive task",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/scheduled/{id}/run": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Trigger a force run export immediately for a scheduled task with optional custom time range",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ScheduledTasks"
+                ],
+                "summary": "Trigger force run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Scheduled Task ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional start and end time for custom range",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/dto.TriggerForceRunRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Returns workflow details and time range",
+                        "schema": {
+                            "$ref": "#/definitions/dto.TriggerForceRunResponse"
                         }
                     },
                     "400": {
@@ -10631,6 +10879,117 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "addon.Addon": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "environment_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "lookup_key": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/types.Status"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/types.AddonType"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "string"
+                }
+            }
+        },
+        "costsheet.Filter": {
+            "type": "object",
+            "properties": {
+                "costsheetIDs": {
+                    "description": "CostsheetIDs allows filtering by specific costsheet IDs",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environmentID": {
+                    "description": "EnvironmentID filters by specific environment ID",
+                    "type": "string"
+                },
+                "filters": {
+                    "description": "Filters contains custom filtering conditions",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.FilterCondition"
+                    }
+                },
+                "lookupKey": {
+                    "description": "LookupKey filters by lookup key",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name filters by costsheet name",
+                    "type": "string"
+                },
+                "queryFilter": {
+                    "description": "QueryFilter contains pagination and basic query parameters",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.QueryFilter"
+                        }
+                    ]
+                },
+                "sort": {
+                    "description": "Sort specifies result ordering preferences",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/types.SortCondition"
+                    }
+                },
+                "status": {
+                    "description": "Status filters by costsheet status",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.Status"
+                        }
+                    ]
+                },
+                "tenantID": {
+                    "description": "TenantID filters by specific tenant ID",
+                    "type": "string"
+                },
+                "timeRangeFilter": {
+                    "description": "TimeRangeFilter allows filtering by time periods",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.TimeRangeFilter"
+                        }
+                    ]
+                }
+            }
+        },
         "coupon.Coupon": {
             "type": "object",
             "properties": {
@@ -11136,7 +11495,8 @@ const docTemplate = `{
                 },
                 "billing_period_count": {
                     "description": "billing_period_count is the billing period count",
-                    "type": "integer"
+                    "type": "integer",
+                    "default": 1
                 },
                 "period_end": {
                     "description": "period_end is the end of the new billing period",
@@ -11179,39 +11539,16 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.CalculateROIRequest": {
-            "type": "object",
-            "required": [
-                "subscription_id"
-            ],
-            "properties": {
-                "meter_id": {
-                    "description": "MeterID references the meter to track usage",
-                    "type": "string"
-                },
-                "period_end": {
-                    "type": "string"
-                },
-                "period_start": {
-                    "description": "Optional time range. If not provided, uses entire subscription period",
-                    "type": "string"
-                },
-                "price_id": {
-                    "description": "PriceID references the price configuration",
-                    "type": "string"
-                },
-                "subscription_id": {
-                    "description": "SubscriptionID is required to get subscription details",
-                    "type": "string"
-                }
-            }
-        },
         "dto.CancelSubscriptionRequest": {
             "type": "object",
             "required": [
                 "cancellation_type"
             ],
             "properties": {
+                "_": {
+                    "description": "SuppressWebhook is an internal flag to suppress webhook events during cancellation.",
+                    "type": "boolean"
+                },
                 "cancellation_type": {
                     "description": "CancellationType determines when the cancellation takes effect",
                     "allOf": [
@@ -11307,6 +11644,9 @@ const docTemplate = `{
                 "status": {
                     "$ref": "#/definitions/types.Status"
                 },
+                "sync_config": {
+                    "$ref": "#/definitions/types.SyncConfig"
+                },
                 "tenant_id": {
                     "type": "string"
                 },
@@ -11318,62 +11658,134 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.CostBreakdownItem": {
+        "dto.CostAnalyticItem": {
             "type": "object",
             "properties": {
-                "cost": {
-                    "description": "Cost is the calculated cost for this meter",
-                    "type": "number"
+                "cost_by_period": {
+                    "description": "Breakdown",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.CostPoint"
+                    }
+                },
+                "costsheet_v2_id": {
+                    "type": "string"
+                },
+                "currency": {
+                    "description": "Metadata",
+                    "type": "string"
+                },
+                "customer_id": {
+                    "type": "string"
+                },
+                "external_customer_id": {
+                    "type": "string"
+                },
+                "meter": {
+                    "description": "Expanded data (populated when expand options are specified)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/meter.Meter"
+                        }
+                    ]
                 },
                 "meter_id": {
-                    "description": "MeterID identifies the usage meter",
                     "type": "string"
                 },
                 "meter_name": {
-                    "description": "MeterName is the display name of the meter",
                     "type": "string"
                 },
-                "usage": {
-                    "description": "Usage is the quantity consumed",
-                    "type": "number"
-                }
-            }
-        },
-        "dto.CostBreakdownResponse": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "description": "Items contains the breakdown by meter",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/dto.CostBreakdownItem"
+                "price": {
+                    "$ref": "#/definitions/price.Price"
+                },
+                "price_id": {
+                    "type": "string"
+                },
+                "properties": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
                     }
                 },
+                "source": {
+                    "type": "string"
+                },
                 "total_cost": {
-                    "description": "TotalCost is the sum of all meter costs",
+                    "description": "Aggregated metrics",
+                    "type": "number"
+                },
+                "total_events": {
+                    "type": "integer"
+                },
+                "total_quantity": {
                     "type": "number"
                 }
             }
         },
-        "dto.CostSheetResponse": {
+        "dto.CostPoint": {
+            "type": "object",
+            "properties": {
+                "cost": {
+                    "type": "number"
+                },
+                "event_count": {
+                    "type": "integer"
+                },
+                "quantity": {
+                    "type": "number"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.CostsheetResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
                     "type": "string"
                 },
+                "created_by": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "environment_id": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
-                "meter_id": {
+                "lookup_key": {
                     "type": "string"
                 },
-                "price_id": {
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
                     "type": "string"
+                },
+                "prices": {
+                    "description": "Associated prices",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.PriceResponse"
+                    }
                 },
                 "status": {
                     "$ref": "#/definitions/types.Status"
                 },
+                "tenant_id": {
+                    "type": "string"
+                },
                 "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
                     "type": "string"
                 }
             }
@@ -11767,23 +12179,44 @@ const docTemplate = `{
                 },
                 "provider_type": {
                     "$ref": "#/definitions/types.SecretProvider"
+                },
+                "sync_config": {
+                    "$ref": "#/definitions/types.SyncConfig"
                 }
             }
         },
-        "dto.CreateCostSheetRequest": {
+        "dto.CreateCostsheetRequest": {
             "type": "object",
             "required": [
-                "meter_id",
-                "price_id"
+                "name"
             ],
             "properties": {
-                "meter_id": {
-                    "description": "MeterID references the meter to track usage",
+                "description": {
                     "type": "string"
                 },
-                "price_id": {
-                    "description": "PriceID references the price configuration",
-                    "type": "string"
+                "lookup_key": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                }
+            }
+        },
+        "dto.CreateCostsheetResponse": {
+            "type": "object",
+            "properties": {
+                "costsheet": {
+                    "$ref": "#/definitions/dto.CostsheetResponse"
                 }
             }
         },
@@ -12148,6 +12581,9 @@ const docTemplate = `{
                 "type"
             ],
             "properties": {
+                "alert_settings": {
+                    "$ref": "#/definitions/types.AlertSettings"
+                },
                 "description": {
                     "type": "string"
                 },
@@ -12570,7 +13006,6 @@ const docTemplate = `{
                 "billing_cadence",
                 "billing_model",
                 "billing_period",
-                "billing_period_count",
                 "currency",
                 "invoice_cadence",
                 "price_unit_type",
@@ -12591,7 +13026,7 @@ const docTemplate = `{
                 },
                 "billing_period_count": {
                     "type": "integer",
-                    "minimum": 1
+                    "default": 1
                 },
                 "currency": {
                     "type": "string"
@@ -12718,7 +13153,6 @@ const docTemplate = `{
                 "billing_cadence",
                 "billing_model",
                 "billing_period",
-                "billing_period_count",
                 "currency",
                 "invoice_cadence",
                 "price_unit_type",
@@ -12739,7 +13173,7 @@ const docTemplate = `{
                 },
                 "billing_period_count": {
                     "type": "integer",
-                    "minimum": 1
+                    "default": 1
                 },
                 "currency": {
                     "type": "string"
@@ -12872,12 +13306,46 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.CreateScheduledTaskRequest": {
+            "type": "object",
+            "required": [
+                "connection_id",
+                "entity_type",
+                "interval",
+                "job_config"
+            ],
+            "properties": {
+                "connection_id": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "entity_type": {
+                    "$ref": "#/definitions/types.ScheduledTaskEntityType"
+                },
+                "interval": {
+                    "description": "Note: \"custom\" is excluded from API (internal testing only)",
+                    "enum": [
+                        "hourly",
+                        "daily"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.ScheduledTaskInterval"
+                        }
+                    ]
+                },
+                "job_config": {
+                    "$ref": "#/definitions/types.S3JobConfig"
+                }
+            }
+        },
         "dto.CreateSubscriptionRequest": {
             "type": "object",
             "required": [
                 "billing_cadence",
                 "billing_period",
-                "billing_period_count",
                 "currency",
                 "plan_id"
             ],
@@ -12905,7 +13373,7 @@ const docTemplate = `{
                 },
                 "billing_period_count": {
                     "type": "integer",
-                    "minimum": 1
+                    "default": 1
                 },
                 "collection_method": {
                     "description": "collection_method determines how invoices are collected\n\"default_incomplete\" - subscription waits for payment confirmation before activation\n\"send_invoice\" - subscription activates immediately, invoice is sent for payment",
@@ -13614,6 +14082,17 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.DeleteCostsheetResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.EntitlementResponse": {
             "type": "object",
             "properties": {
@@ -13826,6 +14305,9 @@ const docTemplate = `{
         "dto.FeatureResponse": {
             "type": "object",
             "properties": {
+                "alert_settings": {
+                    "$ref": "#/definitions/types.AlertSettings"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -13907,6 +14389,95 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "usage_percent": {
+                    "type": "number"
+                }
+            }
+        },
+        "dto.GetCostAnalyticsRequest": {
+            "type": "object",
+            "properties": {
+                "end_time": {
+                    "type": "string"
+                },
+                "expand": {
+                    "description": "Expand options - specify which entities to expand",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "external_customer_id": {
+                    "description": "Optional - for specific customer",
+                    "type": "string"
+                },
+                "limit": {
+                    "description": "Pagination",
+                    "type": "integer"
+                },
+                "meter_ids": {
+                    "description": "Additional filters",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "start_time": {
+                    "description": "Time range fields (optional - defaults to last 7 days if not provided)",
+                    "type": "string"
+                }
+            }
+        },
+        "dto.GetCostsheetResponse": {
+            "type": "object",
+            "properties": {
+                "costsheet": {
+                    "$ref": "#/definitions/dto.CostsheetResponse"
+                }
+            }
+        },
+        "dto.GetDetailedCostAnalyticsResponse": {
+            "type": "object",
+            "properties": {
+                "cost_analytics": {
+                    "description": "Cost analytics array (flattened from nested structure)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.CostAnalyticItem"
+                    }
+                },
+                "currency": {
+                    "type": "string"
+                },
+                "end_time": {
+                    "type": "string"
+                },
+                "margin": {
+                    "description": "Revenue - Cost",
+                    "type": "number"
+                },
+                "margin_percent": {
+                    "description": "(Margin / Revenue) * 100",
+                    "type": "number"
+                },
+                "roi": {
+                    "description": "(Revenue - Cost) / Cost",
+                    "type": "number"
+                },
+                "roi_percent": {
+                    "description": "ROI * 100",
+                    "type": "number"
+                },
+                "start_time": {
+                    "type": "string"
+                },
+                "total_cost": {
+                    "type": "number"
+                },
+                "total_revenue": {
+                    "description": "Derived metrics",
                     "type": "number"
                 }
             }
@@ -14032,6 +14603,13 @@ const docTemplate = `{
             "properties": {
                 "end_time": {
                     "type": "string"
+                },
+                "expand": {
+                    "description": "allowed values: \"price\", \"meter\", \"feature\", \"subscription_line_item\",\"plan\",\"addon\"",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "external_customer_id": {
                     "type": "string"
@@ -14857,17 +15435,17 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.ListCostSheetsResponse": {
+        "dto.ListCostsheetResponse": {
             "type": "object",
             "properties": {
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/dto.CostSheetResponse"
+                        "$ref": "#/definitions/dto.CostsheetResponse"
                     }
                 },
-                "total": {
-                    "type": "integer"
+                "pagination": {
+                    "$ref": "#/definitions/types.PaginationResponse"
                 }
             }
         },
@@ -15053,6 +15631,20 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/dto.PriceResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/types.PaginationResponse"
+                }
+            }
+        },
+        "dto.ListScheduledTasksResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.ScheduledTaskResponse"
                     }
                 },
                 "pagination": {
@@ -15516,6 +16108,9 @@ const docTemplate = `{
         "dto.PriceResponse": {
             "type": "object",
             "properties": {
+                "addon": {
+                    "$ref": "#/definitions/dto.AddonResponse"
+                },
                 "amount": {
                     "description": "Amount stored in main currency units (e.g., dollars, not cents)\nFor USD: 12.50 means $12.50",
                     "type": "number"
@@ -15531,7 +16126,8 @@ const docTemplate = `{
                 },
                 "billing_period_count": {
                     "description": "BillingPeriodCount is the count of the billing period ex 1, 3, 6, 12",
-                    "type": "integer"
+                    "type": "integer",
+                    "default": 1
                 },
                 "conversion_rate": {
                     "description": "ConversionRate is the rate of the price unit to the base currency\nFor BTC: 1 BTC = 100000000 USD",
@@ -15601,8 +16197,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "parent_price_id": {
-                    "description": "ParentPriceID references the parent price (only set when scope is SUBSCRIPTION)",
+                    "description": "ParentPriceID references the root price (always set for price lineage tracking)",
                     "type": "string"
+                },
+                "plan": {
+                    "$ref": "#/definitions/dto.PlanResponse"
                 },
                 "plan_id": {
                     "description": "TODO: Remove this once we have a proper price entity type",
@@ -15820,43 +16419,6 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.ROIResponse": {
-            "type": "object",
-            "properties": {
-                "cost": {
-                    "description": "Cost and Revenue",
-                    "type": "number"
-                },
-                "cost_breakdown": {
-                    "description": "Cost breakdown by meter",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/dto.CostBreakdownItem"
-                    }
-                },
-                "markup": {
-                    "description": "Markup (Revenue - Cost / Cost)",
-                    "type": "number"
-                },
-                "markup_percentage": {
-                    "type": "number"
-                },
-                "net_margin": {
-                    "description": "Net Margin (ROI)",
-                    "type": "number"
-                },
-                "net_margin_percentage": {
-                    "type": "number"
-                },
-                "net_revenue": {
-                    "description": "Net Revenue (Revenue - Cost)",
-                    "type": "number"
-                },
-                "revenue": {
-                    "type": "number"
-                }
-            }
-        },
         "dto.RemoveAddonRequest": {
             "type": "object",
             "required": [
@@ -15900,6 +16462,53 @@ const docTemplate = `{
                             "$ref": "#/definitions/types.ResumeMode"
                         }
                     ]
+                }
+            }
+        },
+        "dto.ScheduledTaskResponse": {
+            "type": "object",
+            "properties": {
+                "connection_id": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "entity_type": {
+                    "$ref": "#/definitions/types.ScheduledTaskEntityType"
+                },
+                "environment_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "interval": {
+                    "description": "Note: \"custom\" is excluded from API docs",
+                    "enum": [
+                        "hourly",
+                        "daily"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.ScheduledTaskInterval"
+                        }
+                    ]
+                },
+                "job_config": {
+                    "$ref": "#/definitions/types.S3JobConfig"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },
@@ -16137,7 +16746,6 @@ const docTemplate = `{
                 "billing_cadence",
                 "billing_cycle",
                 "billing_period",
-                "billing_period_count",
                 "proration_behavior",
                 "target_plan_id"
             ],
@@ -16168,7 +16776,8 @@ const docTemplate = `{
                 },
                 "billing_period_count": {
                     "description": "billing_period_count is the billing period count for the new subscription",
-                    "type": "integer"
+                    "type": "integer",
+                    "default": 1
                 },
                 "metadata": {
                     "description": "metadata contains additional key-value pairs for storing extra information",
@@ -16406,7 +17015,8 @@ const docTemplate = `{
                 },
                 "billing_period_count": {
                     "description": "BillingPeriodCount is the total number units of the billing period.",
-                    "type": "integer"
+                    "type": "integer",
+                    "default": 1
                 },
                 "cancel_at": {
                     "description": "CancelAt is the date the subscription will be canceled",
@@ -16812,6 +17422,9 @@ const docTemplate = `{
                 "processed_records": {
                     "type": "integer"
                 },
+                "scheduled_task_id": {
+                    "type": "string"
+                },
                 "started_at": {
                     "type": "string"
                 },
@@ -16837,6 +17450,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_by": {
+                    "type": "string"
+                },
+                "workflow_id": {
                     "type": "string"
                 }
             }
@@ -17185,6 +17801,38 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.TriggerForceRunRequest": {
+            "type": "object",
+            "properties": {
+                "end_time": {
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.TriggerForceRunResponse": {
+            "type": "object",
+            "properties": {
+                "end_time": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mode": {
+                    "description": "\"custom\" or \"automatic\"",
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "string"
+                },
+                "workflow_id": {
+                    "type": "string"
+                }
+            }
+        },
         "dto.UpdateAddonRequest": {
             "type": "object",
             "properties": {
@@ -17210,22 +17858,41 @@ const docTemplate = `{
                 "name": {
                     "type": "string",
                     "maxLength": 255
+                },
+                "sync_config": {
+                    "$ref": "#/definitions/types.SyncConfig"
                 }
             }
         },
-        "dto.UpdateCostSheetRequest": {
+        "dto.UpdateCostsheetRequest": {
             "type": "object",
-            "required": [
-                "id"
-            ],
             "properties": {
-                "id": {
-                    "description": "ID of the costsheet to update",
+                "description": {
                     "type": "string"
                 },
-                "status": {
-                    "description": "Status updates the costsheet's status (optional)",
-                    "type": "string"
+                "lookup_key": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                }
+            }
+        },
+        "dto.UpdateCostsheetResponse": {
+            "type": "object",
+            "properties": {
+                "costsheet": {
+                    "$ref": "#/definitions/dto.CostsheetResponse"
                 }
             }
         },
@@ -17349,6 +18016,9 @@ const docTemplate = `{
         "dto.UpdateFeatureRequest": {
             "type": "object",
             "properties": {
+                "alert_settings": {
+                    "$ref": "#/definitions/types.AlertSettings"
+                },
                 "description": {
                     "type": "string"
                 },
@@ -17544,7 +18214,6 @@ const docTemplate = `{
                 "billing_cadence",
                 "billing_model",
                 "billing_period",
-                "billing_period_count",
                 "currency",
                 "invoice_cadence",
                 "price_unit_type",
@@ -17565,7 +18234,7 @@ const docTemplate = `{
                 },
                 "billing_period_count": {
                     "type": "integer",
-                    "minimum": 1
+                    "default": 1
                 },
                 "currency": {
                     "type": "string"
@@ -17690,10 +18359,21 @@ const docTemplate = `{
         "dto.UpdatePriceRequest": {
             "type": "object",
             "properties": {
+                "amount": {
+                    "description": "Amount is the new price amount that overrides the original price (optional)",
+                    "type": "number"
+                },
+                "billing_model": {
+                    "$ref": "#/definitions/types.BillingModel"
+                },
                 "description": {
                     "type": "string"
                 },
+                "effective_from": {
+                    "type": "string"
+                },
                 "lookup_key": {
+                    "description": "All price fields that can be updated\nNon-critical fields (can be updated directly)",
                     "type": "string"
                 },
                 "metadata": {
@@ -17701,6 +18381,29 @@ const docTemplate = `{
                     "additionalProperties": {
                         "type": "string"
                     }
+                },
+                "tier_mode": {
+                    "description": "TierMode determines how to calculate the price for a given quantity",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.BillingTier"
+                        }
+                    ]
+                },
+                "tiers": {
+                    "description": "Tiers determines the pricing tiers for this line item",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.CreatePriceTier"
+                    }
+                },
+                "transform_quantity": {
+                    "description": "TransformQuantity determines how to transform the quantity for this line item",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/price.TransformQuantity"
+                        }
+                    ]
                 }
             }
         },
@@ -17721,6 +18424,63 @@ const docTemplate = `{
                 "symbol": {
                     "type": "string",
                     "maxLength": 10
+                }
+            }
+        },
+        "dto.UpdateScheduledTaskRequest": {
+            "type": "object",
+            "required": [
+                "enabled"
+            ],
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "dto.UpdateSubscriptionLineItemRequest": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "description": "Amount is the new price amount that overrides the original price",
+                    "type": "number"
+                },
+                "billing_model": {
+                    "$ref": "#/definitions/types.BillingModel"
+                },
+                "effective_from": {
+                    "description": "EffectiveFrom for the existing line item (if not provided, defaults to now)",
+                    "type": "string"
+                },
+                "metadata": {
+                    "description": "Metadata for the new line item",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "tier_mode": {
+                    "description": "TierMode determines how to calculate the price for a given quantity",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.BillingTier"
+                        }
+                    ]
+                },
+                "tiers": {
+                    "description": "Tiers determines the pricing tiers for this line item",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dto.CreatePriceTier"
+                    }
+                },
+                "transform_quantity": {
+                    "description": "TransformQuantity determines how to transform the quantity for this line item",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/price.TransformQuantity"
+                        }
+                    ]
                 }
             }
         },
@@ -17816,6 +18576,17 @@ const docTemplate = `{
         "dto.UsageAnalyticItem": {
             "type": "object",
             "properties": {
+                "add_on_id": {
+                    "type": "string"
+                },
+                "addon": {
+                    "description": "Full addon object (only if expand includes \"addon\")",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/addon.Addon"
+                        }
+                    ]
+                },
                 "aggregation_type": {
                     "$ref": "#/definitions/types.AggregationType"
                 },
@@ -17829,10 +18600,41 @@ const docTemplate = `{
                 "event_name": {
                     "type": "string"
                 },
+                "feature": {
+                    "description": "Full feature object (only if expand includes \"feature\")",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/feature.Feature"
+                        }
+                    ]
+                },
                 "feature_id": {
                     "type": "string"
                 },
+                "meter": {
+                    "description": "Full meter object (only if expand includes \"meter\")",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/meter.Meter"
+                        }
+                    ]
+                },
+                "meter_id": {
+                    "description": "Meter ID",
+                    "type": "string"
+                },
                 "name": {
+                    "type": "string"
+                },
+                "plan": {
+                    "description": "Full plan object (only if expand includes \"plan\")",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/plan.Plan"
+                        }
+                    ]
+                },
+                "plan_id": {
                     "type": "string"
                 },
                 "points": {
@@ -17840,6 +18642,18 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/dto.UsageAnalyticPoint"
                     }
+                },
+                "price": {
+                    "description": "Full price object (only if expand includes \"price\")",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/price.Price"
+                        }
+                    ]
+                },
+                "price_id": {
+                    "description": "Price ID used for this usage",
+                    "type": "string"
                 },
                 "properties": {
                     "description": "Stores property values for flexible grouping (e.g., org_id -\u003e \"org123\")",
@@ -17850,6 +18664,22 @@ const docTemplate = `{
                 },
                 "source": {
                     "type": "string"
+                },
+                "sub_line_item_id": {
+                    "description": "Subscription line item ID",
+                    "type": "string"
+                },
+                "subscription_id": {
+                    "description": "Subscription ID",
+                    "type": "string"
+                },
+                "subscription_line_item": {
+                    "description": "Full line item (only if expand includes \"subscription_line_item\")",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/subscription.SubscriptionLineItem"
+                        }
+                    ]
                 },
                 "total_cost": {
                     "type": "number"
@@ -18013,9 +18843,6 @@ const docTemplate = `{
                 },
                 "tenant_id": {
                     "type": "string"
-                },
-                "unpaid_invoice_amount": {
-                    "type": "number"
                 },
                 "updated_at": {
                     "type": "string"
@@ -18181,6 +19008,62 @@ const docTemplate = `{
                 }
             }
         },
+        "feature.Feature": {
+            "type": "object",
+            "properties": {
+                "alert_settings": {
+                    "$ref": "#/definitions/types.AlertSettings"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "environment_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "lookup_key": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "$ref": "#/definitions/types.Metadata"
+                },
+                "meter_id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/types.Status"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/types.FeatureType"
+                },
+                "unit_plural": {
+                    "type": "string"
+                },
+                "unit_singular": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "string"
+                }
+            }
+        },
         "gin.H": {
             "type": "object",
             "additionalProperties": {}
@@ -18248,6 +19131,68 @@ const docTemplate = `{
                 }
             }
         },
+        "meter.Meter": {
+            "type": "object",
+            "properties": {
+                "aggregation": {
+                    "description": "Aggregation defines the aggregation type and field for the meter\nIt is used to aggregate the events into a single value for calculating the usage",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/meter.Aggregation"
+                        }
+                    ]
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "environment_id": {
+                    "description": "EnvironmentID is the environment identifier for the meter",
+                    "type": "string"
+                },
+                "event_name": {
+                    "description": "EventName is the unique identifier for the event that this meter is tracking\nIt is a mandatory field in the events table and hence being used as the primary matching field\nWe can have multiple meters tracking the same event but with different filters and aggregation",
+                    "type": "string"
+                },
+                "filters": {
+                    "description": "Filters define the criteria for the meter to be applied on the events before aggregation\nIt also defines the possible values on which later the charges will be applied",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/meter.Filter"
+                    }
+                },
+                "id": {
+                    "description": "ID is the unique identifier for the meter",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name is the display name of the meter",
+                    "type": "string"
+                },
+                "reset_usage": {
+                    "description": "ResetUsage defines whether the usage should be reset periodically or not\nFor ex meters tracking total storage used do not get reset but meters tracking\ntotal API requests do.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.ResetUsage"
+                        }
+                    ]
+                },
+                "status": {
+                    "$ref": "#/definitions/types.Status"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "string"
+                }
+            }
+        },
         "models.TemporalWorkflowResult": {
             "type": "object",
             "properties": {
@@ -18258,6 +19203,50 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "workflow_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "plan.Plan": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "display_order": {
+                    "type": "integer"
+                },
+                "environment_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "lookup_key": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "$ref": "#/definitions/types.Metadata"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/types.Status"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
                     "type": "string"
                 }
             }
@@ -18308,7 +19297,8 @@ const docTemplate = `{
                 },
                 "billing_period_count": {
                     "description": "BillingPeriodCount is the count of the billing period ex 1, 3, 6, 12",
-                    "type": "integer"
+                    "type": "integer",
+                    "default": 1
                 },
                 "conversion_rate": {
                     "description": "ConversionRate is the rate of the price unit to the base currency\nFor BTC: 1 BTC = 100000000 USD",
@@ -18375,7 +19365,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "parent_price_id": {
-                    "description": "ParentPriceID references the parent price (only set when scope is SUBSCRIPTION)",
+                    "description": "ParentPriceID references the root price (always set for price lineage tracking)",
                     "type": "string"
                 },
                 "price_unit": {
@@ -18820,10 +19810,38 @@ const docTemplate = `{
                 "AggregationWeightedSum"
             ]
         },
+        "types.AlertCondition": {
+            "type": "string",
+            "enum": [
+                "above",
+                "below"
+            ],
+            "x-enum-varnames": [
+                "AlertConditionAbove",
+                "AlertConditionBelow"
+            ]
+        },
         "types.AlertConfig": {
             "type": "object",
             "properties": {
                 "threshold": {
+                    "$ref": "#/definitions/types.WalletAlertThreshold"
+                }
+            }
+        },
+        "types.AlertSettings": {
+            "type": "object",
+            "properties": {
+                "alert_enabled": {
+                    "type": "boolean"
+                },
+                "critical": {
+                    "$ref": "#/definitions/types.AlertThreshold"
+                },
+                "info": {
+                    "$ref": "#/definitions/types.AlertThreshold"
+                },
+                "warning": {
                     "$ref": "#/definitions/types.AlertThreshold"
                 }
             }
@@ -18831,14 +19849,22 @@ const docTemplate = `{
         "types.AlertThreshold": {
             "type": "object",
             "properties": {
-                "type": {
-                    "description": "amount",
-                    "type": "string"
+                "condition": {
+                    "$ref": "#/definitions/types.AlertCondition"
                 },
-                "value": {
+                "threshold": {
                     "type": "number"
                 }
             }
+        },
+        "types.AlertThresholdType": {
+            "type": "string",
+            "enum": [
+                "amount"
+            ],
+            "x-enum-varnames": [
+                "AlertThresholdTypeAmount"
+            ]
         },
         "types.AutoTopupTrigger": {
             "type": "string",
@@ -18997,6 +20023,9 @@ const docTemplate = `{
             "properties": {
                 "generic": {
                     "$ref": "#/definitions/types.GenericConnectionMetadata"
+                },
+                "s3": {
+                    "$ref": "#/definitions/types.S3ConnectionMetadata"
                 },
                 "settings": {
                     "$ref": "#/definitions/types.ConnectionSettings"
@@ -19337,6 +20366,19 @@ const docTemplate = `{
                 "ENTITLEMENT_USAGE_RESET_PERIOD_NEVER"
             ]
         },
+        "types.EntitySyncConfig": {
+            "type": "object",
+            "properties": {
+                "inbound": {
+                    "description": "Inbound from external provider to FlexPrice",
+                    "type": "boolean"
+                },
+                "outbound": {
+                    "description": "Outbound from FlexPrice to external provider",
+                    "type": "boolean"
+                }
+            }
+        },
         "types.EntityType": {
             "type": "string",
             "enum": [
@@ -19496,7 +20538,8 @@ const docTemplate = `{
                 "invoice",
                 "subscription",
                 "payment",
-                "credit_note"
+                "credit_note",
+                "addon"
             ],
             "x-enum-varnames": [
                 "IntegrationEntityTypeCustomer",
@@ -19504,7 +20547,8 @@ const docTemplate = `{
                 "IntegrationEntityTypeInvoice",
                 "IntegrationEntityTypeSubscription",
                 "IntegrationEntityTypePayment",
-                "IntegrationEntityTypeCreditNote"
+                "IntegrationEntityTypeCreditNote",
+                "IntegrationEntityTypeAddon"
             ]
         },
         "types.InvoiceBillingReason": {
@@ -19736,14 +20780,10 @@ const docTemplate = `{
         "types.PaymentGatewayType": {
             "type": "string",
             "enum": [
-                "stripe",
-                "razorpay",
-                "finix"
+                "stripe"
             ],
             "x-enum-varnames": [
-                "PaymentGatewayTypeStripe",
-                "PaymentGatewayTypeRazorpay",
-                "PaymentGatewayTypeFinix"
+                "PaymentGatewayTypeStripe"
             ]
         },
         "types.PaymentMethodType": {
@@ -19791,15 +20831,6 @@ const docTemplate = `{
             "properties": {
                 "end_time": {
                     "type": "string"
-                },
-                "entity_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "entity_type": {
-                    "$ref": "#/definitions/types.EntitlementEntityType"
                 },
                 "expand": {
                     "type": "string"
@@ -19853,13 +20884,15 @@ const docTemplate = `{
                 "PLAN",
                 "SUBSCRIPTION",
                 "ADDON",
-                "PRICE"
+                "PRICE",
+                "COSTSHEET"
             ],
             "x-enum-varnames": [
                 "PRICE_ENTITY_TYPE_PLAN",
                 "PRICE_ENTITY_TYPE_SUBSCRIPTION",
                 "PRICE_ENTITY_TYPE_ADDON",
-                "PRICE_ENTITY_TYPE_PRICE"
+                "PRICE_ENTITY_TYPE_PRICE",
+                "PRICE_ENTITY_TYPE_COSTSHEET"
             ]
         },
         "types.PriceType": {
@@ -19957,6 +20990,80 @@ const docTemplate = `{
                 "ResumeModeAuto"
             ]
         },
+        "types.S3CompressionType": {
+            "type": "string",
+            "enum": [
+                "none",
+                "gzip"
+            ],
+            "x-enum-varnames": [
+                "S3CompressionTypeNone",
+                "S3CompressionTypeGzip"
+            ]
+        },
+        "types.S3ConnectionMetadata": {
+            "type": "object",
+            "properties": {
+                "aws_access_key_id": {
+                    "description": "AWS access key (encrypted)",
+                    "type": "string"
+                },
+                "aws_secret_access_key": {
+                    "description": "AWS secret access key (encrypted)",
+                    "type": "string"
+                },
+                "aws_session_token": {
+                    "description": "AWS session token for temporary credentials (encrypted)",
+                    "type": "string"
+                }
+            }
+        },
+        "types.S3EncryptionType": {
+            "type": "string",
+            "enum": [
+                "AES256",
+                "aws:kms",
+                "aws:kms:dsse"
+            ],
+            "x-enum-varnames": [
+                "S3EncryptionTypeAES256",
+                "S3EncryptionTypeAwsKms",
+                "S3EncryptionTypeAwsKmsDsse"
+            ]
+        },
+        "types.S3JobConfig": {
+            "type": "object",
+            "properties": {
+                "bucket": {
+                    "description": "S3 bucket name",
+                    "type": "string"
+                },
+                "compression": {
+                    "description": "Compression type: \"gzip\", \"none\" (default: \"none\")",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.S3CompressionType"
+                        }
+                    ]
+                },
+                "encryption": {
+                    "description": "Encryption type: \"AES256\", \"aws:kms\", \"aws:kms:dsse\" (default: \"AES256\")",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.S3EncryptionType"
+                        }
+                    ]
+                },
+                "key_prefix": {
+                    "description": "Optional prefix for S3 keys (e.g., \"flexprice-exports/\")",
+                    "type": "string"
+                },
+                "region": {
+                    "description": "AWS region (e.g., \"us-west-2\")",
+                    "type": "string"
+                }
+            }
+        },
         "types.ScheduleEndBehavior": {
             "type": "string",
             "enum": [
@@ -19968,17 +21075,49 @@ const docTemplate = `{
                 "EndBehaviorCancel"
             ]
         },
+        "types.ScheduledTaskEntityType": {
+            "type": "string",
+            "enum": [
+                "events",
+                "invoice"
+            ],
+            "x-enum-varnames": [
+                "ScheduledTaskEntityTypeEvents",
+                "ScheduledTaskEntityTypeInvoice"
+            ]
+        },
+        "types.ScheduledTaskInterval": {
+            "type": "string",
+            "enum": [
+                "custom",
+                "hourly",
+                "daily"
+            ],
+            "x-enum-comments": {
+                "ScheduledTaskIntervalCustom": "10 minutes for testing"
+            },
+            "x-enum-descriptions": [
+                "10 minutes for testing",
+                "",
+                ""
+            ],
+            "x-enum-varnames": [
+                "ScheduledTaskIntervalCustom",
+                "ScheduledTaskIntervalHourly",
+                "ScheduledTaskIntervalDaily"
+            ]
+        },
         "types.SecretProvider": {
             "type": "string",
             "enum": [
                 "flexprice",
                 "stripe",
-                "razorpay"
+                "s3"
             ],
             "x-enum-varnames": [
                 "SecretProviderFlexPrice",
                 "SecretProviderStripe",
-                "SecretProviderRazorpay"
+                "SecretProviderS3"
             ]
         },
         "types.SecretType": {
@@ -20194,6 +21333,25 @@ const docTemplate = `{
                 "SubscriptionStatusUnpaid"
             ]
         },
+        "types.SyncConfig": {
+            "type": "object",
+            "properties": {
+                "invoice": {
+                    "$ref": "#/definitions/types.EntitySyncConfig"
+                },
+                "plan": {
+                    "description": "Integration sync (Stripe, Razorpay, etc.)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.EntitySyncConfig"
+                        }
+                    ]
+                },
+                "subscription": {
+                    "$ref": "#/definitions/types.EntitySyncConfig"
+                }
+            }
+        },
         "types.TaskStatus": {
             "type": "string",
             "enum": [
@@ -20387,6 +21545,22 @@ const docTemplate = `{
                 "TransactionTypeCredit",
                 "TransactionTypeDebit"
             ]
+        },
+        "types.WalletAlertThreshold": {
+            "type": "object",
+            "properties": {
+                "type": {
+                    "description": "amount",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.AlertThresholdType"
+                        }
+                    ]
+                },
+                "value": {
+                    "type": "number"
+                }
+            }
         },
         "types.WalletConfig": {
             "type": "object",

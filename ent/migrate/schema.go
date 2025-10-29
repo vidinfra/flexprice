@@ -86,6 +86,8 @@ var (
 		{Name: "environment_id", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "entity_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "entity_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "parent_entity_type", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "parent_entity_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "alert_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "alert_status", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "alert_info", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
@@ -104,12 +106,17 @@ var (
 			{
 				Name:    "idx_alertlogs_type",
 				Unique:  false,
-				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[10]},
+				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[12]},
 			},
 			{
 				Name:    "idx_alertlogs_entity_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[8], AlertLogsColumns[9], AlertLogsColumns[3]},
+			},
+			{
+				Name:    "idx_alertlogs_entity_parent_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[8], AlertLogsColumns[9], AlertLogsColumns[10], AlertLogsColumns[11], AlertLogsColumns[3]},
 			},
 		},
 	}
@@ -205,8 +212,8 @@ var (
 			},
 		},
 	}
-	// CostsheetColumns holds the columns for the "costsheet" table.
-	CostsheetColumns = []*schema.Column{
+	// CostsheetsColumns holds the columns for the "costsheets" table.
+	CostsheetsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeString, Unique: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "tenant_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "status", Type: field.TypeString, Default: "published", SchemaType: map[string]string{"postgres": "varchar(20)"}},
@@ -215,41 +222,29 @@ var (
 		{Name: "created_by", Type: field.TypeString, Nullable: true},
 		{Name: "updated_by", Type: field.TypeString, Nullable: true},
 		{Name: "environment_id", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "varchar(50)"}},
-		{Name: "meter_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
-		{Name: "price_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "metadata", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "name", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(255)"}},
+		{Name: "lookup_key", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
+		{Name: "description", Type: field.TypeString, Nullable: true, Size: 2147483647},
 	}
-	// CostsheetTable holds the schema information for the "costsheet" table.
-	CostsheetTable = &schema.Table{
-		Name:       "costsheet",
-		Columns:    CostsheetColumns,
-		PrimaryKey: []*schema.Column{CostsheetColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "costsheet_meters_costsheet",
-				Columns:    []*schema.Column{CostsheetColumns[8]},
-				RefColumns: []*schema.Column{MetersColumns[0]},
-				OnDelete:   schema.NoAction,
-			},
-			{
-				Symbol:     "costsheet_prices_costsheet",
-				Columns:    []*schema.Column{CostsheetColumns[9]},
-				RefColumns: []*schema.Column{PricesColumns[0]},
-				OnDelete:   schema.NoAction,
-			},
-		},
+	// CostsheetsTable holds the schema information for the "costsheets" table.
+	CostsheetsTable = &schema.Table{
+		Name:       "costsheets",
+		Columns:    CostsheetsColumns,
+		PrimaryKey: []*schema.Column{CostsheetsColumns[0]},
 		Indexes: []*schema.Index{
+			{
+				Name:    "idx_costsheet_tenant_environment_lookup_key",
+				Unique:  true,
+				Columns: []*schema.Column{CostsheetsColumns[1], CostsheetsColumns[7], CostsheetsColumns[10]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "status = 'published' AND lookup_key IS NOT NULL AND lookup_key != ''",
+				},
+			},
 			{
 				Name:    "costsheet_tenant_id_environment_id",
 				Unique:  false,
-				Columns: []*schema.Column{CostsheetColumns[1], CostsheetColumns[7]},
-			},
-			{
-				Name:    "costsheet_meter_id_price_id",
-				Unique:  true,
-				Columns: []*schema.Column{CostsheetColumns[8], CostsheetColumns[9]},
-				Annotation: &entsql.IndexAnnotation{
-					Where: "status = 'published'",
-				},
+				Columns: []*schema.Column{CostsheetsColumns[1], CostsheetsColumns[7]},
 			},
 		},
 	}
@@ -842,6 +837,7 @@ var (
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
 		{Name: "unit_singular", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "unit_plural", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "alert_settings", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
 	}
 	// FeaturesTable holds the schema information for the "features" table.
 	FeaturesTable = &schema.Table{
@@ -879,6 +875,42 @@ var (
 				Name:    "idx_feature_tenant_env_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{FeaturesColumns[1], FeaturesColumns[7], FeaturesColumns[3]},
+			},
+		},
+	}
+	// GroupsColumns holds the columns for the "groups" table.
+	GroupsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Unique: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "tenant_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "status", Type: field.TypeString, Default: "published", SchemaType: map[string]string{"postgres": "varchar(20)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeString, Nullable: true},
+		{Name: "updated_by", Type: field.TypeString, Nullable: true},
+		{Name: "environment_id", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "metadata", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "name", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(255)"}},
+		{Name: "entity_type", Type: field.TypeString, Default: "price", SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "lookup_key", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
+	}
+	// GroupsTable holds the schema information for the "groups" table.
+	GroupsTable = &schema.Table{
+		Name:       "groups",
+		Columns:    GroupsColumns,
+		PrimaryKey: []*schema.Column{GroupsColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "idx_group_tenant_environment_lookup_key",
+				Unique:  true,
+				Columns: []*schema.Column{GroupsColumns[1], GroupsColumns[7], GroupsColumns[11]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "status = 'published' AND lookup_key IS NOT NULL AND lookup_key != ''",
+				},
+			},
+			{
+				Name:    "group_tenant_id_environment_id",
+				Unique:  false,
+				Columns: []*schema.Column{GroupsColumns[1], GroupsColumns[7]},
 			},
 		},
 	}
@@ -1292,6 +1324,7 @@ var (
 		{Name: "end_date", Type: field.TypeTime, Nullable: true},
 		{Name: "addon_prices", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "price_unit_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "group_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 	}
 	// PricesTable holds the schema information for the "prices" table.
 	PricesTable = &schema.Table{
@@ -1309,6 +1342,12 @@ var (
 				Symbol:     "prices_price_unit_price_unit_edge",
 				Columns:    []*schema.Column{PricesColumns[38]},
 				RefColumns: []*schema.Column{PriceUnitColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "prices_groups_group",
+				Columns:    []*schema.Column{PricesColumns[39]},
+				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 		},
@@ -1330,6 +1369,16 @@ var (
 				Name:    "price_start_date_end_date",
 				Unique:  false,
 				Columns: []*schema.Column{PricesColumns[35], PricesColumns[36]},
+			},
+			{
+				Name:    "price_group_id",
+				Unique:  false,
+				Columns: []*schema.Column{PricesColumns[39]},
+			},
+			{
+				Name:    "price_tenant_id_environment_id_group_id",
+				Unique:  false,
+				Columns: []*schema.Column{PricesColumns[1], PricesColumns[7], PricesColumns[39]},
 			},
 		},
 	}
@@ -1368,6 +1417,51 @@ var (
 				Name:    "priceunit_tenant_id_environment_id",
 				Unique:  false,
 				Columns: []*schema.Column{PriceUnitColumns[1], PriceUnitColumns[7]},
+			},
+		},
+	}
+	// ScheduledTasksColumns holds the columns for the "scheduled_tasks" table.
+	ScheduledTasksColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Unique: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "tenant_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "status", Type: field.TypeString, Default: "published", SchemaType: map[string]string{"postgres": "varchar(20)"}},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "created_by", Type: field.TypeString, Nullable: true},
+		{Name: "updated_by", Type: field.TypeString, Nullable: true},
+		{Name: "environment_id", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "connection_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "entity_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "interval", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(20)"}},
+		{Name: "enabled", Type: field.TypeBool, Default: true},
+		{Name: "job_config", Type: field.TypeJSON, Nullable: true},
+		{Name: "temporal_schedule_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(100)"}},
+	}
+	// ScheduledTasksTable holds the schema information for the "scheduled_tasks" table.
+	ScheduledTasksTable = &schema.Table{
+		Name:       "scheduled_tasks",
+		Columns:    ScheduledTasksColumns,
+		PrimaryKey: []*schema.Column{ScheduledTasksColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "scheduledtask_tenant_id_environment_id_enabled",
+				Unique:  false,
+				Columns: []*schema.Column{ScheduledTasksColumns[1], ScheduledTasksColumns[7], ScheduledTasksColumns[11]},
+			},
+			{
+				Name:    "scheduledtask_connection_id_enabled",
+				Unique:  false,
+				Columns: []*schema.Column{ScheduledTasksColumns[8], ScheduledTasksColumns[11]},
+			},
+			{
+				Name:    "scheduledtask_entity_type_interval_enabled",
+				Unique:  false,
+				Columns: []*schema.Column{ScheduledTasksColumns[9], ScheduledTasksColumns[10], ScheduledTasksColumns[11]},
+			},
+			{
+				Name:    "scheduledtask_connection_id_entity_type_status",
+				Unique:  false,
+				Columns: []*schema.Column{ScheduledTasksColumns[8], ScheduledTasksColumns[9], ScheduledTasksColumns[2]},
 			},
 		},
 	}
@@ -1771,7 +1865,9 @@ var (
 		{Name: "environment_id", Type: field.TypeString, Nullable: true, Default: "", SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "task_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "entity_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
-		{Name: "file_url", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(255)"}},
+		{Name: "scheduled_task_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "workflow_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
+		{Name: "file_url", Type: field.TypeString, Default: "", SchemaType: map[string]string{"postgres": "varchar(255)"}},
 		{Name: "file_name", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
 		{Name: "file_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(10)"}},
 		{Name: "task_status", Type: field.TypeString, Default: "PENDING", SchemaType: map[string]string{"postgres": "varchar(50)"}},
@@ -1804,7 +1900,7 @@ var (
 			{
 				Name:    "idx_tasks_tenant_env_task_status",
 				Unique:  false,
-				Columns: []*schema.Column{TasksColumns[1], TasksColumns[7], TasksColumns[13], TasksColumns[2]},
+				Columns: []*schema.Column{TasksColumns[1], TasksColumns[7], TasksColumns[15], TasksColumns[2]},
 			},
 		},
 	}
@@ -2129,7 +2225,7 @@ var (
 		AuthsTable,
 		BillingSequencesTable,
 		ConnectionsTable,
-		CostsheetTable,
+		CostsheetsTable,
 		CouponsTable,
 		CouponApplicationsTable,
 		CouponAssociationsTable,
@@ -2142,6 +2238,7 @@ var (
 		EntityIntegrationMappingsTable,
 		EnvironmentsTable,
 		FeaturesTable,
+		GroupsTable,
 		InvoicesTable,
 		InvoiceLineItemsTable,
 		InvoiceSequencesTable,
@@ -2151,6 +2248,7 @@ var (
 		PlansTable,
 		PricesTable,
 		PriceUnitTable,
+		ScheduledTasksTable,
 		SecretsTable,
 		SettingsTable,
 		SubscriptionsTable,
@@ -2171,11 +2269,6 @@ var (
 )
 
 func init() {
-	CostsheetTable.ForeignKeys[0].RefTable = MetersTable
-	CostsheetTable.ForeignKeys[1].RefTable = PricesTable
-	CostsheetTable.Annotation = &entsql.Annotation{
-		Table: "costsheet",
-	}
 	CouponApplicationsTable.ForeignKeys[0].RefTable = CouponsTable
 	CouponApplicationsTable.ForeignKeys[1].RefTable = InvoicesTable
 	CouponApplicationsTable.ForeignKeys[2].RefTable = InvoiceLineItemsTable
@@ -2191,6 +2284,7 @@ func init() {
 	PaymentAttemptsTable.ForeignKeys[0].RefTable = PaymentsTable
 	PricesTable.ForeignKeys[0].RefTable = AddonsTable
 	PricesTable.ForeignKeys[1].RefTable = PriceUnitTable
+	PricesTable.ForeignKeys[2].RefTable = GroupsTable
 	PriceUnitTable.Annotation = &entsql.Annotation{
 		Table: "price_unit",
 	}

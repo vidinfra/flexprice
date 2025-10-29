@@ -63,6 +63,12 @@ type EntityIntegrationMappingService interface {
 	DeleteEntityIntegrationMapping(ctx context.Context, id string) error
 }
 
+// RevenueAnalyticsService defines the interface for revenue analytics operations
+type RevenueAnalyticsService interface {
+	// GetDetailedCostAnalytics retrieves detailed cost analytics with derived metrics
+	GetDetailedCostAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetDetailedCostAnalyticsResponse, error)
+}
+
 type SubscriptionService interface {
 	CreateSubscription(ctx context.Context, req dto.CreateSubscriptionRequest) (*dto.SubscriptionResponse, error)
 	GetSubscription(ctx context.Context, id string) (*dto.SubscriptionResponse, error)

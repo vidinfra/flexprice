@@ -10,6 +10,9 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/invoice"
 	"github.com/flexprice/flexprice/internal/domain/payment"
 	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/integration/hubspot"
+	hubspotwebhook "github.com/flexprice/flexprice/internal/integration/hubspot/webhook"
+	"github.com/flexprice/flexprice/internal/integration/s3"
 	"github.com/flexprice/flexprice/internal/integration/stripe"
 	"github.com/flexprice/flexprice/internal/integration/stripe/webhook"
 	"github.com/flexprice/flexprice/internal/logger"
@@ -17,7 +20,7 @@ import (
 	"github.com/flexprice/flexprice/internal/types"
 )
 
-// Factory manages different payment integration providers
+// Factory manages different payment integration providers and storage providers
 type Factory struct {
 	config                       *config.Configuration
 	logger                       *logger.Logger
@@ -27,6 +30,9 @@ type Factory struct {
 	paymentRepo                  payment.Repository
 	entityIntegrationMappingRepo entityintegrationmapping.Repository
 	encryptionService            security.EncryptionService
+
+	// Storage clients (cached for reuse)
+	s3Client *s3.Client
 }
 
 // NewFactory creates a new integration factory
@@ -121,11 +127,54 @@ func (f *Factory) GetStripeIntegration(ctx context.Context) (*StripeIntegration,
 	}, nil
 }
 
+// GetHubSpotIntegration returns a complete HubSpot integration setup
+func (f *Factory) GetHubSpotIntegration(ctx context.Context) (*HubSpotIntegration, error) {
+	// Create HubSpot client
+	hubspotClient := hubspot.NewClient(
+		f.connectionRepo,
+		f.encryptionService,
+		f.logger,
+	)
+
+	// Create customer service
+	customerSvc := hubspot.NewCustomerService(
+		hubspotClient,
+		f.customerRepo,
+		f.entityIntegrationMappingRepo,
+		f.logger,
+	)
+
+	// Create invoice sync service
+	invoiceSyncSvc := hubspot.NewInvoiceSyncService(
+		hubspotClient,
+		f.invoiceRepo,
+		f.entityIntegrationMappingRepo,
+		f.logger,
+	)
+
+	// Create webhook handler
+	webhookHandler := hubspotwebhook.NewHandler(
+		hubspotClient,
+		customerSvc,
+		f.connectionRepo,
+		f.logger,
+	)
+
+	return &HubSpotIntegration{
+		Client:         hubspotClient,
+		CustomerSvc:    customerSvc,
+		InvoiceSyncSvc: invoiceSyncSvc,
+		WebhookHandler: webhookHandler,
+	}, nil
+}
+
 // GetIntegrationByProvider returns the appropriate integration for the given provider type
 func (f *Factory) GetIntegrationByProvider(ctx context.Context, providerType types.SecretProvider) (interface{}, error) {
 	switch providerType {
 	case types.SecretProviderStripe:
 		return f.GetStripeIntegration(ctx)
+	case types.SecretProviderHubSpot:
+		return f.GetHubSpotIntegration(ctx)
 	default:
 		return nil, ierr.NewError("unsupported integration provider").
 			WithHint("Provider type is not supported").
@@ -140,6 +189,7 @@ func (f *Factory) GetIntegrationByProvider(ctx context.Context, providerType typ
 func (f *Factory) GetSupportedProviders() []types.SecretProvider {
 	return []types.SecretProvider{
 		types.SecretProviderStripe,
+		types.SecretProviderHubSpot,
 	}
 }
 
@@ -163,6 +213,14 @@ type StripeIntegration struct {
 	WebhookHandler *webhook.Handler
 }
 
+// HubSpotIntegration contains all HubSpot integration services
+type HubSpotIntegration struct {
+	Client         hubspot.HubSpotClient
+	CustomerSvc    hubspot.HubSpotCustomerService
+	InvoiceSyncSvc *hubspot.InvoiceSyncService
+	WebhookHandler *hubspotwebhook.Handler
+}
+
 // IntegrationProvider defines the interface for all integration providers
 type IntegrationProvider interface {
 	GetProviderType() types.SecretProvider
@@ -184,6 +242,21 @@ func (p *StripeProvider) IsAvailable(ctx context.Context) bool {
 	return p.integration.Client.HasStripeConnection(ctx)
 }
 
+// HubSpotProvider implements IntegrationProvider for HubSpot
+type HubSpotProvider struct {
+	integration *HubSpotIntegration
+}
+
+// GetProviderType returns the provider type
+func (p *HubSpotProvider) GetProviderType() types.SecretProvider {
+	return types.SecretProviderHubSpot
+}
+
+// IsAvailable checks if HubSpot integration is available
+func (p *HubSpotProvider) IsAvailable(ctx context.Context) bool {
+	return p.integration.Client.HasHubSpotConnection(ctx)
+}
+
 // GetAvailableProviders returns all available providers for the current environment
 func (f *Factory) GetAvailableProviders(ctx context.Context) ([]IntegrationProvider, error) {
 	var providers []IntegrationProvider
@@ -197,14 +270,42 @@ func (f *Factory) GetAvailableProviders(ctx context.Context) ([]IntegrationProvi
 		}
 	}
 
-	// Future providers can be added here
-	// razorpayIntegration, err := f.GetRazorpayIntegration(ctx)
-	// if err == nil {
-	//     razorpayProvider := &RazorpayProvider{integration: razorpayIntegration}
-	//     if razorpayProvider.IsAvailable(ctx) {
-	//         providers = append(providers, razorpayProvider)
-	//     }
-	// }
+	// Check HubSpot
+	hubspotIntegration, err := f.GetHubSpotIntegration(ctx)
+	if err == nil {
+		hubspotProvider := &HubSpotProvider{integration: hubspotIntegration}
+		if hubspotProvider.IsAvailable(ctx) {
+			providers = append(providers, hubspotProvider)
+		}
+	}
 
 	return providers, nil
+}
+
+// GetStorageProvider returns an S3 storage client for the given connection
+// Currently only S3 is supported. In the future, Azure Blob Storage, Google Cloud Storage,
+// and other providers can be added by checking the connection's provider type.
+func (f *Factory) GetStorageProvider(ctx context.Context, connectionID string) (*s3.Client, error) {
+	if f.s3Client == nil {
+		f.s3Client = s3.NewClient(
+			f.connectionRepo,
+			f.encryptionService,
+			f.logger,
+		)
+	}
+
+	return f.s3Client, nil
+}
+
+// GetS3Client returns the S3 client directly (for backward compatibility)
+// Deprecated: Use GetStorageProvider instead for future-proof code
+func (f *Factory) GetS3Client(ctx context.Context) (*s3.Client, error) {
+	if f.s3Client == nil {
+		f.s3Client = s3.NewClient(
+			f.connectionRepo,
+			f.encryptionService,
+			f.logger,
+		)
+	}
+	return f.s3Client, nil
 }

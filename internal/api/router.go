@@ -36,7 +36,8 @@ type Handlers struct {
 	Payment                  *v1.PaymentHandler
 	Task                     *v1.TaskHandler
 	Secret                   *v1.SecretHandler
-	CostSheet                *v1.CostSheetHandler
+	Costsheet                *v1.CostsheetHandler
+	RevenueAnalytics         *v1.RevenueAnalyticsHandler
 	CreditNote               *v1.CreditNoteHandler
 	Tax                      *v1.TaxHandler
 	Coupon                   *v1.CouponHandler
@@ -46,6 +47,8 @@ type Handlers struct {
 	EntityIntegrationMapping *v1.EntityIntegrationMappingHandler
 	Settings                 *v1.SettingsHandler
 	SetupIntent              *v1.SetupIntentHandler
+	Group                    *v1.GroupHandler
+	ScheduledTask            *v1.ScheduledTaskHandler
 
 	// Portal handlers
 	Onboarding *v1.OnboardingHandler
@@ -171,7 +174,8 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 
 			// New endpoints for entitlements and usage
 			customer.GET("/:id/entitlements", handlers.Customer.GetCustomerEntitlements)
-			customer.GET("/:id/usage", handlers.Customer.GetCustomerUsageSummary)
+			customer.GET("/usage", handlers.Customer.GetCustomerUsageSummary)     // New route with query parameters (must come first!)
+			customer.GET("/:id/usage", handlers.Customer.GetCustomerUsageSummary) // Deprecated route with path parameter
 
 			// other routes for customer
 			customer.GET("/:id/wallets", handlers.Wallet.GetWalletsByCustomerID)
@@ -208,6 +212,14 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			addon.GET("/lookup/:lookup_key", handlers.Addon.GetAddonByLookupKey)
 			addon.PUT("/:id", handlers.Addon.UpdateAddon)
 			addon.DELETE("/:id", handlers.Addon.DeleteAddon)
+		}
+
+		group := v1Private.Group("/groups")
+		{
+			group.POST("", handlers.Group.CreateGroup)
+			group.POST("/search", handlers.Group.ListGroups)
+			group.GET("/:id", handlers.Group.GetGroup)
+			group.DELETE("/:id", handlers.Group.DeleteGroup)
 		}
 
 		subscription := v1Private.Group("/subscriptions")
@@ -327,6 +339,18 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			tasks.GET("", handlers.Task.ListTasks)
 			tasks.GET("/:id", handlers.Task.GetTask)
 			tasks.PUT("/:id/status", handlers.Task.UpdateTaskStatus)
+
+			// Scheduled tasks routes under /tasks/scheduled
+			scheduledTasks := tasks.Group("/scheduled")
+			{
+				scheduledTasks.POST("", handlers.ScheduledTask.CreateScheduledTask)
+				scheduledTasks.GET("", handlers.ScheduledTask.ListScheduledTasks)
+				scheduledTasks.GET("/:id", handlers.ScheduledTask.GetScheduledTask)
+				scheduledTasks.PUT("/:id", handlers.ScheduledTask.UpdateScheduledTask)
+				scheduledTasks.DELETE("/:id", handlers.ScheduledTask.DeleteScheduledTask)
+				scheduledTasks.POST("/:id/run", handlers.ScheduledTask.TriggerForceRun)
+
+			}
 		}
 
 		// Tax rate routes
@@ -381,17 +405,18 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			connections.POST("/search", handlers.Connection.ListConnectionsByFilter)
 		}
 
-		// Cost sheet routes
-		costSheet := v1Private.Group("/costs")
+		// Costsheet routes
+		costsheets := v1Private.Group("/costs")
 		{
-			costSheet.POST("", handlers.CostSheet.CreateCostSheet)
-			costSheet.GET("", handlers.CostSheet.ListCostSheets)
-			costSheet.GET("/:id", handlers.CostSheet.GetCostSheet)
-			costSheet.PUT("/:id", handlers.CostSheet.UpdateCostSheet)
-			costSheet.DELETE("/:id", handlers.CostSheet.DeleteCostSheet)
-			costSheet.GET("/breakdown/:subscription_id", handlers.CostSheet.GetCostBreakDown)
-			costSheet.POST("/roi", handlers.CostSheet.CalculateROI)
+			costsheets.POST("/search", handlers.Costsheet.ListCostsheetByFilter)
+			costsheets.POST("", handlers.Costsheet.CreateCostsheet)
+			costsheets.GET("/:id", handlers.Costsheet.GetCostsheet)
+			costsheets.PUT("/:id", handlers.Costsheet.UpdateCostsheet)
+			costsheets.DELETE("/:id", handlers.Costsheet.DeleteCostsheet)
+			costsheets.GET("/active", handlers.Costsheet.GetActiveCostsheetForTenant)
+			costsheets.POST("/analytics", handlers.RevenueAnalytics.GetDetailedCostAnalytics)
 		}
+
 		// Credit note routes
 		creditNotes := v1Private.Group("/creditnotes")
 		{
@@ -451,6 +476,8 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 	{
 		// Stripe webhook endpoint: POST /v1/webhooks/stripe/{tenant_id}/{environment_id}
 		webhooks.POST("/stripe/:tenant_id/:environment_id", handlers.Webhook.HandleStripeWebhook)
+		// HubSpot webhook endpoint: POST /v1/webhooks/hubspot/{tenant_id}/{environment_id}
+		webhooks.POST("/hubspot/:tenant_id/:environment_id", handlers.Webhook.HandleHubSpotWebhook)
 	}
 
 	// Cron routes

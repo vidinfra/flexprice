@@ -88,19 +88,14 @@ const (
 	FieldStartDate = "start_date"
 	// FieldEndDate holds the string denoting the end_date field in the database.
 	FieldEndDate = "end_date"
-	// EdgeCostsheet holds the string denoting the costsheet edge name in mutations.
-	EdgeCostsheet = "costsheet"
+	// FieldGroupID holds the string denoting the group_id field in the database.
+	FieldGroupID = "group_id"
 	// EdgePriceUnitEdge holds the string denoting the price_unit_edge edge name in mutations.
 	EdgePriceUnitEdge = "price_unit_edge"
+	// EdgeGroup holds the string denoting the group edge name in mutations.
+	EdgeGroup = "group"
 	// Table holds the table name of the price in the database.
 	Table = "prices"
-	// CostsheetTable is the table that holds the costsheet relation/edge.
-	CostsheetTable = "costsheet"
-	// CostsheetInverseTable is the table name for the Costsheet entity.
-	// It exists in this package in order to avoid circular dependency with the "costsheet" package.
-	CostsheetInverseTable = "costsheet"
-	// CostsheetColumn is the table column denoting the costsheet relation/edge.
-	CostsheetColumn = "price_id"
 	// PriceUnitEdgeTable is the table that holds the price_unit_edge relation/edge.
 	PriceUnitEdgeTable = "prices"
 	// PriceUnitEdgeInverseTable is the table name for the PriceUnit entity.
@@ -108,6 +103,13 @@ const (
 	PriceUnitEdgeInverseTable = "price_unit"
 	// PriceUnitEdgeColumn is the table column denoting the price_unit_edge relation/edge.
 	PriceUnitEdgeColumn = "price_unit_id"
+	// GroupTable is the table that holds the group relation/edge.
+	GroupTable = "prices"
+	// GroupInverseTable is the table name for the Group entity.
+	// It exists in this package in order to avoid circular dependency with the "group" package.
+	GroupInverseTable = "groups"
+	// GroupColumn is the table column denoting the group relation/edge.
+	GroupColumn = "group_id"
 )
 
 // Columns holds all SQL columns for price fields.
@@ -150,6 +152,7 @@ var Columns = []string{
 	FieldParentPriceID,
 	FieldStartDate,
 	FieldEndDate,
+	FieldGroupID,
 }
 
 // ForeignKeys holds the SQL foreign-keys that are owned by the "prices"
@@ -380,18 +383,9 @@ func ByEndDate(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldEndDate, opts...).ToFunc()
 }
 
-// ByCostsheetCount orders the results by costsheet count.
-func ByCostsheetCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newCostsheetStep(), opts...)
-	}
-}
-
-// ByCostsheet orders the results by costsheet terms.
-func ByCostsheet(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newCostsheetStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
+// ByGroupID orders the results by the group_id field.
+func ByGroupID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGroupID, opts...).ToFunc()
 }
 
 // ByPriceUnitEdgeField orders the results by price_unit_edge field.
@@ -400,17 +394,24 @@ func ByPriceUnitEdgeField(field string, opts ...sql.OrderTermOption) OrderOption
 		sqlgraph.OrderByNeighborTerms(s, newPriceUnitEdgeStep(), sql.OrderByField(field, opts...))
 	}
 }
-func newCostsheetStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(CostsheetInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, CostsheetTable, CostsheetColumn),
-	)
+
+// ByGroupField orders the results by group field.
+func ByGroupField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newGroupStep(), sql.OrderByField(field, opts...))
+	}
 }
 func newPriceUnitEdgeStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(PriceUnitEdgeInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, false, PriceUnitEdgeTable, PriceUnitEdgeColumn),
+	)
+}
+func newGroupStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(GroupInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, false, GroupTable, GroupColumn),
 	)
 }
