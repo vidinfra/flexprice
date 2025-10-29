@@ -987,8 +987,9 @@ type AnalyticsData struct {
 	Features              map[string]*feature.Feature
 	Meters                map[string]*meter.Meter
 	Prices                map[string]*price.Price
-	Plans                 map[string]*plan.Plan   // Map of plan ID -> plan
-	Addons                map[string]*addon.Addon // Map of addon ID -> addon
+	PriceResponses        map[string]*dto.PriceResponse // Map of price ID -> PriceResponse (used when groups need to be expanded)
+	Plans                 map[string]*plan.Plan         // Map of plan ID -> plan
+	Addons                map[string]*addon.Addon       // Map of addon ID -> addon
 	Currency              string
 	Params                *events.UsageAnalyticsParams
 }
@@ -1149,6 +1150,7 @@ func (s *featureUsageTrackingService) fetchAnalyticsData(ctx context.Context, re
 		Prices:                make(map[string]*price.Price),
 		Plans:                 make(map[string]*plan.Plan),
 		Addons:                make(map[string]*addon.Addon),
+		PriceResponses:        make(map[string]*dto.PriceResponse),
 	}
 
 	// Build subscription maps
@@ -1510,11 +1512,13 @@ func (s *featureUsageTrackingService) fetchSubscriptionPrices(ctx context.Contex
 
 	// Fetch prices
 	if len(priceIDs) > 0 {
+		priceService := NewPriceService(s.ServiceParams)
 		priceFilter := types.NewNoLimitPriceFilter()
+		priceFilter.Expand = lo.ToPtr(string(types.ExpandGroups))
 		priceFilter.PriceIDs = priceIDs
 		priceFilter.WithStatus(types.StatusPublished)
 		priceFilter.AllowExpiredPrices = false
-		prices, err := s.PriceRepo.List(ctx, priceFilter)
+		pricesResponse, err := priceService.GetPrices(ctx, priceFilter)
 		if err != nil {
 			return ierr.WithError(err).
 				WithHint("Failed to fetch subscription prices for cost calculation").
@@ -1523,8 +1527,9 @@ func (s *featureUsageTrackingService) fetchSubscriptionPrices(ctx context.Contex
 
 		// Create price map by price ID - this ensures different prices for the same meter
 		// (e.g., from cancelled and new subscriptions) are tracked separately
-		for _, p := range prices {
-			data.Prices[p.ID] = p
+		for _, priceResp := range pricesResponse.Items {
+			data.Prices[priceResp.ID] = priceResp.Price
+			data.PriceResponses[priceResp.ID] = priceResp
 		}
 	}
 
@@ -2024,7 +2029,7 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 		}
 		// Can expand plan and addon
 		if analytic.PriceID != "" {
-			if price, ok := data.Prices[analytic.PriceID]; ok {
+			if price, ok := data.PriceResponses[analytic.PriceID]; ok {
 				switch price.EntityType {
 				case types.PRICE_ENTITY_TYPE_ADDON:
 					item.AddOnID = price.EntityID

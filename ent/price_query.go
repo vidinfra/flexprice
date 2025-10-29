@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/flexprice/flexprice/ent/group"
 	"github.com/flexprice/flexprice/ent/predicate"
 	"github.com/flexprice/flexprice/ent/price"
 	"github.com/flexprice/flexprice/ent/priceunit"
@@ -24,6 +25,7 @@ type PriceQuery struct {
 	inters            []Interceptor
 	predicates        []predicate.Price
 	withPriceUnitEdge *PriceUnitQuery
+	withGroup         *GroupQuery
 	withFKs           bool
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -76,6 +78,28 @@ func (pq *PriceQuery) QueryPriceUnitEdge() *PriceUnitQuery {
 			sqlgraph.From(price.Table, price.FieldID, selector),
 			sqlgraph.To(priceunit.Table, priceunit.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, false, price.PriceUnitEdgeTable, price.PriceUnitEdgeColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(pq.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryGroup chains the current query on the "group" edge.
+func (pq *PriceQuery) QueryGroup() *GroupQuery {
+	query := (&GroupClient{config: pq.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := pq.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := pq.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(price.Table, price.FieldID, selector),
+			sqlgraph.To(group.Table, group.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, price.GroupTable, price.GroupColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(pq.driver.Dialect(), step)
 		return fromU, nil
@@ -276,6 +300,7 @@ func (pq *PriceQuery) Clone() *PriceQuery {
 		inters:            append([]Interceptor{}, pq.inters...),
 		predicates:        append([]predicate.Price{}, pq.predicates...),
 		withPriceUnitEdge: pq.withPriceUnitEdge.Clone(),
+		withGroup:         pq.withGroup.Clone(),
 		// clone intermediate query.
 		sql:  pq.sql.Clone(),
 		path: pq.path,
@@ -290,6 +315,17 @@ func (pq *PriceQuery) WithPriceUnitEdge(opts ...func(*PriceUnitQuery)) *PriceQue
 		opt(query)
 	}
 	pq.withPriceUnitEdge = query
+	return pq
+}
+
+// WithGroup tells the query-builder to eager-load the nodes that are connected to
+// the "group" edge. The optional arguments are used to configure the query builder of the edge.
+func (pq *PriceQuery) WithGroup(opts ...func(*GroupQuery)) *PriceQuery {
+	query := (&GroupClient{config: pq.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	pq.withGroup = query
 	return pq
 }
 
@@ -372,8 +408,9 @@ func (pq *PriceQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Price,
 		nodes       = []*Price{}
 		withFKs     = pq.withFKs
 		_spec       = pq.querySpec()
-		loadedTypes = [1]bool{
+		loadedTypes = [2]bool{
 			pq.withPriceUnitEdge != nil,
+			pq.withGroup != nil,
 		}
 	)
 	if withFKs {
@@ -400,6 +437,12 @@ func (pq *PriceQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Price,
 	if query := pq.withPriceUnitEdge; query != nil {
 		if err := pq.loadPriceUnitEdge(ctx, query, nodes, nil,
 			func(n *Price, e *PriceUnit) { n.Edges.PriceUnitEdge = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := pq.withGroup; query != nil {
+		if err := pq.loadGroup(ctx, query, nodes, nil,
+			func(n *Price, e *Group) { n.Edges.Group = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -435,6 +478,38 @@ func (pq *PriceQuery) loadPriceUnitEdge(ctx context.Context, query *PriceUnitQue
 	}
 	return nil
 }
+func (pq *PriceQuery) loadGroup(ctx context.Context, query *GroupQuery, nodes []*Price, init func(*Price), assign func(*Price, *Group)) error {
+	ids := make([]string, 0, len(nodes))
+	nodeids := make(map[string][]*Price)
+	for i := range nodes {
+		if nodes[i].GroupID == nil {
+			continue
+		}
+		fk := *nodes[i].GroupID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(group.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "group_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
 
 func (pq *PriceQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := pq.querySpec()
@@ -463,6 +538,9 @@ func (pq *PriceQuery) querySpec() *sqlgraph.QuerySpec {
 		}
 		if pq.withPriceUnitEdge != nil {
 			_spec.Node.AddColumnOnce(price.FieldPriceUnitID)
+		}
+		if pq.withGroup != nil {
+			_spec.Node.AddColumnOnce(price.FieldGroupID)
 		}
 	}
 	if ps := pq.predicates; len(ps) > 0 {

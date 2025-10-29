@@ -11,7 +11,6 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/feature"
 	"github.com/flexprice/flexprice/internal/domain/meter"
 	"github.com/flexprice/flexprice/internal/domain/plan"
-	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
@@ -303,7 +302,7 @@ type UsageAnalyticItem struct {
 	MeterID              string                             `json:"meter_id,omitempty"`               // Meter ID
 	SubLineItemID        string                             `json:"sub_line_item_id,omitempty"`       // Subscription line item ID
 	SubscriptionID       string                             `json:"subscription_id,omitempty"`        // Subscription ID
-	Price                *price.Price                       `json:"price,omitempty"`                  // Full price object (only if expand includes "price")
+	Price                *PriceResponse                     `json:"price,omitempty"`                  // Full price object (only if expand includes "price")
 	Meter                *meter.Meter                       `json:"meter,omitempty"`                  // Full meter object (only if expand includes "meter")
 	Feature              *feature.Feature                   `json:"feature,omitempty"`                // Full feature object (only if expand includes "feature")
 	SubscriptionLineItem *subscription.SubscriptionLineItem `json:"subscription_line_item,omitempty"` // Full line item (only if expand includes "subscription_line_item")

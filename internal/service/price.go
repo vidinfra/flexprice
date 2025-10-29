@@ -88,22 +88,29 @@ func (s *priceService) CreatePrice(ctx context.Context, req dto.CreatePriceReque
 	}
 
 	// Handle regular price case
-	price, err := req.ToPrice(ctx)
+	p, err := req.ToPrice(ctx)
 	if err != nil {
 		return nil, ierr.WithError(err).
 			WithHint("Failed to parse price data").
 			Mark(ierr.ErrValidation)
 	}
 
-	if err := s.PriceRepo.Create(ctx, price); err != nil {
+	// Validate group if provided
+	if req.GroupID != "" {
+		if err := s.validateGroup(ctx, []*price.Price{p}); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := s.PriceRepo.Create(ctx, p); err != nil {
 		return nil, err
 	}
 
-	response := &dto.PriceResponse{Price: price}
+	response := &dto.PriceResponse{Price: p}
 
 	// TODO: !REMOVE after migration
-	if price.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
-		response.PlanID = price.EntityID
+	if p.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
+		response.PlanID = p.EntityID
 	}
 
 	return response, nil
@@ -197,6 +204,10 @@ func (s *priceService) CreateBulkPrice(ctx context.Context, req dto.CreateBulkPr
 
 		// Create regular prices in bulk if any exist
 		if len(regularPrices) > 0 {
+			// Validate groups if provided
+			if err := s.validateGroup(txCtx, regularPrices); err != nil {
+				return err
+			}
 			if err := s.PriceRepo.CreateBulk(txCtx, regularPrices); err != nil {
 				return ierr.WithError(err).
 					WithHint("Failed to create prices in bulk").
@@ -499,6 +510,17 @@ func (s *priceService) GetPrice(ctx context.Context, id string) (*dto.PriceRespo
 		response.PricingUnit = &dto.PriceUnitResponse{PriceUnit: priceUnit}
 	}
 
+	if price.GroupID != "" {
+		groupService := NewGroupService(s.ServiceParams)
+		group, err := groupService.GetGroup(ctx, price.GroupID)
+		if err != nil {
+			s.Logger.Warnw("failed to fetch group", "group_id", price.GroupID, "error", err)
+			// Don't fail the request if group fetch fails, just continue
+		} else {
+			response.Group = group
+		}
+	}
+
 	return response, nil
 }
 
@@ -513,7 +535,7 @@ func (s *priceService) GetPricesByPlanID(ctx context.Context, planID string) (*d
 		WithEntityIDs([]string{planID}).
 		WithStatus(types.StatusPublished).
 		WithEntityType(types.PRICE_ENTITY_TYPE_PLAN).
-		WithExpand(string(types.ExpandMeters) + "," + string(types.ExpandPriceUnit))
+		WithExpand(string(types.ExpandMeters) + "," + string(types.ExpandPriceUnit) + "," + string(types.ExpandGroups))
 
 	response, err := s.GetPrices(ctx, priceFilter)
 	if err != nil {
@@ -667,6 +689,7 @@ func (s *priceService) GetPrices(ctx context.Context, filter *types.PriceFilter)
 	// Collect entity IDs based on entity type for efficient bulk fetching
 	var planIDs []string
 	var addonIDs []string
+	var groupIDs []string
 
 	// Separate prices by entity type to collect IDs
 	for _, p := range prices {
@@ -674,6 +697,9 @@ func (s *priceService) GetPrices(ctx context.Context, filter *types.PriceFilter)
 			planIDs = append(planIDs, p.EntityID)
 		} else if p.EntityType == types.PRICE_ENTITY_TYPE_ADDON && p.EntityID != "" {
 			addonIDs = append(addonIDs, p.EntityID)
+		}
+		if p.GroupID != "" {
+			groupIDs = append(groupIDs, p.GroupID)
 		}
 	}
 
@@ -722,6 +748,32 @@ func (s *priceService) GetPrices(ctx context.Context, filter *types.PriceFilter)
 		}
 	}
 
+	// If groups are requested to be expanded, fetch groups in bulk
+	var groupsByID map[string]*dto.GroupResponse
+	if filter.GetExpand().Has(types.ExpandGroups) && len(groupIDs) > 0 {
+		// Remove duplicates
+		groupIDs = lo.Uniq(groupIDs)
+
+		groupService := NewGroupService(s.ServiceParams)
+		groupFilter := &types.GroupFilter{
+			QueryFilter: types.NewNoLimitQueryFilter(),
+			GroupIDs:    groupIDs,
+		}
+
+		groupsResponse, err := groupService.ListGroups(ctx, groupFilter)
+		if err != nil {
+			s.Logger.Warnw("failed to fetch groups in bulk", "error", err)
+			// Don't fail the request, just continue without groups
+			groupsByID = make(map[string]*dto.GroupResponse)
+		} else {
+			// Create a map for group lookup
+			groupsByID = make(map[string]*dto.GroupResponse, len(groupsResponse.Items))
+			for _, g := range groupsResponse.Items {
+				groupsByID[g.ID] = g
+			}
+		}
+	}
+
 	// Build response with expanded fields
 	for i, p := range prices {
 		response.Items[i] = &dto.PriceResponse{Price: p}
@@ -751,6 +803,13 @@ func (s *priceService) GetPrices(ctx context.Context, filter *types.PriceFilter)
 		if filter.GetExpand().Has(types.ExpandAddons) && p.EntityType == types.PRICE_ENTITY_TYPE_ADDON && p.EntityID != "" {
 			if addon, ok := addonsByID[p.EntityID]; ok {
 				response.Items[i].Addon = addon
+			}
+		}
+
+		// Add group if requested and available
+		if filter.GetExpand().Has(types.ExpandGroups) && p.GroupID != "" {
+			if group, ok := groupsByID[p.GroupID]; ok {
+				response.Items[i].Group = group
 			}
 		}
 	}
@@ -792,6 +851,15 @@ func (s *priceService) UpdatePrice(ctx context.Context, id string, req dto.Updat
 		if err := s.DB.WithTx(ctx, func(ctx context.Context) error {
 			// Terminate the existing price
 			existingPrice.EndDate = &terminationEndDate
+
+			// Validate group if provided
+			if req.GroupID != "" {
+				existingPrice.GroupID = req.GroupID
+				if err := s.validateGroup(ctx, []*price.Price{existingPrice}); err != nil {
+					return err
+				}
+			}
+
 			if err := s.PriceRepo.Update(ctx, existingPrice); err != nil {
 				return err
 			}
@@ -834,6 +902,13 @@ func (s *priceService) UpdatePrice(ctx context.Context, id string, req dto.Updat
 		}
 		if req.EffectiveFrom != nil {
 			existingPrice.EndDate = req.EffectiveFrom
+		}
+
+		if req.GroupID != "" {
+			existingPrice.GroupID = req.GroupID
+			if err := s.validateGroup(ctx, []*price.Price{existingPrice}); err != nil {
+				return nil, err
+			}
 		}
 
 		// Update the price in database
@@ -1221,4 +1296,30 @@ func (s *priceService) CalculateCostSheetPrice(ctx context.Context, price *price
 	// For now, we'll use the same calculation as CalculateCost
 	// In the future, we can add costsheet-specific pricing rules here
 	return s.CalculateCost(ctx, price, quantity)
+}
+
+// validateGroup validates that a group exists and is of type "price"
+func (s *priceService) validateGroup(ctx context.Context, prices []*price.Price) error {
+	// 1. Get all group IDs from prices
+	groupIDs := make([]string, 0)
+	for _, price := range prices {
+		if price.GroupID == "" {
+			continue
+		}
+		groupIDs = append(groupIDs, price.GroupID)
+	}
+
+	groupIDs = lo.Uniq(groupIDs)
+
+	// 2. Validate groups if any
+	if len(groupIDs) == 0 {
+		return nil
+	}
+
+	// 3. Validate group
+	groupService := NewGroupService(s.ServiceParams)
+	if err := groupService.ValidateGroupBulk(ctx, groupIDs, types.GroupEntityTypePrice); err != nil {
+		return err
+	}
+	return nil
 }
