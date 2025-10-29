@@ -24,11 +24,27 @@ type WebhookPayload []WebhookEvent
 
 // DealResponse represents a HubSpot deal object from the API
 type DealResponse struct {
-	ID         string                 `json:"id"`
-	Properties map[string]interface{} `json:"properties"`
-	CreatedAt  time.Time              `json:"createdAt"`
-	UpdatedAt  time.Time              `json:"updatedAt"`
-	Archived   bool                   `json:"archived"`
+	ID         string         `json:"id"`
+	Properties DealProperties `json:"properties"`
+	CreatedAt  time.Time      `json:"createdAt"`
+	UpdatedAt  time.Time      `json:"updatedAt"`
+	Archived   bool           `json:"archived"`
+}
+
+// DealProperties represents HubSpot deal properties
+type DealProperties struct {
+	DealName  string `json:"dealname,omitempty"`  // Deal name
+	Amount    string `json:"amount,omitempty"`    // Deal amount as decimal string
+	DealStage string `json:"dealstage,omitempty"` // Deal stage ID
+	Pipeline  string `json:"pipeline,omitempty"`  // Pipeline ID
+	// ACV (Annual Contract Value) - calculated by HubSpot based on line items
+	ACV string `json:"hs_acv,omitempty"`
+	// MRR (Monthly Recurring Revenue) - calculated by HubSpot
+	MRR string `json:"hs_mrr,omitempty"`
+	// ARR (Annual Recurring Revenue) - calculated by HubSpot
+	ARR string `json:"hs_arr,omitempty"`
+	// TCV (Total Contract Value) - calculated by HubSpot
+	TCV string `json:"hs_tcv,omitempty"`
 }
 
 // ContactResponse represents a HubSpot contact object from the API
@@ -110,6 +126,65 @@ type LineItemProperties struct {
 
 // LineItemResponse represents a HubSpot line item response
 type LineItemResponse struct {
+	ID         string                 `json:"id"`
+	Properties map[string]interface{} `json:"properties"`
+	CreatedAt  time.Time              `json:"createdAt"`
+	UpdatedAt  time.Time              `json:"updatedAt"`
+}
+
+// Deal DTOs
+
+// DealUpdateRequest represents a request to update a HubSpot deal
+type DealUpdateRequest struct {
+	Properties map[string]string `json:"properties"`
+}
+
+// DealUpdateResponse represents a HubSpot deal update response
+type DealUpdateResponse struct {
+	ID         string         `json:"id"`
+	Properties DealProperties `json:"properties"`
+	CreatedAt  time.Time      `json:"createdAt"`
+	UpdatedAt  time.Time      `json:"updatedAt"`
+}
+
+// Deal Line Item DTOs
+
+// DealLineItemCreateRequest represents a request to create a HubSpot line item for a deal
+type DealLineItemCreateRequest struct {
+	Properties   DealLineItemProperties `json:"properties"`
+	Associations []LineItemAssociation  `json:"associations,omitempty"`
+}
+
+// DealLineItemProperties represents HubSpot line item properties
+type DealLineItemProperties struct {
+	Name                 string `json:"name"`                                // Product/service name
+	Price                string `json:"price"`                               // Unit price as decimal (e.g., "10.00")
+	Quantity             string `json:"quantity"`                            // Quantity as string (e.g., "1", "2.5")
+	Amount               string `json:"amount,omitempty"`                    // Total amount as decimal (quantity * price)
+	Discount             string `json:"discount,omitempty"`                  // Discount amount or percentage
+	RecurringBillingFreq string `json:"recurringbillingfrequency,omitempty"` // Billing frequency (e.g., "monthly", "annually")
+	Description          string `json:"description,omitempty"`               // Line item description / pricing model
+}
+
+// LineItemAssociation represents an association between a line item and another object (deal, quote, etc.)
+type LineItemAssociation struct {
+	To    AssociationTarget `json:"to"`
+	Types []AssociationType `json:"types"`
+}
+
+// AssociationTarget represents the target object for an association
+type AssociationTarget struct {
+	ID string `json:"id"`
+}
+
+// AssociationType represents the type of association
+type AssociationType struct {
+	AssociationCategory string `json:"associationCategory"` // e.g., "HUBSPOT_DEFINED"
+	AssociationTypeID   int    `json:"associationTypeId"`   // e.g., 20 for line item to deal
+}
+
+// DealLineItemResponse represents a HubSpot line item response
+type DealLineItemResponse struct {
 	ID         string                 `json:"id"`
 	Properties map[string]interface{} `json:"properties"`
 	CreatedAt  time.Time              `json:"createdAt"`

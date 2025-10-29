@@ -9,6 +9,8 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
 	"github.com/flexprice/flexprice/internal/domain/invoice"
 	"github.com/flexprice/flexprice/internal/domain/payment"
+	"github.com/flexprice/flexprice/internal/domain/price"
+	"github.com/flexprice/flexprice/internal/domain/subscription"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/integration/hubspot"
 	hubspotwebhook "github.com/flexprice/flexprice/internal/integration/hubspot/webhook"
@@ -26,8 +28,10 @@ type Factory struct {
 	logger                       *logger.Logger
 	connectionRepo               connection.Repository
 	customerRepo                 customer.Repository
+	subscriptionRepo             subscription.Repository
 	invoiceRepo                  invoice.Repository
 	paymentRepo                  payment.Repository
+	priceRepo                    price.Repository
 	entityIntegrationMappingRepo entityintegrationmapping.Repository
 	encryptionService            security.EncryptionService
 
@@ -41,8 +45,10 @@ func NewFactory(
 	logger *logger.Logger,
 	connectionRepo connection.Repository,
 	customerRepo customer.Repository,
+	subscriptionRepo subscription.Repository,
 	invoiceRepo invoice.Repository,
 	paymentRepo payment.Repository,
+	priceRepo price.Repository,
 	entityIntegrationMappingRepo entityintegrationmapping.Repository,
 	encryptionService security.EncryptionService,
 ) *Factory {
@@ -51,8 +57,10 @@ func NewFactory(
 		logger:                       logger,
 		connectionRepo:               connectionRepo,
 		customerRepo:                 customerRepo,
+		subscriptionRepo:             subscriptionRepo,
 		invoiceRepo:                  invoiceRepo,
 		paymentRepo:                  paymentRepo,
+		priceRepo:                    priceRepo,
 		entityIntegrationMappingRepo: entityIntegrationMappingRepo,
 		encryptionService:            encryptionService,
 	}
@@ -152,6 +160,15 @@ func (f *Factory) GetHubSpotIntegration(ctx context.Context) (*HubSpotIntegratio
 		f.logger,
 	)
 
+	// Create deal sync service
+	dealSyncSvc := hubspot.NewDealSyncService(
+		hubspotClient,
+		f.customerRepo,
+		f.subscriptionRepo,
+		f.priceRepo,
+		f.logger,
+	)
+
 	// Create webhook handler
 	webhookHandler := hubspotwebhook.NewHandler(
 		hubspotClient,
@@ -164,6 +181,7 @@ func (f *Factory) GetHubSpotIntegration(ctx context.Context) (*HubSpotIntegratio
 		Client:         hubspotClient,
 		CustomerSvc:    customerSvc,
 		InvoiceSyncSvc: invoiceSyncSvc,
+		DealSyncSvc:    dealSyncSvc,
 		WebhookHandler: webhookHandler,
 	}, nil
 }
@@ -218,6 +236,7 @@ type HubSpotIntegration struct {
 	Client         hubspot.HubSpotClient
 	CustomerSvc    hubspot.HubSpotCustomerService
 	InvoiceSyncSvc *hubspot.InvoiceSyncService
+	DealSyncSvc    *hubspot.DealSyncService
 	WebhookHandler *hubspotwebhook.Handler
 }
 

@@ -117,6 +117,7 @@ func (s *InvoiceSyncService) SyncInvoiceToHubSpot(ctx context.Context, invoiceID
 
 	// Create entity integration mapping to track the sync
 	mapping := &entityintegrationmapping.EntityIntegrationMapping{
+		ID:               types.GenerateUUIDWithPrefix(types.UUID_PREFIX_ENTITY_INTEGRATION_MAPPING),
 		EntityType:       types.IntegrationEntityTypeInvoice,
 		EntityID:         invoiceID,
 		ProviderType:     string(types.SecretProviderHubSpot),
@@ -127,10 +128,12 @@ func (s *InvoiceSyncService) SyncInvoiceToHubSpot(ctx context.Context, invoiceID
 	}
 
 	if err := s.entityIntegrationMappingRepo.Create(ctx, mapping); err != nil {
-		s.logger.Errorw("failed to create entity integration mapping",
+		// If duplicate key (race condition), that's fine - invoice is already tracked
+		s.logger.Warnw("failed to create entity integration mapping (may already exist)",
 			"error", err,
 			"invoice_id", invoiceID,
 			"hubspot_invoice_id", hubspotInvoiceID)
+		// Don't return error - the invoice was successfully synced to HubSpot
 	}
 
 	return nil
