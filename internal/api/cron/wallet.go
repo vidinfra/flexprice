@@ -255,30 +255,6 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 					"ongoing_balance_alert_state", wallet.AlertState,
 				)
 
-				// Use AlertLogsService to handle alert logging and webhook publishing
-				err = h.alertLogsService.LogAlert(ctx, &service.LogAlertRequest{
-					EntityType:  types.AlertEntityTypeWallet,
-					EntityID:    wallet.ID,
-					AlertType:   types.AlertTypeLowOngoingBalance,
-					AlertStatus: alertStatus,
-					AlertInfo: types.AlertInfo{
-						Threshold: types.AlertThreshold{
-							Type:  types.AlertThresholdTypeAmount,
-							Value: threshold,
-						},
-						ValueAtTime: *ongoingBalance,
-						Timestamp:   time.Now().UTC(),
-					},
-				})
-				if err != nil {
-					h.logger.Errorw("failed to log alert",
-						"wallet_id", wallet.ID,
-						"alert_status", alertStatus,
-						"error", err,
-					)
-					continue
-				}
-
 				// Update wallet alert state to match the logged status (if it changed)
 				if wallet.AlertState != string(alertStatus) {
 					if err := h.walletService.UpdateWalletAlertState(ctx, wallet.ID, alertStatus); err != nil {
@@ -299,7 +275,29 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 				if !ongoingBalance.LessThanOrEqual(wallet.AutoTopupMinBalance) ||
 					wallet.AutoTopupTrigger == types.AutoTopupTriggerDisabled ||
 					wallet.AutoTopupAmount.LessThanOrEqual(decimal.Zero) {
-					// No auto top-up needed, continue to next wallet
+
+					err = h.alertLogsService.LogAlert(ctx, &service.LogAlertRequest{
+						EntityType:  types.AlertEntityTypeWallet,
+						EntityID:    wallet.ID,
+						AlertType:   types.AlertTypeLowOngoingBalance,
+						AlertStatus: alertStatus,
+						AlertInfo: types.AlertInfo{
+							Threshold: types.AlertThreshold{
+								Type:  types.AlertThresholdTypeAmount,
+								Value: threshold,
+							},
+							ValueAtTime: *ongoingBalance,
+							Timestamp:   time.Now().UTC(),
+						},
+					})
+					if err != nil {
+						h.logger.Errorw("failed to log alert",
+							"wallet_id", wallet.ID,
+							"alert_status", alertStatus,
+							"error", err,
+						)
+						continue
+					}
 					continue
 				}
 
