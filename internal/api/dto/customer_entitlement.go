@@ -98,6 +98,7 @@ type GetCustomerUsageSummaryRequest struct {
 	CustomerID        string   `json:"customer_id,omitempty" form:"customer_id"`
 	CustomerLookupKey string   `json:"customer_lookup_key,omitempty" form:"customer_lookup_key"`
 	FeatureIDs        []string `json:"feature_ids,omitempty" form:"feature_ids"`
+	FeatureLookupKeys []string `json:"feature_lookup_keys,omitempty" form:"feature_lookup_keys"`
 	SubscriptionIDs   []string `json:"subscription_ids,omitempty" form:"subscription_ids"`
 }
 
