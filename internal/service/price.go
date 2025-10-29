@@ -756,7 +756,7 @@ func (s *priceService) GetPrices(ctx context.Context, filter *types.PriceFilter)
 
 		groupService := NewGroupService(s.ServiceParams)
 		groupFilter := &types.GroupFilter{
-			QueryFilter: types.NewDefaultQueryFilter(),
+			QueryFilter: types.NewNoLimitQueryFilter(),
 			GroupIDs:    groupIDs,
 		}
 
@@ -854,10 +854,10 @@ func (s *priceService) UpdatePrice(ctx context.Context, id string, req dto.Updat
 
 			// Validate group if provided
 			if req.GroupID != "" {
+				existingPrice.GroupID = req.GroupID
 				if err := s.validateGroup(ctx, []*price.Price{existingPrice}); err != nil {
 					return err
 				}
-				existingPrice.GroupID = req.GroupID
 			}
 
 			if err := s.PriceRepo.Update(ctx, existingPrice); err != nil {
@@ -905,6 +905,7 @@ func (s *priceService) UpdatePrice(ctx context.Context, id string, req dto.Updat
 		}
 
 		if req.GroupID != "" {
+			existingPrice.GroupID = req.GroupID
 			if err := s.validateGroup(ctx, []*price.Price{existingPrice}); err != nil {
 				return nil, err
 			}
@@ -1302,6 +1303,9 @@ func (s *priceService) validateGroup(ctx context.Context, prices []*price.Price)
 	// 1. Get all group IDs from prices
 	groupIDs := make([]string, 0)
 	for _, price := range prices {
+		if price.GroupID == "" {
+			continue
+		}
 		groupIDs = append(groupIDs, price.GroupID)
 	}
 

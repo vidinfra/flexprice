@@ -213,18 +213,6 @@ func (s *groupService) getAssociatedEntitiesBulk(ctx context.Context, groups []*
 	return result, nil
 }
 
-// disassociateEntities removes group associations from entities
-func (s *groupService) disassociateEntities(ctx context.Context, entityType types.GroupEntityType, entityIDs []string) error {
-	switch entityType {
-	case types.GroupEntityTypePrice:
-		return s.PriceRepo.ClearGroupIDsBulk(ctx, entityIDs)
-	default:
-		return ierr.NewError("unsupported entity type").
-			WithHint("Unsupported entity type: " + entityType.String()).
-			Mark(ierr.ErrValidation)
-	}
-}
-
 // disassociateEntitiesByGroupID removes group associations from all entities in a group
 func (s *groupService) disassociateEntitiesByGroupID(ctx context.Context, entityType types.GroupEntityType, groupID string) error {
 	switch entityType {

@@ -37,7 +37,6 @@ import (
 	"go.uber.org/fx"
 
 	_ "github.com/flexprice/flexprice/docs/swagger"
-	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/proration"
 	"github.com/flexprice/flexprice/internal/integration"
 	"github.com/flexprice/flexprice/internal/security"
@@ -287,7 +286,6 @@ func provideHandlers(
 	subscriptionChangeService service.SubscriptionChangeService,
 	featureUsageTrackingService service.FeatureUsageTrackingService,
 	alertLogsService service.AlertLogsService,
-	priceRepo price.Repository,
 	groupService service.GroupService,
 	integrationFactory *integration.Factory,
 	db postgres.IClient,

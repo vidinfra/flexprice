@@ -662,30 +662,18 @@ func (r *priceRepository) GetByGroupIDs(ctx context.Context, groupIDs []string) 
 	return domainPrice.FromEntList(prices), nil
 }
 
-func (r *priceRepository) ClearGroupIDsBulk(ctx context.Context, ids []string) error {
-	client := r.client.Writer(ctx)
-
-	_, err := client.Price.Update().
-		Where(price.IDIn(ids...)).
-		ClearGroupID().
-		Save(ctx)
-	if err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to clear group IDs in bulk").
-			WithReportableDetails(map[string]interface{}{
-				"ids": ids,
-			}).
-			Mark(ierr.ErrDatabase)
-	}
-	return nil
-}
-
 func (r *priceRepository) ClearByGroupID(ctx context.Context, groupID string) error {
 	client := r.client.Writer(ctx)
 
 	_, err := client.Price.Update().
-		Where(price.GroupID(groupID)).
+		Where(
+			price.GroupID(groupID),
+			price.TenantID(types.GetTenantID(ctx)),
+			price.EnvironmentID(types.GetEnvironmentID(ctx)),
+		).
 		ClearGroupID().
+		SetUpdatedAt(time.Now().UTC()).
+		SetUpdatedBy(types.GetUserID(ctx)).
 		Save(ctx)
 	if err != nil {
 		return ierr.WithError(err).

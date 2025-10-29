@@ -42,19 +42,6 @@ func (r *CreateGroupRequest) ToGroup(ctx context.Context) (*group.Group, error) 
 	}, nil
 }
 
-// AddEntityToGroupRequest represents the request to add an entity to a group
-type AddEntityToGroupRequest struct {
-	EntityIDs []string `json:"entity_ids" validate:"required"`
-}
-
-func (r *AddEntityToGroupRequest) Validate() error {
-	if err := validator.ValidateRequest(r); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // GroupResponse represents the group response
 type GroupResponse struct {
 	ID         string            `json:"id"`

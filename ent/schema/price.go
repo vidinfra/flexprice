@@ -233,7 +233,6 @@ func (Price) Indexes() []ent.Index {
 			Annotations(entsql.IndexWhere("status = 'published' AND lookup_key IS NOT NULL AND lookup_key != ''")),
 		index.Fields("tenant_id", "environment_id"),
 		index.Fields("start_date", "end_date"),
-		index.Fields("group_id"),
 		index.Fields("tenant_id", "environment_id", "group_id"),
 	}
 }

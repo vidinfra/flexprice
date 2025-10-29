@@ -9,7 +9,7 @@ import (
 	baseMixin "github.com/flexprice/flexprice/ent/schema/mixin"
 )
 
-var Idx_group_tenant_environment_name = "idx_group_tenant_environment_lookup_key"
+var Idx_group_tenant_environment_lookup_key = "idx_group_tenant_environment_lookup_key"
 
 // Group holds the schema definition for the Group entity.
 type Group struct {
@@ -67,7 +67,7 @@ func (Group) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("tenant_id", "environment_id", "lookup_key").
 			Unique().
-			StorageKey(Idx_group_tenant_environment_name).
+			StorageKey(Idx_group_tenant_environment_lookup_key).
 			Annotations(entsql.IndexWhere("status = 'published'" + " AND lookup_key IS NOT NULL AND lookup_key != ''")),
 		index.Fields("tenant_id", "environment_id"),
 	}

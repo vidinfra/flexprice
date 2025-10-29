@@ -85,33 +85,6 @@ func (r *groupRepository) Get(ctx context.Context, id string) (*domainGroup.Grou
 	return r.toDomainGroup(entGroup), nil
 }
 
-func (r *groupRepository) GetByName(ctx context.Context, name string) (*domainGroup.Group, error) {
-	client := r.client.Reader(ctx)
-	tenantID := types.GetTenantID(ctx)
-	environmentID := types.GetEnvironmentID(ctx)
-
-	entGroup, err := client.Group.Query().
-		Where(
-			group.NameEQ(name),
-			group.TenantIDEQ(tenantID),
-			group.EnvironmentIDEQ(environmentID),
-			group.StatusEQ(string(types.StatusPublished)),
-		).
-		Only(ctx)
-
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, nil // Return nil instead of error for "not found"
-		}
-		r.log.Error("Failed to get group by name", "error", err, "name", name)
-		return nil, ierr.WithError(err).
-			WithHint("Failed to get group by name").
-			Mark(ierr.ErrDatabase)
-	}
-
-	return r.toDomainGroup(entGroup), nil
-}
-
 func (r *groupRepository) GetByLookupKey(ctx context.Context, lookupKey string) (*domainGroup.Group, error) {
 	client := r.client.Reader(ctx)
 	tenantID := types.GetTenantID(ctx)
