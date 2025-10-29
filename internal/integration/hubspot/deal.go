@@ -2,6 +2,7 @@ package hubspot
 
 import (
 	"context"
+	"time"
 
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/price"
@@ -9,7 +10,6 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
-	"github.com/shopspring/decimal"
 )
 
 // DealSyncService handles synchronization of subscription data with HubSpot deals
@@ -89,16 +89,17 @@ func (s *DealSyncService) SyncSubscriptionToDeal(ctx context.Context, subscripti
 		"subscription_id", subscriptionID,
 		"line_items_count", len(sub.LineItems))
 
-	// Filter for FIXED pricing only (flat rate)
+	// Filter for ACTIVE and FIXED pricing only (flat rate)
 	var flatRateLineItems []*subscription.SubscriptionLineItem
+	now := time.Now()
 	for _, lineItem := range sub.LineItems {
-		if lineItem.PriceType == types.PRICE_TYPE_FIXED {
+		if lineItem.PriceType == types.PRICE_TYPE_FIXED && lineItem.IsActive(now) {
 			flatRateLineItems = append(flatRateLineItems, lineItem)
 		}
 	}
 
 	if len(flatRateLineItems) == 0 {
-		s.logger.Warnw("no flat rate line items to sync",
+		s.logger.Warnw("no active flat rate line items to sync",
 			"subscription_id", subscriptionID,
 			"deal_id", dealID,
 			"line_items_count", len(sub.LineItems))
@@ -198,8 +199,8 @@ func (s *DealSyncService) createHubSpotLineItem(
 				},
 				Types: []AssociationType{
 					{
-						AssociationCategory: "HUBSPOT_DEFINED",
-						AssociationTypeID:   20, // Line item to deal association
+						AssociationCategory: string(AssociationCategoryHubSpotDefined),
+						AssociationTypeID:   AssociationTypeLineItemToDeal,
 					},
 				},
 			},
@@ -259,31 +260,19 @@ func (s *DealSyncService) updateDealAmountFromHubSpot(ctx context.Context, dealI
 
 	s.logger.Infow("fetched deal properties",
 		"deal_id", dealID,
-		"properties", deal.Properties)
+		"acv", deal.Properties.ACV,
+		"mrr", deal.Properties.MRR,
+		"arr", deal.Properties.ARR)
 
-	// Extract ACV from deal properties
-	var acv string
-	if deal.Properties != nil {
-		// Try different possible property names and types
-		if acvValue, ok := deal.Properties["hs_acv"].(string); ok && acvValue != "" {
-			acv = acvValue
-			s.logger.Infow("found ACV as string", "deal_id", dealID, "acv", acv)
-		} else if acvValue, ok := deal.Properties["hs_acv"].(float64); ok {
-			acv = decimal.NewFromFloat(acvValue).String()
-			s.logger.Infow("found ACV as float64", "deal_id", dealID, "acv", acv)
-		} else {
-			s.logger.Warnw("hs_acv property not found or empty",
-				"deal_id", dealID,
-				"available_properties", deal.Properties)
-			return ierr.NewError("ACV not found in HubSpot deal").
-				WithHint("HubSpot has not calculated ACV yet or line items were not synced").
-				Mark(ierr.ErrHTTPClient)
-		}
-	}
-
+	// Extract ACV from deal properties (already a string)
+	acv := deal.Properties.ACV
 	if acv == "" {
-		return ierr.NewError("ACV is empty").
-			WithHint("HubSpot ACV calculation may have failed").
+		s.logger.Warnw("hs_acv property not found or empty",
+			"deal_id", dealID,
+			"deal_name", deal.Properties.DealName,
+			"current_amount", deal.Properties.Amount)
+		return ierr.NewError("ACV not found in HubSpot deal").
+			WithHint("HubSpot has not calculated ACV yet or line items were not synced").
 			Mark(ierr.ErrHTTPClient)
 	}
 

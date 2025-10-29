@@ -380,8 +380,15 @@ func (s *subscriptionService) triggerHubSpotDealSyncWorkflow(ctx context.Context
 		"environment_id", envID)
 
 	// Check if HubSpot connection exists and deal outbound sync is enabled
+	if s.ConnectionRepo == nil {
+		s.Logger.Debugw("ConnectionRepo not available, skipping HubSpot deal sync",
+			"subscription_id", subscriptionID,
+			"customer_id", customerID)
+		return
+	}
+
 	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderHubSpot)
-	if err != nil {
+	if err != nil || conn == nil {
 		s.Logger.Debugw("HubSpot connection not found, skipping deal sync",
 			"error", err,
 			"subscription_id", subscriptionID,

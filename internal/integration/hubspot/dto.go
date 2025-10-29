@@ -24,11 +24,27 @@ type WebhookPayload []WebhookEvent
 
 // DealResponse represents a HubSpot deal object from the API
 type DealResponse struct {
-	ID         string                 `json:"id"`
-	Properties map[string]interface{} `json:"properties"`
-	CreatedAt  time.Time              `json:"createdAt"`
-	UpdatedAt  time.Time              `json:"updatedAt"`
-	Archived   bool                   `json:"archived"`
+	ID         string         `json:"id"`
+	Properties DealProperties `json:"properties"`
+	CreatedAt  time.Time      `json:"createdAt"`
+	UpdatedAt  time.Time      `json:"updatedAt"`
+	Archived   bool           `json:"archived"`
+}
+
+// DealProperties represents HubSpot deal properties
+type DealProperties struct {
+	DealName  string `json:"dealname,omitempty"`  // Deal name
+	Amount    string `json:"amount,omitempty"`    // Deal amount as decimal string
+	DealStage string `json:"dealstage,omitempty"` // Deal stage ID
+	Pipeline  string `json:"pipeline,omitempty"`  // Pipeline ID
+	// ACV (Annual Contract Value) - calculated by HubSpot based on line items
+	ACV string `json:"hs_acv,omitempty"`
+	// MRR (Monthly Recurring Revenue) - calculated by HubSpot
+	MRR string `json:"hs_mrr,omitempty"`
+	// ARR (Annual Recurring Revenue) - calculated by HubSpot
+	ARR string `json:"hs_arr,omitempty"`
+	// TCV (Total Contract Value) - calculated by HubSpot
+	TCV string `json:"hs_tcv,omitempty"`
 }
 
 // ContactResponse represents a HubSpot contact object from the API
@@ -125,10 +141,10 @@ type DealUpdateRequest struct {
 
 // DealUpdateResponse represents a HubSpot deal update response
 type DealUpdateResponse struct {
-	ID         string                 `json:"id"`
-	Properties map[string]interface{} `json:"properties"`
-	CreatedAt  time.Time              `json:"createdAt"`
-	UpdatedAt  time.Time              `json:"updatedAt"`
+	ID         string         `json:"id"`
+	Properties DealProperties `json:"properties"`
+	CreatedAt  time.Time      `json:"createdAt"`
+	UpdatedAt  time.Time      `json:"updatedAt"`
 }
 
 // Deal Line Item DTOs
