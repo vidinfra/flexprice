@@ -297,6 +297,7 @@ func (r *priceRepository) Update(ctx context.Context, p *domainPrice.Price) erro
 		SetMetadata(map[string]string(p.Metadata)).
 		SetUpdatedAt(time.Now().UTC()).
 		SetUpdatedBy(types.GetUserID(ctx)).
+		SetNillableGroupID(lo.ToPtr(p.GroupID)).
 		Save(ctx)
 
 	if err != nil {
