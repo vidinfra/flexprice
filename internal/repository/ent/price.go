@@ -297,6 +297,7 @@ func (r *priceRepository) Update(ctx context.Context, p *domainPrice.Price) erro
 		SetMetadata(map[string]string(p.Metadata)).
 		SetUpdatedAt(time.Now().UTC()).
 		SetUpdatedBy(types.GetUserID(ctx)).
+		SetNillableGroupID(lo.ToPtr(p.GroupID)).
 		Save(ctx)
 
 	if err != nil {
@@ -420,7 +421,8 @@ func (r *priceRepository) CreateBulk(ctx context.Context, prices []*domainPrice.
 			SetCreatedAt(p.CreatedAt).
 			SetUpdatedAt(p.UpdatedAt).
 			SetCreatedBy(p.CreatedBy).
-			SetUpdatedBy(p.UpdatedBy)
+			SetUpdatedBy(p.UpdatedBy).
+			SetNillableGroupID(lo.ToPtr(p.GroupID))
 	}
 
 	_, err := client.Price.CreateBulk(builders...).Save(ctx)
@@ -640,4 +642,47 @@ func (r *priceRepository) DeleteCache(ctx context.Context, priceID string) {
 	environmentID := types.GetEnvironmentID(ctx)
 	cacheKey := cache.GenerateKey(cache.PrefixPrice, tenantID, environmentID, priceID)
 	r.cache.Delete(ctx, cacheKey)
+}
+
+// Grouping cruds
+
+func (r *priceRepository) GetByGroupIDs(ctx context.Context, groupIDs []string) ([]*domainPrice.Price, error) {
+	client := r.client.Reader(ctx)
+
+	prices, err := client.Price.Query().
+		Where(price.GroupIDIn(groupIDs...)).
+		All(ctx)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get prices by group IDs").
+			WithReportableDetails(map[string]interface{}{
+				"group_ids": groupIDs,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	return domainPrice.FromEntList(prices), nil
+}
+
+func (r *priceRepository) ClearByGroupID(ctx context.Context, groupID string) error {
+	client := r.client.Writer(ctx)
+
+	_, err := client.Price.Update().
+		Where(
+			price.GroupID(groupID),
+			price.TenantID(types.GetTenantID(ctx)),
+			price.EnvironmentID(types.GetEnvironmentID(ctx)),
+		).
+		ClearGroupID().
+		SetUpdatedAt(time.Now().UTC()).
+		SetUpdatedBy(types.GetUserID(ctx)).
+		Save(ctx)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to clear group ID").
+			WithReportableDetails(map[string]interface{}{
+				"group_id": groupID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	return nil
 }

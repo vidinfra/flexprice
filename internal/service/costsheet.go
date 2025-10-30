@@ -8,6 +8,7 @@ import (
 	domainCostsheet "github.com/flexprice/flexprice/internal/domain/costsheet"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
@@ -180,7 +181,7 @@ func (s *costsheetService) GetCostsheets(ctx context.Context, filter *domainCost
 		priceFilter := types.NewNoLimitPriceFilter().
 			WithEntityIDs(costsheetIDs).
 			WithStatus(types.StatusPublished).
-			WithEntityType(types.PRICE_ENTITY_TYPE_PLAN)
+			WithEntityType(types.PRICE_ENTITY_TYPE_COSTSHEET)
 
 		// If meters should be expanded, propagate the expansion to prices
 		if filter.GetExpand().Has(types.ExpandMeters) {
@@ -294,24 +295,23 @@ func (s *costsheetService) GetActiveCostsheetForTenant(ctx context.Context) (*dt
 		QueryFilter: types.NewNoLimitQueryFilter(),
 	}
 
+	filter.QueryFilter.Expand = lo.ToPtr(string(types.ExpandPrices))
 	// List costsheets (automatically filtered by tenant and environment from context)
-	costsheets, err := s.CostSheetRepo.List(ctx, filter)
+	response, err := s.GetCostsheets(ctx, filter)
 	if err != nil {
 		return nil, ierr.WithError(err).
 			WithHint("Failed to retrieve active costsheet").
 			Mark(ierr.ErrDatabase)
 	}
 
-	if len(costsheets) == 0 {
+	if len(response.Items) == 0 {
 		return nil, ierr.NewError("no active costsheet found").
 			WithHint("No active costsheet found for this tenant").
 			Mark(ierr.ErrNotFound)
 	}
 
 	// Return the first (most recent) costsheet
-	response := dto.ToCostsheetResponse(costsheets[0])
-
-	return response, nil
+	return response.Items[0], nil
 }
 
 // Legacy calculation methods for backward compatibility

@@ -231,6 +231,18 @@ func convertConnectionMetadataToMap(encryptedSecretData types.ConnectionMetadata
 			}
 			return result
 		}
+	case types.SecretProviderHubSpot:
+		if encryptedSecretData.HubSpot != nil {
+			result := map[string]interface{}{
+				"access_token":  encryptedSecretData.HubSpot.AccessToken,
+				"client_secret": encryptedSecretData.HubSpot.ClientSecret,
+			}
+			// Add app_id if present
+			if encryptedSecretData.HubSpot.AppID != "" {
+				result["app_id"] = encryptedSecretData.HubSpot.AppID
+			}
+			return result
+		}
 	default:
 		// For other providers or unknown types, use generic format
 		if encryptedSecretData.Generic != nil {

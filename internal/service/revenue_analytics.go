@@ -31,9 +31,9 @@ func NewRevenueAnalyticsService(params ServiceParams, featureUsageTrackingServic
 }
 
 // GetCostAnalytics retrieves cost analytics following the GetUsageBySubscription pattern
-func (s *revenueAnalyticsService) GetCostAnalytics(
+func (s *revenueAnalyticsService) getCostAnalytics(
 	ctx context.Context,
-	costsheetV2ID string,
+	costsheetID string,
 	req *dto.GetCostAnalyticsRequest,
 ) (*dto.GetCostAnalyticsResponse, error) {
 	// 1. Validate request
@@ -44,14 +44,14 @@ func (s *revenueAnalyticsService) GetCostAnalytics(
 	}
 
 	// 2. Fetch costsheet and associated prices (like subscription line items)
-	prices, err := s.fetchCostsheetPrices(ctx, costsheetV2ID)
+	prices, err := s.fetchCostsheetPrices(ctx, costsheetID)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(prices) == 0 {
-		s.Logger.Warnw("no prices found for costsheet", "costsheet_v2_id", costsheetV2ID)
-		return s.buildEmptyResponse(costsheetV2ID, req), nil
+		s.Logger.Warnw("no prices found for costsheet", "costsheet_id", costsheetID)
+		return s.buildEmptyResponse(costsheetID, req), nil
 	}
 
 	priceMap := make(map[string]*price.Price)
@@ -65,8 +65,8 @@ func (s *revenueAnalyticsService) GetCostAnalytics(
 	}
 
 	if len(meters) == 0 {
-		s.Logger.Warnw("no meters found for costsheet", "costsheet_v2_id", costsheetV2ID)
-		return s.buildEmptyResponse(costsheetV2ID, req), nil
+		s.Logger.Warnw("no meters found for costsheet", "costsheet_id", costsheetID)
+		return s.buildEmptyResponse(costsheetID, req), nil
 	}
 
 	// 4. Build meter usage requests for each customer-price combination
@@ -74,7 +74,7 @@ func (s *revenueAnalyticsService) GetCostAnalytics(
 
 	if len(meterUsageRequests) == 0 {
 		s.Logger.Warnw("no meter usage requests generated")
-		return s.buildEmptyResponse(costsheetV2ID, req), nil
+		return s.buildEmptyResponse(costsheetID, req), nil
 	}
 
 	// 5. Use existing BulkGetUsageByMeter (same as subscription billing)
@@ -90,7 +90,7 @@ func (s *revenueAnalyticsService) GetCostAnalytics(
 	costAnalytics := s.calculateCostsFromUsage(ctx, usageMap, prices, meters, req)
 
 	// 7. Build response with prefetched data
-	return s.buildResponse(costsheetV2ID, req, costAnalytics, meters, priceMap), nil
+	return s.buildResponse(costsheetID, req, costAnalytics, meters, priceMap), nil
 }
 
 // GetDetailedCostAnalytics retrieves detailed cost analytics with derived metrics
@@ -104,8 +104,14 @@ func (s *revenueAnalyticsService) GetDetailedCostAnalytics(
 		return nil, err
 	}
 
+	if len(costsheet.Prices) == 0 {
+		return nil, ierr.NewError("no prices found for costsheet").
+			WithHint("No prices found for costsheet").
+			Mark(ierr.ErrNotFound)
+	}
+
 	// 1. Fetch cost analytics
-	costAnalytics, err := s.GetCostAnalytics(ctx, costsheet.ID, req)
+	costAnalytics, err := s.getCostAnalytics(ctx, costsheet.ID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -149,15 +155,15 @@ func (s *revenueAnalyticsService) GetDetailedCostAnalytics(
 }
 
 // fetchCostsheetPrices fetches prices associated with a costsheet
-func (s *revenueAnalyticsService) fetchCostsheetPrices(ctx context.Context, costsheetV2ID string) ([]*price.Price, error) {
-	if costsheetV2ID == "" {
+func (s *revenueAnalyticsService) fetchCostsheetPrices(ctx context.Context, costsheetID string) ([]*price.Price, error) {
+	if costsheetID == "" {
 		// If no costsheet specified, we could fetch all prices, but for now return empty
 		return []*price.Price{}, nil
 	}
 
 	priceService := NewPriceService(s.ServiceParams)
 	priceFilter := types.NewNoLimitPriceFilter()
-	priceFilter.EntityIDs = []string{costsheetV2ID}
+	priceFilter.EntityIDs = []string{costsheetID}
 	priceFilter.EntityType = lo.ToPtr(types.PRICE_ENTITY_TYPE_COSTSHEET)
 	priceFilter.Status = lo.ToPtr(types.StatusPublished)
 	priceFilter.Expand = lo.ToPtr(string(types.ExpandMeters))
@@ -313,7 +319,7 @@ func (s *revenueAnalyticsService) calculateCostsFromUsage(
 			TotalEvents:        int64(len(usage.Results)),
 			Currency:           price.Currency,
 			PriceID:            price.ID,
-			CostsheetV2ID:      price.EntityID, // Assuming price is linked to costsheet
+			CostsheetID:        price.EntityID, // Assuming price is linked to costsheet
 		}
 
 		costAnalytics = append(costAnalytics, costAnalytic)
@@ -324,7 +330,7 @@ func (s *revenueAnalyticsService) calculateCostsFromUsage(
 
 // buildResponse builds the final cost analytics response
 func (s *revenueAnalyticsService) buildResponse(
-	costsheetV2ID string,
+	costsheetID string,
 	req *dto.GetCostAnalyticsRequest,
 	costAnalytics []dto.CostAnalyticItem,
 	meters map[string]*meter.Meter,
@@ -336,7 +342,7 @@ func (s *revenueAnalyticsService) buildResponse(
 	}
 
 	response := &dto.GetCostAnalyticsResponse{
-		CostsheetV2ID: costsheetV2ID,
+		CostsheetID:   costsheetID,
 		StartTime:     req.StartTime,
 		EndTime:       req.EndTime,
 		CostAnalytics: costAnalytics,
@@ -366,9 +372,9 @@ func (s *revenueAnalyticsService) buildResponse(
 }
 
 // buildEmptyResponse builds an empty response for cases with no data
-func (s *revenueAnalyticsService) buildEmptyResponse(costsheetV2ID string, req *dto.GetCostAnalyticsRequest) *dto.GetCostAnalyticsResponse {
+func (s *revenueAnalyticsService) buildEmptyResponse(costsheetID string, req *dto.GetCostAnalyticsRequest) *dto.GetCostAnalyticsResponse {
 	return &dto.GetCostAnalyticsResponse{
-		CostsheetV2ID:      costsheetV2ID,
+		CostsheetID:        costsheetID,
 		ExternalCustomerID: req.ExternalCustomerID,
 		StartTime:          req.StartTime,
 		EndTime:            req.EndTime,

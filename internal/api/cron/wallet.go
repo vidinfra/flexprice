@@ -178,8 +178,11 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 			)
 
 			// Get all features for this tenant+environment - we'll filter by alert settings in code
+			queryFilter := types.NewNoLimitQueryFilter()
+			queryFilter.Status = lo.ToPtr(types.StatusPublished)
+
 			features, err := h.featureService.GetFeatures(ctx, &types.FeatureFilter{
-				QueryFilter: types.NewNoLimitQueryFilter(),
+				QueryFilter: queryFilter,
 			})
 			if err != nil {
 				h.logger.Errorw("failed to get features for alert checking",

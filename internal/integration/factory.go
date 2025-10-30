@@ -9,7 +9,11 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
 	"github.com/flexprice/flexprice/internal/domain/invoice"
 	"github.com/flexprice/flexprice/internal/domain/payment"
+	"github.com/flexprice/flexprice/internal/domain/price"
+	"github.com/flexprice/flexprice/internal/domain/subscription"
 	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/integration/hubspot"
+	hubspotwebhook "github.com/flexprice/flexprice/internal/integration/hubspot/webhook"
 	"github.com/flexprice/flexprice/internal/integration/s3"
 	"github.com/flexprice/flexprice/internal/integration/stripe"
 	"github.com/flexprice/flexprice/internal/integration/stripe/webhook"
@@ -24,8 +28,10 @@ type Factory struct {
 	logger                       *logger.Logger
 	connectionRepo               connection.Repository
 	customerRepo                 customer.Repository
+	subscriptionRepo             subscription.Repository
 	invoiceRepo                  invoice.Repository
 	paymentRepo                  payment.Repository
+	priceRepo                    price.Repository
 	entityIntegrationMappingRepo entityintegrationmapping.Repository
 	encryptionService            security.EncryptionService
 
@@ -39,8 +45,10 @@ func NewFactory(
 	logger *logger.Logger,
 	connectionRepo connection.Repository,
 	customerRepo customer.Repository,
+	subscriptionRepo subscription.Repository,
 	invoiceRepo invoice.Repository,
 	paymentRepo payment.Repository,
+	priceRepo price.Repository,
 	entityIntegrationMappingRepo entityintegrationmapping.Repository,
 	encryptionService security.EncryptionService,
 ) *Factory {
@@ -49,8 +57,10 @@ func NewFactory(
 		logger:                       logger,
 		connectionRepo:               connectionRepo,
 		customerRepo:                 customerRepo,
+		subscriptionRepo:             subscriptionRepo,
 		invoiceRepo:                  invoiceRepo,
 		paymentRepo:                  paymentRepo,
+		priceRepo:                    priceRepo,
 		entityIntegrationMappingRepo: entityIntegrationMappingRepo,
 		encryptionService:            encryptionService,
 	}
@@ -125,11 +135,64 @@ func (f *Factory) GetStripeIntegration(ctx context.Context) (*StripeIntegration,
 	}, nil
 }
 
+// GetHubSpotIntegration returns a complete HubSpot integration setup
+func (f *Factory) GetHubSpotIntegration(ctx context.Context) (*HubSpotIntegration, error) {
+	// Create HubSpot client
+	hubspotClient := hubspot.NewClient(
+		f.connectionRepo,
+		f.encryptionService,
+		f.logger,
+	)
+
+	// Create customer service
+	customerSvc := hubspot.NewCustomerService(
+		hubspotClient,
+		f.customerRepo,
+		f.entityIntegrationMappingRepo,
+		f.logger,
+	)
+
+	// Create invoice sync service
+	invoiceSyncSvc := hubspot.NewInvoiceSyncService(
+		hubspotClient,
+		f.invoiceRepo,
+		f.entityIntegrationMappingRepo,
+		f.logger,
+	)
+
+	// Create deal sync service
+	dealSyncSvc := hubspot.NewDealSyncService(
+		hubspotClient,
+		f.customerRepo,
+		f.subscriptionRepo,
+		f.priceRepo,
+		f.logger,
+	)
+
+	// Create webhook handler
+	webhookHandler := hubspotwebhook.NewHandler(
+		hubspotClient,
+		customerSvc,
+		f.connectionRepo,
+		f.logger,
+	)
+
+	return &HubSpotIntegration{
+		Client:         hubspotClient,
+		CustomerSvc:    customerSvc,
+		InvoiceSyncSvc: invoiceSyncSvc,
+		DealSyncSvc:    dealSyncSvc,
+		WebhookHandler: webhookHandler,
+	}, nil
+}
+
 // GetIntegrationByProvider returns the appropriate integration for the given provider type
 func (f *Factory) GetIntegrationByProvider(ctx context.Context, providerType types.SecretProvider) (interface{}, error) {
 	switch providerType {
 	case types.SecretProviderStripe:
 		return f.GetStripeIntegration(ctx)
+	case types.SecretProviderHubSpot:
+		return f.GetHubSpotIntegration(ctx)
 	default:
 		return nil, ierr.NewError("unsupported integration provider").
 			WithHint("Provider type is not supported").
@@ -144,6 +207,7 @@ func (f *Factory) GetIntegrationByProvider(ctx context.Context, providerType typ
 func (f *Factory) GetSupportedProviders() []types.SecretProvider {
 	return []types.SecretProvider{
 		types.SecretProviderStripe,
+		types.SecretProviderHubSpot,
 	}
 }
 
@@ -167,6 +231,15 @@ type StripeIntegration struct {
 	WebhookHandler *webhook.Handler
 }
 
+// HubSpotIntegration contains all HubSpot integration services
+type HubSpotIntegration struct {
+	Client         hubspot.HubSpotClient
+	CustomerSvc    hubspot.HubSpotCustomerService
+	InvoiceSyncSvc *hubspot.InvoiceSyncService
+	DealSyncSvc    *hubspot.DealSyncService
+	WebhookHandler *hubspotwebhook.Handler
+}
+
 // IntegrationProvider defines the interface for all integration providers
 type IntegrationProvider interface {
 	GetProviderType() types.SecretProvider
@@ -188,6 +261,21 @@ func (p *StripeProvider) IsAvailable(ctx context.Context) bool {
 	return p.integration.Client.HasStripeConnection(ctx)
 }
 
+// HubSpotProvider implements IntegrationProvider for HubSpot
+type HubSpotProvider struct {
+	integration *HubSpotIntegration
+}
+
+// GetProviderType returns the provider type
+func (p *HubSpotProvider) GetProviderType() types.SecretProvider {
+	return types.SecretProviderHubSpot
+}
+
+// IsAvailable checks if HubSpot integration is available
+func (p *HubSpotProvider) IsAvailable(ctx context.Context) bool {
+	return p.integration.Client.HasHubSpotConnection(ctx)
+}
+
 // GetAvailableProviders returns all available providers for the current environment
 func (f *Factory) GetAvailableProviders(ctx context.Context) ([]IntegrationProvider, error) {
 	var providers []IntegrationProvider
@@ -201,14 +289,14 @@ func (f *Factory) GetAvailableProviders(ctx context.Context) ([]IntegrationProvi
 		}
 	}
 
-	// Future providers can be added here
-	// razorpayIntegration, err := f.GetRazorpayIntegration(ctx)
-	// if err == nil {
-	//     razorpayProvider := &RazorpayProvider{integration: razorpayIntegration}
-	//     if razorpayProvider.IsAvailable(ctx) {
-	//         providers = append(providers, razorpayProvider)
-	//     }
-	// }
+	// Check HubSpot
+	hubspotIntegration, err := f.GetHubSpotIntegration(ctx)
+	if err == nil {
+		hubspotProvider := &HubSpotProvider{integration: hubspotIntegration}
+		if hubspotProvider.IsAvailable(ctx) {
+			providers = append(providers, hubspotProvider)
+		}
+	}
 
 	return providers, nil
 }
