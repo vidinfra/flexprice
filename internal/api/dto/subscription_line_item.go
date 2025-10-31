@@ -173,6 +173,16 @@ func (r *CreateSubscriptionLineItemRequest) ToSubscriptionLineItem(ctx context.C
 
 // Validate validates the delete subscription line item request
 func (r *DeleteSubscriptionLineItemRequest) Validate() error {
+	// Validate effective from date is not in the past if provided
+	if r.EffectiveFrom != nil && r.EffectiveFrom.Before(time.Now().UTC()) {
+		return ierr.NewError("effective_from must be in the future or present").
+			WithHint("Effective from date must be in the future or present").
+			WithReportableDetails(map[string]interface{}{
+				"effective_from": r.EffectiveFrom,
+				"current_time":   time.Now().UTC(),
+			}).
+			Mark(ierr.ErrValidation)
+	}
 
 	return nil
 }

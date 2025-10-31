@@ -109,9 +109,9 @@ func (s *subscriptionService) DeleteSubscriptionLineItem(ctx context.Context, li
 	// Set end date and update
 	var effectiveFrom time.Time
 	if req.EffectiveFrom != nil {
-		effectiveFrom = *req.EffectiveFrom
+		effectiveFrom = req.EffectiveFrom.UTC()
 	} else {
-		effectiveFrom = time.Now()
+		effectiveFrom = time.Now().UTC()
 	}
 
 	// Validate effective from date is after start date
