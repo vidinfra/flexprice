@@ -78,6 +78,10 @@ func (r *alertLogsRepository) Create(ctx context.Context, al *domainAlertLogs.Al
 	if al.ParentEntityID != nil {
 		createQuery = createQuery.SetParentEntityID(*al.ParentEntityID)
 	}
+	// Set customer ID if provided
+	if al.CustomerID != nil {
+		createQuery = createQuery.SetCustomerID(*al.CustomerID)
+	}
 
 	_, err := createQuery.Save(ctx)
 

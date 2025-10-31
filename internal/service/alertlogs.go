@@ -31,6 +31,7 @@ type LogAlertRequest struct {
 	EntityID         string                `json:"entity_id" validate:"required"`
 	ParentEntityType *string               `json:"parent_entity_type,omitempty"` // Optional parent entity type (e.g., "wallet")
 	ParentEntityID   *string               `json:"parent_entity_id,omitempty"`   // Optional parent entity ID (e.g., wallet_id)
+	CustomerID       *string               `json:"customer_id,omitempty"`        // Optional customer ID for whom alert has been raised
 	AlertType        types.AlertType       `json:"alert_type" validate:"required"`
 	AlertStatus      types.AlertState      `json:"alert_status" validate:"required"`
 	AlertInfo        types.AlertInfo       `json:"alert_info" validate:"required"`
@@ -184,6 +185,7 @@ func (s *alertLogsService) LogAlert(ctx context.Context, req *LogAlertRequest) e
 		EntityID:         req.EntityID,
 		ParentEntityType: req.ParentEntityType,
 		ParentEntityID:   req.ParentEntityID,
+		CustomerID:       req.CustomerID,
 		AlertType:        req.AlertType,
 		AlertStatus:      req.AlertStatus,
 		AlertInfo:        req.AlertInfo,
@@ -364,9 +366,17 @@ func (s *alertLogsService) publishWebhookEvent(ctx context.Context, eventName st
 		if alertLog.ParentEntityID != nil {
 			walletID = lo.FromPtr(alertLog.ParentEntityID)
 		}
+		
+		// Get customer_id
+		customerID := ""
+		if alertLog.CustomerID != nil {
+			customerID = lo.FromPtr(alertLog.CustomerID)
+		}
+		
 		webhookPayload, err = json.Marshal(webhookDto.InternalAlertEvent{
 			FeatureID:   alertLog.EntityID,            // Feature ID
 			WalletID:    walletID,                     // Wallet ID from parent entity ID
+			CustomerID:  customerID,                   // Customer ID
 			AlertType:   string(alertLog.AlertType),   // Alert type
 			AlertStatus: string(alertLog.AlertStatus), // Alert status
 		})

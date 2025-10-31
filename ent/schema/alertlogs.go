@@ -66,6 +66,15 @@ func (AlertLogs) Fields() []ent.Field {
 			Nillable().
 			Immutable(),
 
+		// Customer ID (optional) - ID of the customer for whom alert has been raised
+		field.String("customer_id").
+			SchemaType(map[string]string{
+				"postgres": "varchar(50)",
+			}).
+			Optional().
+			Nillable().
+			Immutable(),
+
 		// Type of alert (credit_balance, ongoing_balance, etc)
 		field.String("alert_type").
 			SchemaType(map[string]string{
