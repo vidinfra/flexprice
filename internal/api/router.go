@@ -523,7 +523,7 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 	}
 
 	// Alert routes
-	alert := v1Private.Group("/alert")
+	alert := v1Private.Group("/alerts")
 	{
 		// list alert logs by filter
 		alert.POST("/search", handlers.AlertLogsHandler.ListAlertLogsByFilter)

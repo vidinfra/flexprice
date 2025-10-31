@@ -119,6 +119,11 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[8], AlertLogsColumns[9], AlertLogsColumns[10], AlertLogsColumns[11], AlertLogsColumns[3]},
 			},
+			{
+				Name:    "idx_alertlogs_customer_type_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[12], AlertLogsColumns[13], AlertLogsColumns[14], AlertLogsColumns[3]},
+			},
 		},
 	}
 	// AuthsColumns holds the columns for the "auths" table.

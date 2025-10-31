@@ -120,5 +120,8 @@ func (AlertLogs) Indexes() []ent.Index {
 		// Index for querying alerts by entity + parent entity (for feature wallet balance alerts)
 		index.Fields("tenant_id", "environment_id", "entity_type", "entity_id", "parent_entity_type", "parent_entity_id", "created_at").
 			StorageKey("idx_alertlogs_entity_parent_created_at"),
+		// Index for querying alerts by customer
+		index.Fields("tenant_id", "environment_id", "customer_id", "alert_type", "alert_status", "created_at").
+			StorageKey("idx_alertlogs_customer_type_status_created_at"),
 	}
 }
