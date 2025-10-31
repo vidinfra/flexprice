@@ -23,6 +23,9 @@ type AlertLogsService interface {
 
 	// ListAlertsByEntity retrieves alert logs for a specific entity
 	ListAlertsByEntity(ctx context.Context, entityType types.AlertEntityType, entityID string, limit int) ([]*alertlogs.AlertLog, error)
+
+	// ListAlertLogsByFilter retrieves alert logs by filter
+	ListAlertLogsByFilter(ctx context.Context, filter *types.AlertLogFilter) (*types.ListResponse[*alertlogs.AlertLog], error)
 }
 
 // LogAlertRequest represents the request to log an alert
@@ -366,13 +369,13 @@ func (s *alertLogsService) publishWebhookEvent(ctx context.Context, eventName st
 		if alertLog.ParentEntityID != nil {
 			walletID = lo.FromPtr(alertLog.ParentEntityID)
 		}
-		
+
 		// Get customer_id
 		customerID := ""
 		if alertLog.CustomerID != nil {
 			customerID = lo.FromPtr(alertLog.CustomerID)
 		}
-		
+
 		webhookPayload, err = json.Marshal(webhookDto.InternalAlertEvent{
 			FeatureID:   alertLog.EntityID,            // Feature ID
 			WalletID:    walletID,                     // Wallet ID from parent entity ID
@@ -406,4 +409,55 @@ func (s *alertLogsService) publishWebhookEvent(ctx context.Context, eventName st
 	}
 
 	return nil
+}
+
+func (s *alertLogsService) ListAlertLogsByFilter(ctx context.Context, filter *types.AlertLogFilter) (*types.ListResponse[*alertlogs.AlertLog], error) {
+	if filter == nil {
+		filter = types.NewDefaultAlertLogFilter()
+	}
+
+	if filter.QueryFilter == nil {
+		filter.QueryFilter = types.NewDefaultQueryFilter()
+	}
+
+	// Set default sort order if not specified
+	if filter.QueryFilter.Sort == nil {
+		filter.QueryFilter.Sort = lo.ToPtr("created_at")
+		filter.QueryFilter.Order = lo.ToPtr("desc")
+	}
+
+	// Validate expand fields
+	if filter.Expand != nil && *filter.Expand != "" {
+		expand := filter.GetExpand()
+		if err := expand.Validate(types.AlertLogExpandConfig); err != nil {
+			return nil, err
+		}
+	}
+
+	// validate filters
+	if err := filter.Validate(); err != nil {
+		return nil, err
+	}
+
+	alertLogs, err := s.AlertLogsRepo.List(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	alertLogCount, err := s.AlertLogsRepo.Count(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &types.ListResponse[*alertlogs.AlertLog]{
+		Items: alertLogs,
+	}
+
+	response.Pagination = types.NewPaginationResponse(
+		alertLogCount,
+		filter.GetLimit(),
+		filter.GetOffset(),
+	)
+
+	return response, nil
 }

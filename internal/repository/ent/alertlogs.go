@@ -181,6 +181,19 @@ func (r *alertLogsRepository) List(ctx context.Context, filter *types.AlertLogFi
 	if filter.AlertStatus != "" {
 		query = query.Where(alertlogs.AlertStatus(string(filter.AlertStatus)))
 	}
+	if filter.CustomerID != "" {
+		query = query.Where(alertlogs.CustomerID(filter.CustomerID))
+	}
+
+	// Apply time range filters if provided
+	if filter.TimeRangeFilter != nil {
+		if filter.TimeRangeFilter.StartTime != nil {
+			query = query.Where(alertlogs.CreatedAtGTE(*filter.TimeRangeFilter.StartTime))
+		}
+		if filter.TimeRangeFilter.EndTime != nil {
+			query = query.Where(alertlogs.CreatedAtLTE(*filter.TimeRangeFilter.EndTime))
+		}
+	}
 
 	// Apply pagination
 	if filter.GetLimit() > 0 {
@@ -229,6 +242,19 @@ func (r *alertLogsRepository) Count(ctx context.Context, filter *types.AlertLogF
 	}
 	if filter.AlertStatus != "" {
 		query = query.Where(alertlogs.AlertStatus(string(filter.AlertStatus)))
+	}
+	if filter.CustomerID != "" {
+		query = query.Where(alertlogs.CustomerID(filter.CustomerID))
+	}
+
+	// Apply time range filters if provided
+	if filter.TimeRangeFilter != nil {
+		if filter.TimeRangeFilter.StartTime != nil {
+			query = query.Where(alertlogs.CreatedAtGTE(*filter.TimeRangeFilter.StartTime))
+		}
+		if filter.TimeRangeFilter.EndTime != nil {
+			query = query.Where(alertlogs.CreatedAtLTE(*filter.TimeRangeFilter.EndTime))
+		}
 	}
 
 	count, err := query.Count(ctx)
