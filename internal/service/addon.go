@@ -96,7 +96,8 @@ func (s *addonService) GetAddon(ctx context.Context, id string) (*dto.AddonRespo
 	}
 
 	if len(entitlements.Items) > 0 {
-		response.Entitlements = entitlements.Items
+		response.Entitlements = make([]*dto.EntitlementResponse, len(entitlements.Items))
+		copy(response.Entitlements, entitlements.Items)
 	}
 
 	return response, nil
