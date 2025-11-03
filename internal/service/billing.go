@@ -1088,6 +1088,10 @@ func (s *billingService) CreateInvoiceRequestForCharges(
 		if lineItem.PriceID == nil {
 			continue
 		}
+		metadata := lineItem.Metadata
+		if metadata["is_overage"] == "true" {
+			continue
+		}
 		subLineItem, ok := priceIDtoSubLineItemMap[*lineItem.PriceID]
 		if !ok {
 			continue
