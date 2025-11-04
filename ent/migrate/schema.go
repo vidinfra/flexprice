@@ -88,6 +88,7 @@ var (
 		{Name: "entity_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "parent_entity_type", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "parent_entity_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "customer_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "alert_type", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "alert_status", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "alert_info", Type: field.TypeJSON, SchemaType: map[string]string{"postgres": "jsonb"}},
@@ -106,7 +107,7 @@ var (
 			{
 				Name:    "idx_alertlogs_type",
 				Unique:  false,
-				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[12]},
+				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[13]},
 			},
 			{
 				Name:    "idx_alertlogs_entity_created_at",
@@ -117,6 +118,11 @@ var (
 				Name:    "idx_alertlogs_entity_parent_created_at",
 				Unique:  false,
 				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[8], AlertLogsColumns[9], AlertLogsColumns[10], AlertLogsColumns[11], AlertLogsColumns[3]},
+			},
+			{
+				Name:    "idx_alertlogs_customer_type_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{AlertLogsColumns[1], AlertLogsColumns[7], AlertLogsColumns[12], AlertLogsColumns[13], AlertLogsColumns[14], AlertLogsColumns[3]},
 			},
 		},
 	}
@@ -1322,9 +1328,8 @@ var (
 		{Name: "parent_price_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "start_date", Type: field.TypeTime, Nullable: true},
 		{Name: "end_date", Type: field.TypeTime, Nullable: true},
-		{Name: "addon_prices", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
-		{Name: "price_unit_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "group_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
+		{Name: "price_unit_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 	}
 	// PricesTable holds the schema information for the "prices" table.
 	PricesTable = &schema.Table{
@@ -1333,21 +1338,9 @@ var (
 		PrimaryKey: []*schema.Column{PricesColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
-				Symbol:     "prices_addons_prices",
-				Columns:    []*schema.Column{PricesColumns[37]},
-				RefColumns: []*schema.Column{AddonsColumns[0]},
-				OnDelete:   schema.SetNull,
-			},
-			{
 				Symbol:     "prices_price_unit_price_unit_edge",
 				Columns:    []*schema.Column{PricesColumns[38]},
 				RefColumns: []*schema.Column{PriceUnitColumns[0]},
-				OnDelete:   schema.SetNull,
-			},
-			{
-				Symbol:     "prices_groups_group",
-				Columns:    []*schema.Column{PricesColumns[39]},
-				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 		},
@@ -1371,14 +1364,9 @@ var (
 				Columns: []*schema.Column{PricesColumns[35], PricesColumns[36]},
 			},
 			{
-				Name:    "price_group_id",
-				Unique:  false,
-				Columns: []*schema.Column{PricesColumns[39]},
-			},
-			{
 				Name:    "price_tenant_id_environment_id_group_id",
 				Unique:  false,
-				Columns: []*schema.Column{PricesColumns[1], PricesColumns[7], PricesColumns[39]},
+				Columns: []*schema.Column{PricesColumns[1], PricesColumns[7], PricesColumns[37]},
 			},
 		},
 	}
@@ -2282,9 +2270,7 @@ func init() {
 	EntitlementsTable.ForeignKeys[0].RefTable = AddonsTable
 	InvoiceLineItemsTable.ForeignKeys[0].RefTable = InvoicesTable
 	PaymentAttemptsTable.ForeignKeys[0].RefTable = PaymentsTable
-	PricesTable.ForeignKeys[0].RefTable = AddonsTable
-	PricesTable.ForeignKeys[1].RefTable = PriceUnitTable
-	PricesTable.ForeignKeys[2].RefTable = GroupsTable
+	PricesTable.ForeignKeys[0].RefTable = PriceUnitTable
 	PriceUnitTable.Annotation = &entsql.Annotation{
 		Table: "price_unit",
 	}
