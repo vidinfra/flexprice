@@ -1395,6 +1395,7 @@ func (s *billingService) AggregateEntitlements(entitlements []*dto.EntitlementRe
 				UsageResetPeriod: types.EntitlementUsageResetPeriod(entResp.UsageResetPeriod),
 				IsSoftLimit:      entResp.IsSoftLimit,
 				StaticValue:      entResp.StaticValue,
+				IsUnlimited:      entResp.UsageLimit == nil,
 			}
 			domainEntitlements = append(domainEntitlements, domainEnt)
 		}

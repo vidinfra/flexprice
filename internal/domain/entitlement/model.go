@@ -14,6 +14,7 @@ type Entitlement struct {
 	FeatureID        string                            `json:"feature_id"`
 	FeatureType      types.FeatureType                 `json:"feature_type"`
 	IsEnabled        bool                              `json:"is_enabled"`
+	IsUnlimited      bool                              `json:"is_unlimited"`
 	UsageLimit       *int64                            `json:"usage_limit"`
 	UsageResetPeriod types.EntitlementUsageResetPeriod `json:"usage_reset_period"`
 	IsSoftLimit      bool                              `json:"is_soft_limit"`
