@@ -612,14 +612,7 @@ func (s *subscriptionService) handleSubscriptionPhases(
 		// Create phase line items in database
 		for _, lineItem := range phaseLineItems {
 			if err := s.SubscriptionLineItemRepo.Create(ctx, lineItem); err != nil {
-				return ierr.WithError(err).
-					WithHint("Failed to create phase line item").
-					WithReportableDetails(map[string]interface{}{
-						"subscription_id": sub.ID,
-						"phase_id":        phase.ID,
-						"line_item_id":    lineItem.ID,
-					}).
-					Mark(ierr.ErrInternal)
+				return err
 			}
 		}
 
