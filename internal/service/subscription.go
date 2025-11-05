@@ -623,7 +623,7 @@ func (s *subscriptionService) handleSubscriptionPhases(
 				"subscription_id", sub.ID,
 				"coupon_count", len(phaseCoupons))
 			couponAssociationService := NewCouponAssociationService(s.ServiceParams)
-			err := couponAssociationService.ApplyCouponsToSubscription(ctx, sub.ID, phaseCoupons)
+			err := couponAssociationService.ApplyCouponsToSubscription(ctx, sub, phaseCoupons)
 			if err != nil {
 				return ierr.WithError(err).
 					WithHint("Failed to apply coupons to subscription").
@@ -2925,7 +2925,7 @@ func (s *subscriptionService) handleSubCoupons(
 		"coupon_count", len(subscriptionCoupons))
 
 	couponAssociationService := NewCouponAssociationService(s.ServiceParams)
-	err := couponAssociationService.ApplyCouponsToSubscription(ctx, sub.ID, subscriptionCoupons)
+	err := couponAssociationService.ApplyCouponsToSubscription(ctx, sub, subscriptionCoupons)
 	if err != nil {
 		return ierr.WithError(err).
 			WithHint("Failed to apply coupons to subscription").
