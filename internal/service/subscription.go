@@ -218,6 +218,15 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		}
 	}
 
+	// Create original price to line item mapping before processing overrides
+	// This captures the mapping before any price overrides change the PriceID
+	originalPriceToLineItemMap := make(map[string]string)
+	for _, item := range lineItems {
+		if item.PriceID != "" && item.ID != "" {
+			originalPriceToLineItemMap[item.PriceID] = item.ID
+		}
+	}
+
 	// Process price overrides if provided
 	if len(req.OverrideLineItems) > 0 {
 		err = s.ProcessSubscriptionPriceOverrides(ctx, sub, req.OverrideLineItems, lineItems, priceMap)
@@ -320,7 +329,7 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		}
 
 		// handle subscription coupons
-		err = s.handleSubCoupons(ctx, sub, req)
+		err = s.handleSubCoupons(ctx, sub, req, originalPriceToLineItemMap)
 		if err != nil {
 			return err
 		}
@@ -539,10 +548,6 @@ func (s *subscriptionService) handleSubscriptionPhases(
 		return nil
 	}
 
-	s.Logger.Infow("processing subscription phases",
-		"subscription_id", sub.ID,
-		"phases_count", len(phaseRequests))
-
 	// Create a map from price ID to price for quick lookup
 	priceMap := lo.SliceToMap(validPrices, func(p *dto.PriceResponse) (string, *dto.PriceResponse) {
 		return p.Price.ID, p
@@ -552,20 +557,13 @@ func (s *subscriptionService) handleSubscriptionPhases(
 	planResponse := &dto.PlanResponse{Plan: plan}
 
 	// Process each phase
-	for phaseIdx, phaseReq := range phaseRequests {
+	for _, phaseReq := range phaseRequests {
 		// Convert phase request to domain model
 		phase := phaseReq.ToSubscriptionPhase(ctx, sub.ID)
 
 		// Create the phase
 		if err := s.SubscriptionPhaseRepo.Create(ctx, phase); err != nil {
-			return ierr.WithError(err).
-				WithHint("Failed to create subscription phase").
-				WithReportableDetails(map[string]interface{}{
-					"subscription_id": sub.ID,
-					"phase_index":     phaseIdx,
-					"phase_start":     phaseReq.StartDate,
-				}).
-				Mark(ierr.ErrInternal)
+			return err
 		}
 
 		// Create line items from plan prices - reusing DTO's ToSubscriptionLineItem logic (same as AddSubscriptionLineItem)
@@ -595,6 +593,15 @@ func (s *subscriptionService) handleSubscriptionPhases(
 			return lineItem
 		})
 
+		// Create original price to line item mapping before processing overrides
+		// This captures the mapping before any price overrides change the PriceID
+		phasePriceToLineItemMap := make(map[string]string)
+		for _, item := range phaseLineItems {
+			if item.PriceID != "" && item.ID != "" {
+				phasePriceToLineItemMap[item.PriceID] = item.ID
+			}
+		}
+
 		// Process phase-specific price overrides if present
 		if len(phaseReq.OverrideLineItems) > 0 {
 			if err := s.ProcessSubscriptionPriceOverrides(ctx, sub, phaseReq.OverrideLineItems, phaseLineItems, priceMap); err != nil {
@@ -617,33 +624,14 @@ func (s *subscriptionService) handleSubscriptionPhases(
 		}
 
 		// Handle phase coupons - transform simple coupons to SubscriptionCouponRequest format
-		phaseCoupons := s.normalizePhaseCoupons(phaseReq, phase.ID)
+		couponAssociationService := NewCouponAssociationService(s.ServiceParams)
+		phaseCoupons := s.normalizePhaseCoupons(phaseReq, phase.ID, phasePriceToLineItemMap)
 		if len(phaseCoupons) > 0 {
-			s.Logger.Infow("handling subscription and line item coupon associations",
-				"subscription_id", sub.ID,
-				"coupon_count", len(phaseCoupons))
-			couponAssociationService := NewCouponAssociationService(s.ServiceParams)
 			err := couponAssociationService.ApplyCouponsToSubscription(ctx, sub, phaseCoupons)
 			if err != nil {
-				return ierr.WithError(err).
-					WithHint("Failed to apply coupons to subscription").
-					WithReportableDetails(map[string]interface{}{
-						"subscription_id": sub.ID,
-						"coupon_count":    len(phaseCoupons),
-					}).
-					Mark(ierr.ErrInternal)
+				return err
 			}
-			s.Logger.Infow("successfully applied all coupons to subscription",
-				"subscription_id", sub.ID,
-				"coupon_count", len(phaseCoupons))
 		}
-
-		s.Logger.Infow("created subscription phase",
-			"subscription_id", sub.ID,
-			"phase_id", phase.ID,
-			"phase_index", phaseIdx,
-			"line_items_count", len(phaseLineItems),
-			"coupons_count", len(phaseCoupons))
 	}
 
 	return nil
@@ -654,6 +642,7 @@ func (s *subscriptionService) handleSubscriptionPhases(
 func (s *subscriptionService) normalizePhaseCoupons(
 	phaseReq dto.SubscriptionPhaseCreateRequest,
 	phaseID string,
+	phasePriceToLineItemMap map[string]string,
 ) []dto.SubscriptionCouponRequest {
 	var subscriptionCoupons []dto.SubscriptionCouponRequest
 
@@ -669,18 +658,26 @@ func (s *subscriptionService) normalizePhaseCoupons(
 		}
 	}
 
-	// Convert line item coupons - LineItemCoupons uses line_item_id as keys
-	for lineItemID, couponIDs := range phaseReq.LineItemCoupons {
+	// Convert line item coupons - use phasePriceToLineItemMap to convert priceID to lineItemID
+	for priceID, couponIDs := range phaseReq.LineItemCoupons {
 		for _, couponID := range couponIDs {
 			if couponID != "" {
-				lineItemIDCopy := lineItemID // Copy to avoid loop variable issue
-				subscriptionCoupons = append(subscriptionCoupons, dto.SubscriptionCouponRequest{
-					CouponID:            couponID,
-					LineItemID:          lo.ToPtr(lineItemIDCopy),
-					SubscriptionPhaseID: lo.ToPtr(phaseID),
-					StartDate:           phaseReq.StartDate,
-					EndDate:             phaseReq.EndDate,
-				})
+				// Get lineItemID from the phase price mapping
+				if lineItemID, exists := phasePriceToLineItemMap[priceID]; exists {
+					subscriptionCoupons = append(subscriptionCoupons, dto.SubscriptionCouponRequest{
+						CouponID:            couponID,
+						LineItemID:          lo.ToPtr(lineItemID),
+						SubscriptionPhaseID: lo.ToPtr(phaseID),
+						StartDate:           phaseReq.StartDate,
+						EndDate:             phaseReq.EndDate,
+					})
+				} else {
+					// Log warning but continue processing other coupons
+					s.Logger.Warnw("phase coupon priceID not found in phase line items, skipping",
+						"price_id", priceID,
+						"coupon_id", couponID,
+						"phase_id", phaseID)
+				}
 			}
 		}
 	}
@@ -2892,6 +2889,7 @@ func (s *subscriptionService) handleSubCoupons(
 	ctx context.Context,
 	sub *subscription.Subscription,
 	req dto.CreateSubscriptionRequest,
+	originalPriceToLineItemMap map[string]string,
 ) error {
 	// Convert deprecated fields to SubscriptionCouponRequest format
 	var subscriptionCoupons []dto.SubscriptionCouponRequest
@@ -2903,15 +2901,25 @@ func (s *subscriptionService) handleSubCoupons(
 			})
 		}
 	}
-	for lineItemID, couponIDs := range req.LineItemCoupons {
+
+	// Process LineItemCoupons - use originalPriceToLineItemMap to convert priceID to lineItemID
+	for priceID, couponIDs := range req.LineItemCoupons {
 		for _, couponID := range couponIDs {
 			if couponID != "" {
-				lineItemIDCopy := lineItemID
-				subscriptionCoupons = append(subscriptionCoupons, dto.SubscriptionCouponRequest{
-					CouponID:   couponID,
-					LineItemID: lo.ToPtr(lineItemIDCopy),
-					StartDate:  sub.StartDate,
-				})
+				// Get lineItemID from the original price mapping
+				if lineItemID, exists := originalPriceToLineItemMap[priceID]; exists {
+					subscriptionCoupons = append(subscriptionCoupons, dto.SubscriptionCouponRequest{
+						CouponID:   couponID,
+						LineItemID: lo.ToPtr(lineItemID),
+						StartDate:  sub.StartDate,
+					})
+				} else {
+					// Log warning but continue processing other coupons
+					s.Logger.Warnw("coupon priceID not found in subscription, skipping",
+						"price_id", priceID,
+						"coupon_id", couponID,
+						"subscription_id", sub.ID)
+				}
 			}
 		}
 	}
