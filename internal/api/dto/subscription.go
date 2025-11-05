@@ -279,6 +279,9 @@ type SubscriptionResponse struct {
 	// CouponAssociations are the coupon associations for this subscription
 	CouponAssociations []*CouponAssociationResponse `json:"coupon_associations,omitempty"`
 
+	// Phases are the subscription phases for this subscription
+	Phases []*SubscriptionPhaseResponse `json:"phases,omitempty"`
+
 	// Latest invoice information for incomplete subscriptions
 	LatestInvoice *InvoiceResponse `json:"latest_invoice,omitempty"`
 }

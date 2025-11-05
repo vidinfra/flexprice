@@ -978,6 +978,19 @@ func (s *subscriptionService) GetSubscription(ctx context.Context, id string) (*
 		response.CouponAssociations = couponAssociationsResponse.Items
 	}
 
+	// expand subscription phases
+	subscriptionPhaseService := NewSubscriptionPhaseService(s.ServiceParams)
+	phaseFilter := types.NewNoLimitSubscriptionPhaseFilter()
+	phaseFilter.SubscriptionIDs = []string{id}
+	phasesResponse, err := subscriptionPhaseService.GetSubscriptionPhases(ctx, phaseFilter)
+	if err != nil {
+		s.Logger.Errorw("failed to get subscription phases for subscription",
+			"subscription_id", id,
+			"error", err)
+	} else {
+		response.Phases = phasesResponse.Items
+	}
+
 	// expand price for subscription line items
 	priceIds := lo.Map(lineItems, func(item *subscription.SubscriptionLineItem, _ int) string {
 		return item.PriceID
