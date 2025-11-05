@@ -324,7 +324,7 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 			couponReq.StartDate = sub.StartDate
 			return couponReq
 		})
-		if err := s.ApplyCouponsToSubscriptionWithLineItems(ctx, sub.ID, subscriptionCoupons, lineItems); err != nil {
+		if err := s.ApplyCouponsToSubscriptionWithLineItems(ctx, sub.ID, subscriptionCoupons); err != nil {
 			return err
 		}
 
@@ -622,7 +622,7 @@ func (s *subscriptionService) handleSubscriptionPhases(
 		// Handle phase coupons - transform simple coupons to SubscriptionCouponRequest format
 		phaseCoupons := s.normalizePhaseCoupons(phaseReq, phase.ID)
 		if len(phaseCoupons) > 0 {
-			if err := s.ApplyCouponsToSubscriptionWithLineItems(ctx, sub.ID, phaseCoupons, phaseLineItems); err != nil {
+			if err := s.ApplyCouponsToSubscriptionWithLineItems(ctx, sub.ID, phaseCoupons); err != nil {
 				return err
 			}
 		}
@@ -2876,7 +2876,7 @@ func (s *subscriptionService) ProcessSubscriptionRenewalDueAlert(ctx context.Con
 }
 
 // ApplyCouponsToSubscriptionWithLineItems applies both subscription-level and line item-level coupons to a subscription
-func (s *subscriptionService) ApplyCouponsToSubscriptionWithLineItems(ctx context.Context, subscriptionID string, couponRequests []dto.SubscriptionCouponRequest, lineItems []*subscription.SubscriptionLineItem) error {
+func (s *subscriptionService) ApplyCouponsToSubscriptionWithLineItems(ctx context.Context, subscriptionID string, couponRequests []dto.SubscriptionCouponRequest) error {
 	if len(couponRequests) == 0 {
 		return nil
 	}
