@@ -75,10 +75,9 @@ type SubscriptionCouponRequest struct {
 
 // Validate validates the SubscriptionCouponRequest
 func (r *SubscriptionCouponRequest) Validate() error {
-	if r.CouponID == "" {
-		return ierr.NewError("coupon_id is required").
-			WithHint("Please provide a valid coupon ID").
-			Mark(ierr.ErrValidation)
+
+	if err := validator.ValidateRequest(r); err != nil {
+		return err
 	}
 
 	// Validate date range if EndDate is provided
