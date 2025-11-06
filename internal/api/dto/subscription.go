@@ -556,15 +556,6 @@ func (r *CreateSubscriptionRequest) Validate() error {
 			// If not the last phase, validate that current phase's end date equals next phase's start date
 			if !isLastPhase {
 				nextPhase := r.Phases[i+1]
-				if currentPhase.EndDate == nil {
-					// This should not happen due to check above, but adding for safety
-					return ierr.NewError("phase end_date is required for continuity").
-						WithHint(fmt.Sprintf("Phase at index %d must have an end_date that matches the start_date of the next phase", i)).
-						WithReportableDetails(map[string]interface{}{
-							"phase_index": i,
-						}).
-						Mark(ierr.ErrValidation)
-				}
 
 				// Check if end date of current phase equals start date of next phase
 				if !currentPhase.EndDate.Equal(nextPhase.StartDate) {
