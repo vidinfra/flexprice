@@ -4751,7 +4751,7 @@ func (s *subscriptionService) GetSubscriptionEntitlements(ctx context.Context, s
 		WithEntityIDs([]string{subscriptionID}).
 		WithEntityType(types.ENTITLEMENT_ENTITY_TYPE_SUBSCRIPTION).
 		WithStatus(types.StatusPublished).
-		WithExpand(fmt.Sprintf("%s,%s", types.ExpandFeatures, types.ExpandMeters))
+		WithExpand(fmt.Sprintf("%s,%s,%s", types.ExpandFeatures, types.ExpandMeters, types.ExpandAddons))
 
 	subscriptionEntResp, err := entitlementService.ListEntitlements(ctx, subscriptionEntFilter)
 	if err != nil {
