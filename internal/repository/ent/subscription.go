@@ -160,7 +160,6 @@ func (r *subscriptionRepository) Update(ctx context.Context, sub *domainSub.Subs
 			subscription.TenantID(types.GetTenantID(ctx)),
 			subscription.Status(string(types.StatusPublished)),
 			subscription.EnvironmentID(types.GetEnvironmentID(ctx)),
-			subscription.Version(sub.Version), // Version check for optimistic locking
 		)
 
 	// Set all fields
@@ -177,8 +176,7 @@ func (r *subscriptionRepository) Update(ctx context.Context, sub *domainSub.Subs
 		SetCollectionMethod(subscription.CollectionMethod(sub.CollectionMethod)).
 		SetNillableGatewayPaymentMethodID(sub.GatewayPaymentMethodID).
 		SetUpdatedAt(now).
-		SetUpdatedBy(types.GetUserID(ctx)).
-		AddVersion(1) // Increment version atomically
+		SetUpdatedBy(types.GetUserID(ctx))
 
 	if sub.ActivePauseID != nil {
 		query.SetActivePauseID(*sub.ActivePauseID)
