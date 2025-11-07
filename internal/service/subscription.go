@@ -10,6 +10,7 @@ import (
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/addonassociation"
 	"github.com/flexprice/flexprice/internal/domain/customer"
+	"github.com/flexprice/flexprice/internal/domain/entitlement"
 	"github.com/flexprice/flexprice/internal/domain/invoice"
 	"github.com/flexprice/flexprice/internal/interfaces"
 
@@ -252,6 +253,14 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		// Handle addons if provided
 		if len(req.Addons) > 0 {
 			err = s.handleSubscriptionAddons(ctx, sub, req.Addons)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Process entitlement overrides if provided
+		if len(req.OverrideEntitlements) > 0 {
+			err = s.ProcessSubscriptionEntitlementOverrides(ctx, sub, req.OverrideEntitlements)
 			if err != nil {
 				return err
 			}
@@ -683,28 +692,84 @@ func (s *subscriptionService) handleCreditGrants(
 				Mark(ierr.ErrDatabase)
 		}
 
-		// Apply the credit grant using the new simplified method
+		// Check subscription status before applying credit grant
+		// Incomplete subscriptions should defer credit grants until they become active
+		stateHandler := NewSubscriptionStateHandler(subscription, createdGrant.CreditGrant)
+		action, err := stateHandler.DetermineCreditGrantAction()
+		if err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to determine credit grant action").
+				WithReportableDetails(map[string]interface{}{
+					"subscription_id":     subscription.ID,
+					"grant_id":            createdGrant.ID,
+					"subscription_status": subscription.SubscriptionStatus,
+				}).
+				Mark(ierr.ErrValidation)
+		}
+
+		// Only apply credit grant if subscription status allows it
+		// For incomplete subscriptions, the grant will be deferred and applied later
+		// when the subscription becomes active (via scheduled application processing)
 		metadata := types.Metadata{
 			"created_during": "subscription_creation",
 			"grant_name":     createdGrant.Name,
 		}
 
-		err = creditGrantService.ApplyCreditGrant(
-			ctx,
-			createdGrant.CreditGrant,
-			subscription,
-			metadata,
-		)
+		if action == StateActionApply {
+			// Apply the credit grant using the new simplified method
+			err = creditGrantService.ApplyCreditGrant(
+				ctx,
+				createdGrant.CreditGrant,
+				subscription,
+				metadata,
+			)
 
-		if err != nil {
-			return ierr.WithError(err).
-				WithHint("Failed to apply credit grant for subscription").
-				WithReportableDetails(map[string]interface{}{
-					"subscription_id": subscription.ID,
-					"grant_id":        createdGrant.ID,
-					"grant_name":      createdGrant.Name,
-				}).
-				Mark(ierr.ErrDatabase)
+			if err != nil {
+				return ierr.WithError(err).
+					WithHint("Failed to apply credit grant for subscription").
+					WithReportableDetails(map[string]interface{}{
+						"subscription_id": subscription.ID,
+						"grant_id":        createdGrant.ID,
+						"grant_name":      createdGrant.Name,
+					}).
+					Mark(ierr.ErrDatabase)
+			}
+		} else if action == StateActionDefer || action == StateActionSkip {
+			// For deferred/skipped actions, create a CGA so it can be processed later
+			// when the subscription becomes active (via scheduled application processing)
+			// This ensures the credit grant will be applied when the subscription status changes
+			_, err = creditGrantService.CreateScheduledCreditGrantApplication(
+				ctx,
+				createdGrant.CreditGrant,
+				subscription,
+				metadata,
+			)
+
+			if err != nil {
+				return ierr.WithError(err).
+					WithHint("Failed to create scheduled credit grant application").
+					WithReportableDetails(map[string]interface{}{
+						"subscription_id": subscription.ID,
+						"grant_id":        createdGrant.ID,
+						"grant_name":      createdGrant.Name,
+						"action":          action,
+					}).
+					Mark(ierr.ErrDatabase)
+			}
+
+			s.Logger.Infow("credit grant scheduled for later processing during subscription creation",
+				"subscription_id", subscription.ID,
+				"grant_id", createdGrant.ID,
+				"subscription_status", subscription.SubscriptionStatus,
+				"action", action)
+		} else if action == StateActionCancel {
+			// For cancelled actions, don't create a CGA as the subscription is cancelled
+			// and credits should not be applied
+			s.Logger.Infow("credit grant cancelled during subscription creation",
+				"subscription_id", subscription.ID,
+				"grant_id", createdGrant.ID,
+				"subscription_status", subscription.SubscriptionStatus,
+				"action", action)
 		}
 
 	}
@@ -3728,113 +3793,136 @@ func (s *subscriptionService) ActivateIncompleteSubscription(ctx context.Context
 		"previous_status", types.SubscriptionStatusIncomplete,
 		"new_status", types.SubscriptionStatusActive)
 
+	// Process any pending credit grant applications for this subscription
+	// This ensures credit grants are applied immediately when subscription becomes active
+	// The cron job serves as a backup in case this fails
+	err = s.processPendingCreditGrantsForSubscription(ctx, sub)
+	if err != nil {
+		// Log the error but don't fail the activation
+		// The cron job will pick up these CGAs as a backup
+		s.Logger.Errorw("failed to process pending credit grants during subscription activation",
+			"subscription_id", subscriptionID,
+			"error", err,
+			"note", "cron job will process these as backup")
+	}
+
 	// Publish webhook event for subscription activation
 	s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionActivated, subscriptionID)
 
 	return nil
 }
 
-// GetSubscriptionConfig retrieves the subscription configuration from settings
+// processPendingCreditGrantsForSubscription finds and processes pending CGAs for a subscription
+// This is called when a subscription becomes active to immediately apply deferred credit grants
+func (s *subscriptionService) processPendingCreditGrantsForSubscription(ctx context.Context, sub *subscription.Subscription) error {
+	// Get credit grant service
+	creditGrantService := NewCreditGrantService(s.ServiceParams)
 
-// isEligibleForAutoCancellation checks if an active subscription is eligible for auto-cancellation
-func (s *subscriptionService) isEligibleForAutoCancellation(ctx context.Context, sub *subscription.Subscription, config *types.SubscriptionConfig) bool {
-	// First check if auto-cancellation is enabled
-	if !config.AutoCancellationEnabled {
-		s.Logger.Debugw("auto-cancellation not enabled for subscription",
-			"subscription_id", sub.ID)
-		return false
-	}
-
-	// Check if subscription is active
-	if sub.SubscriptionStatus != types.SubscriptionStatusActive {
-		return false
-	}
-
-	now := time.Now().UTC()
-
-	// Query for unpaid invoices
-	filter := &types.InvoiceFilter{
-		SubscriptionID: sub.ID,
-		PaymentStatus: []types.PaymentStatus{
-			types.PaymentStatusPending,
-			types.PaymentStatusFailed,
+	// Find pending credit grant applications for this subscription
+	filter := &types.CreditGrantApplicationFilter{
+		SubscriptionIDs: []string{sub.ID},
+		ApplicationStatuses: []types.ApplicationStatus{
+			types.ApplicationStatusPending,
+			types.ApplicationStatusFailed,
 		},
+		QueryFilter: types.NewNoLimitQueryFilter(),
 	}
 
-	s.Logger.Debugw("fetching unpaid invoices for auto-cancellation eligibility",
-		"subscription_id", sub.ID,
-		"payment_statuses", filter.PaymentStatus)
-
-	invoices, err := s.InvoiceRepo.List(ctx, filter)
+	applications, err := s.CreditGrantApplicationRepo.List(ctx, filter)
 	if err != nil {
-		s.Logger.Errorw("failed to fetch invoices for auto-cancellation",
-			"subscription_id", sub.ID,
-			"error", err)
-		return false
+		return ierr.WithError(err).
+			WithHint("Failed to get pending credit grant applications").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_id": sub.ID,
+			}).
+			Mark(ierr.ErrDatabase)
 	}
 
-	s.Logger.Debugw("found invoices for subscription",
-		"subscription_id", sub.ID,
-		"invoice_count", len(invoices))
+	if len(applications) == 0 {
+		s.Logger.Infow("no pending credit grant applications found for subscription",
+			"subscription_id", sub.ID)
+		return nil
+	}
 
-	// Check each invoice for eligibility criteria
-	for _, inv := range invoices {
-		// Skip invalid due dates
-		if inv.DueDate == nil {
-			s.Logger.Warnw("invoice has invalid due date, skipping",
-				"subscription_id", sub.ID,
-				"invoice_id", inv.ID)
+	s.Logger.Infow("found pending credit grant applications to process",
+		"subscription_id", sub.ID,
+		"count", len(applications))
+
+	// Process each application
+	successCount := 0
+	failureCount := 0
+	for _, cga := range applications {
+		// Get the credit grant
+		creditGrant, err := creditGrantService.GetCreditGrant(ctx, cga.CreditGrantID)
+		if err != nil {
+			s.Logger.Errorw("failed to get credit grant for application",
+				"application_id", cga.ID,
+				"grant_id", cga.CreditGrantID,
+				"error", err)
+			failureCount++
 			continue
 		}
 
-		// Check amount_remaining (must have outstanding amount)
-		if !inv.AmountRemaining.GreaterThan(decimal.Zero) {
-			s.Logger.Debugw("invoice has no remaining amount, skipping",
-				"subscription_id", sub.ID,
-				"invoice_id", inv.ID,
-				"amount_remaining", inv.AmountRemaining)
+		// Check subscription state and determine action
+		stateHandler := NewSubscriptionStateHandler(sub, creditGrant.CreditGrant)
+		action, err := stateHandler.DetermineCreditGrantAction()
+		if err != nil {
+			s.Logger.Errorw("failed to determine credit grant action",
+				"application_id", cga.ID,
+				"grant_id", cga.CreditGrantID,
+				"error", err)
+			failureCount++
 			continue
 		}
 
-		// Calculate grace period end time: due_date + grace_period_days
-		gracePeriodEndTime := inv.DueDate.AddDate(0, 0, config.GracePeriodDays)
-
-		s.Logger.Debugw("evaluating invoice for auto-cancellation",
-			"subscription_id", sub.ID,
-			"invoice_id", inv.ID,
-			"due_date", inv.DueDate,
-			"amount_remaining", inv.AmountRemaining,
-			"grace_period_days", config.GracePeriodDays,
-			"grace_period_end_time", gracePeriodEndTime,
-			"current_time", now,
-			"is_past_grace_period", now.After(gracePeriodEndTime))
-
-		// Check if current time is past grace period end
-		if now.After(gracePeriodEndTime) {
-			s.Logger.Infow("subscription eligible for auto-cancellation",
-				"subscription_id", sub.ID,
-				"invoice_id", inv.ID,
-				"amount_remaining", inv.AmountRemaining,
-				"due_date", inv.DueDate,
-				"grace_period_end_time", gracePeriodEndTime,
-				"current_time", now,
-				"payment_status", inv.PaymentStatus)
-			return true
-		} else {
-			s.Logger.Debugw("invoice not past grace period yet",
-				"subscription_id", sub.ID,
-				"invoice_id", inv.ID,
-				"due_date", inv.DueDate,
-				"grace_period_end_time", gracePeriodEndTime,
-				"days_until_grace_expires", gracePeriodEndTime.Sub(now).Hours()/24)
+		// Only apply if action is APPLY (subscription is now active)
+		if action != StateActionApply {
+			s.Logger.Infow("skipping credit grant application - action not APPLY",
+				"application_id", cga.ID,
+				"grant_id", cga.CreditGrantID,
+				"action", action,
+				"subscription_status", sub.SubscriptionStatus)
+			continue
 		}
+
+		// Apply the credit grant to wallet
+		err = creditGrantService.ApplyCreditGrantToWallet(ctx, creditGrant.CreditGrant, sub, cga)
+		if err != nil {
+			s.Logger.Errorw("failed to apply credit grant to wallet",
+				"application_id", cga.ID,
+				"grant_id", cga.CreditGrantID,
+				"error", err)
+			failureCount++
+			continue
+		}
+
+		s.Logger.Infow("successfully applied credit grant during subscription activation",
+			"application_id", cga.ID,
+			"grant_id", cga.CreditGrantID,
+			"subscription_id", sub.ID,
+			"credits", cga.Credits)
+		successCount++
 	}
 
-	s.Logger.Debugw("subscription not eligible for auto-cancellation",
+	s.Logger.Infow("completed processing pending credit grants",
 		"subscription_id", sub.ID,
-		"reason", "no invoices past grace period")
+		"total", len(applications),
+		"success", successCount,
+		"failed", failureCount)
 
-	return false
+	if failureCount > 0 {
+		return ierr.NewError("some credit grant applications failed to process").
+			WithHint("Some credit grants could not be applied. The cron job will retry these.").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_id": sub.ID,
+				"total":           len(applications),
+				"success":         successCount,
+				"failed":          failureCount,
+			}).
+			Mark(ierr.ErrInvalidOperation)
+	}
+
+	return nil
 }
 
 // ProcessAutoCancellationSubscriptions processes subscriptions that are eligible for auto-cancellation
@@ -3861,21 +3949,31 @@ func (s *subscriptionService) ProcessAutoCancellationSubscriptions(ctx context.C
 
 	// Process each tenant x environment combination
 	for _, tenantConfig := range enabledConfigs {
+		// Skip if auto-cancellation is not enabled
+		if !tenantConfig.AutoCancellationEnabled {
+			s.Logger.Debugw("auto-cancellation not enabled for tenant",
+				"tenant_id", tenantConfig.TenantID,
+				"environment_id", tenantConfig.EnvironmentID)
+			continue
+		}
+
 		// Create a new context with tenant and environment IDs
 		tenantCtx := context.WithValue(ctx, types.CtxTenantID, tenantConfig.TenantID)
 		tenantCtx = context.WithValue(tenantCtx, types.CtxEnvironmentID, tenantConfig.EnvironmentID)
 
-		s.Logger.Infow("processing tenant",
+		s.Logger.Debugw("processing tenant",
 			"tenant_id", tenantConfig.TenantID,
 			"environment_id", tenantConfig.EnvironmentID,
 			"grace_period_days", tenantConfig.GracePeriodDays)
 
 		// Get all past due invoices for this tenant x environment
 		invoicesFilter := &types.InvoiceFilter{
-			InvoiceType:   types.InvoiceTypeSubscription,
-			PaymentStatus: []types.PaymentStatus{types.PaymentStatusFailed, types.PaymentStatusPending, types.PaymentStatusInitiated, types.PaymentStatusProcessing},
-			SkipLineItems: true,
-			QueryFilter:   types.NewNoLimitQueryFilter(),
+			InvoiceType:       types.InvoiceTypeSubscription,
+			InvoiceStatus:     []types.InvoiceStatus{types.InvoiceStatusFinalized},
+			PaymentStatus:     []types.PaymentStatus{types.PaymentStatusFailed, types.PaymentStatusPending},
+			AmountRemainingGt: lo.ToPtr(decimal.NewFromInt(0)),
+			SkipLineItems:     true,
+			QueryFilter:       types.NewNoLimitQueryFilter(),
 		}
 
 		invoices, err := s.InvoiceRepo.List(tenantCtx, invoicesFilter)
@@ -3887,16 +3985,64 @@ func (s *subscriptionService) ProcessAutoCancellationSubscriptions(ctx context.C
 			continue // Skip this tenant but continue with others
 		}
 
-		subscriptionIDs := lo.FilterMap(invoices, func(invoice *invoice.Invoice, _ int) (string, bool) {
-			return *invoice.SubscriptionID, invoice.SubscriptionID != nil
-		})
-		subscriptionIDs = lo.Uniq(subscriptionIDs)
-
-		s.Logger.Infow("found invoices for tenant",
+		s.Logger.Debugw("found unpaid invoices for tenant",
 			"tenant_id", tenantConfig.TenantID,
 			"environment_id", tenantConfig.EnvironmentID,
-			"invoice_count", len(invoices),
+			"invoice_count", len(invoices))
+
+		// Filter invoices that are past grace period
+		now := time.Now().UTC()
+		eligibleInvoices := lo.Filter(invoices, func(inv *invoice.Invoice, _ int) bool {
+			// Must have a subscription ID
+			if inv.SubscriptionID == nil {
+				return false
+			}
+
+			// Must have a valid due date
+			if inv.DueDate == nil {
+				s.Logger.Warnw("invoice has invalid due date, skipping",
+					"invoice_id", inv.ID,
+					"subscription_id", *inv.SubscriptionID)
+				return false
+			}
+
+			// Calculate grace period end time: due_date + grace_period_days
+			gracePeriodEndTime := inv.DueDate.AddDate(0, 0, tenantConfig.GracePeriodDays)
+
+			// Check if current time is past grace period end
+			isPastGracePeriod := now.After(gracePeriodEndTime)
+
+			if isPastGracePeriod {
+				s.Logger.Debugw("found invoice past grace period",
+					"invoice_id", inv.ID,
+					"subscription_id", *inv.SubscriptionID,
+					"due_date", inv.DueDate,
+					"grace_period_end_time", gracePeriodEndTime,
+					"amount_remaining", inv.AmountRemaining,
+					"current_time", now)
+			}
+
+			return isPastGracePeriod
+		})
+
+		// Extract unique subscription IDs from eligible invoices
+		subscriptionIDs := lo.Uniq(lo.FilterMap(eligibleInvoices, func(inv *invoice.Invoice, _ int) (string, bool) {
+			return lo.FromPtr(inv.SubscriptionID), inv.SubscriptionID != nil
+		}))
+
+		s.Logger.Debugw("found subscriptions with invoices past grace period",
+			"tenant_id", tenantConfig.TenantID,
+			"environment_id", tenantConfig.EnvironmentID,
+			"total_invoices", len(invoices),
+			"eligible_invoices", len(eligibleInvoices),
 			"subscription_count", len(subscriptionIDs))
+
+		if len(subscriptionIDs) == 0 {
+			s.Logger.Debugw("no subscriptions eligible for auto-cancellation",
+				"tenant_id", tenantConfig.TenantID,
+				"environment_id", tenantConfig.EnvironmentID)
+			continue
+		}
 
 		// Get ONLY ACTIVE subscriptions for this tenant x environment
 		filter := &types.SubscriptionFilter{
@@ -3913,7 +4059,7 @@ func (s *subscriptionService) ProcessAutoCancellationSubscriptions(ctx context.C
 			continue // Skip this tenant but continue with others
 		}
 
-		s.Logger.Infow("found subscriptions for tenant",
+		s.Logger.Debugw("found active subscriptions to cancel",
 			"tenant_id", tenantConfig.TenantID,
 			"environment_id", tenantConfig.EnvironmentID,
 			"subscription_count", len(subscriptions))
@@ -3921,39 +4067,39 @@ func (s *subscriptionService) ProcessAutoCancellationSubscriptions(ctx context.C
 		canceledCount := 0
 		failedCount := 0
 
-		// Process each subscription for this tenant
+		// Cancel all subscriptions - they've already been filtered for eligibility
 		for _, sub := range subscriptions {
-			if s.isEligibleForAutoCancellation(tenantCtx, sub, tenantConfig.SubscriptionConfig) {
-				s.Logger.Infow("auto-cancelling subscription",
+			s.Logger.Infow("auto-cancelling subscription",
+				"subscription_id", sub.ID,
+				"tenant_id", tenantConfig.TenantID,
+				"environment_id", tenantConfig.EnvironmentID,
+				"grace_period_days", tenantConfig.GracePeriodDays,
+				"reason", "grace_period_expired",
+			)
+
+			// Cancel the subscription
+			if _, err := s.CancelSubscription(tenantCtx, sub.ID, &dto.CancelSubscriptionRequest{
+				CancellationType: types.CancellationTypeImmediate,
+			}); err != nil {
+				s.Logger.Errorw("failed to auto-cancel subscription",
 					"subscription_id", sub.ID,
 					"tenant_id", tenantConfig.TenantID,
 					"environment_id", tenantConfig.EnvironmentID,
-					"grace_period_days", tenantConfig.GracePeriodDays)
-
-				// Cancel the subscription
-				if _, err := s.CancelSubscription(tenantCtx, sub.ID, &dto.CancelSubscriptionRequest{
-					CancellationType: types.CancellationTypeImmediate,
-				}); err != nil {
-					s.Logger.Errorw("failed to auto-cancel subscription",
-						"subscription_id", sub.ID,
-						"tenant_id", tenantConfig.TenantID,
-						"environment_id", tenantConfig.EnvironmentID,
-						"error", err)
-					failedCount++
-					continue
-				}
-
-				canceledCount++
-
-				// Log audit trail
-				s.Logger.Infow("successfully auto-canceled subscription",
-					"subscription_id", sub.ID,
-					"reason", "grace_period_expired",
-					"grace_period_days", tenantConfig.GracePeriodDays,
-					"canceled_by", "auto_cancellation_system",
-					"tenant_id", tenantConfig.TenantID,
-					"environment_id", tenantConfig.EnvironmentID)
+					"error", err)
+				failedCount++
+				continue
 			}
+
+			canceledCount++
+
+			// Log audit trail
+			s.Logger.Infow("successfully auto-canceled subscription",
+				"subscription_id", sub.ID,
+				"reason", "grace_period_expired",
+				"grace_period_days", tenantConfig.GracePeriodDays,
+				"canceled_by", "auto_cancellation_system",
+				"tenant_id", tenantConfig.TenantID,
+				"environment_id", tenantConfig.EnvironmentID)
 		}
 
 		s.Logger.Infow("completed processing for tenant",
@@ -4532,6 +4678,9 @@ func (s *subscriptionService) GetFeatureUsageBySubscription(ctx context.Context,
 // This includes entitlements from:
 // 1. The subscription's plan
 // 2. Active addon associations (one-time addons counted once, multiple addons counted per occurrence)
+// 3. Subscription-scoped entitlement overrides
+// Note: If a plan/addon entitlement has been overridden at the subscription level,
+// only the subscription-scoped override is returned, not the original.
 func (s *subscriptionService) GetSubscriptionEntitlements(ctx context.Context, subscriptionID string) ([]*dto.EntitlementResponse, error) {
 	// Get the subscription
 	sub, err := s.SubRepo.Get(ctx, subscriptionID)
@@ -4580,27 +4729,114 @@ func (s *subscriptionService) GetSubscriptionEntitlements(ctx context.Context, s
 		return assoc.AddonID
 	}))
 
-	// Step 4: Fetch all addon entitlements in a single bulk query
-	allEntitlements := planEntitlements.Items
+	// Step 4: Fetch addon entitlements if any addons exist
+	var addonEntitlements []*dto.EntitlementResponse
+	if len(addonIDs) > 0 {
+		// Create filter for bulk fetching addon entitlements
+		addonEntFilter := types.NewNoLimitEntitlementFilter().
+			WithEntityIDs(addonIDs).
+			WithEntityType(types.ENTITLEMENT_ENTITY_TYPE_ADDON).
+			WithStatus(types.StatusPublished).
+			WithExpand(fmt.Sprintf("%s,%s", types.ExpandFeatures, types.ExpandMeters))
 
-	if len(addonIDs) == 0 {
-		return allEntitlements, nil
+		addonEntResp, err := entitlementService.ListEntitlements(ctx, addonEntFilter)
+		if err != nil {
+			return nil, err
+		}
+		addonEntitlements = addonEntResp.Items
 	}
 
-	// Create filter for bulk fetching addon entitlements
-	addonEntFilter := types.NewNoLimitEntitlementFilter().
-		WithEntityIDs(addonIDs).
-		WithEntityType(types.ENTITLEMENT_ENTITY_TYPE_ADDON).
+	// Step 5: Fetch subscription-scoped entitlement overrides
+	subscriptionEntFilter := types.NewNoLimitEntitlementFilter().
+		WithEntityIDs([]string{subscriptionID}).
+		WithEntityType(types.ENTITLEMENT_ENTITY_TYPE_SUBSCRIPTION).
 		WithStatus(types.StatusPublished).
-		WithExpand(fmt.Sprintf("%s,%s", types.ExpandFeatures, types.ExpandMeters))
+		WithExpand(fmt.Sprintf("%s,%s,%s", types.ExpandFeatures, types.ExpandMeters, types.ExpandAddons))
 
-	addonEntitlements, err := entitlementService.ListEntitlements(ctx, addonEntFilter)
+	subscriptionEntResp, err := entitlementService.ListEntitlements(ctx, subscriptionEntFilter)
 	if err != nil {
 		return nil, err
 	}
+	subscriptionEntitlements := subscriptionEntResp.Items
 
-	allEntitlements = append(allEntitlements, addonEntitlements.Items...)
-	return allEntitlements, nil
+	// Step 6: Filter out overridden entitlements and combine results
+	finalEntitlements := s.filterOverriddenEntitlements(
+		planEntitlements.Items,
+		addonEntitlements,
+		subscriptionEntitlements,
+		subscriptionID,
+	)
+
+	return finalEntitlements, nil
+}
+
+// filterOverriddenEntitlements removes plan/addon entitlements that have been overridden
+// by subscription-scoped entitlements and returns the combined final list
+func (s *subscriptionService) filterOverriddenEntitlements(
+	planEntitlements []*dto.EntitlementResponse,
+	addonEntitlements []*dto.EntitlementResponse,
+	subscriptionEntitlements []*dto.EntitlementResponse,
+	subscriptionID string,
+) []*dto.EntitlementResponse {
+	// Build a map of parent_entitlement_id -> true for quick lookup
+	s.Logger.Infow("total plan entitlements", "count", len(planEntitlements))
+	s.Logger.Infow("total addon entitlements", "count", len(addonEntitlements))
+	s.Logger.Infow("total subscription entitlements", "count", len(subscriptionEntitlements))
+	overriddenIDs := make(map[string]bool)
+	for _, subEnt := range subscriptionEntitlements {
+		if subEnt.ParentEntitlementID != nil && *subEnt.ParentEntitlementID != "" {
+			overriddenIDs[*subEnt.ParentEntitlementID] = true
+		}
+	}
+
+	// If no overrides exist, just combine all entitlements
+	if len(overriddenIDs) == 0 {
+		allEntitlements := make([]*dto.EntitlementResponse, 0, len(planEntitlements)+len(addonEntitlements)+len(subscriptionEntitlements))
+		allEntitlements = append(allEntitlements, planEntitlements...)
+		allEntitlements = append(allEntitlements, addonEntitlements...)
+		allEntitlements = append(allEntitlements, subscriptionEntitlements...)
+		return allEntitlements
+	}
+
+	// Filter plan entitlements - exclude overridden ones
+	filteredPlanEnts := make([]*dto.EntitlementResponse, 0, len(planEntitlements))
+	planOverrideCount := 0
+	for _, planEnt := range planEntitlements {
+		if !overriddenIDs[planEnt.ID] {
+			filteredPlanEnts = append(filteredPlanEnts, planEnt)
+		} else {
+			planOverrideCount++
+		}
+	}
+
+	// Filter addon entitlements - exclude overridden ones
+	filteredAddonEnts := make([]*dto.EntitlementResponse, 0, len(addonEntitlements))
+	addonOverrideCount := 0
+	for _, addonEnt := range addonEntitlements {
+		if !overriddenIDs[addonEnt.ID] {
+			filteredAddonEnts = append(filteredAddonEnts, addonEnt)
+		} else {
+			addonOverrideCount++
+		}
+	}
+
+	// Log override statistics
+	if planOverrideCount > 0 || addonOverrideCount > 0 {
+		s.Logger.Infow("filtered overridden entitlements",
+			"subscription_id", subscriptionID,
+			"plan_overrides", planOverrideCount,
+			"addon_overrides", addonOverrideCount,
+			"total_subscription_entitlements", len(subscriptionEntitlements))
+	}
+
+	// Combine filtered plan entitlements, filtered addon entitlements, and all subscription overrides
+	finalEntitlements := make([]*dto.EntitlementResponse, 0,
+		len(filteredPlanEnts)+len(filteredAddonEnts)+len(subscriptionEntitlements))
+	finalEntitlements = append(finalEntitlements, filteredPlanEnts...)
+	finalEntitlements = append(finalEntitlements, filteredAddonEnts...)
+	finalEntitlements = append(finalEntitlements, subscriptionEntitlements...)
+
+	return finalEntitlements
 }
 
 // GetAggregatedSubscriptionEntitlements retrieves and aggregates all entitlements for a subscription
@@ -4660,4 +4896,188 @@ func (s *subscriptionService) GetAggregatedSubscriptionEntitlements(ctx context.
 	}
 
 	return response, nil
+}
+
+// ProcessSubscriptionEntitlementOverrides creates subscription-scoped entitlement overrides
+// Only plan entitlements can be overridden, not addon entitlements
+func (s *subscriptionService) ProcessSubscriptionEntitlementOverrides(
+	ctx context.Context,
+	sub *subscription.Subscription,
+	overrideRequests []dto.OverrideEntitlementRequest,
+) error {
+	if len(overrideRequests) == 0 {
+		return nil
+	}
+
+	s.Logger.Infow("processing entitlement overrides",
+		"subscription_id", sub.ID,
+		"override_count", len(overrideRequests))
+
+	// Get plan entitlements to validate and copy from
+	planEntitlements, err := s.EntitlementRepo.ListByPlanIDs(ctx, []string{sub.PlanID})
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to fetch plan entitlements").
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Create a map for quick lookup
+	entitlementMap := make(map[string]*entitlement.Entitlement)
+	for _, ent := range planEntitlements {
+		entitlementMap[ent.ID] = ent
+	}
+
+	// Validate that ONLY plan entitlements are being overridden (no addon entitlements)
+	for _, override := range overrideRequests {
+		// Validate the override request
+		if err := override.Validate(); err != nil {
+			return err
+		}
+
+		// Check if the entitlement exists in plan
+		parentEnt, existsInPlan := entitlementMap[override.EntitlementID]
+
+		if !existsInPlan {
+			// The entitlement is not in the plan, check if it might be an addon entitlement
+			// by fetching the entitlement directly to give a better error message
+			checkEnt, err := s.EntitlementRepo.Get(ctx, override.EntitlementID)
+			if err == nil && checkEnt != nil {
+				// Entitlement exists but is not a plan entitlement
+				if checkEnt.EntityType == types.ENTITLEMENT_ENTITY_TYPE_ADDON {
+					return ierr.NewError("only plan entitlements can be overridden").
+						WithHint("Addon entitlements cannot be overridden at subscription level. Only plan entitlements can be overridden.").
+						WithReportableDetails(map[string]interface{}{
+							"entitlement_id": override.EntitlementID,
+							"entity_type":    checkEnt.EntityType,
+							"entity_id":      checkEnt.EntityID,
+							"plan_id":        sub.PlanID,
+						}).
+						Mark(ierr.ErrValidation)
+				}
+			}
+
+			// Either entitlement doesn't exist or belongs to a different plan
+			return ierr.NewError("entitlement not found").
+				WithHint(fmt.Sprintf("Entitlement %s does not belong to plan %s", override.EntitlementID, sub.PlanID)).
+				WithReportableDetails(map[string]interface{}{
+					"entitlement_id":  override.EntitlementID,
+					"subscription_id": sub.ID,
+					"plan_id":         sub.PlanID,
+				}).
+				Mark(ierr.ErrNotFound)
+		}
+
+		// Double-check entity type (should always be PLAN at this point, but defensive programming)
+		if parentEnt.EntityType != types.ENTITLEMENT_ENTITY_TYPE_PLAN {
+			return ierr.NewError("only plan entitlements can be overridden").
+				WithHint("Only plan entitlements can be overridden at subscription level.").
+				WithReportableDetails(map[string]interface{}{
+					"entitlement_id": override.EntitlementID,
+					"entity_type":    parentEnt.EntityType,
+					"plan_id":        sub.PlanID,
+				}).
+				Mark(ierr.ErrValidation)
+		}
+	}
+
+	// Process each override request
+	for _, override := range overrideRequests {
+		// Get the parent entitlement (already validated above)
+		parentEnt := entitlementMap[override.EntitlementID]
+
+		// Create subscription-scoped entitlement with overrides
+		newEnt := &entitlement.Entitlement{
+			ID:                  types.GenerateUUIDWithPrefix(types.UUID_PREFIX_ENTITLEMENT),
+			EntityType:          types.ENTITLEMENT_ENTITY_TYPE_SUBSCRIPTION,
+			EntityID:            sub.ID,
+			FeatureID:           parentEnt.FeatureID,
+			FeatureType:         parentEnt.FeatureType,
+			UsageResetPeriod:    parentEnt.UsageResetPeriod,
+			IsSoftLimit:         parentEnt.IsSoftLimit,
+			DisplayOrder:        parentEnt.DisplayOrder,
+			ParentEntitlementID: &parentEnt.ID,
+			EnvironmentID:       parentEnt.EnvironmentID,
+			BaseModel:           types.GetDefaultBaseModel(ctx),
+		}
+
+		// Apply overrides - ONLY these 3 fields can be overridden
+		// Filter based on feature type since for metered features, nil is also a valid value
+		switch parentEnt.FeatureType {
+		case types.FeatureTypeMetered:
+			// For metered features, UsageLimit can be overridden (including nil for unlimited)
+			// Simply use whatever value is provided (even if nil)
+			newEnt.UsageLimit = override.UsageLimit
+		default:
+			// For non-metered features, UsageLimit is not relevant, leave as nil
+			newEnt.UsageLimit = nil
+		}
+
+		if override.IsEnabled != nil {
+			newEnt.IsEnabled = *override.IsEnabled
+		} else {
+			newEnt.IsEnabled = parentEnt.IsEnabled
+		}
+
+		if override.StaticValue != nil {
+			newEnt.StaticValue = *override.StaticValue
+		} else {
+			newEnt.StaticValue = parentEnt.StaticValue
+		}
+
+		// Validate based on feature type
+		switch parentEnt.FeatureType {
+		case types.FeatureTypeMetered:
+			// For metered features, usage_limit and is_enabled are relevant
+			if override.StaticValue != nil {
+				return ierr.NewError("static_value cannot be set for metered features").
+					WithHint("Only usage_limit and is_enabled can be overridden for metered features").
+					Mark(ierr.ErrValidation)
+			}
+			// Ensure UsageResetPeriod is set for metered features
+			// If parent has empty reset period, default to MONTHLY
+			if newEnt.UsageResetPeriod == "" {
+				newEnt.UsageResetPeriod = types.ENTITLEMENT_USAGE_RESET_PERIOD_MONTHLY
+				s.Logger.Warnw("subscription entitlement override: parent entitlement had empty usage_reset_period, defaulting to MONTHLY",
+					"subscription_id", sub.ID,
+					"parent_entitlement_id", parentEnt.ID,
+					"feature_id", parentEnt.FeatureID)
+			}
+		case types.FeatureTypeStatic:
+			// For static features, static_value is required
+			if newEnt.StaticValue == "" {
+				return ierr.NewError("static_value is required for static features").
+					WithHint("Please provide static_value for this feature type").
+					Mark(ierr.ErrValidation)
+			}
+			if override.UsageLimit != nil {
+				return ierr.NewError("usage_limit cannot be set for static features").
+					WithHint("Only static_value and is_enabled can be overridden for static features").
+					Mark(ierr.ErrValidation)
+			}
+		}
+
+		// Create the subscription-scoped entitlement
+		_, err := s.EntitlementRepo.Create(ctx, newEnt)
+		if err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to create subscription entitlement override").
+				WithReportableDetails(map[string]interface{}{
+					"subscription_id":       sub.ID,
+					"parent_entitlement_id": parentEnt.ID,
+					"feature_id":            parentEnt.FeatureID,
+				}).
+				Mark(ierr.ErrDatabase)
+		}
+
+		s.Logger.Infow("created subscription-scoped entitlement override",
+			"subscription_id", sub.ID,
+			"entitlement_id", newEnt.ID,
+			"parent_entitlement_id", parentEnt.ID,
+			"feature_id", parentEnt.FeatureID,
+			"usage_limit_override", override.UsageLimit != nil,
+			"is_enabled_override", override.IsEnabled != nil,
+			"static_value_override", override.StaticValue != nil)
+	}
+
+	return nil
 }

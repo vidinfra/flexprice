@@ -19530,32 +19530,33 @@ func (m *CustomerMutation) ResetEdge(name string) error {
 // EntitlementMutation represents an operation that mutates the Entitlement nodes in the graph.
 type EntitlementMutation struct {
 	config
-	op                 Op
-	typ                string
-	id                 *string
-	tenant_id          *string
-	status             *string
-	created_at         *time.Time
-	updated_at         *time.Time
-	created_by         *string
-	updated_by         *string
-	environment_id     *string
-	entity_type        *string
-	entity_id          *string
-	feature_id         *string
-	feature_type       *string
-	is_enabled         *bool
-	usage_limit        *int64
-	addusage_limit     *int64
-	usage_reset_period *string
-	is_soft_limit      *bool
-	static_value       *string
-	display_order      *int
-	adddisplay_order   *int
-	clearedFields      map[string]struct{}
-	done               bool
-	oldValue           func(context.Context) (*Entitlement, error)
-	predicates         []predicate.Entitlement
+	op                    Op
+	typ                   string
+	id                    *string
+	tenant_id             *string
+	status                *string
+	created_at            *time.Time
+	updated_at            *time.Time
+	created_by            *string
+	updated_by            *string
+	environment_id        *string
+	entity_type           *string
+	entity_id             *string
+	feature_id            *string
+	feature_type          *string
+	is_enabled            *bool
+	usage_limit           *int64
+	addusage_limit        *int64
+	usage_reset_period    *string
+	is_soft_limit         *bool
+	static_value          *string
+	display_order         *int
+	adddisplay_order      *int
+	parent_entitlement_id *string
+	clearedFields         map[string]struct{}
+	done                  bool
+	oldValue              func(context.Context) (*Entitlement, error)
+	predicates            []predicate.Entitlement
 }
 
 var _ ent.Mutation = (*EntitlementMutation)(nil)
@@ -20419,6 +20420,55 @@ func (m *EntitlementMutation) ResetDisplayOrder() {
 	m.adddisplay_order = nil
 }
 
+// SetParentEntitlementID sets the "parent_entitlement_id" field.
+func (m *EntitlementMutation) SetParentEntitlementID(s string) {
+	m.parent_entitlement_id = &s
+}
+
+// ParentEntitlementID returns the value of the "parent_entitlement_id" field in the mutation.
+func (m *EntitlementMutation) ParentEntitlementID() (r string, exists bool) {
+	v := m.parent_entitlement_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldParentEntitlementID returns the old "parent_entitlement_id" field's value of the Entitlement entity.
+// If the Entitlement object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *EntitlementMutation) OldParentEntitlementID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldParentEntitlementID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldParentEntitlementID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldParentEntitlementID: %w", err)
+	}
+	return oldValue.ParentEntitlementID, nil
+}
+
+// ClearParentEntitlementID clears the value of the "parent_entitlement_id" field.
+func (m *EntitlementMutation) ClearParentEntitlementID() {
+	m.parent_entitlement_id = nil
+	m.clearedFields[entitlement.FieldParentEntitlementID] = struct{}{}
+}
+
+// ParentEntitlementIDCleared returns if the "parent_entitlement_id" field was cleared in this mutation.
+func (m *EntitlementMutation) ParentEntitlementIDCleared() bool {
+	_, ok := m.clearedFields[entitlement.FieldParentEntitlementID]
+	return ok
+}
+
+// ResetParentEntitlementID resets all changes to the "parent_entitlement_id" field.
+func (m *EntitlementMutation) ResetParentEntitlementID() {
+	m.parent_entitlement_id = nil
+	delete(m.clearedFields, entitlement.FieldParentEntitlementID)
+}
+
 // Where appends a list predicates to the EntitlementMutation builder.
 func (m *EntitlementMutation) Where(ps ...predicate.Entitlement) {
 	m.predicates = append(m.predicates, ps...)
@@ -20453,7 +20503,7 @@ func (m *EntitlementMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *EntitlementMutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 18)
 	if m.tenant_id != nil {
 		fields = append(fields, entitlement.FieldTenantID)
 	}
@@ -20505,6 +20555,9 @@ func (m *EntitlementMutation) Fields() []string {
 	if m.display_order != nil {
 		fields = append(fields, entitlement.FieldDisplayOrder)
 	}
+	if m.parent_entitlement_id != nil {
+		fields = append(fields, entitlement.FieldParentEntitlementID)
+	}
 	return fields
 }
 
@@ -20547,6 +20600,8 @@ func (m *EntitlementMutation) Field(name string) (ent.Value, bool) {
 		return m.StaticValue()
 	case entitlement.FieldDisplayOrder:
 		return m.DisplayOrder()
+	case entitlement.FieldParentEntitlementID:
+		return m.ParentEntitlementID()
 	}
 	return nil, false
 }
@@ -20590,6 +20645,8 @@ func (m *EntitlementMutation) OldField(ctx context.Context, name string) (ent.Va
 		return m.OldStaticValue(ctx)
 	case entitlement.FieldDisplayOrder:
 		return m.OldDisplayOrder(ctx)
+	case entitlement.FieldParentEntitlementID:
+		return m.OldParentEntitlementID(ctx)
 	}
 	return nil, fmt.Errorf("unknown Entitlement field %s", name)
 }
@@ -20718,6 +20775,13 @@ func (m *EntitlementMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetDisplayOrder(v)
 		return nil
+	case entitlement.FieldParentEntitlementID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetParentEntitlementID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Entitlement field %s", name)
 }
@@ -20799,6 +20863,9 @@ func (m *EntitlementMutation) ClearedFields() []string {
 	if m.FieldCleared(entitlement.FieldStaticValue) {
 		fields = append(fields, entitlement.FieldStaticValue)
 	}
+	if m.FieldCleared(entitlement.FieldParentEntitlementID) {
+		fields = append(fields, entitlement.FieldParentEntitlementID)
+	}
 	return fields
 }
 
@@ -20836,6 +20903,9 @@ func (m *EntitlementMutation) ClearField(name string) error {
 		return nil
 	case entitlement.FieldStaticValue:
 		m.ClearStaticValue()
+		return nil
+	case entitlement.FieldParentEntitlementID:
+		m.ClearParentEntitlementID()
 		return nil
 	}
 	return fmt.Errorf("unknown Entitlement nullable field %s", name)
@@ -20895,6 +20965,9 @@ func (m *EntitlementMutation) ResetField(name string) error {
 		return nil
 	case entitlement.FieldDisplayOrder:
 		m.ResetDisplayOrder()
+		return nil
+	case entitlement.FieldParentEntitlementID:
+		m.ResetParentEntitlementID()
 		return nil
 	}
 	return fmt.Errorf("unknown Entitlement field %s", name)
@@ -41560,30 +41633,31 @@ func (m *ScheduledTaskMutation) ResetEdge(name string) error {
 // SecretMutation represents an operation that mutates the Secret nodes in the graph.
 type SecretMutation struct {
 	config
-	op                Op
-	typ               string
-	id                *string
-	tenant_id         *string
-	status            *string
-	created_at        *time.Time
-	updated_at        *time.Time
-	created_by        *string
-	updated_by        *string
-	environment_id    *string
-	name              *string
-	_type             *string
-	provider          *string
-	value             *string
-	display_id        *string
-	permissions       *[]string
-	appendpermissions []string
-	expires_at        *time.Time
-	last_used_at      *time.Time
-	provider_data     *map[string]string
-	clearedFields     map[string]struct{}
-	done              bool
-	oldValue          func(context.Context) (*Secret, error)
-	predicates        []predicate.Secret
+	op             Op
+	typ            string
+	id             *string
+	tenant_id      *string
+	status         *string
+	created_at     *time.Time
+	updated_at     *time.Time
+	created_by     *string
+	updated_by     *string
+	environment_id *string
+	name           *string
+	_type          *string
+	provider       *string
+	value          *string
+	display_id     *string
+	expires_at     *time.Time
+	last_used_at   *time.Time
+	provider_data  *map[string]string
+	roles          *[]string
+	appendroles    []string
+	user_type      *string
+	clearedFields  map[string]struct{}
+	done           bool
+	oldValue       func(context.Context) (*Secret, error)
+	predicates     []predicate.Secret
 }
 
 var _ ent.Mutation = (*SecretMutation)(nil)
@@ -42187,71 +42261,6 @@ func (m *SecretMutation) ResetDisplayID() {
 	delete(m.clearedFields, secret.FieldDisplayID)
 }
 
-// SetPermissions sets the "permissions" field.
-func (m *SecretMutation) SetPermissions(s []string) {
-	m.permissions = &s
-	m.appendpermissions = nil
-}
-
-// Permissions returns the value of the "permissions" field in the mutation.
-func (m *SecretMutation) Permissions() (r []string, exists bool) {
-	v := m.permissions
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldPermissions returns the old "permissions" field's value of the Secret entity.
-// If the Secret object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SecretMutation) OldPermissions(ctx context.Context) (v []string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPermissions is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPermissions requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPermissions: %w", err)
-	}
-	return oldValue.Permissions, nil
-}
-
-// AppendPermissions adds s to the "permissions" field.
-func (m *SecretMutation) AppendPermissions(s []string) {
-	m.appendpermissions = append(m.appendpermissions, s...)
-}
-
-// AppendedPermissions returns the list of values that were appended to the "permissions" field in this mutation.
-func (m *SecretMutation) AppendedPermissions() ([]string, bool) {
-	if len(m.appendpermissions) == 0 {
-		return nil, false
-	}
-	return m.appendpermissions, true
-}
-
-// ClearPermissions clears the value of the "permissions" field.
-func (m *SecretMutation) ClearPermissions() {
-	m.permissions = nil
-	m.appendpermissions = nil
-	m.clearedFields[secret.FieldPermissions] = struct{}{}
-}
-
-// PermissionsCleared returns if the "permissions" field was cleared in this mutation.
-func (m *SecretMutation) PermissionsCleared() bool {
-	_, ok := m.clearedFields[secret.FieldPermissions]
-	return ok
-}
-
-// ResetPermissions resets all changes to the "permissions" field.
-func (m *SecretMutation) ResetPermissions() {
-	m.permissions = nil
-	m.appendpermissions = nil
-	delete(m.clearedFields, secret.FieldPermissions)
-}
-
 // SetExpiresAt sets the "expires_at" field.
 func (m *SecretMutation) SetExpiresAt(t time.Time) {
 	m.expires_at = &t
@@ -42399,6 +42408,120 @@ func (m *SecretMutation) ResetProviderData() {
 	delete(m.clearedFields, secret.FieldProviderData)
 }
 
+// SetRoles sets the "roles" field.
+func (m *SecretMutation) SetRoles(s []string) {
+	m.roles = &s
+	m.appendroles = nil
+}
+
+// Roles returns the value of the "roles" field in the mutation.
+func (m *SecretMutation) Roles() (r []string, exists bool) {
+	v := m.roles
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRoles returns the old "roles" field's value of the Secret entity.
+// If the Secret object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecretMutation) OldRoles(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRoles is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRoles requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRoles: %w", err)
+	}
+	return oldValue.Roles, nil
+}
+
+// AppendRoles adds s to the "roles" field.
+func (m *SecretMutation) AppendRoles(s []string) {
+	m.appendroles = append(m.appendroles, s...)
+}
+
+// AppendedRoles returns the list of values that were appended to the "roles" field in this mutation.
+func (m *SecretMutation) AppendedRoles() ([]string, bool) {
+	if len(m.appendroles) == 0 {
+		return nil, false
+	}
+	return m.appendroles, true
+}
+
+// ClearRoles clears the value of the "roles" field.
+func (m *SecretMutation) ClearRoles() {
+	m.roles = nil
+	m.appendroles = nil
+	m.clearedFields[secret.FieldRoles] = struct{}{}
+}
+
+// RolesCleared returns if the "roles" field was cleared in this mutation.
+func (m *SecretMutation) RolesCleared() bool {
+	_, ok := m.clearedFields[secret.FieldRoles]
+	return ok
+}
+
+// ResetRoles resets all changes to the "roles" field.
+func (m *SecretMutation) ResetRoles() {
+	m.roles = nil
+	m.appendroles = nil
+	delete(m.clearedFields, secret.FieldRoles)
+}
+
+// SetUserType sets the "user_type" field.
+func (m *SecretMutation) SetUserType(s string) {
+	m.user_type = &s
+}
+
+// UserType returns the value of the "user_type" field in the mutation.
+func (m *SecretMutation) UserType() (r string, exists bool) {
+	v := m.user_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUserType returns the old "user_type" field's value of the Secret entity.
+// If the Secret object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SecretMutation) OldUserType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUserType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUserType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUserType: %w", err)
+	}
+	return oldValue.UserType, nil
+}
+
+// ClearUserType clears the value of the "user_type" field.
+func (m *SecretMutation) ClearUserType() {
+	m.user_type = nil
+	m.clearedFields[secret.FieldUserType] = struct{}{}
+}
+
+// UserTypeCleared returns if the "user_type" field was cleared in this mutation.
+func (m *SecretMutation) UserTypeCleared() bool {
+	_, ok := m.clearedFields[secret.FieldUserType]
+	return ok
+}
+
+// ResetUserType resets all changes to the "user_type" field.
+func (m *SecretMutation) ResetUserType() {
+	m.user_type = nil
+	delete(m.clearedFields, secret.FieldUserType)
+}
+
 // Where appends a list predicates to the SecretMutation builder.
 func (m *SecretMutation) Where(ps ...predicate.Secret) {
 	m.predicates = append(m.predicates, ps...)
@@ -42433,7 +42556,7 @@ func (m *SecretMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SecretMutation) Fields() []string {
-	fields := make([]string, 0, 16)
+	fields := make([]string, 0, 17)
 	if m.tenant_id != nil {
 		fields = append(fields, secret.FieldTenantID)
 	}
@@ -42470,9 +42593,6 @@ func (m *SecretMutation) Fields() []string {
 	if m.display_id != nil {
 		fields = append(fields, secret.FieldDisplayID)
 	}
-	if m.permissions != nil {
-		fields = append(fields, secret.FieldPermissions)
-	}
 	if m.expires_at != nil {
 		fields = append(fields, secret.FieldExpiresAt)
 	}
@@ -42481,6 +42601,12 @@ func (m *SecretMutation) Fields() []string {
 	}
 	if m.provider_data != nil {
 		fields = append(fields, secret.FieldProviderData)
+	}
+	if m.roles != nil {
+		fields = append(fields, secret.FieldRoles)
+	}
+	if m.user_type != nil {
+		fields = append(fields, secret.FieldUserType)
 	}
 	return fields
 }
@@ -42514,14 +42640,16 @@ func (m *SecretMutation) Field(name string) (ent.Value, bool) {
 		return m.Value()
 	case secret.FieldDisplayID:
 		return m.DisplayID()
-	case secret.FieldPermissions:
-		return m.Permissions()
 	case secret.FieldExpiresAt:
 		return m.ExpiresAt()
 	case secret.FieldLastUsedAt:
 		return m.LastUsedAt()
 	case secret.FieldProviderData:
 		return m.ProviderData()
+	case secret.FieldRoles:
+		return m.Roles()
+	case secret.FieldUserType:
+		return m.UserType()
 	}
 	return nil, false
 }
@@ -42555,14 +42683,16 @@ func (m *SecretMutation) OldField(ctx context.Context, name string) (ent.Value, 
 		return m.OldValue(ctx)
 	case secret.FieldDisplayID:
 		return m.OldDisplayID(ctx)
-	case secret.FieldPermissions:
-		return m.OldPermissions(ctx)
 	case secret.FieldExpiresAt:
 		return m.OldExpiresAt(ctx)
 	case secret.FieldLastUsedAt:
 		return m.OldLastUsedAt(ctx)
 	case secret.FieldProviderData:
 		return m.OldProviderData(ctx)
+	case secret.FieldRoles:
+		return m.OldRoles(ctx)
+	case secret.FieldUserType:
+		return m.OldUserType(ctx)
 	}
 	return nil, fmt.Errorf("unknown Secret field %s", name)
 }
@@ -42656,13 +42786,6 @@ func (m *SecretMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetDisplayID(v)
 		return nil
-	case secret.FieldPermissions:
-		v, ok := value.([]string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetPermissions(v)
-		return nil
 	case secret.FieldExpiresAt:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -42683,6 +42806,20 @@ func (m *SecretMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetProviderData(v)
+		return nil
+	case secret.FieldRoles:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRoles(v)
+		return nil
+	case secret.FieldUserType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUserType(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Secret field %s", name)
@@ -42729,9 +42866,6 @@ func (m *SecretMutation) ClearedFields() []string {
 	if m.FieldCleared(secret.FieldDisplayID) {
 		fields = append(fields, secret.FieldDisplayID)
 	}
-	if m.FieldCleared(secret.FieldPermissions) {
-		fields = append(fields, secret.FieldPermissions)
-	}
 	if m.FieldCleared(secret.FieldExpiresAt) {
 		fields = append(fields, secret.FieldExpiresAt)
 	}
@@ -42740,6 +42874,12 @@ func (m *SecretMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(secret.FieldProviderData) {
 		fields = append(fields, secret.FieldProviderData)
+	}
+	if m.FieldCleared(secret.FieldRoles) {
+		fields = append(fields, secret.FieldRoles)
+	}
+	if m.FieldCleared(secret.FieldUserType) {
+		fields = append(fields, secret.FieldUserType)
 	}
 	return fields
 }
@@ -42770,9 +42910,6 @@ func (m *SecretMutation) ClearField(name string) error {
 	case secret.FieldDisplayID:
 		m.ClearDisplayID()
 		return nil
-	case secret.FieldPermissions:
-		m.ClearPermissions()
-		return nil
 	case secret.FieldExpiresAt:
 		m.ClearExpiresAt()
 		return nil
@@ -42781,6 +42918,12 @@ func (m *SecretMutation) ClearField(name string) error {
 		return nil
 	case secret.FieldProviderData:
 		m.ClearProviderData()
+		return nil
+	case secret.FieldRoles:
+		m.ClearRoles()
+		return nil
+	case secret.FieldUserType:
+		m.ClearUserType()
 		return nil
 	}
 	return fmt.Errorf("unknown Secret nullable field %s", name)
@@ -42826,9 +42969,6 @@ func (m *SecretMutation) ResetField(name string) error {
 	case secret.FieldDisplayID:
 		m.ResetDisplayID()
 		return nil
-	case secret.FieldPermissions:
-		m.ResetPermissions()
-		return nil
 	case secret.FieldExpiresAt:
 		m.ResetExpiresAt()
 		return nil
@@ -42837,6 +42977,12 @@ func (m *SecretMutation) ResetField(name string) error {
 		return nil
 	case secret.FieldProviderData:
 		m.ResetProviderData()
+		return nil
+	case secret.FieldRoles:
+		m.ResetRoles()
+		return nil
+	case secret.FieldUserType:
+		m.ResetUserType()
 		return nil
 	}
 	return fmt.Errorf("unknown Secret field %s", name)
@@ -59519,6 +59665,9 @@ type UserMutation struct {
 	created_by    *string
 	updated_by    *string
 	email         *string
+	_type         *string
+	roles         *[]string
+	appendroles   []string
 	clearedFields map[string]struct{}
 	done          bool
 	oldValue      func(context.Context) (*User, error)
@@ -59888,7 +60037,7 @@ func (m *UserMutation) Email() (r string, exists bool) {
 // OldEmail returns the old "email" field's value of the User entity.
 // If the User object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UserMutation) OldEmail(ctx context.Context) (v string, err error) {
+func (m *UserMutation) OldEmail(ctx context.Context) (v *string, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldEmail is only allowed on UpdateOne operations")
 	}
@@ -59902,9 +60051,123 @@ func (m *UserMutation) OldEmail(ctx context.Context) (v string, err error) {
 	return oldValue.Email, nil
 }
 
+// ClearEmail clears the value of the "email" field.
+func (m *UserMutation) ClearEmail() {
+	m.email = nil
+	m.clearedFields[user.FieldEmail] = struct{}{}
+}
+
+// EmailCleared returns if the "email" field was cleared in this mutation.
+func (m *UserMutation) EmailCleared() bool {
+	_, ok := m.clearedFields[user.FieldEmail]
+	return ok
+}
+
 // ResetEmail resets all changes to the "email" field.
 func (m *UserMutation) ResetEmail() {
 	m.email = nil
+	delete(m.clearedFields, user.FieldEmail)
+}
+
+// SetType sets the "type" field.
+func (m *UserMutation) SetType(s string) {
+	m._type = &s
+}
+
+// GetType returns the value of the "type" field in the mutation.
+func (m *UserMutation) GetType() (r string, exists bool) {
+	v := m._type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldType returns the old "type" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldType: %w", err)
+	}
+	return oldValue.Type, nil
+}
+
+// ResetType resets all changes to the "type" field.
+func (m *UserMutation) ResetType() {
+	m._type = nil
+}
+
+// SetRoles sets the "roles" field.
+func (m *UserMutation) SetRoles(s []string) {
+	m.roles = &s
+	m.appendroles = nil
+}
+
+// Roles returns the value of the "roles" field in the mutation.
+func (m *UserMutation) Roles() (r []string, exists bool) {
+	v := m.roles
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRoles returns the old "roles" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldRoles(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRoles is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRoles requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRoles: %w", err)
+	}
+	return oldValue.Roles, nil
+}
+
+// AppendRoles adds s to the "roles" field.
+func (m *UserMutation) AppendRoles(s []string) {
+	m.appendroles = append(m.appendroles, s...)
+}
+
+// AppendedRoles returns the list of values that were appended to the "roles" field in this mutation.
+func (m *UserMutation) AppendedRoles() ([]string, bool) {
+	if len(m.appendroles) == 0 {
+		return nil, false
+	}
+	return m.appendroles, true
+}
+
+// ClearRoles clears the value of the "roles" field.
+func (m *UserMutation) ClearRoles() {
+	m.roles = nil
+	m.appendroles = nil
+	m.clearedFields[user.FieldRoles] = struct{}{}
+}
+
+// RolesCleared returns if the "roles" field was cleared in this mutation.
+func (m *UserMutation) RolesCleared() bool {
+	_, ok := m.clearedFields[user.FieldRoles]
+	return ok
+}
+
+// ResetRoles resets all changes to the "roles" field.
+func (m *UserMutation) ResetRoles() {
+	m.roles = nil
+	m.appendroles = nil
+	delete(m.clearedFields, user.FieldRoles)
 }
 
 // Where appends a list predicates to the UserMutation builder.
@@ -59941,7 +60204,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 9)
 	if m.tenant_id != nil {
 		fields = append(fields, user.FieldTenantID)
 	}
@@ -59962,6 +60225,12 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.email != nil {
 		fields = append(fields, user.FieldEmail)
+	}
+	if m._type != nil {
+		fields = append(fields, user.FieldType)
+	}
+	if m.roles != nil {
+		fields = append(fields, user.FieldRoles)
 	}
 	return fields
 }
@@ -59985,6 +60254,10 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.UpdatedBy()
 	case user.FieldEmail:
 		return m.Email()
+	case user.FieldType:
+		return m.GetType()
+	case user.FieldRoles:
+		return m.Roles()
 	}
 	return nil, false
 }
@@ -60008,6 +60281,10 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldUpdatedBy(ctx)
 	case user.FieldEmail:
 		return m.OldEmail(ctx)
+	case user.FieldType:
+		return m.OldType(ctx)
+	case user.FieldRoles:
+		return m.OldRoles(ctx)
 	}
 	return nil, fmt.Errorf("unknown User field %s", name)
 }
@@ -60066,6 +60343,20 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetEmail(v)
 		return nil
+	case user.FieldType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetType(v)
+		return nil
+	case user.FieldRoles:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRoles(v)
+		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)
 }
@@ -60102,6 +60393,12 @@ func (m *UserMutation) ClearedFields() []string {
 	if m.FieldCleared(user.FieldUpdatedBy) {
 		fields = append(fields, user.FieldUpdatedBy)
 	}
+	if m.FieldCleared(user.FieldEmail) {
+		fields = append(fields, user.FieldEmail)
+	}
+	if m.FieldCleared(user.FieldRoles) {
+		fields = append(fields, user.FieldRoles)
+	}
 	return fields
 }
 
@@ -60121,6 +60418,12 @@ func (m *UserMutation) ClearField(name string) error {
 		return nil
 	case user.FieldUpdatedBy:
 		m.ClearUpdatedBy()
+		return nil
+	case user.FieldEmail:
+		m.ClearEmail()
+		return nil
+	case user.FieldRoles:
+		m.ClearRoles()
 		return nil
 	}
 	return fmt.Errorf("unknown User nullable field %s", name)
@@ -60150,6 +60453,12 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldEmail:
 		m.ResetEmail()
+		return nil
+	case user.FieldType:
+		m.ResetType()
+		return nil
+	case user.FieldRoles:
+		m.ResetRoles()
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)
