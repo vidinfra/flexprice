@@ -1599,34 +1599,6 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{SubscriptionsColumns[1], SubscriptionsColumns[7], SubscriptionsColumns[17], SubscriptionsColumns[11], SubscriptionsColumns[2]},
 			},
-			{
-				Name:    "subscription_tenant_id_environment_id_pause_status_status",
-				Unique:  false,
-				Columns: []*schema.Column{SubscriptionsColumns[1], SubscriptionsColumns[7], SubscriptionsColumns[28], SubscriptionsColumns[2]},
-			},
-			{
-				Name:    "subscription_tenant_id_environment_id_active_pause_id_status",
-				Unique:  false,
-				Columns: []*schema.Column{SubscriptionsColumns[1], SubscriptionsColumns[7], SubscriptionsColumns[29], SubscriptionsColumns[2]},
-			},
-			{
-				Name:    "subscription_tenant_id_environment_id_payment_behavior_status",
-				Unique:  false,
-				Columns: []*schema.Column{SubscriptionsColumns[1], SubscriptionsColumns[7], SubscriptionsColumns[33], SubscriptionsColumns[2]},
-			},
-			{
-				Name:    "subscription_tenant_id_environment_id_collection_method_status",
-				Unique:  false,
-				Columns: []*schema.Column{SubscriptionsColumns[1], SubscriptionsColumns[7], SubscriptionsColumns[34], SubscriptionsColumns[2]},
-			},
-			{
-				Name:    "subscription_tenant_id_environment_id_subscription_status_collection_method_status",
-				Unique:  false,
-				Columns: []*schema.Column{SubscriptionsColumns[1], SubscriptionsColumns[7], SubscriptionsColumns[11], SubscriptionsColumns[34], SubscriptionsColumns[2]},
-				Annotation: &entsql.IndexAnnotation{
-					Where: "subscription_status IN ('incomplete', 'past_due')",
-				},
-			},
 		},
 	}
 	// SubscriptionLineItemsColumns holds the columns for the "subscription_line_items" table.
