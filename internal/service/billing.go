@@ -1342,7 +1342,7 @@ func (s *billingService) AggregateEntitlements(entitlements []*dto.EntitlementRe
 			if ent.Addon != nil {
 				entityName = ent.Addon.Name
 			}
-		} else if ent.EntityType == (types.ENTITLEMENT_ENTITY_TYPE_SUBSCRIPTION) {
+		case types.ENTITLEMENT_ENTITY_TYPE_SUBSCRIPTION:
 			entityType = dto.EntitlementSourceEntityTypeSubscription
 			// For subscription entitlements, entity_name can be left empty or set to subscription identifier
 			// The entity_id is the subscription ID itself
