@@ -2,6 +2,9 @@ package razorpay
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 
 	"github.com/flexprice/flexprice/internal/domain/connection"
 	ierr "github.com/flexprice/flexprice/internal/errors"
@@ -19,6 +22,7 @@ type RazorpayClient interface {
 	HasRazorpayConnection(ctx context.Context) bool
 	CreateCustomer(ctx context.Context, customerData map[string]interface{}) (map[string]interface{}, error)
 	CreatePaymentLink(ctx context.Context, paymentLinkData map[string]interface{}) (map[string]interface{}, error)
+	VerifyWebhookSignature(ctx context.Context, payload []byte, signature string) error
 }
 
 // Client handles Razorpay API client setup and configuration
@@ -99,6 +103,10 @@ func (c *Client) GetDecryptedRazorpayConfig(conn *connection.Connection) (*Razor
 		razorpayConfig.SecretKey = secretKey
 	}
 
+	if webhookSecret, exists := decryptedMetadata["webhook_secret"]; exists {
+		razorpayConfig.WebhookSecret = webhookSecret
+	}
+
 	return razorpayConfig, nil
 }
 
@@ -130,15 +138,28 @@ func (c *Client) decryptConnectionMetadata(conn *connection.Connection) (types.M
 			return nil, ierr.NewError("failed to decrypt secret key").Mark(ierr.ErrInternal)
 		}
 
+		// Decrypt webhook secret (optional field)
+		var webhookSecret string
+		if conn.EncryptedSecretData.Razorpay.WebhookSecret != "" {
+			webhookSecret, err = c.encryptionService.Decrypt(conn.EncryptedSecretData.Razorpay.WebhookSecret)
+			if err != nil {
+				c.logger.Warnw("failed to decrypt webhook secret", "connection_id", conn.ID, "error", err)
+				// Don't fail - webhook secret is optional
+				webhookSecret = ""
+			}
+		}
+
 		decryptedMetadata := types.Metadata{
-			"key_id":     keyID,
-			"secret_key": secretKey,
+			"key_id":         keyID,
+			"secret_key":     secretKey,
+			"webhook_secret": webhookSecret,
 		}
 
 		c.logger.Infow("successfully decrypted razorpay credentials",
 			"connection_id", conn.ID,
 			"has_key_id", keyID != "",
-			"has_secret_key", secretKey != "")
+			"has_secret_key", secretKey != "",
+			"has_webhook_secret", webhookSecret != "")
 
 		return decryptedMetadata, nil
 	}
@@ -214,4 +235,44 @@ func (c *Client) CreatePaymentLink(ctx context.Context, paymentLinkData map[stri
 
 	c.logger.Infow("successfully created payment link in Razorpay", "payment_link_id", razorpayPaymentLink["id"])
 	return razorpayPaymentLink, nil
+}
+
+// VerifyWebhookSignature verifies the Razorpay webhook signature
+func (c *Client) VerifyWebhookSignature(ctx context.Context, payload []byte, signature string) error {
+	config, err := c.GetRazorpayConfig(ctx)
+	if err != nil {
+		c.logger.Errorw("failed to get Razorpay config for signature verification", "error", err)
+		return ierr.NewError("failed to verify webhook signature").
+			WithHint("Unable to verify Razorpay webhook signature").
+			Mark(ierr.ErrInternal)
+	}
+
+	// Use webhook secret if available, otherwise fall back to API secret key
+	// According to Razorpay docs, webhooks should use webhook secret
+	secretForVerification := config.WebhookSecret
+	if secretForVerification == "" {
+		c.logger.Warnw("webhook secret not configured, using API secret key as fallback")
+		secretForVerification = config.SecretKey
+	}
+
+	// Verify signature using HMAC SHA256
+	// Razorpay uses HMAC SHA256 to sign the webhook body
+	mac := hmac.New(sha256.New, []byte(secretForVerification))
+	mac.Write(payload)
+	expectedSignature := hex.EncodeToString(mac.Sum(nil))
+
+	if expectedSignature != signature {
+		c.logger.Errorw("webhook signature mismatch",
+			"expected_signature_length", len(expectedSignature),
+			"received_signature_length", len(signature),
+			"payload_length", len(payload),
+			"using_webhook_secret", config.WebhookSecret != "")
+		return ierr.NewError("webhook signature verification failed").
+			WithHint("Invalid webhook signature").
+			Mark(ierr.ErrValidation)
+	}
+
+	c.logger.Infow("webhook signature verified successfully",
+		"using_webhook_secret", config.WebhookSecret != "")
+	return nil
 }

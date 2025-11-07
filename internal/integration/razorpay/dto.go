@@ -6,8 +6,9 @@ import (
 
 // RazorpayConfig holds decrypted Razorpay configuration
 type RazorpayConfig struct {
-	KeyID     string
-	SecretKey string
+	KeyID         string
+	SecretKey     string
+	WebhookSecret string // Optional: for webhook signature verification
 }
 
 // CustomerResponse represents a Razorpay customer

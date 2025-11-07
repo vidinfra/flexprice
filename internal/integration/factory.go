@@ -15,6 +15,7 @@ import (
 	"github.com/flexprice/flexprice/internal/integration/hubspot"
 	hubspotwebhook "github.com/flexprice/flexprice/internal/integration/hubspot/webhook"
 	"github.com/flexprice/flexprice/internal/integration/razorpay"
+	razorpaywebhook "github.com/flexprice/flexprice/internal/integration/razorpay/webhook"
 	"github.com/flexprice/flexprice/internal/integration/s3"
 	"github.com/flexprice/flexprice/internal/integration/stripe"
 	"github.com/flexprice/flexprice/internal/integration/stripe/webhook"
@@ -211,10 +212,18 @@ func (f *Factory) GetRazorpayIntegration(ctx context.Context) (*RazorpayIntegrat
 		f.logger,
 	)
 
+	// Create webhook handler
+	webhookHandler := razorpaywebhook.NewHandler(
+		razorpayClient,
+		f.entityIntegrationMappingRepo,
+		f.logger,
+	)
+
 	return &RazorpayIntegration{
-		Client:      razorpayClient,
-		CustomerSvc: customerSvc,
-		PaymentSvc:  paymentSvc,
+		Client:         razorpayClient,
+		CustomerSvc:    customerSvc,
+		PaymentSvc:     paymentSvc,
+		WebhookHandler: webhookHandler,
 	}, nil
 }
 
@@ -277,9 +286,10 @@ type HubSpotIntegration struct {
 
 // RazorpayIntegration contains all Razorpay integration services
 type RazorpayIntegration struct {
-	Client      razorpay.RazorpayClient
-	CustomerSvc razorpay.RazorpayCustomerService
-	PaymentSvc  *razorpay.PaymentService
+	Client         razorpay.RazorpayClient
+	CustomerSvc    razorpay.RazorpayCustomerService
+	PaymentSvc     *razorpay.PaymentService
+	WebhookHandler *razorpaywebhook.Handler
 }
 
 // IntegrationProvider defines the interface for all integration providers

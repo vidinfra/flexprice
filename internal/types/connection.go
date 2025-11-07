@@ -87,8 +87,9 @@ func (h *HubSpotConnectionMetadata) Validate() error {
 
 // RazorpayConnectionMetadata represents Razorpay-specific connection metadata
 type RazorpayConnectionMetadata struct {
-	KeyID     string `json:"key_id"`     // Razorpay Key ID (encrypted)
-	SecretKey string `json:"secret_key"` // Razorpay Secret Key (encrypted)
+	KeyID         string `json:"key_id"`          // Razorpay Key ID (encrypted)
+	SecretKey     string `json:"secret_key"`      // Razorpay Secret Key (encrypted)
+	WebhookSecret string `json:"webhook_secret"`  // Razorpay Webhook Secret (encrypted, optional)
 }
 
 // Validate validates the Razorpay connection metadata
