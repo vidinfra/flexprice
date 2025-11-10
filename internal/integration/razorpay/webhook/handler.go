@@ -17,6 +17,7 @@ import (
 // Handler handles Razorpay webhook events
 type Handler struct {
 	client                       razorpay.RazorpayClient
+	paymentSvc                   *razorpay.PaymentService
 	entityIntegrationMappingRepo entityintegrationmapping.Repository
 	logger                       *logger.Logger
 }
@@ -24,11 +25,13 @@ type Handler struct {
 // NewHandler creates a new Razorpay webhook handler
 func NewHandler(
 	client razorpay.RazorpayClient,
+	paymentSvc *razorpay.PaymentService,
 	entityIntegrationMappingRepo entityintegrationmapping.Repository,
 	logger *logger.Logger,
 ) *Handler {
 	return &Handler{
 		client:                       client,
+		paymentSvc:                   paymentSvc,
 		entityIntegrationMappingRepo: entityIntegrationMappingRepo,
 		logger:                       logger,
 	}
@@ -158,7 +161,7 @@ func (h *Handler) handlePaymentCaptured(ctx context.Context, event *RazorpayWebh
 		"invoice_id", paymentRecord.DestinationID,
 		"payment_amount", amount.String())
 
-	err = h.reconcilePaymentWithInvoice(ctx, flexpricePaymentID, amount, services.PaymentService, services.InvoiceService)
+	err = h.paymentSvc.ReconcilePaymentWithInvoice(ctx, flexpricePaymentID, amount, services.PaymentService, services.InvoiceService)
 	if err != nil {
 		h.logger.Errorw("failed to reconcile payment with invoice",
 			"error", err,
@@ -271,99 +274,6 @@ func (h *Handler) handlePaymentFailed(ctx context.Context, event *RazorpayWebhoo
 		"razorpay_payment_id", payment.ID,
 		"error_code", payment.ErrorCode,
 		"error_description", payment.ErrorDescription)
-
-	return nil
-}
-
-// reconcilePaymentWithInvoice updates the invoice payment status and amounts when a payment succeeds
-func (h *Handler) reconcilePaymentWithInvoice(ctx context.Context, paymentID string, paymentAmount decimal.Decimal, paymentService interfaces.PaymentService, invoiceService interfaces.InvoiceService) error {
-	h.logger.Infow("starting payment reconciliation with invoice",
-		"payment_id", paymentID,
-		"payment_amount", paymentAmount.String())
-
-	// Get the payment record
-	payment, err := paymentService.GetPayment(ctx, paymentID)
-	if err != nil {
-		h.logger.Errorw("failed to get payment record for reconciliation",
-			"error", err,
-			"payment_id", paymentID)
-		return err
-	}
-
-	h.logger.Infow("got payment record for reconciliation",
-		"payment_id", paymentID,
-		"invoice_id", payment.DestinationID,
-		"payment_amount", payment.Amount.String())
-
-	// Get the invoice
-	invoiceResp, err := invoiceService.GetInvoice(ctx, payment.DestinationID)
-	if err != nil {
-		h.logger.Errorw("failed to get invoice for payment reconciliation",
-			"error", err,
-			"payment_id", paymentID,
-			"invoice_id", payment.DestinationID)
-		return err
-	}
-
-	h.logger.Infow("got invoice for reconciliation",
-		"payment_id", paymentID,
-		"invoice_id", payment.DestinationID,
-		"invoice_amount_due", invoiceResp.AmountDue.String(),
-		"invoice_amount_paid", invoiceResp.AmountPaid.String(),
-		"invoice_amount_remaining", invoiceResp.AmountRemaining.String(),
-		"invoice_payment_status", invoiceResp.PaymentStatus,
-		"invoice_status", invoiceResp.InvoiceStatus)
-
-	// Calculate new amounts
-	newAmountPaid := invoiceResp.AmountPaid.Add(paymentAmount)
-	newAmountRemaining := invoiceResp.AmountDue.Sub(newAmountPaid)
-
-	// Determine payment status
-	var newPaymentStatus types.PaymentStatus
-	if newAmountRemaining.IsZero() {
-		newPaymentStatus = types.PaymentStatusSucceeded
-	} else if newAmountRemaining.IsNegative() {
-		// Invoice is overpaid
-		newPaymentStatus = types.PaymentStatusOverpaid
-		// For overpaid invoices, amount_remaining should be 0
-		newAmountRemaining = decimal.Zero
-	} else {
-		newPaymentStatus = types.PaymentStatusPending
-	}
-
-	h.logger.Infow("calculated new amounts for reconciliation",
-		"payment_id", paymentID,
-		"invoice_id", payment.DestinationID,
-		"payment_amount", paymentAmount.String(),
-		"new_amount_paid", newAmountPaid.String(),
-		"new_amount_remaining", newAmountRemaining.String(),
-		"new_payment_status", newPaymentStatus)
-
-	// Update invoice payment status and amounts using reconciliation method
-	h.logger.Infow("calling invoice reconciliation",
-		"payment_id", paymentID,
-		"invoice_id", payment.DestinationID,
-		"payment_amount", paymentAmount.String(),
-		"new_payment_status", newPaymentStatus)
-
-	err = invoiceService.ReconcilePaymentStatus(ctx, payment.DestinationID, newPaymentStatus, &paymentAmount)
-	if err != nil {
-		h.logger.Errorw("failed to update invoice payment status during reconciliation",
-			"error", err,
-			"payment_id", paymentID,
-			"invoice_id", payment.DestinationID,
-			"payment_amount", paymentAmount.String(),
-			"new_payment_status", newPaymentStatus)
-		return err
-	}
-
-	h.logger.Infow("successfully reconciled payment with invoice",
-		"payment_id", paymentID,
-		"invoice_id", payment.DestinationID,
-		"payment_amount", paymentAmount.String(),
-		"new_payment_status", newPaymentStatus,
-		"new_amount_paid", newAmountPaid.String(),
-		"new_amount_remaining", newAmountRemaining.String())
 
 	return nil
 }

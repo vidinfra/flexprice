@@ -215,6 +215,7 @@ func (f *Factory) GetRazorpayIntegration(ctx context.Context) (*RazorpayIntegrat
 	// Create webhook handler
 	webhookHandler := razorpaywebhook.NewHandler(
 		razorpayClient,
+		paymentSvc,
 		f.entityIntegrationMappingRepo,
 		f.logger,
 	)

@@ -296,3 +296,96 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *CreatePayme
 
 	return response, nil
 }
+
+// ReconcilePaymentWithInvoice updates the invoice payment status and amounts when a payment succeeds
+func (s *PaymentService) ReconcilePaymentWithInvoice(ctx context.Context, paymentID string, paymentAmount decimal.Decimal, paymentService interfaces.PaymentService, invoiceService interfaces.InvoiceService) error {
+	s.logger.Infow("starting payment reconciliation with invoice",
+		"payment_id", paymentID,
+		"payment_amount", paymentAmount.String())
+
+	// Get the payment record
+	payment, err := paymentService.GetPayment(ctx, paymentID)
+	if err != nil {
+		s.logger.Errorw("failed to get payment record for reconciliation",
+			"error", err,
+			"payment_id", paymentID)
+		return err
+	}
+
+	s.logger.Infow("got payment record for reconciliation",
+		"payment_id", paymentID,
+		"invoice_id", payment.DestinationID,
+		"payment_amount", payment.Amount.String())
+
+	// Get the invoice
+	invoiceResp, err := invoiceService.GetInvoice(ctx, payment.DestinationID)
+	if err != nil {
+		s.logger.Errorw("failed to get invoice for payment reconciliation",
+			"error", err,
+			"payment_id", paymentID,
+			"invoice_id", payment.DestinationID)
+		return err
+	}
+
+	s.logger.Infow("got invoice for reconciliation",
+		"payment_id", paymentID,
+		"invoice_id", payment.DestinationID,
+		"invoice_amount_due", invoiceResp.AmountDue.String(),
+		"invoice_amount_paid", invoiceResp.AmountPaid.String(),
+		"invoice_amount_remaining", invoiceResp.AmountRemaining.String(),
+		"invoice_payment_status", invoiceResp.PaymentStatus,
+		"invoice_status", invoiceResp.InvoiceStatus)
+
+	// Calculate new amounts
+	newAmountPaid := invoiceResp.AmountPaid.Add(paymentAmount)
+	newAmountRemaining := invoiceResp.AmountDue.Sub(newAmountPaid)
+
+	// Determine payment status
+	var newPaymentStatus types.PaymentStatus
+	if newAmountRemaining.IsZero() {
+		newPaymentStatus = types.PaymentStatusSucceeded
+	} else if newAmountRemaining.IsNegative() {
+		// Invoice is overpaid
+		newPaymentStatus = types.PaymentStatusOverpaid
+		// For overpaid invoices, amount_remaining should be 0
+		newAmountRemaining = decimal.Zero
+	} else {
+		newPaymentStatus = types.PaymentStatusPending
+	}
+
+	s.logger.Infow("calculated new amounts for reconciliation",
+		"payment_id", paymentID,
+		"invoice_id", payment.DestinationID,
+		"payment_amount", paymentAmount.String(),
+		"new_amount_paid", newAmountPaid.String(),
+		"new_amount_remaining", newAmountRemaining.String(),
+		"new_payment_status", newPaymentStatus)
+
+	// Update invoice payment status and amounts using reconciliation method
+	s.logger.Infow("calling invoice reconciliation",
+		"payment_id", paymentID,
+		"invoice_id", payment.DestinationID,
+		"payment_amount", paymentAmount.String(),
+		"new_payment_status", newPaymentStatus)
+
+	err = invoiceService.ReconcilePaymentStatus(ctx, payment.DestinationID, newPaymentStatus, &paymentAmount)
+	if err != nil {
+		s.logger.Errorw("failed to update invoice payment status during reconciliation",
+			"error", err,
+			"payment_id", paymentID,
+			"invoice_id", payment.DestinationID,
+			"payment_amount", paymentAmount.String(),
+			"new_payment_status", newPaymentStatus)
+		return err
+	}
+
+	s.logger.Infow("successfully reconciled payment with invoice",
+		"payment_id", paymentID,
+		"invoice_id", payment.DestinationID,
+		"payment_amount", paymentAmount.String(),
+		"new_payment_status", newPaymentStatus,
+		"new_amount_paid", newAmountPaid.String(),
+		"new_amount_remaining", newAmountRemaining.String())
+
+	return nil
+}
