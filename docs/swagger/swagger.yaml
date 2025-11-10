@@ -1836,7 +1836,6 @@ definitions:
           paying for a billing period
         type: number
       coupons:
-        description: '@deprecated : Use SubscriptionCoupons instead'
         items:
           type: string
         type: array
@@ -1871,7 +1870,6 @@ definitions:
           items:
             type: string
           type: array
-        description: '@deprecated : Use SubscriptionCoupons instead'
         type: object
       lookup_key:
         type: string
@@ -1918,14 +1916,6 @@ definitions:
           This is IGNORED when the billing cycle is anniversary.
       start_date:
         type: string
-      subscription_coupons:
-        description: |-
-          SubscriptionCoupons is a list of coupon requests to be applied to the subscription
-          If PriceID is provided in a coupon request, it's applied to that line item
-          If PriceID is omitted, it's applied at the subscription level
-        items:
-          $ref: '#/definitions/dto.SubscriptionCouponRequest'
-        type: array
       tax_rate_overrides:
         description: "tax_rate_overrides is the tax rate overrides\tto be applied
           to the subscription"
@@ -2747,6 +2737,15 @@ definitions:
       total_count:
         type: integer
     type: object
+  dto.GetMonitoringDataResponse:
+    properties:
+      consumption_lag:
+        type: integer
+      post_processing_lag:
+        type: integer
+      total_count:
+        type: integer
+    type: object
   dto.GetPreviewInvoiceRequest:
     properties:
       period_end:
@@ -3063,32 +3062,25 @@ definitions:
     type: object
   dto.InvoiceCoupon:
     properties:
-      amount_off:
-        type: number
       coupon_association_id:
         type: string
       coupon_id:
         type: string
-      percentage_off:
-        type: number
-      type:
-        $ref: '#/definitions/types.CouponType'
+    required:
+    - coupon_id
     type: object
   dto.InvoiceLineItemCoupon:
     properties:
-      amount_off:
-        type: number
       coupon_association_id:
         type: string
       coupon_id:
         type: string
       line_item_id:
-        description: ID of the invoice line item this coupon applies to
+        description: price_id used to match the line item
         type: string
-      percentage_off:
-        type: number
-      type:
-        $ref: '#/definitions/types.CouponType'
+    required:
+    - coupon_id
+    - line_item_id
     type: object
   dto.InvoiceLineItemPreview:
     properties:
@@ -3688,6 +3680,30 @@ definitions:
     required:
     - email
     - password
+    type: object
+  dto.ManualBalanceDebitRequest:
+    properties:
+      credits:
+        description: credits is the number of credits to debit from the wallet
+        type: number
+      description:
+        description: description to add any specific details about the transaction
+        type: string
+      idempotency_key:
+        description: idempotency_key is a unique key for the transaction
+        type: string
+      metadata:
+        allOf:
+        - $ref: '#/definitions/types.Metadata'
+        description: metadata is a map of key-value pairs to store any additional
+          information about the transaction
+      transaction_reason:
+        allOf:
+        - $ref: '#/definitions/types.TransactionReason'
+        description: transaction_reason is the reason for the transaction
+    required:
+    - idempotency_key
+    - transaction_reason
     type: object
   dto.MeterResponse:
     properties:
@@ -4478,46 +4494,6 @@ definitions:
       subscription_id:
         type: string
     type: object
-  dto.SubscriptionCouponRequest:
-    properties:
-      coupon_id:
-        type: string
-      end_date:
-        type: string
-      price_id:
-        type: string
-      start_date:
-        type: string
-      subscription_phase_id:
-        type: string
-    required:
-    - coupon_id
-    type: object
-    properties:
-      coupon_id:
-        type: string
-      end_date:
-        type: string
-      price_id:
-        type: string
-      start_date:
-        type: string
-      subscription_phase_id:
-        type: string
-    required:
-    - coupon_id
-    type: object
-  dto.SubscriptionEntitlementsResponse:
-    properties:
-      features:
-        items:
-          $ref: '#/definitions/dto.AggregatedFeature'
-        type: array
-      plan_id:
-        type: string
-      subscription_id:
-        type: string
-    type: object
   dto.SubscriptionLineItemResponse:
     properties:
       billing_period:
@@ -4638,8 +4614,22 @@ definitions:
     type: object
   dto.SubscriptionPhaseCreateRequest:
     properties:
+      coupons:
+        description: Coupons represents subscription-level coupons to be applied to
+          this phase
+        items:
+          type: string
+        type: array
       end_date:
         type: string
+      line_item_coupons:
+        additionalProperties:
+          items:
+            type: string
+          type: array
+        description: LineItemCoupons represents line item-level coupons (map of line_item_id
+          to coupon IDs)
+        type: object
       metadata:
         additionalProperties:
           type: string
@@ -4653,16 +4643,43 @@ definitions:
         type: array
       start_date:
         type: string
-      subscription_coupons:
-        description: |-
-          SubscriptionCoupons is a list of coupon requests to be applied to the subscription
-          If PriceID is provided in a coupon request, it's applied to that line item
-          If PriceID is omitted, it's applied at the subscription level
-        items:
-          $ref: '#/definitions/dto.SubscriptionCouponRequest'
-        type: array
     required:
     - start_date
+    type: object
+  dto.SubscriptionPhaseResponse:
+    properties:
+      created_at:
+        type: string
+      created_by:
+        type: string
+      end_date:
+        description: EndDate is when the phase ends (nil if phase is still active
+          or indefinite)
+        type: string
+      environment_id:
+        description: EnvironmentID is the environment identifier for the phase
+        type: string
+      id:
+        description: ID is the unique identifier for the subscription phase
+        type: string
+      metadata:
+        allOf:
+        - $ref: '#/definitions/types.Metadata'
+        description: Metadata contains additional key-value pairs
+      start_date:
+        description: StartDate is when the phase starts
+        type: string
+      status:
+        $ref: '#/definitions/types.Status'
+      subscription_id:
+        description: SubscriptionID is the identifier for the subscription
+        type: string
+      tenant_id:
+        type: string
+      updated_at:
+        type: string
+      updated_by:
+        type: string
     type: object
   dto.SubscriptionResponse:
     properties:
@@ -4783,8 +4800,9 @@ definitions:
         description: PaymentBehavior determines how subscription payments are handled
         type: string
       phases:
+        description: Phases are the subscription phases for this subscription
         items:
-          $ref: '#/definitions/subscription.SubscriptionPhase'
+          $ref: '#/definitions/dto.SubscriptionPhaseResponse'
         type: array
       plan:
         $ref: '#/definitions/dto.PlanResponse'
@@ -7667,21 +7685,30 @@ definitions:
         - $ref: '#/definitions/types.S3EncryptionType'
         description: 'Encryption type: "AES256", "aws:kms", "aws:kms:dsse" (default:
           "AES256")'
+      endpoint_url:
+        description: Custom S3 endpoint URL (e.g., "http://minio:9000" for MinIO)
+        type: string
       key_prefix:
         description: Optional prefix for S3 keys (e.g., "flexprice-exports/")
         type: string
       region:
         description: AWS region (e.g., "us-west-2")
         type: string
+      use_path_style:
+        description: Use path-style addressing instead of virtual-hosted-style (required
+          for MinIO)
+        type: boolean
     type: object
   types.ScheduledTaskEntityType:
     enum:
     - events
     - invoice
+    - credit_topups
     type: string
     x-enum-varnames:
     - ScheduledTaskEntityTypeEvents
     - ScheduledTaskEntityTypeInvoice
+    - ScheduledTaskEntityTypeCreditTopups
   types.ScheduledTaskInterval:
     enum:
     - custom
@@ -7987,6 +8014,7 @@ definitions:
     - CREDIT_NOTE
     - CREDIT_EXPIRED
     - WALLET_TERMINATION
+    - MANUAL_BALANCE_DEBIT
     type: string
     x-enum-varnames:
     - TransactionReasonInvoicePayment
@@ -7997,6 +8025,7 @@ definitions:
     - TransactionReasonCreditNote
     - TransactionReasonCreditExpired
     - TransactionReasonWalletTermination
+    - TransactionReasonManualBalanceDebit
   types.TransactionStatus:
     enum:
     - pending
@@ -10976,6 +11005,26 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Bulk Ingest events
+      tags:
+      - Events
+  /events/monitoring:
+    get:
+      description: Retrieve monitoring data for events including consumer lag and
+        event metrics (last 24 hours by default)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.GetMonitoringDataResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get monitoring data
       tags:
       - Events
   /events/query:
@@ -15315,6 +15364,47 @@ paths:
       summary: Get wallet balance
       tags:
       - Wallets
+  /wallets/{id}/debit:
+    post:
+      consumes:
+      - application/json
+      description: Debit a wallet by debiting credits from a wallet
+      parameters:
+      - description: Wallet ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Debit wallet request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.ManualBalanceDebitRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.WalletResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/errors.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Debit a wallet
+      tags:
+      - Wallets
   /wallets/{id}/terminate:
     post:
       consumes:
@@ -15470,6 +15560,7 @@ paths:
         - CREDIT_NOTE
         - CREDIT_EXPIRED
         - WALLET_TERMINATION
+        - MANUAL_BALANCE_DEBIT
         in: query
         name: transaction_reason
         type: string
@@ -15482,6 +15573,7 @@ paths:
         - TransactionReasonCreditNote
         - TransactionReasonCreditExpired
         - TransactionReasonWalletTermination
+        - TransactionReasonManualBalanceDebit
       - enum:
         - pending
         - completed

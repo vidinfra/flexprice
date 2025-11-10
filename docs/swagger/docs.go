@@ -4421,6 +4421,37 @@ const docTemplate = `{
                 }
             }
         },
+        "/events/monitoring": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Retrieve monitoring data for events including consumer lag and event metrics (last 24 hours by default)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Events"
+                ],
+                "summary": "Get monitoring data",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.GetMonitoringDataResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events/query": {
             "post": {
                 "security": [
@@ -7964,7 +7995,7 @@ const docTemplate = `{
                 "summary": "Create a new API key",
                 "parameters": [
                     {
-                        "description": "API key creation request",
+                        "description": "API key creation request\\",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -11124,6 +11155,70 @@ const docTemplate = `{
                 }
             }
         },
+        "/wallets/{id}/debit": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Debit a wallet by debiting credits from a wallet",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Wallets"
+                ],
+                "summary": "Debit a wallet",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Wallet ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Debit wallet request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.ManualBalanceDebitRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.WalletResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/errors.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/wallets/{id}/terminate": {
             "post": {
                 "security": [
@@ -11370,7 +11465,8 @@ const docTemplate = `{
                             "PURCHASED_CREDIT_DIRECT",
                             "CREDIT_NOTE",
                             "CREDIT_EXPIRED",
-                            "WALLET_TERMINATION"
+                            "WALLET_TERMINATION",
+                            "MANUAL_BALANCE_DEBIT"
                         ],
                         "type": "string",
                         "x-enum-varnames": [
@@ -11381,7 +11477,8 @@ const docTemplate = `{
                             "TransactionReasonPurchasedCreditDirect",
                             "TransactionReasonCreditNote",
                             "TransactionReasonCreditExpired",
-                            "TransactionReasonWalletTermination"
+                            "TransactionReasonWalletTermination",
+                            "TransactionReasonManualBalanceDebit"
                         ],
                         "name": "transaction_reason",
                         "in": "query"
@@ -14170,7 +14267,6 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "coupons": {
-                    "description": "@deprecated : Use SubscriptionCoupons instead",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -14205,7 +14301,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "line_item_coupons": {
-                    "description": "@deprecated : Use SubscriptionCoupons instead",
                     "type": "object",
                     "additionalProperties": {
                         "type": "array",
@@ -14269,13 +14364,6 @@ const docTemplate = `{
                 },
                 "start_date": {
                     "type": "string"
-                },
-                "subscription_coupons": {
-                    "description": "SubscriptionCoupons is a list of coupon requests to be applied to the subscription\nIf PriceID is provided in a coupon request, it's applied to that line item\nIf PriceID is omitted, it's applied at the subscription level",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/dto.SubscriptionCouponRequest"
-                    }
                 },
                 "tax_rate_overrides": {
                     "description": "tax_rate_overrides is the tax rate overrides\tto be applied to the subscription",
@@ -15412,6 +15500,20 @@ const docTemplate = `{
                 }
             }
         },
+        "dto.GetMonitoringDataResponse": {
+            "type": "object",
+            "properties": {
+                "consumption_lag": {
+                    "type": "integer"
+                },
+                "post_processing_lag": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
         "dto.GetPreviewInvoiceRequest": {
             "type": "object",
             "required": [
@@ -15821,30 +15923,25 @@ const docTemplate = `{
         },
         "dto.InvoiceCoupon": {
             "type": "object",
+            "required": [
+                "coupon_id"
+            ],
             "properties": {
-                "amount_off": {
-                    "type": "number"
-                },
                 "coupon_association_id": {
                     "type": "string"
                 },
                 "coupon_id": {
                     "type": "string"
-                },
-                "percentage_off": {
-                    "type": "number"
-                },
-                "type": {
-                    "$ref": "#/definitions/types.CouponType"
                 }
             }
         },
         "dto.InvoiceLineItemCoupon": {
             "type": "object",
+            "required": [
+                "coupon_id",
+                "line_item_id"
+            ],
             "properties": {
-                "amount_off": {
-                    "type": "number"
-                },
                 "coupon_association_id": {
                     "type": "string"
                 },
@@ -15852,14 +15949,8 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "line_item_id": {
-                    "description": "ID of the invoice line item this coupon applies to",
+                    "description": "price_id used to match the line item",
                     "type": "string"
-                },
-                "percentage_off": {
-                    "type": "number"
-                },
-                "type": {
-                    "$ref": "#/definitions/types.CouponType"
                 }
             }
         },
@@ -16672,6 +16763,43 @@ const docTemplate = `{
                 },
                 "token": {
                     "type": "string"
+                }
+            }
+        },
+        "dto.ManualBalanceDebitRequest": {
+            "type": "object",
+            "required": [
+                "idempotency_key",
+                "transaction_reason"
+            ],
+            "properties": {
+                "credits": {
+                    "description": "credits is the number of credits to debit from the wallet",
+                    "type": "number"
+                },
+                "description": {
+                    "description": "description to add any specific details about the transaction",
+                    "type": "string"
+                },
+                "idempotency_key": {
+                    "description": "idempotency_key is a unique key for the transaction",
+                    "type": "string"
+                },
+                "metadata": {
+                    "description": "metadata is a map of key-value pairs to store any additional information about the transaction",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.Metadata"
+                        }
+                    ]
+                },
+                "transaction_reason": {
+                    "description": "transaction_reason is the reason for the transaction",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.TransactionReason"
+                        }
+                    ]
                 }
             }
         },
@@ -17773,68 +17901,6 @@ const docTemplate = `{
                 }
             }
         },
-        "dto.SubscriptionCouponRequest": {
-            "type": "object",
-            "required": [
-                "coupon_id"
-            ],
-            "properties": {
-                "coupon_id": {
-                    "type": "string"
-                },
-                "end_date": {
-                    "type": "string"
-                },
-                "price_id": {
-                    "type": "string"
-                },
-                "start_date": {
-                    "type": "string"
-                },
-                "subscription_phase_id": {
-                    "type": "string"
-                }
-            }
-        },
-            "type": "object",
-            "required": [
-                "coupon_id"
-            ],
-            "properties": {
-                "coupon_id": {
-                    "type": "string"
-                },
-                "end_date": {
-                    "type": "string"
-                },
-                "price_id": {
-                    "type": "string"
-                },
-                "start_date": {
-                    "type": "string"
-                },
-                "subscription_phase_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "dto.SubscriptionEntitlementsResponse": {
-            "type": "object",
-            "properties": {
-                "features": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/dto.AggregatedFeature"
-                    }
-                },
-                "plan_id": {
-                    "type": "string"
-                },
-                "subscription_id": {
-                    "type": "string"
-                }
-            }
-        },
         "dto.SubscriptionLineItemResponse": {
             "type": "object",
             "properties": {
@@ -18011,8 +18077,25 @@ const docTemplate = `{
                 "start_date"
             ],
             "properties": {
+                "coupons": {
+                    "description": "Coupons represents subscription-level coupons to be applied to this phase",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "end_date": {
                     "type": "string"
+                },
+                "line_item_coupons": {
+                    "description": "LineItemCoupons represents line item-level coupons (map of line_item_id to coupon IDs)",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
                 },
                 "metadata": {
                     "type": "object",
@@ -18029,13 +18112,57 @@ const docTemplate = `{
                 },
                 "start_date": {
                     "type": "string"
+                }
+            }
+        },
+        "dto.SubscriptionPhaseResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
                 },
-                "subscription_coupons": {
-                    "description": "SubscriptionCoupons is a list of coupon requests to be applied to the subscription\nIf PriceID is provided in a coupon request, it's applied to that line item\nIf PriceID is omitted, it's applied at the subscription level",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/dto.SubscriptionCouponRequest"
-                    }
+                "created_by": {
+                    "type": "string"
+                },
+                "end_date": {
+                    "description": "EndDate is when the phase ends (nil if phase is still active or indefinite)",
+                    "type": "string"
+                },
+                "environment_id": {
+                    "description": "EnvironmentID is the environment identifier for the phase",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID is the unique identifier for the subscription phase",
+                    "type": "string"
+                },
+                "metadata": {
+                    "description": "Metadata contains additional key-value pairs",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/types.Metadata"
+                        }
+                    ]
+                },
+                "start_date": {
+                    "description": "StartDate is when the phase starts",
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/types.Status"
+                },
+                "subscription_id": {
+                    "description": "SubscriptionID is the identifier for the subscription",
+                    "type": "string"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "updated_by": {
+                    "type": "string"
                 }
             }
         },
@@ -18179,9 +18306,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "phases": {
+                    "description": "Phases are the subscription phases for this subscription",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/subscription.SubscriptionPhase"
+                        "$ref": "#/definitions/dto.SubscriptionPhaseResponse"
                     }
                 },
                 "plan": {
@@ -22206,6 +22334,10 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "endpoint_url": {
+                    "description": "Custom S3 endpoint URL (e.g., \"http://minio:9000\" for MinIO)",
+                    "type": "string"
+                },
                 "key_prefix": {
                     "description": "Optional prefix for S3 keys (e.g., \"flexprice-exports/\")",
                     "type": "string"
@@ -22213,6 +22345,10 @@ const docTemplate = `{
                 "region": {
                     "description": "AWS region (e.g., \"us-west-2\")",
                     "type": "string"
+                },
+                "use_path_style": {
+                    "description": "Use path-style addressing instead of virtual-hosted-style (required for MinIO)",
+                    "type": "boolean"
                 }
             }
         },
@@ -22220,11 +22356,13 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "events",
-                "invoice"
+                "invoice",
+                "credit_topups"
             ],
             "x-enum-varnames": [
                 "ScheduledTaskEntityTypeEvents",
-                "ScheduledTaskEntityTypeInvoice"
+                "ScheduledTaskEntityTypeInvoice",
+                "ScheduledTaskEntityTypeCreditTopups"
             ]
         },
         "types.ScheduledTaskInterval": {
@@ -22647,7 +22785,8 @@ const docTemplate = `{
                 "PURCHASED_CREDIT_DIRECT",
                 "CREDIT_NOTE",
                 "CREDIT_EXPIRED",
-                "WALLET_TERMINATION"
+                "WALLET_TERMINATION",
+                "MANUAL_BALANCE_DEBIT"
             ],
             "x-enum-varnames": [
                 "TransactionReasonInvoicePayment",
@@ -22657,7 +22796,8 @@ const docTemplate = `{
                 "TransactionReasonPurchasedCreditDirect",
                 "TransactionReasonCreditNote",
                 "TransactionReasonCreditExpired",
-                "TransactionReasonWalletTermination"
+                "TransactionReasonWalletTermination",
+                "TransactionReasonManualBalanceDebit"
             ]
         },
         "types.TransactionStatus": {
