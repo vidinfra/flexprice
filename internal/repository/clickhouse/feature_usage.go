@@ -1226,6 +1226,22 @@ func (r *FeatureUsageRepository) getAnalyticsPoints(
 		queryParams = append(queryParams, analytics.FeatureID)
 	}
 
+	// Add price_id filter if present in analytics (CRITICAL for price override cases)
+	// This ensures that when the same feature has multiple prices (price override),
+	// each price gets its own time-series points
+	if analytics.PriceID != "" {
+		query += " AND price_id = ?"
+		queryParams = append(queryParams, analytics.PriceID)
+	}
+
+	// Add sub_line_item_id filter if present in analytics (CRITICAL for price override cases)
+	// This ensures that when the same feature has multiple prices (price override),
+	// each subscription line item gets its own time-series points
+	if analytics.SubLineItemID != "" {
+		query += " AND sub_line_item_id = ?"
+		queryParams = append(queryParams, analytics.SubLineItemID)
+	}
+
 	// Add source filter if present in analytics
 	if analytics.Source != "" {
 		query += " AND source = ?"
@@ -1274,6 +1290,8 @@ func (r *FeatureUsageRepository) getAnalyticsPoints(
 		"query", query,
 		"params", queryParams,
 		"feature_id", analytics.FeatureID,
+		"price_id", analytics.PriceID,
+		"sub_line_item_id", analytics.SubLineItemID,
 		"source", analytics.Source,
 		"property_filters", params.PropertyFilters,
 	)

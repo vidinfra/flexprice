@@ -1519,7 +1519,10 @@ func (s *featureUsageTrackingService) fetchSubscriptionPrices(ctx context.Contex
 		priceFilter.Expand = lo.ToPtr(string(types.ExpandGroups))
 		priceFilter.PriceIDs = priceIDs
 		priceFilter.WithStatus(types.StatusPublished)
-		priceFilter.AllowExpiredPrices = false
+		// CRITICAL: Allow expired prices for price override cases
+		// When a price is overridden, the old price is terminated (has end_date)
+		// We still need it to calculate costs for historical usage
+		priceFilter.AllowExpiredPrices = true
 		pricesResponse, err := priceService.GetPrices(ctx, priceFilter)
 		if err != nil {
 			return ierr.WithError(err).
@@ -1552,7 +1555,9 @@ func (s *featureUsageTrackingService) fetchSubscriptionPrices(ctx context.Contex
 			parentPriceFilter.Expand = lo.ToPtr(string(types.ExpandGroups))
 			parentPriceFilter.PriceIDs = parentPriceIDs
 			parentPriceFilter.WithStatus(types.StatusPublished)
-			parentPriceFilter.AllowExpiredPrices = false
+			// CRITICAL: Allow expired prices for price override cases
+			// Parent prices might be expired when subscription-scoped overrides are created
+			parentPriceFilter.AllowExpiredPrices = true
 			parentPricesResponse, err := priceService.GetPrices(ctx, parentPriceFilter)
 			if err != nil {
 				return ierr.WithError(err).
