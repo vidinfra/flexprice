@@ -372,7 +372,7 @@ func (h *WalletHandler) UpdateWallet(c *gin.Context) {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param id path string true "Wallet ID"
-// @Param request body dto.DebitWalletRequest true "Debit wallet request"
+// @Param request body dto.ManualBalanceDebitRequest true "Debit wallet request"
 // @Success 200 {object} dto.WalletResponse
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 404 {object} ierr.ErrorResponse
