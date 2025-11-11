@@ -331,3 +331,19 @@ type UsageAnalyticPoint struct {
 	Cost       decimal.Decimal `json:"cost"`
 	EventCount uint64          `json:"event_count"` // Number of events in this time window
 }
+
+type GetMonitoringDataRequest struct {
+	StartTime time.Time `json:"start_time"`
+	EndTime   time.Time `json:"end_time"`
+}
+
+func (r *GetMonitoringDataRequest) Validate() error {
+	// No validation needed, all fields are optional
+	return nil
+}
+
+type GetMonitoringDataResponse struct {
+	TotalCount        uint64 `json:"total_count"`
+	ConsumptionLag    int64  `json:"consumption_lag"`
+	PostProcessingLag int64  `json:"post_processing_lag"`
+}
