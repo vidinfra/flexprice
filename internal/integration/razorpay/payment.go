@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/interfaces"
@@ -177,13 +178,33 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *CreatePayme
 
 	description := strings.Join(descriptionParts, " | ")
 
-	// Build notes with metadata
+	// Build notes with metadata and line items
 	notes := map[string]interface{}{
-		"flexprice_invoice_id":  req.InvoiceID,
-		"flexprice_customer_id": req.CustomerID,
-		"flexprice_payment_id":  req.PaymentID,
-		"environment_id":        req.EnvironmentID,
-		"payment_source":        "flexprice",
+		"flexprice_invoice_id":     req.InvoiceID,
+		"flexprice_customer_id":    req.CustomerID,
+		"flexprice_payment_id":     req.PaymentID,
+		"flexprice_environment_id": req.EnvironmentID,
+		"payment_source":           "flexprice",
+	}
+
+	// Add all line items to notes with name as key and amount as value
+	if len(invoiceResp.LineItems) > 0 {
+		for i, item := range invoiceResp.LineItems {
+			// Get display name with fallback
+			itemName := fmt.Sprintf("Item %d", i+1)
+			if item.DisplayName != nil && *item.DisplayName != "" {
+				itemName = *item.DisplayName
+			} else if item.PlanDisplayName != nil && *item.PlanDisplayName != "" {
+				itemName = *item.PlanDisplayName
+			}
+
+			// Add line item with amount in the format "name: amount currency"
+			notes[itemName] = fmt.Sprintf("%s %s", item.Amount.StringFixed(2), strings.ToUpper(item.Currency))
+		}
+
+		s.logger.Infow("added line items to notes",
+			"invoice_id", req.InvoiceID,
+			"line_items_count", len(invoiceResp.LineItems))
 	}
 
 	// Add custom metadata if provided
@@ -191,34 +212,51 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *CreatePayme
 		notes[k] = v
 	}
 
-	// Build description with line items details
-	// Razorpay doesn't support line_items field in payment links, so we include them in description
-	descriptionWithLineItems := description
+	// Build a clean, concise description with customer name, plan name and invoice number
+	// Format: "Customer Name - Plan Name - Invoice Number"
+	var descriptionWithLineItems string
+
+	// Get customer name
+	customerName := flexpriceCustomer.Name
+
+	// Get invoice number for reference
+	invoiceNumber := DefaultInvoiceLabel
+	if invoiceResp.InvoiceNumber != nil && *invoiceResp.InvoiceNumber != "" {
+		invoiceNumber = *invoiceResp.InvoiceNumber
+	}
+
+	// Build description based on line items
 	if len(invoiceResp.LineItems) > 0 {
-		descriptionWithLineItems += " | "
-		lineItemDescriptions := []string{}
-		for _, item := range invoiceResp.LineItems {
-			// Get display name with fallback
-			itemName := "Line Item"
+		if len(invoiceResp.LineItems) == 1 {
+			// Single item: "Customer Name - Plan Name - Invoice Number"
+			item := invoiceResp.LineItems[0]
+			itemName := DefaultItemName
 			if item.DisplayName != nil && *item.DisplayName != "" {
 				itemName = *item.DisplayName
 			} else if item.PlanDisplayName != nil && *item.PlanDisplayName != "" {
 				itemName = *item.PlanDisplayName
 			}
-
-			// Format: "Item Name (Amount Currency)"
-			itemDesc := fmt.Sprintf("%s (%s %s)",
-				itemName,
-				item.Amount.StringFixed(2),
-				strings.ToUpper(item.Currency))
-			lineItemDescriptions = append(lineItemDescriptions, itemDesc)
+			descriptionWithLineItems = fmt.Sprintf("%s | %s | %s", customerName, itemName, invoiceNumber)
+		} else {
+			// Multiple items: "Customer Name - Plan Name +X more - Invoice Number"
+			item := invoiceResp.LineItems[0]
+			itemName := DefaultItemName
+			if item.DisplayName != nil && *item.DisplayName != "" {
+				itemName = *item.DisplayName
+			} else if item.PlanDisplayName != nil && *item.PlanDisplayName != "" {
+				itemName = *item.PlanDisplayName
+			}
+			remainingCount := len(invoiceResp.LineItems) - 1
+			descriptionWithLineItems = fmt.Sprintf("%s | %s +%d more | %s", customerName, itemName, remainingCount, invoiceNumber)
 		}
-		descriptionWithLineItems += strings.Join(lineItemDescriptions, " | ")
-
-		s.logger.Infow("added line items to description",
-			"invoice_id", req.InvoiceID,
-			"line_items_count", len(invoiceResp.LineItems))
+	} else {
+		// No line items, use customer name with invoice number
+		descriptionWithLineItems = fmt.Sprintf("%s | %s | %s", customerName, description, invoiceNumber)
 	}
+
+	s.logger.Infow("formatted payment description",
+		"invoice_id", req.InvoiceID,
+		"description", descriptionWithLineItems)
 
 	// Build customer info object
 	// Razorpay payment links require customer object with name, email, and optionally contact
@@ -245,18 +283,25 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *CreatePayme
 		"notes":           notes,
 	}
 
-	// Add callback URL if provided (success URL)
+	// Razorpay only supports a single callback_url (unlike Stripe's success_url and cancel_url)
+	// The customer will be redirected to this URL after completing OR cancelling the payment
+	// Use callback_method: "get" as required by Razorpay for payment links
 	if req.SuccessURL != "" {
 		paymentLinkData["callback_url"] = req.SuccessURL
-		paymentLinkData["callback_method"] = "get" // Use GET method for callback
+		paymentLinkData["callback_method"] = "get" // Only "get" is supported by Razorpay payment links
+		s.logger.Infow("callback URL configured for payment link",
+			"invoice_id", req.InvoiceID,
+			"callback_url", req.SuccessURL)
+	} else {
+		s.logger.Warnw("no callback URL provided - customer will not be redirected after payment",
+			"invoice_id", req.InvoiceID)
 	}
+	// Note: CancelURL is not supported by Razorpay - callback_url is used for both success and cancel
 
 	s.logger.Infow("creating payment link in Razorpay",
 		"invoice_id", req.InvoiceID,
 		"customer_id", req.CustomerID,
 		"razorpay_customer_id", razorpayCustomerID,
-		"customer_name", flexpriceCustomer.Name,
-		"customer_email", flexpriceCustomer.Email,
 		"amount", amountInSmallestUnit,
 		"currency", req.Currency)
 
@@ -269,11 +314,46 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *CreatePayme
 		return nil, err
 	}
 
-	// Extract response fields
-	paymentLinkID := razorpayPaymentLink["id"].(string)
-	paymentLinkURL := razorpayPaymentLink["short_url"].(string)
-	status := razorpayPaymentLink["status"].(string)
-	createdAt := int64(razorpayPaymentLink["created_at"].(float64))
+	// Safely extract response fields with type assertions
+	paymentLinkID, ok := razorpayPaymentLink["id"].(string)
+	if !ok || paymentLinkID == "" {
+		s.logger.Errorw("missing payment link id in Razorpay response",
+			"invoice_id", req.InvoiceID)
+		return nil, ierr.NewError("razorpay payment link id missing in response").
+			WithHint("Check Razorpay CreatePaymentLink response payload").
+			Mark(ierr.ErrSystem)
+	}
+
+	paymentLinkURL, ok := razorpayPaymentLink["short_url"].(string)
+	if !ok || paymentLinkURL == "" {
+		s.logger.Errorw("missing payment link URL in Razorpay response",
+			"invoice_id", req.InvoiceID,
+			"payment_link_id", paymentLinkID)
+		return nil, ierr.NewError("razorpay payment link URL missing in response").
+			WithHint("Check Razorpay CreatePaymentLink response payload").
+			Mark(ierr.ErrSystem)
+	}
+
+	status, ok := razorpayPaymentLink["status"].(string)
+	if !ok {
+		// Default to "created" if status is missing
+		status = "created"
+		s.logger.Warnw("missing status in Razorpay payment link response, using default",
+			"invoice_id", req.InvoiceID,
+			"payment_link_id", paymentLinkID)
+	}
+
+	createdAtFloat, ok := razorpayPaymentLink["created_at"].(float64)
+	var createdAt int64
+	if ok {
+		createdAt = int64(createdAtFloat)
+	} else {
+		// Fallback to current time if created_at is missing
+		createdAt = time.Now().Unix()
+		s.logger.Warnw("missing created_at in Razorpay payment link response, using current time",
+			"invoice_id", req.InvoiceID,
+			"payment_link_id", paymentLinkID)
+	}
 
 	response := &RazorpayPaymentLinkResponse{
 		ID:         paymentLinkID,

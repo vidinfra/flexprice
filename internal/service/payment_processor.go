@@ -356,14 +356,15 @@ func (p *paymentProcessor) handleStripePaymentLinkCreation(ctx context.Context, 
 }
 
 func (p *paymentProcessor) handleRazorpayPaymentLinkCreation(ctx context.Context, paymentObj *payment.Payment, invoice *invoice.Invoice) error {
-	// Extract success URL and cancel URL from gateway metadata
+	// Extract success URL and cancel URL from metadata
 	successURL := ""
 	cancelURL := ""
-	if paymentObj.GatewayMetadata != nil {
-		if url, exists := paymentObj.GatewayMetadata["success_url"]; exists {
+
+	if paymentObj.Metadata != nil {
+		if url, exists := paymentObj.Metadata["success_url"]; exists {
 			successURL = url
 		}
-		if url, exists := paymentObj.GatewayMetadata["cancel_url"]; exists {
+		if url, exists := paymentObj.Metadata["cancel_url"]; exists {
 			cancelURL = url
 		}
 	}

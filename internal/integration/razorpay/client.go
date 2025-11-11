@@ -199,7 +199,7 @@ func (c *Client) CreateCustomer(ctx context.Context, customerData map[string]int
 
 	razorpayCustomer, err := razorpayClient.Customer.Create(customerData, nil)
 	if err != nil {
-		c.logger.Errorw("failed to create customer in Razorpay", "error", err, "customer_data", customerData)
+		c.logger.Errorw("failed to create customer in Razorpay", "error", err)
 		return nil, ierr.NewError("failed to create customer in Razorpay").
 			WithHint("Unable to create customer in Razorpay").
 			WithReportableDetails(map[string]interface{}{
@@ -224,7 +224,7 @@ func (c *Client) CreatePaymentLink(ctx context.Context, paymentLinkData map[stri
 
 	razorpayPaymentLink, err := razorpayClient.PaymentLink.Create(paymentLinkData, nil)
 	if err != nil {
-		c.logger.Errorw("failed to create payment link in Razorpay", "error", err, "payment_link_data", paymentLinkData)
+		c.logger.Errorw("failed to create payment link in Razorpay", "error", err)
 		return nil, ierr.NewError("failed to create payment link in Razorpay").
 			WithHint("Unable to create payment link in Razorpay").
 			WithReportableDetails(map[string]interface{}{

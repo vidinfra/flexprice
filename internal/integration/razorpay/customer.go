@@ -2,6 +2,7 @@ package razorpay
 
 import (
 	"context"
+	"time"
 
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
@@ -124,8 +125,7 @@ func (s *CustomerService) SyncCustomerToRazorpay(ctx context.Context, flexpriceC
 	}
 
 	s.logger.Infow("creating customer in Razorpay",
-		"customer_id", flexpriceCustomer.ID,
-		"customer_name", flexpriceCustomer.Name)
+		"customer_id", flexpriceCustomer.ID)
 
 	// Create customer in Razorpay using wrapper function
 	razorpayCustomer, err := s.client.CreateCustomer(ctx, customerData)
@@ -136,7 +136,16 @@ func (s *CustomerService) SyncCustomerToRazorpay(ctx context.Context, flexpriceC
 		return "", err
 	}
 
-	razorpayCustomerID := razorpayCustomer["id"].(string)
+	// Safely extract customer ID from response
+	rawID, ok := razorpayCustomer["id"].(string)
+	if !ok || rawID == "" {
+		s.logger.Errorw("missing Razorpay customer id in response",
+			"customer_id", flexpriceCustomer.ID)
+		return "", ierr.NewError("razorpay customer id missing in response").
+			WithHint("Check Razorpay CreateCustomer response payload").
+			Mark(ierr.ErrSystem)
+	}
+	razorpayCustomerID := rawID
 
 	s.logger.Infow("created customer in Razorpay",
 		"customer_id", flexpriceCustomer.ID,
@@ -149,11 +158,13 @@ func (s *CustomerService) SyncCustomerToRazorpay(ctx context.Context, flexpriceC
 		EntityType:       types.IntegrationEntityTypeCustomer,
 		ProviderType:     string(types.SecretProviderRazorpay),
 		ProviderEntityID: razorpayCustomerID,
-		EnvironmentID:    types.GetEnvironmentID(ctx),
-		BaseModel: types.BaseModel{
-			TenantID: types.GetTenantID(ctx),
-			Status:   types.StatusPublished,
+		Metadata: map[string]interface{}{
+			"created_via":          "flexprice_to_provider",
+			"razorpay_customer_id": razorpayCustomerID,
+			"synced_at":            time.Now().UTC().Format(time.RFC3339),
 		},
+		EnvironmentID: types.GetEnvironmentID(ctx),
+		BaseModel:     types.GetDefaultBaseModel(ctx),
 	}
 
 	err = s.entityIntegrationMappingRepo.Create(ctx, mapping)
@@ -185,7 +196,7 @@ func (s *CustomerService) GetRazorpayCustomerID(ctx context.Context, customerID 
 	if err != nil {
 		return "", ierr.WithError(err).
 			WithHint("Failed to get Razorpay customer mapping").
-			Mark(ierr.ErrNotFound)
+			Mark(ierr.ErrSystem)
 	}
 
 	if len(mappings) == 0 {

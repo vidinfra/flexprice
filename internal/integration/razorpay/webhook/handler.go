@@ -2,7 +2,6 @@ package webhook
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
@@ -122,23 +121,44 @@ func (h *Handler) handlePaymentCaptured(ctx context.Context, event *RazorpayWebh
 	// Convert amount from smallest currency unit (paise) to standard unit
 	amount := decimal.NewFromInt(payment.Amount).Div(decimal.NewFromInt(100))
 
-	// Prepare gateway metadata (all values must be strings)
-	gatewayMetadata := types.Metadata{
-		"razorpay_payment_id": payment.ID,
-		"status":              payment.Status,
-		"method":              payment.Method,
-		"captured":            fmt.Sprintf("%v", payment.Captured),
-		"amount_paise":        fmt.Sprintf("%d", payment.Amount),
-		"currency":            payment.Currency,
-		"fee":                 fmt.Sprintf("%d", payment.Fee),
-		"tax":                 fmt.Sprintf("%d", payment.Tax),
+	// Determine payment method ID based on payment method type
+	var paymentMethodID string
+	switch RazorpayPaymentMethod(payment.Method) {
+	case RazorpayPaymentMethodCard:
+		if payment.CardID != "" {
+			paymentMethodID = payment.CardID
+		}
+	case RazorpayPaymentMethodUPI:
+		if payment.VPA != "" {
+			paymentMethodID = payment.VPA
+		}
+	case RazorpayPaymentMethodWallet:
+		if payment.Wallet != "" {
+			paymentMethodID = payment.Wallet
+		}
+	case RazorpayPaymentMethodNetbanking:
+		if payment.Bank != "" {
+			paymentMethodID = payment.Bank
+		}
 	}
 
 	updateReq := dto.UpdatePaymentRequest{
-		PaymentStatus: &paymentStatus,
-		SucceededAt:   &now,
-		Metadata:      &gatewayMetadata,
+		PaymentStatus:    &paymentStatus,
+		SucceededAt:      &now,
+		GatewayPaymentID: &payment.ID, // Set Razorpay payment ID (e.g., pay_ReLTtNd9exrNsW)
 	}
+
+	// Set payment_method_id if available (could be card_id, VPA, wallet, or bank)
+	if paymentMethodID != "" {
+		updateReq.PaymentMethodID = &paymentMethodID
+	}
+
+	h.logger.Infow("updating payment with gateway details",
+		"flexprice_payment_id", flexpricePaymentID,
+		"razorpay_payment_id", payment.ID,
+		"payment_method", payment.Method,
+		"payment_method_id", paymentMethodID,
+		"amount", amount.String())
 
 	_, err = services.PaymentService.UpdatePayment(ctx, flexpricePaymentID, updateReq)
 	if err != nil {
@@ -223,9 +243,9 @@ func (h *Handler) handlePaymentFailed(ctx context.Context, event *RazorpayWebhoo
 		return nil
 	}
 
-	// Check if payment is already failed
-	if paymentRecord.PaymentStatus == types.PaymentStatusFailed {
-		h.logger.Infow("payment already marked as failed",
+	// Check if payment is already processed
+	if paymentRecord.PaymentStatus == types.PaymentStatusSucceeded {
+		h.logger.Infow("Ignoring payment.failed webhook for succeeded payment",
 			"flexprice_payment_id", flexpricePaymentID,
 			"razorpay_payment_id", payment.ID)
 		return nil
@@ -241,24 +261,45 @@ func (h *Handler) handlePaymentFailed(ctx context.Context, event *RazorpayWebhoo
 	paymentStatus := string(types.PaymentStatusFailed)
 	now := time.Now()
 
-	// Prepare gateway metadata
-	gatewayMetadata := types.Metadata{
-		"razorpay_payment_id": payment.ID,
-		"status":              payment.Status,
-		"method":              payment.Method,
-		"error_code":          payment.ErrorCode,
-		"error_description":   payment.ErrorDescription,
-		"error_source":        payment.ErrorSource,
-		"error_step":          payment.ErrorStep,
-		"error_reason":        payment.ErrorReason,
+	// Determine payment method ID based on payment method type
+	var paymentMethodID string
+	switch RazorpayPaymentMethod(payment.Method) {
+	case RazorpayPaymentMethodCard:
+		if payment.CardID != "" {
+			paymentMethodID = payment.CardID
+		}
+	case RazorpayPaymentMethodUPI:
+		if payment.VPA != "" {
+			paymentMethodID = payment.VPA
+		}
+	case RazorpayPaymentMethodWallet:
+		if payment.Wallet != "" {
+			paymentMethodID = payment.Wallet
+		}
+	case RazorpayPaymentMethodNetbanking:
+		if payment.Bank != "" {
+			paymentMethodID = payment.Bank
+		}
 	}
 
 	updateReq := dto.UpdatePaymentRequest{
-		PaymentStatus: &paymentStatus,
-		FailedAt:      &now,
-		ErrorMessage:  &errorMsg,
-		Metadata:      &gatewayMetadata,
+		PaymentStatus:    &paymentStatus,
+		FailedAt:         &now,
+		ErrorMessage:     &errorMsg,
+		GatewayPaymentID: &payment.ID, // Set Razorpay payment ID even for failed payments
 	}
+
+	// Set payment_method_id if available
+	if paymentMethodID != "" {
+		updateReq.PaymentMethodID = &paymentMethodID
+	}
+
+	h.logger.Infow("updating failed payment with gateway details",
+		"flexprice_payment_id", flexpricePaymentID,
+		"razorpay_payment_id", payment.ID,
+		"payment_method", payment.Method,
+		"payment_method_id", paymentMethodID,
+		"error_code", payment.ErrorCode)
 
 	_, err = services.PaymentService.UpdatePayment(ctx, flexpricePaymentID, updateReq)
 	if err != nil {

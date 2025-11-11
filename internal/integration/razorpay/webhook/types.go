@@ -1,5 +1,28 @@
 package webhook
 
+// RazorpayEventType represents the type of Razorpay webhook event
+type RazorpayEventType string
+
+const (
+	// Payment events
+	EventPaymentCaptured   RazorpayEventType = "payment.captured"
+	EventPaymentFailed     RazorpayEventType = "payment.failed"
+	EventPaymentAuthorized RazorpayEventType = "payment.authorized"
+)
+
+// RazorpayPaymentMethod represents the payment method used in Razorpay
+type RazorpayPaymentMethod string
+
+const (
+	RazorpayPaymentMethodCard       RazorpayPaymentMethod = "card"
+	RazorpayPaymentMethodUPI        RazorpayPaymentMethod = "upi"
+	RazorpayPaymentMethodWallet     RazorpayPaymentMethod = "wallet"
+	RazorpayPaymentMethodNetbanking RazorpayPaymentMethod = "netbanking"
+	RazorpayPaymentMethodEMI        RazorpayPaymentMethod = "emi"
+	RazorpayPaymentMethodCardless   RazorpayPaymentMethod = "cardless_emi"
+	RazorpayPaymentMethodPaylater   RazorpayPaymentMethod = "paylater"
+)
+
 // RazorpayWebhookEvent represents a Razorpay webhook event
 type RazorpayWebhookEvent struct {
 	Entity    string                 `json:"entity"`
@@ -31,6 +54,10 @@ type Payment struct {
 	InvoiceID        string                 `json:"invoice_id"`        // Razorpay invoice ID
 	Method           string                 `json:"method"`            // Payment method (card, netbanking, wallet, upi)
 	Description      string                 `json:"description"`       // Payment description
+	CardID           string                 `json:"card_id"`           // Card ID (if payment method is card)
+	Bank             string                 `json:"bank"`              // Bank name (if payment method is netbanking)
+	Wallet           string                 `json:"wallet"`            // Wallet name (if payment method is wallet)
+	VPA              string                 `json:"vpa"`               // Virtual Payment Address (if payment method is UPI)
 	AmountRefunded   int64                  `json:"amount_refunded"`   // Amount refunded
 	Refunded         bool                   `json:"refunded"`          // Whether payment is refunded
 	Captured         bool                   `json:"captured"`          // Whether payment is captured
@@ -46,13 +73,3 @@ type Payment struct {
 	Notes            map[string]interface{} `json:"notes"`             // Custom notes
 	CreatedAt        int64                  `json:"created_at"`        // Unix timestamp
 }
-
-// RazorpayEventType represents the type of Razorpay webhook event
-type RazorpayEventType string
-
-const (
-	// Payment events
-	EventPaymentCaptured   RazorpayEventType = "payment.captured"
-	EventPaymentFailed     RazorpayEventType = "payment.failed"
-	EventPaymentAuthorized RazorpayEventType = "payment.authorized"
-)
