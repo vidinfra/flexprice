@@ -10,7 +10,6 @@ import (
 	"github.com/flexprice/flexprice/internal/interfaces"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
-	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
@@ -128,56 +127,6 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *CreatePayme
 	// Razorpay expects amounts in smallest currency unit
 	amountInSmallestUnit := req.Amount.Mul(decimal.NewFromInt(100)).IntPart()
 
-	// Build description with invoice information
-	var descriptionParts []string
-
-	// Add invoice information
-	invoiceInfo := fmt.Sprintf("Invoice: %s", lo.FromPtrOr(invoiceResp.InvoiceNumber, req.InvoiceID))
-	descriptionParts = append(descriptionParts, invoiceInfo)
-
-	// Add invoice total
-	totalInfo := fmt.Sprintf("Total: %s %s", invoiceResp.Total.String(), invoiceResp.Currency)
-	descriptionParts = append(descriptionParts, totalInfo)
-
-	// Add items details
-	if len(invoiceResp.LineItems) > 0 {
-		var itemDetails []string
-		for _, lineItem := range invoiceResp.LineItems {
-			if lineItem.Amount.IsZero() {
-				continue // Skip zero-amount items
-			}
-
-			var entityType string
-			var itemName string
-
-			// Determine entity type and name
-			if lineItem.EntityType != nil {
-				switch *lineItem.EntityType {
-				case string(types.InvoiceLineItemEntityTypePlan):
-					entityType = "Plan"
-					itemName = lo.FromPtrOr(lineItem.DisplayName, "")
-					if itemName == "" {
-						itemName = lo.FromPtrOr(lineItem.PlanDisplayName, "Plan")
-					}
-				case string(types.InvoiceLineItemEntityTypeAddon):
-					entityType = "Add-on"
-					itemName = lo.FromPtrOr(lineItem.DisplayName, "Add-on")
-				default:
-					entityType = "Item"
-					itemName = lo.FromPtrOr(lineItem.DisplayName, "Service")
-				}
-			}
-			itemDetail := fmt.Sprintf("%s: %s (%s %s)", entityType, itemName, lineItem.Amount.String(), invoiceResp.Currency)
-			itemDetails = append(itemDetails, itemDetail)
-		}
-
-		if len(itemDetails) > 0 {
-			descriptionParts = append(descriptionParts, itemDetails...)
-		}
-	}
-
-	description := strings.Join(descriptionParts, " | ")
-
 	// Build notes with metadata and line items
 	notes := map[string]interface{}{
 		"flexprice_invoice_id":     req.InvoiceID,
@@ -250,8 +199,8 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *CreatePayme
 			descriptionWithLineItems = fmt.Sprintf("%s | %s +%d more | %s", customerName, itemName, remainingCount, invoiceNumber)
 		}
 	} else {
-		// No line items, use customer name with invoice number
-		descriptionWithLineItems = fmt.Sprintf("%s | %s | %s", customerName, description, invoiceNumber)
+		// No line items, use customer name with generic payment label and invoice number
+		descriptionWithLineItems = fmt.Sprintf("%s | Payment | %s", customerName, invoiceNumber)
 	}
 
 	s.logger.Infow("formatted payment description",
