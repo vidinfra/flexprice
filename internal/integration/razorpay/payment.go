@@ -1,0 +1,420 @@
+package razorpay
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/interfaces"
+	"github.com/flexprice/flexprice/internal/logger"
+	"github.com/flexprice/flexprice/internal/types"
+	"github.com/shopspring/decimal"
+)
+
+// PaymentService handles Razorpay payment operations
+type PaymentService struct {
+	client      RazorpayClient
+	customerSvc RazorpayCustomerService
+	logger      *logger.Logger
+}
+
+// NewPaymentService creates a new Razorpay payment service
+func NewPaymentService(
+	client RazorpayClient,
+	customerSvc RazorpayCustomerService,
+	logger *logger.Logger,
+) *PaymentService {
+	return &PaymentService{
+		client:      client,
+		customerSvc: customerSvc,
+		logger:      logger,
+	}
+}
+
+// CreatePaymentLink creates a Razorpay payment link
+func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *CreatePaymentLinkRequest, customerService interfaces.CustomerService, invoiceService interfaces.InvoiceService) (*RazorpayPaymentLinkResponse, error) {
+	s.logger.Infow("creating razorpay payment link",
+		"invoice_id", req.InvoiceID,
+		"customer_id", req.CustomerID,
+		"amount", req.Amount.String(),
+		"currency", req.Currency,
+		"environment_id", req.EnvironmentID,
+	)
+
+	// Validate invoice and check payment eligibility
+	invoiceResp, err := invoiceService.GetInvoice(ctx, req.InvoiceID)
+	if err != nil {
+		return nil, ierr.NewError("failed to get invoice").
+			WithHint("Invoice not found").
+			WithReportableDetails(map[string]interface{}{
+				"invoice_id": req.InvoiceID,
+			}).
+			Mark(ierr.ErrNotFound)
+	}
+
+	// Validate invoice payment status
+	if invoiceResp.PaymentStatus == types.PaymentStatusSucceeded {
+		return nil, ierr.NewError("invoice is already paid").
+			WithHint("Cannot create payment link for an already paid invoice").
+			WithReportableDetails(map[string]interface{}{
+				"invoice_id":     req.InvoiceID,
+				"payment_status": invoiceResp.PaymentStatus,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	if invoiceResp.InvoiceStatus == types.InvoiceStatusVoided {
+		return nil, ierr.NewError("invoice is voided").
+			WithHint("Cannot create payment link for a voided invoice").
+			WithReportableDetails(map[string]interface{}{
+				"invoice_id":     req.InvoiceID,
+				"invoice_status": invoiceResp.InvoiceStatus,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Validate payment amount against invoice remaining balance
+	if req.Amount.GreaterThan(invoiceResp.AmountRemaining) {
+		return nil, ierr.NewError("payment amount exceeds invoice remaining balance").
+			WithHint("Payment amount cannot be greater than the remaining balance on the invoice").
+			WithReportableDetails(map[string]interface{}{
+				"invoice_id":        req.InvoiceID,
+				"payment_amount":    req.Amount.String(),
+				"invoice_remaining": invoiceResp.AmountRemaining.String(),
+				"invoice_total":     invoiceResp.AmountDue.String(),
+				"invoice_paid":      invoiceResp.AmountPaid.String(),
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Validate currency matches invoice currency
+	if req.Currency != invoiceResp.Currency {
+		return nil, ierr.NewError("payment currency does not match invoice currency").
+			WithHint("Payment currency must match the invoice currency").
+			WithReportableDetails(map[string]interface{}{
+				"invoice_id":       req.InvoiceID,
+				"payment_currency": req.Currency,
+				"invoice_currency": invoiceResp.Currency,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Ensure customer is synced to Razorpay before creating payment link
+	flexpriceCustomer, err := s.customerSvc.EnsureCustomerSyncedToRazorpay(ctx, req.CustomerID, customerService)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to sync customer to Razorpay").
+			WithReportableDetails(map[string]interface{}{
+				"customer_id": req.CustomerID,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Get Razorpay customer ID (should exist after sync)
+	razorpayCustomerID, exists := flexpriceCustomer.Metadata["razorpay_customer_id"]
+	if !exists || razorpayCustomerID == "" {
+		return nil, ierr.NewError("customer does not have Razorpay customer ID after sync").
+			WithHint("Failed to sync customer to Razorpay").
+			WithReportableDetails(map[string]interface{}{
+				"customer_id": req.CustomerID,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Convert amount to smallest currency unit (paise for INR, cents for USD, etc.)
+	// Razorpay expects amounts in smallest currency unit
+	amountInSmallestUnit := req.Amount.Mul(decimal.NewFromInt(100)).IntPart()
+
+	// Build notes with metadata and line items
+	notes := map[string]interface{}{
+		"flexprice_invoice_id":     req.InvoiceID,
+		"flexprice_customer_id":    req.CustomerID,
+		"flexprice_payment_id":     req.PaymentID,
+		"flexprice_environment_id": req.EnvironmentID,
+		"payment_source":           "flexprice",
+	}
+
+	// Add all line items to notes with name as key and amount as value
+	if len(invoiceResp.LineItems) > 0 {
+		for i, item := range invoiceResp.LineItems {
+			// Get display name with fallback
+			itemName := fmt.Sprintf("Item %d", i+1)
+			if item.DisplayName != nil && *item.DisplayName != "" {
+				itemName = *item.DisplayName
+			} else if item.PlanDisplayName != nil && *item.PlanDisplayName != "" {
+				itemName = *item.PlanDisplayName
+			}
+
+			// Add line item with amount in the format "name: amount currency"
+			notes[itemName] = fmt.Sprintf("%s %s", item.Amount.StringFixed(2), strings.ToUpper(item.Currency))
+		}
+
+		s.logger.Infow("added line items to notes",
+			"invoice_id", req.InvoiceID,
+			"line_items_count", len(invoiceResp.LineItems))
+	}
+
+	// Add custom metadata if provided
+	for k, v := range req.Metadata {
+		notes[k] = v
+	}
+
+	// Build a clean, concise description with customer name, plan name and invoice number
+	// Format: "Customer Name - Plan Name - Invoice Number"
+	var descriptionWithLineItems string
+
+	// Get customer name
+	customerName := flexpriceCustomer.Name
+
+	// Get invoice number for reference
+	invoiceNumber := DefaultInvoiceLabel
+	if invoiceResp.InvoiceNumber != nil && *invoiceResp.InvoiceNumber != "" {
+		invoiceNumber = *invoiceResp.InvoiceNumber
+	}
+
+	// Build description based on line items
+	if len(invoiceResp.LineItems) > 0 {
+		if len(invoiceResp.LineItems) == 1 {
+			// Single item: "Customer Name - Plan Name - Invoice Number"
+			item := invoiceResp.LineItems[0]
+			itemName := DefaultItemName
+			if item.DisplayName != nil && *item.DisplayName != "" {
+				itemName = *item.DisplayName
+			} else if item.PlanDisplayName != nil && *item.PlanDisplayName != "" {
+				itemName = *item.PlanDisplayName
+			}
+			descriptionWithLineItems = fmt.Sprintf("%s | %s | %s", customerName, itemName, invoiceNumber)
+		} else {
+			// Multiple items: "Customer Name - Plan Name +X more - Invoice Number"
+			item := invoiceResp.LineItems[0]
+			itemName := DefaultItemName
+			if item.DisplayName != nil && *item.DisplayName != "" {
+				itemName = *item.DisplayName
+			} else if item.PlanDisplayName != nil && *item.PlanDisplayName != "" {
+				itemName = *item.PlanDisplayName
+			}
+			remainingCount := len(invoiceResp.LineItems) - 1
+			descriptionWithLineItems = fmt.Sprintf("%s | %s +%d more | %s", customerName, itemName, remainingCount, invoiceNumber)
+		}
+	} else {
+		// No line items, use customer name with generic payment label and invoice number
+		descriptionWithLineItems = fmt.Sprintf("%s | Payment | %s", customerName, invoiceNumber)
+	}
+
+	s.logger.Infow("formatted payment description",
+		"invoice_id", req.InvoiceID,
+		"description", descriptionWithLineItems)
+
+	// Build customer info object
+	// Razorpay payment links require customer object with name, email, and optionally contact
+	customerInfo := map[string]interface{}{
+		"name": flexpriceCustomer.Name,
+	}
+	if flexpriceCustomer.Email != "" {
+		customerInfo["email"] = flexpriceCustomer.Email
+	}
+	// Note: contact/phone not available in FlexPrice customer model
+
+	// Prepare payment link data according to Razorpay API format
+	// Following the exact format from Razorpay documentation
+	paymentLinkData := map[string]interface{}{
+		"amount":      amountInSmallestUnit,
+		"currency":    strings.ToUpper(req.Currency),
+		"description": descriptionWithLineItems,
+		"customer":    customerInfo,
+		"notify": map[string]interface{}{
+			"sms":   true,
+			"email": true,
+		},
+		"reminder_enable": true,
+		"notes":           notes,
+	}
+
+	// Razorpay only supports a single callback_url (unlike Stripe's success_url and cancel_url)
+	// The customer will be redirected to this URL after completing OR cancelling the payment
+	// Use callback_method: "get" as required by Razorpay for payment links
+	if req.SuccessURL != "" {
+		paymentLinkData["callback_url"] = req.SuccessURL
+		paymentLinkData["callback_method"] = "get" // Only "get" is supported by Razorpay payment links
+		s.logger.Infow("callback URL configured for payment link",
+			"invoice_id", req.InvoiceID,
+			"callback_url", req.SuccessURL)
+	} else {
+		s.logger.Warnw("no callback URL provided - customer will not be redirected after payment",
+			"invoice_id", req.InvoiceID)
+	}
+	// Note: CancelURL is not supported by Razorpay - callback_url is used for both success and cancel
+
+	s.logger.Infow("creating payment link in Razorpay",
+		"invoice_id", req.InvoiceID,
+		"customer_id", req.CustomerID,
+		"razorpay_customer_id", razorpayCustomerID,
+		"amount", amountInSmallestUnit,
+		"currency", req.Currency)
+
+	// Create payment link in Razorpay using wrapper function
+	razorpayPaymentLink, err := s.client.CreatePaymentLink(ctx, paymentLinkData)
+	if err != nil {
+		s.logger.Errorw("failed to create Razorpay payment link",
+			"error", err,
+			"invoice_id", req.InvoiceID)
+		return nil, err
+	}
+
+	// Safely extract response fields with type assertions
+	paymentLinkID, ok := razorpayPaymentLink["id"].(string)
+	if !ok || paymentLinkID == "" {
+		s.logger.Errorw("missing payment link id in Razorpay response",
+			"invoice_id", req.InvoiceID)
+		return nil, ierr.NewError("razorpay payment link id missing in response").
+			WithHint("Check Razorpay CreatePaymentLink response payload").
+			Mark(ierr.ErrSystem)
+	}
+
+	paymentLinkURL, ok := razorpayPaymentLink["short_url"].(string)
+	if !ok || paymentLinkURL == "" {
+		s.logger.Errorw("missing payment link URL in Razorpay response",
+			"invoice_id", req.InvoiceID,
+			"payment_link_id", paymentLinkID)
+		return nil, ierr.NewError("razorpay payment link URL missing in response").
+			WithHint("Check Razorpay CreatePaymentLink response payload").
+			Mark(ierr.ErrSystem)
+	}
+
+	status, ok := razorpayPaymentLink["status"].(string)
+	if !ok {
+		// Default to "created" if status is missing
+		status = "created"
+		s.logger.Warnw("missing status in Razorpay payment link response, using default",
+			"invoice_id", req.InvoiceID,
+			"payment_link_id", paymentLinkID)
+	}
+
+	createdAtFloat, ok := razorpayPaymentLink["created_at"].(float64)
+	var createdAt int64
+	if ok {
+		createdAt = int64(createdAtFloat)
+	} else {
+		// Fallback to current time if created_at is missing
+		createdAt = time.Now().Unix()
+		s.logger.Warnw("missing created_at in Razorpay payment link response, using current time",
+			"invoice_id", req.InvoiceID,
+			"payment_link_id", paymentLinkID)
+	}
+
+	response := &RazorpayPaymentLinkResponse{
+		ID:         paymentLinkID,
+		PaymentURL: paymentLinkURL,
+		Amount:     req.Amount,
+		Currency:   req.Currency,
+		Status:     status,
+		CreatedAt:  createdAt,
+		PaymentID:  req.PaymentID,
+	}
+
+	s.logger.Infow("successfully created razorpay payment link",
+		"payment_id", response.PaymentID,
+		"payment_link_id", paymentLinkID,
+		"payment_url", paymentLinkURL,
+		"invoice_id", req.InvoiceID,
+		"amount", req.Amount.String(),
+		"currency", req.Currency,
+	)
+
+	return response, nil
+}
+
+// ReconcilePaymentWithInvoice updates the invoice payment status and amounts when a payment succeeds
+func (s *PaymentService) ReconcilePaymentWithInvoice(ctx context.Context, paymentID string, paymentAmount decimal.Decimal, paymentService interfaces.PaymentService, invoiceService interfaces.InvoiceService) error {
+	s.logger.Infow("starting payment reconciliation with invoice",
+		"payment_id", paymentID,
+		"payment_amount", paymentAmount.String())
+
+	// Get the payment record
+	payment, err := paymentService.GetPayment(ctx, paymentID)
+	if err != nil {
+		s.logger.Errorw("failed to get payment record for reconciliation",
+			"error", err,
+			"payment_id", paymentID)
+		return err
+	}
+
+	s.logger.Infow("got payment record for reconciliation",
+		"payment_id", paymentID,
+		"invoice_id", payment.DestinationID,
+		"payment_amount", payment.Amount.String())
+
+	// Get the invoice
+	invoiceResp, err := invoiceService.GetInvoice(ctx, payment.DestinationID)
+	if err != nil {
+		s.logger.Errorw("failed to get invoice for payment reconciliation",
+			"error", err,
+			"payment_id", paymentID,
+			"invoice_id", payment.DestinationID)
+		return err
+	}
+
+	s.logger.Infow("got invoice for reconciliation",
+		"payment_id", paymentID,
+		"invoice_id", payment.DestinationID,
+		"invoice_amount_due", invoiceResp.AmountDue.String(),
+		"invoice_amount_paid", invoiceResp.AmountPaid.String(),
+		"invoice_amount_remaining", invoiceResp.AmountRemaining.String(),
+		"invoice_payment_status", invoiceResp.PaymentStatus,
+		"invoice_status", invoiceResp.InvoiceStatus)
+
+	// Calculate new amounts
+	newAmountPaid := invoiceResp.AmountPaid.Add(paymentAmount)
+	newAmountRemaining := invoiceResp.AmountDue.Sub(newAmountPaid)
+
+	// Determine payment status
+	var newPaymentStatus types.PaymentStatus
+	if newAmountRemaining.IsZero() {
+		newPaymentStatus = types.PaymentStatusSucceeded
+	} else if newAmountRemaining.IsNegative() {
+		// Invoice is overpaid
+		newPaymentStatus = types.PaymentStatusOverpaid
+		// For overpaid invoices, amount_remaining should be 0
+		newAmountRemaining = decimal.Zero
+	} else {
+		newPaymentStatus = types.PaymentStatusPending
+	}
+
+	s.logger.Infow("calculated new amounts for reconciliation",
+		"payment_id", paymentID,
+		"invoice_id", payment.DestinationID,
+		"payment_amount", paymentAmount.String(),
+		"new_amount_paid", newAmountPaid.String(),
+		"new_amount_remaining", newAmountRemaining.String(),
+		"new_payment_status", newPaymentStatus)
+
+	// Update invoice payment status and amounts using reconciliation method
+	s.logger.Infow("calling invoice reconciliation",
+		"payment_id", paymentID,
+		"invoice_id", payment.DestinationID,
+		"payment_amount", paymentAmount.String(),
+		"new_payment_status", newPaymentStatus)
+
+	err = invoiceService.ReconcilePaymentStatus(ctx, payment.DestinationID, newPaymentStatus, &paymentAmount)
+	if err != nil {
+		s.logger.Errorw("failed to update invoice payment status during reconciliation",
+			"error", err,
+			"payment_id", paymentID,
+			"invoice_id", payment.DestinationID,
+			"payment_amount", paymentAmount.String(),
+			"new_payment_status", newPaymentStatus)
+		return err
+	}
+
+	s.logger.Infow("successfully reconciled payment with invoice",
+		"payment_id", paymentID,
+		"invoice_id", payment.DestinationID,
+		"payment_amount", paymentAmount.String(),
+		"new_payment_status", newPaymentStatus,
+		"new_amount_paid", newAmountPaid.String(),
+		"new_amount_remaining", newAmountRemaining.String())
+
+	return nil
+}
