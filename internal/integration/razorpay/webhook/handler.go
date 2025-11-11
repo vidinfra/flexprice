@@ -39,6 +39,22 @@ func NewHandler(
 // ServiceDependencies contains all service dependencies needed by webhook handlers
 type ServiceDependencies = interfaces.ServiceDependencies
 
+// getPaymentMethodID extracts the payment method ID based on the payment method type
+func getPaymentMethodID(payment Payment) string {
+	switch RazorpayPaymentMethod(payment.Method) {
+	case RazorpayPaymentMethodCard:
+		return payment.CardID
+	case RazorpayPaymentMethodUPI:
+		return payment.VPA
+	case RazorpayPaymentMethodWallet:
+		return payment.Wallet
+	case RazorpayPaymentMethodNetbanking:
+		return payment.Bank
+	default:
+		return ""
+	}
+}
+
 // HandleWebhookEvent processes a Razorpay webhook event
 // This function never returns errors to ensure webhooks always return 200 OK
 // All errors are logged internally to prevent Razorpay from retrying
@@ -122,25 +138,7 @@ func (h *Handler) handlePaymentCaptured(ctx context.Context, event *RazorpayWebh
 	amount := decimal.NewFromInt(payment.Amount).Div(decimal.NewFromInt(100))
 
 	// Determine payment method ID based on payment method type
-	var paymentMethodID string
-	switch RazorpayPaymentMethod(payment.Method) {
-	case RazorpayPaymentMethodCard:
-		if payment.CardID != "" {
-			paymentMethodID = payment.CardID
-		}
-	case RazorpayPaymentMethodUPI:
-		if payment.VPA != "" {
-			paymentMethodID = payment.VPA
-		}
-	case RazorpayPaymentMethodWallet:
-		if payment.Wallet != "" {
-			paymentMethodID = payment.Wallet
-		}
-	case RazorpayPaymentMethodNetbanking:
-		if payment.Bank != "" {
-			paymentMethodID = payment.Bank
-		}
-	}
+	paymentMethodID := getPaymentMethodID(payment)
 
 	updateReq := dto.UpdatePaymentRequest{
 		PaymentStatus:    &paymentStatus,
@@ -262,25 +260,7 @@ func (h *Handler) handlePaymentFailed(ctx context.Context, event *RazorpayWebhoo
 	now := time.Now()
 
 	// Determine payment method ID based on payment method type
-	var paymentMethodID string
-	switch RazorpayPaymentMethod(payment.Method) {
-	case RazorpayPaymentMethodCard:
-		if payment.CardID != "" {
-			paymentMethodID = payment.CardID
-		}
-	case RazorpayPaymentMethodUPI:
-		if payment.VPA != "" {
-			paymentMethodID = payment.VPA
-		}
-	case RazorpayPaymentMethodWallet:
-		if payment.Wallet != "" {
-			paymentMethodID = payment.Wallet
-		}
-	case RazorpayPaymentMethodNetbanking:
-		if payment.Bank != "" {
-			paymentMethodID = payment.Bank
-		}
-	}
+	paymentMethodID := getPaymentMethodID(payment)
 
 	updateReq := dto.UpdatePaymentRequest{
 		PaymentStatus:    &paymentStatus,
