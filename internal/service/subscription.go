@@ -114,6 +114,20 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		priceMap[p.Price.ID] = p
 	}
 
+	// Create phases array if phases are provided
+	var phases []*subscription.SubscriptionPhase
+	var firstPhaseID string
+	if len(req.Phases) > 0 {
+		phases = make([]*subscription.SubscriptionPhase, len(req.Phases))
+		for i, phaseReq := range req.Phases {
+			phase := phaseReq.ToSubscriptionPhase(ctx, sub.ID)
+			phases[i] = phase
+			if i == 0 {
+				firstPhaseID = phase.ID
+			}
+		}
+	}
+
 	// Ensure start date is in UTC format
 	// Note: StartDate is now guaranteed to be set (either from request or defaulted in DTO validation)
 	sub.StartDate = sub.StartDate.UTC()
@@ -202,6 +216,11 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		item.TrialPeriod = price.TrialPeriod
 		item.PriceUnitID = price.PriceUnitID
 		item.PriceUnit = price.PriceUnit
+
+		// Set phase ID if phases exist
+		if firstPhaseID != "" {
+			item.SubscriptionPhaseID = &firstPhaseID
+		}
 
 		// If phases exist, set end date to first phase end date, otherwise use subscription end date
 		if len(req.Phases) > 0 && req.Phases[0].EndDate != nil {
@@ -370,8 +389,8 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 	}
 
 	// Handle subscription phases if provided
-	if len(req.Phases) > 0 {
-		err = s.handleSubscriptionPhases(ctx, sub, req.Phases, plan, validPrices)
+	if len(phases) > 0 {
+		err = s.handleSubscriptionPhases(ctx, sub, phases, req.Phases, plan, validPrices)
 		if err != nil {
 			return nil, err
 		}
@@ -540,11 +559,12 @@ func (s *subscriptionService) handleTaxRateLinking(ctx context.Context, sub *sub
 func (s *subscriptionService) handleSubscriptionPhases(
 	ctx context.Context,
 	sub *subscription.Subscription,
+	phases []*subscription.SubscriptionPhase,
 	phaseRequests []dto.SubscriptionPhaseCreateRequest,
 	plan *plan.Plan,
 	validPrices []*dto.PriceResponse,
 ) error {
-	if len(phaseRequests) == 0 {
+	if len(phases) == 0 {
 		return nil
 	}
 
@@ -557,14 +577,19 @@ func (s *subscriptionService) handleSubscriptionPhases(
 	planResponse := &dto.PlanResponse{Plan: plan}
 
 	// Process each phase
-	for _, phaseReq := range phaseRequests {
-		// Convert phase request to domain model
-		phase := phaseReq.ToSubscriptionPhase(ctx, sub.ID)
-
-		// Create the phase
+	for i, phase := range phases {
+		// Create the phase in database
 		if err := s.SubscriptionPhaseRepo.Create(ctx, phase); err != nil {
 			return err
 		}
+
+		// Skip creating line items for the first phase since they're already created with the subscription
+		if i == 0 {
+			continue
+		}
+
+		// Get corresponding phase request for additional data
+		phaseReq := phaseRequests[i]
 
 		// Create line items from plan prices - reusing DTO's ToSubscriptionLineItem logic (same as AddSubscriptionLineItem)
 		phaseLineItems := lo.Map(validPrices, func(priceResp *dto.PriceResponse, _ int) *subscription.SubscriptionLineItem {

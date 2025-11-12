@@ -571,6 +571,29 @@ func (r *CreateSubscriptionRequest) Validate() error {
 				}
 			}
 		}
+
+		// Validate that subscription dates match phase dates when both are provided
+		if r.StartDate != nil && !r.StartDate.Equal(r.Phases[0].StartDate) {
+			return ierr.NewError("subscription start_date must match first phase start_date when both are provided").
+				WithHint("Ensure subscription start_date equals the first phase start_date").
+				WithReportableDetails(map[string]interface{}{
+					"subscription_start_date": *r.StartDate,
+					"first_phase_start_date":  r.Phases[0].StartDate,
+				}).
+				Mark(ierr.ErrValidation)
+		}
+
+		// Check last phase end date validation
+		lastPhase := r.Phases[len(r.Phases)-1]
+		if r.EndDate != nil && lastPhase.EndDate != nil && !r.EndDate.Equal(*lastPhase.EndDate) {
+			return ierr.NewError("subscription end_date must match last phase end_date when both are provided").
+				WithHint("Ensure subscription end_date equals the last phase end_date").
+				WithReportableDetails(map[string]interface{}{
+					"subscription_end_date": *r.EndDate,
+					"last_phase_end_date":   *lastPhase.EndDate,
+				}).
+				Mark(ierr.ErrValidation)
+		}
 	}
 
 	return nil
@@ -694,6 +717,30 @@ func (r *CreateSubscriptionRequest) ToSubscription(ctx context.Context) *subscri
 		r.CustomerTimezone = "UTC"
 	}
 
+	// Determine subscription start and end dates based on phases
+	var startDate time.Time
+	var endDate *time.Time
+	var billingAnchor time.Time
+
+	if len(r.Phases) > 0 {
+		// If phases are provided, use first phase start date as subscription start date
+		startDate = r.Phases[0].StartDate
+		billingAnchor = startDate
+
+		// Use last phase end date as subscription end date (if last phase has end date)
+		lastPhase := r.Phases[len(r.Phases)-1]
+		if lastPhase.EndDate != nil {
+			endDate = lastPhase.EndDate
+		}
+	} else {
+		// If no phases, use provided start/end dates
+		if r.StartDate != nil {
+			startDate = *r.StartDate
+			billingAnchor = startDate
+		}
+		endDate = r.EndDate
+	}
+
 	sub := &subscription.Subscription{
 		ID:                 types.GenerateUUIDWithPrefix(types.UUID_PREFIX_SUBSCRIPTION),
 		CustomerID:         r.CustomerID,
@@ -701,14 +748,14 @@ func (r *CreateSubscriptionRequest) ToSubscription(ctx context.Context) *subscri
 		Currency:           strings.ToLower(r.Currency),
 		LookupKey:          r.LookupKey,
 		SubscriptionStatus: initialStatus,
-		StartDate:          *r.StartDate,
-		EndDate:            r.EndDate,
+		StartDate:          startDate,
+		EndDate:            endDate,
 		TrialStart:         r.TrialStart,
 		TrialEnd:           r.TrialEnd,
 		BillingCadence:     r.BillingCadence,
 		BillingPeriod:      r.BillingPeriod,
 		BillingPeriodCount: r.BillingPeriodCount,
-		BillingAnchor:      *r.StartDate,
+		BillingAnchor:      billingAnchor,
 		Metadata:           r.Metadata,
 		EnvironmentID:      types.GetEnvironmentID(ctx),
 		BaseModel:          types.GetDefaultBaseModel(ctx),
