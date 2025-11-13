@@ -590,6 +590,12 @@ func (p *paymentProcessor) handleInvoicePostProcessing(ctx context.Context, paym
 
 	if invoice.AmountRemaining.IsZero() {
 		invoice.PaymentStatus = types.PaymentStatusSucceeded
+		// Finalize invoice if it's still in draft state
+		if invoice.InvoiceStatus == types.InvoiceStatusDraft {
+			invoice.InvoiceStatus = types.InvoiceStatusFinalized
+			finalizedAt := time.Now().UTC()
+			invoice.FinalizedAt = &finalizedAt
+		}
 	} else if invoice.AmountRemaining.LessThan(invoice.AmountDue) {
 		invoice.PaymentStatus = types.PaymentStatusPending // Partial payment still keeps it pending
 	}
@@ -597,6 +603,31 @@ func (p *paymentProcessor) handleInvoicePostProcessing(ctx context.Context, paym
 	// Update the invoice
 	if err := p.InvoiceRepo.Update(ctx, invoice); err != nil {
 		return err
+	}
+
+	// Check if this invoice is for a purchased credit (has wallet_transaction_id in metadata)
+	// If so, complete the wallet transaction to credit the wallet
+	if invoice.Metadata != nil {
+		if walletTransactionID, ok := invoice.Metadata["wallet_transaction_id"]; ok && walletTransactionID != "" {
+			// Only complete the transaction if payment is fully succeeded
+			if invoice.PaymentStatus == types.PaymentStatusSucceeded {
+				walletService := NewWalletService(p.ServiceParams)
+				if err := walletService.CompletePurchasedCreditTransaction(ctx, walletTransactionID); err != nil {
+					p.Logger.Errorw("failed to complete purchased credit transaction",
+						"error", err,
+						"invoice_id", invoice.ID,
+						"wallet_transaction_id", walletTransactionID,
+					)
+					// Don't fail the payment, but log the error
+					// The transaction can be manually completed later
+				} else {
+					p.Logger.Infow("successfully completed purchased credit transaction",
+						"invoice_id", invoice.ID,
+						"wallet_transaction_id", walletTransactionID,
+					)
+				}
+			}
+		}
 	}
 
 	// Check if this is the first invoice payment for an incomplete subscription

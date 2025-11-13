@@ -611,6 +611,52 @@ func (r *walletRepository) UpdateTransactionStatus(ctx context.Context, id strin
 	return nil
 }
 
+// UpdateTransaction updates a wallet transaction with all fields
+func (r *walletRepository) UpdateTransaction(ctx context.Context, tx *walletdomain.Transaction) error {
+	// Start a span for this repository operation
+	span := StartRepositorySpan(ctx, "wallet", "update_transaction", map[string]interface{}{
+		"transaction_id": tx.ID,
+		"wallet_id":      tx.WalletID,
+	})
+	defer FinishSpan(span)
+
+	client := r.client.Writer(ctx)
+	count, err := client.WalletTransaction.Update().
+		Where(
+			wallettransaction.ID(tx.ID),
+			wallettransaction.TenantID(types.GetTenantID(ctx)),
+			wallettransaction.StatusEQ(string(types.StatusPublished)),
+			wallettransaction.EnvironmentID(types.GetEnvironmentID(ctx)),
+		).
+		SetTransactionStatus(string(tx.TxStatus)).
+		SetCreditBalanceBefore(tx.CreditBalanceBefore).
+		SetCreditBalanceAfter(tx.CreditBalanceAfter).
+		SetCreditsAvailable(tx.CreditsAvailable).
+		SetUpdatedBy(types.GetUserID(ctx)).
+		SetUpdatedAt(tx.UpdatedAt).
+		Save(ctx)
+
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to update transaction").
+			WithReportableDetails(map[string]interface{}{
+				"transaction_id": tx.ID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	if count == 0 {
+		return ierr.NewError("transaction not found").
+			WithHint("The transaction may not exist").
+			WithReportableDetails(map[string]interface{}{
+				"transaction_id": tx.ID,
+			}).
+			Mark(ierr.ErrNotFound)
+	}
+
+	return nil
+}
+
 // WalletTransactionQuery type alias for better readability
 type WalletTransactionQuery = *ent.WalletTransactionQuery
 

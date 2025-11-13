@@ -82,6 +82,9 @@ type WalletService interface {
 
 	// TopUpWalletForProratedCharge tops up a wallet for proration credits from subscription changes
 	TopUpWalletForProratedCharge(ctx context.Context, customerID string, amount decimal.Decimal, currency string) error
+
+	// CompletePurchasedCreditTransaction completes a pending wallet transaction when payment succeeds
+	CompletePurchasedCreditTransaction(ctx context.Context, walletTransactionID string) error
 }
 
 type walletService struct {
@@ -308,13 +311,11 @@ func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *d
 		idempotencyKey = types.GenerateUUID()
 	}
 
-	// Prepare credit operation details
-	referenceType := types.WalletTxReferenceTypeExternal
-	referenceID := idempotencyKey
-
 	// Handle special case for purchased credits with invoice
 	if req.TransactionReason == types.TransactionReasonPurchasedCreditInvoiced {
-		paymentID, err := s.handlePurchasedCreditInvoicedTransaction(
+		// This creates a PENDING wallet transaction and invoice
+		// No wallet balance update happens yet
+		walletTransactionID, err := s.handlePurchasedCreditInvoicedTransaction(
 			ctx,
 			walletID,
 			lo.ToPtr(idempotencyKey),
@@ -323,9 +324,21 @@ func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *d
 		if err != nil {
 			return nil, err
 		}
-		referenceID = paymentID
-		referenceType = types.WalletTxReferenceTypePayment
+
+		s.Logger.Debugw("created pending credit purchase with invoice",
+			"wallet_id", walletID,
+			"wallet_transaction_id", walletTransactionID,
+			"credits", req.CreditsToAdd.String(),
+		)
+
+		// Return wallet without crediting it yet
+		return s.GetWalletByID(ctx, walletID)
 	}
+
+	// Handle direct credit purchase (PURCHASED_CREDIT_DIRECT) or any other transaction reason
+	// This immediately credits the wallet
+	referenceType := types.WalletTxReferenceTypeExternal
+	referenceID := idempotencyKey
 
 	// Create wallet credit operation
 	creditReq := &wallet.WalletOperation{
@@ -342,7 +355,7 @@ func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *d
 		Priority:          req.Priority,
 	}
 
-	// Process wallet credit
+	// Process wallet credit immediately
 	if err := s.CreditWallet(ctx, creditReq); err != nil {
 		return nil, err
 	}
@@ -353,7 +366,6 @@ func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *d
 func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Context, walletID string, idempotencyKey *string, req *dto.TopUpWalletRequest) (string, error) {
 	// Initialize required services
 	invoiceService := NewInvoiceService(s.ServiceParams)
-	paymentService := NewPaymentService(s.ServiceParams)
 
 	// Retrieve wallet and customer details
 	w, err := s.WalletRepo.GetWalletByID(ctx, walletID)
@@ -361,52 +373,245 @@ func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Con
 		return "", err
 	}
 
-	var paymentID string
+	var walletTransactionID string
 	err = s.DB.WithTx(ctx, func(ctx context.Context) error {
-		// Create invoice for credit purchase
+		// Step 1: Create a pending wallet transaction (no balance update yet)
+		tx := &wallet.Transaction{
+			ID:                  types.GenerateUUIDWithPrefix(types.UUID_PREFIX_WALLET_TRANSACTION),
+			WalletID:            walletID,
+			Type:                types.TransactionTypeCredit,
+			CreditAmount:        req.CreditsToAdd,
+			Amount:              s.GetCurrencyAmountFromCredits(req.CreditsToAdd, w.ConversionRate),
+			TxStatus:            types.TransactionStatusPending,
+			ReferenceType:       types.WalletTxReferenceTypeExternal,
+			ReferenceID:         lo.FromPtr(idempotencyKey),
+			Description:         lo.Ternary(req.Description != "", req.Description, "Purchased credits - pending payment"),
+			Metadata:            req.Metadata,
+			TransactionReason:   types.TransactionReasonPurchasedCreditInvoiced,
+			Priority:            req.Priority,
+			IdempotencyKey:      lo.FromPtr(idempotencyKey),
+			EnvironmentID:       w.EnvironmentID,
+			CreditBalanceBefore: w.CreditBalance,
+			CreditBalanceAfter:  w.CreditBalance, // Balance doesn't change yet
+			CreditsAvailable:    decimal.Zero,    // No credits available yet
+			ExpiryDate:          types.ParseYYYYMMDDToDate(req.ExpiryDate),
+			BaseModel:           types.GetDefaultBaseModel(ctx),
+		}
+
+		// Create the pending transaction
+		if err := s.WalletRepo.CreateTransaction(ctx, tx); err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to create pending wallet transaction").
+				Mark(ierr.ErrInternal)
+		}
+
+		walletTransactionID = tx.ID
+
+		// Step 2: Create invoice for credit purchase with wallet_transaction_id in metadata
 		amount := s.GetCurrencyAmountFromCredits(req.CreditsToAdd, w.ConversionRate)
+		invoiceMetadata := req.Metadata
+		if invoiceMetadata == nil {
+			invoiceMetadata = make(types.Metadata)
+		}
+		invoiceMetadata["wallet_transaction_id"] = walletTransactionID
+		invoiceMetadata["wallet_id"] = walletID
+		invoiceMetadata["credits_amount"] = req.CreditsToAdd.String()
+
 		invoice, err := invoiceService.CreateInvoice(ctx, dto.CreateInvoiceRequest{
 			CustomerID:     w.CustomerID,
 			AmountDue:      amount,
 			Subtotal:       amount,
 			Total:          amount,
 			Currency:       w.Currency,
-			InvoiceType:    types.InvoiceTypeCredit,
+			InvoiceType:    types.InvoiceTypeOneOff, // Changed from CREDIT to ONE_OFF
 			DueDate:        lo.ToPtr(time.Now().UTC()),
 			IdempotencyKey: idempotencyKey,
-			InvoiceStatus:  lo.ToPtr(types.InvoiceStatusFinalized),
+			InvoiceStatus:  lo.ToPtr(types.InvoiceStatusDraft), // Changed from FINALIZED to DRAFT
 			LineItems: []dto.CreateInvoiceLineItemRequest{
 				{
 					Amount:      amount,
 					Quantity:    decimal.NewFromInt(1),
-					DisplayName: lo.ToPtr("Purchased Credits"),
+					DisplayName: lo.ToPtr(fmt.Sprintf("Purchase %s Credits", req.CreditsToAdd.String())),
 				},
 			},
 			PaymentStatus: lo.ToPtr(types.PaymentStatusPending),
+			Metadata:      invoiceMetadata,
 		})
 		if err != nil {
-			return err
+			return ierr.WithError(err).
+				WithHint("Failed to create invoice for purchased credits").
+				Mark(ierr.ErrInternal)
 		}
 
-		// Create payment for the invoice
-		// Process : true will process the payment and update the invoice payment status
-		payment, err := paymentService.CreatePayment(ctx, &dto.CreatePaymentRequest{
-			IdempotencyKey:    lo.FromPtr(idempotencyKey),
-			DestinationType:   types.PaymentDestinationTypeInvoice,
-			DestinationID:     invoice.ID,
-			PaymentMethodType: types.PaymentMethodTypeOffline,
-			Amount:            s.GetCurrencyAmountFromCredits(req.CreditsToAdd, w.ConversionRate),
-			Currency:          w.Currency,
-			ProcessPayment:    true,
-		})
-		if err != nil {
-			return err
-		}
-		paymentID = payment.ID
+		s.Logger.Infow("created pending credit purchase",
+			"wallet_transaction_id", walletTransactionID,
+			"invoice_id", invoice.ID,
+			"wallet_id", walletID,
+			"credits", req.CreditsToAdd.String(),
+			"amount", amount.String(),
+		)
+
 		return nil
 	})
 
-	return paymentID, err
+	return walletTransactionID, err
+}
+
+// CompletePurchasedCreditTransaction completes a pending wallet transaction when payment succeeds
+// This is called by the payment processor after invoice payment is successful
+func (s *walletService) CompletePurchasedCreditTransaction(ctx context.Context, walletTransactionID string) error {
+	// Get the pending transaction
+	tx, err := s.WalletRepo.GetTransactionByID(ctx, walletTransactionID)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get wallet transaction").
+			Mark(ierr.ErrNotFound)
+	}
+
+	// Validate transaction state
+	if tx.TxStatus != types.TransactionStatusPending {
+		s.Logger.Warnw("wallet transaction is not pending",
+			"wallet_transaction_id", walletTransactionID,
+			"current_status", tx.TxStatus,
+		)
+		// If already completed, this is idempotent - return success
+		if tx.TxStatus == types.TransactionStatusCompleted {
+			return nil
+		}
+		return ierr.NewError("wallet transaction is not in pending state").
+			WithHint("Only pending transactions can be completed").
+			WithReportableDetails(map[string]interface{}{
+				"wallet_transaction_id": walletTransactionID,
+				"current_status":        tx.TxStatus,
+			}).
+			Mark(ierr.ErrInvalidOperation)
+	}
+
+	if tx.Type != types.TransactionTypeCredit {
+		return ierr.NewError("only credit transactions can be completed").
+			WithHint("Only credit transactions can be completed").
+			WithReportableDetails(map[string]interface{}{
+				"wallet_transaction_id": walletTransactionID,
+				"transaction_type":      tx.Type,
+			}).
+			Mark(ierr.ErrInvalidOperation)
+	}
+
+	// Get wallet to check current balance
+	w, err := s.WalletRepo.GetWalletByID(ctx, tx.WalletID)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to get wallet").
+			Mark(ierr.ErrNotFound)
+	}
+
+	// Execute completion in a transaction
+	err = s.DB.WithTx(ctx, func(ctx context.Context) error {
+		// Calculate new balances
+		finalBalance := w.Balance.Add(tx.Amount)
+		newCreditBalance := w.CreditBalance.Add(tx.CreditAmount)
+
+		// Update transaction status and balances
+		tx.TxStatus = types.TransactionStatusCompleted
+		tx.CreditBalanceBefore = w.CreditBalance
+		tx.CreditBalanceAfter = newCreditBalance
+		tx.CreditsAvailable = tx.CreditAmount
+		tx.UpdatedAt = time.Now().UTC()
+
+		// Update the transaction
+		if err := s.WalletRepo.UpdateTransaction(ctx, tx); err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to update wallet transaction").
+				Mark(ierr.ErrInternal)
+		}
+
+		// Update wallet balance
+		if err := s.WalletRepo.UpdateWalletBalance(ctx, tx.WalletID, finalBalance, newCreditBalance); err != nil {
+			return ierr.WithError(err).
+				WithHint("Failed to update wallet balance").
+				Mark(ierr.ErrInternal)
+		}
+
+		s.Logger.Infow("completed purchased credit transaction",
+			"wallet_transaction_id", walletTransactionID,
+			"wallet_id", tx.WalletID,
+			"credits_added", tx.CreditAmount.String(),
+			"new_balance", newCreditBalance.String(),
+		)
+
+		// Publish webhook event
+		s.publishInternalTransactionWebhookEvent(ctx, types.WebhookEventWalletTransactionCreated, tx.ID)
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	// Check credit balance alerts after wallet operation
+	var thresholdValue decimal.Decimal
+	var alertStatus types.AlertState
+
+	// Get wallet threshold or use default (0)
+	if w.AlertConfig != nil && w.AlertConfig.Threshold != nil {
+		thresholdValue = w.AlertConfig.Threshold.Value
+	} else {
+		thresholdValue = decimal.Zero
+	}
+
+	newCreditBalance := w.CreditBalance.Add(tx.CreditAmount)
+
+	// Determine alert status based on balance vs threshold
+	if newCreditBalance.LessThan(thresholdValue) {
+		alertStatus = types.AlertStateInAlarm
+	} else {
+		alertStatus = types.AlertStateOk
+	}
+
+	// Create alert info
+	alertInfo := types.AlertInfo{
+		AlertSettings: &types.AlertSettings{
+			Critical: &types.AlertThreshold{
+				Threshold: thresholdValue,
+				Condition: types.AlertConditionBelow,
+			},
+			AlertEnabled: lo.ToPtr(true),
+		},
+		ValueAtTime: newCreditBalance,
+		Timestamp:   time.Now().UTC(),
+	}
+
+	// Log the alert
+	alertService := NewAlertLogsService(s.ServiceParams)
+
+	// Get customer ID from wallet if available
+	var customerID *string
+	if w.CustomerID != "" {
+		customerID = lo.ToPtr(w.CustomerID)
+	}
+
+	logAlertReq := &LogAlertRequest{
+		EntityType:  types.AlertEntityTypeWallet,
+		EntityID:    w.ID,
+		CustomerID:  customerID,
+		AlertType:   types.AlertTypeLowCreditBalance,
+		AlertStatus: alertStatus,
+		AlertInfo:   alertInfo,
+	}
+
+	if err := alertService.LogAlert(ctx, logAlertReq); err != nil {
+		// Log error but don't fail the transaction
+		s.Logger.Errorw("failed to log credit balance alert",
+			"error", err,
+			"wallet_id", w.ID,
+			"new_credit_balance", newCreditBalance,
+			"threshold", thresholdValue,
+			"alert_status", alertStatus,
+		)
+	}
+
+	return nil
 }
 
 // GetWalletBalance calculates the real-time available balance for a wallet

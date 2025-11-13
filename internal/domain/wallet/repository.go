@@ -24,6 +24,7 @@ type Repository interface {
 	ListAllWalletTransactions(ctx context.Context, f *types.WalletTransactionFilter) ([]*Transaction, error)
 	CountWalletTransactions(ctx context.Context, f *types.WalletTransactionFilter) (int, error)
 	UpdateTransactionStatus(ctx context.Context, id string, status types.TransactionStatus) error
+	UpdateTransaction(ctx context.Context, tx *Transaction) error
 
 	// Credit/Debit specific operations
 	FindEligibleCredits(ctx context.Context, walletID string, requiredAmount decimal.Decimal, pageSize int) ([]*Transaction, error)
