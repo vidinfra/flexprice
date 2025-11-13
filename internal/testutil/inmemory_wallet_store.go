@@ -482,6 +482,46 @@ func (s *InMemoryWalletStore) UpdateTransactionStatus(ctx context.Context, id st
 	return nil
 }
 
+// UpdateTransaction updates a wallet transaction (multiple fields)
+func (s *InMemoryWalletStore) UpdateTransaction(ctx context.Context, tx *wallet.Transaction) error {
+	if tx == nil {
+		return ierr.NewError("transaction cannot be nil").
+			WithHint("A valid transaction object must be provided").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Check if transaction exists
+	existing, err := s.GetTransactionByID(ctx, tx.ID)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to retrieve transaction for update").
+			WithReportableDetails(map[string]interface{}{
+				"transaction_id": tx.ID,
+			}).
+			Mark(ierr.ErrNotFound)
+	}
+
+	// Update the fields
+	existing.TxStatus = tx.TxStatus
+	existing.CreditBalanceBefore = tx.CreditBalanceBefore
+	existing.CreditBalanceAfter = tx.CreditBalanceAfter
+	existing.CreditsAvailable = tx.CreditsAvailable
+	existing.UpdatedAt = time.Now().UTC()
+	existing.UpdatedBy = types.GetUserID(ctx)
+
+	// Update in store
+	if err := s.transactions.Update(ctx, tx.ID, existing); err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to update transaction").
+			WithReportableDetails(map[string]interface{}{
+				"transaction_id": tx.ID,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	return nil
+}
+
 func (s *InMemoryWalletStore) Clear() {
 	s.wallets.Clear()
 	s.transactions.Clear()
