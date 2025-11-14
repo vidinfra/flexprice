@@ -590,6 +590,86 @@ func (s *walletService) CompletePurchasedCreditTransaction(ctx context.Context, 
 		return err
 	}
 
+	// Log credit balance alert after transaction completes
+	if err := s.logCreditBalanceAlert(ctx, w, w.CreditBalance.Add(tx.CreditAmount)); err != nil {
+		// Don't fail the transaction if alert logging fails
+		s.Logger.Errorw("failed to log credit balance alert after completing purchased credit transaction",
+			"error", err,
+			"wallet_id", w.ID,
+		)
+	}
+
+	return nil
+}
+
+// logCreditBalanceAlert logs a credit balance alert for a wallet after a balance change
+func (s *walletService) logCreditBalanceAlert(ctx context.Context, w *wallet.Wallet, newCreditBalance decimal.Decimal) error {
+	// Check credit balance alerts after wallet operation
+	var thresholdValue decimal.Decimal
+	var alertStatus types.AlertState
+
+	// Get wallet threshold or use default (0)
+	if w.AlertConfig != nil && w.AlertConfig.Threshold != nil {
+		thresholdValue = w.AlertConfig.Threshold.Value
+	} else {
+		thresholdValue = decimal.Zero
+	}
+
+	// Determine alert status based on balance vs threshold
+	if newCreditBalance.LessThan(thresholdValue) {
+		alertStatus = types.AlertStateInAlarm
+	} else {
+		alertStatus = types.AlertStateOk
+	}
+
+	// Create alert info
+	alertInfo := types.AlertInfo{
+		AlertSettings: &types.AlertSettings{
+			Critical: &types.AlertThreshold{
+				Threshold: thresholdValue,
+				Condition: types.AlertConditionBelow,
+			},
+			AlertEnabled: lo.ToPtr(true),
+		},
+		ValueAtTime: newCreditBalance,
+		Timestamp:   time.Now().UTC(),
+	}
+
+	// Log the alert
+	alertService := NewAlertLogsService(s.ServiceParams)
+
+	// Get customer ID from wallet if available
+	var customerID *string
+	if w.CustomerID != "" {
+		customerID = lo.ToPtr(w.CustomerID)
+	}
+
+	logAlertReq := &LogAlertRequest{
+		EntityType:  types.AlertEntityTypeWallet,
+		EntityID:    w.ID,
+		CustomerID:  customerID,
+		AlertType:   types.AlertTypeLowCreditBalance,
+		AlertStatus: alertStatus,
+		AlertInfo:   alertInfo,
+	}
+
+	if err := alertService.LogAlert(ctx, logAlertReq); err != nil {
+		s.Logger.Errorw("failed to log credit balance alert",
+			"error", err,
+			"wallet_id", w.ID,
+			"new_credit_balance", newCreditBalance,
+			"threshold", thresholdValue,
+			"alert_status", alertStatus,
+		)
+		return err
+	}
+
+	s.Logger.Infow("credit balance alert logged successfully",
+		"wallet_id", w.ID,
+		"new_credit_balance", newCreditBalance,
+		"threshold", thresholdValue,
+		"alert_status", alertStatus,
+	)
 	return nil
 }
 
@@ -1055,72 +1135,15 @@ func (s *walletService) processWalletOperationWithID(ctx context.Context, req *w
 		return "", err
 	}
 
-	// Check credit balance alerts after wallet operation
-	var thresholdValue decimal.Decimal
-	var alertStatus types.AlertState
-
-	// Get wallet threshold or use default (0)
-	if w.AlertConfig != nil && w.AlertConfig.Threshold != nil {
-		thresholdValue = w.AlertConfig.Threshold.Value
-	} else {
-		thresholdValue = decimal.Zero
-	}
-
-	// Determine alert status based on balance vs threshold
-	if newCreditBalance.LessThan(thresholdValue) {
-		alertStatus = types.AlertStateInAlarm
-	} else {
-		alertStatus = types.AlertStateOk
-	}
-
-	// Create alert info
-	alertInfo := types.AlertInfo{
-		AlertSettings: &types.AlertSettings{
-			Critical: &types.AlertThreshold{
-				Threshold: thresholdValue,
-				Condition: types.AlertConditionBelow,
-			},
-			AlertEnabled: lo.ToPtr(true),
-		},
-		ValueAtTime: newCreditBalance,
-		Timestamp:   time.Now().UTC(),
-	}
-
-	// Log the alert
-	alertService := NewAlertLogsService(s.ServiceParams)
-
-	// Get customer ID from wallet if available
-	var customerID *string
-	if w.CustomerID != "" {
-		customerID = lo.ToPtr(w.CustomerID)
-	}
-
-	logAlertReq := &LogAlertRequest{
-		EntityType:  types.AlertEntityTypeWallet,
-		EntityID:    w.ID,
-		CustomerID:  customerID,
-		AlertType:   types.AlertTypeLowCreditBalance,
-		AlertStatus: alertStatus,
-		AlertInfo:   alertInfo,
-	}
-
-	if err := alertService.LogAlert(ctx, logAlertReq); err != nil {
-		// Log error but don't fail the transaction
-		s.Logger.Errorw("failed to log credit balance alert",
+	// Log credit balance alert after wallet operation
+	if err := s.logCreditBalanceAlert(ctx, w, newCreditBalance); err != nil {
+		// Don't fail the transaction if alert logging fails
+		s.Logger.Errorw("failed to log credit balance alert after wallet operation",
 			"error", err,
 			"wallet_id", w.ID,
-			"new_credit_balance", newCreditBalance,
-			"threshold", thresholdValue,
-			"alert_status", alertStatus,
-		)
-	} else {
-		s.Logger.Infow("credit balance alert logged successfully",
-			"wallet_id", w.ID,
-			"new_credit_balance", newCreditBalance,
-			"threshold", thresholdValue,
-			"alert_status", alertStatus,
 		)
 	}
+
 	return transactionID, nil
 }
 
