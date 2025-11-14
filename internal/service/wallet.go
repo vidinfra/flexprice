@@ -456,6 +456,11 @@ func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Con
 		invoiceMetadata["wallet_id"] = walletID
 		invoiceMetadata["credits_amount"] = req.CreditsToAdd.String()
 
+		// Add description to invoice metadata if provided
+		if req.Description != "" {
+			invoiceMetadata["description"] = req.Description
+		}
+
 		invoice, err := invoiceService.CreateInvoice(ctx, dto.CreateInvoiceRequest{
 			CustomerID:     w.CustomerID,
 			AmountDue:      amount,
