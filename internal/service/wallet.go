@@ -32,7 +32,7 @@ type WalletService interface {
 	GetWalletTransactions(ctx context.Context, walletID string, filter *types.WalletTransactionFilter) (*dto.ListWalletTransactionsResponse, error)
 
 	// TopUpWallet adds credits to a wallet
-	TopUpWallet(ctx context.Context, walletID string, req *dto.TopUpWalletRequest) (*dto.WalletResponse, error)
+	TopUpWallet(ctx context.Context, walletID string, req *dto.TopUpWalletRequest) (*dto.TopUpWalletResponse, error)
 
 	// GetWalletTransactionByID retrieves a transaction by its ID
 	GetWalletTransactionByID(ctx context.Context, transactionID string) (*dto.WalletTransactionResponse, error)
@@ -160,17 +160,20 @@ func (s *walletService) CreateWallet(ctx context.Context, req *dto.CreateWalletR
 
 		// Load initial credits to wallet
 		if req.InitialCreditsToLoad.GreaterThan(decimal.Zero) {
+			idempotencyKey := types.GenerateUUID()
 			topUpResp, err := s.TopUpWallet(ctx, w.ID, &dto.TopUpWalletRequest{
 				CreditsToAdd:      req.InitialCreditsToLoad,
 				TransactionReason: types.TransactionReasonFreeCredit,
 				ExpiryDate:        req.InitialCreditsToLoadExpiryDate,
 				ExpiryDateUTC:     req.InitialCreditsExpiryDateUTC,
+				IdempotencyKey:    &idempotencyKey,
 			})
 
 			if err != nil {
 				return err
 			}
-			response = topUpResp
+			// Update response with wallet from top-up response
+			response = topUpResp.Wallet
 		}
 
 		return nil
@@ -270,7 +273,7 @@ func (s *walletService) GetWalletTransactions(ctx context.Context, walletID stri
 }
 
 // Update the TopUpWallet method to use the new processWalletOperation
-func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *dto.TopUpWalletRequest) (*dto.WalletResponse, error) {
+func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *dto.TopUpWalletRequest) (*dto.TopUpWalletResponse, error) {
 	w, err := s.WalletRepo.GetWalletByID(ctx, walletID)
 	if err != nil {
 		return nil, ierr.NewError("Wallet not found").
@@ -315,7 +318,7 @@ func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *d
 	if req.TransactionReason == types.TransactionReasonPurchasedCreditInvoiced {
 		// This creates a PENDING wallet transaction and invoice
 		// No wallet balance update happens yet
-		walletTransactionID, err := s.handlePurchasedCreditInvoicedTransaction(
+		walletTransactionID, invoiceID, err := s.handlePurchasedCreditInvoicedTransaction(
 			ctx,
 			walletID,
 			lo.ToPtr(idempotencyKey),
@@ -328,11 +331,28 @@ func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *d
 		s.Logger.Debugw("created pending credit purchase with invoice",
 			"wallet_id", walletID,
 			"wallet_transaction_id", walletTransactionID,
+			"invoice_id", invoiceID,
 			"credits", req.CreditsToAdd.String(),
 		)
 
-		// Return wallet without crediting it yet
-		return s.GetWalletByID(ctx, walletID)
+		// Get the wallet transaction
+		tx, err := s.WalletRepo.GetTransactionByID(ctx, walletTransactionID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Get updated wallet
+		walletResp, err := s.GetWalletByID(ctx, walletID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Return response with transaction, invoice ID, and wallet
+		return &dto.TopUpWalletResponse{
+			WalletTransaction: dto.FromWalletTransaction(tx),
+			InvoiceID:         &invoiceID,
+			Wallet:            walletResp,
+		}, nil
 	}
 
 	// Handle direct credit purchase (PURCHASED_CREDIT_DIRECT) or any other transaction reason
@@ -356,24 +376,43 @@ func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *d
 	}
 
 	// Process wallet credit immediately
-	if err := s.CreditWallet(ctx, creditReq); err != nil {
+	transactionID, err := s.creditWalletWithID(ctx, creditReq)
+	if err != nil {
 		return nil, err
 	}
 
-	return s.GetWalletByID(ctx, walletID)
+	// Get the wallet transaction by ID
+	tx, err := s.WalletRepo.GetTransactionByID(ctx, transactionID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get updated wallet
+	walletResp, err := s.GetWalletByID(ctx, walletID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Return response with transaction and wallet (no invoice for direct credits)
+	return &dto.TopUpWalletResponse{
+		WalletTransaction: dto.FromWalletTransaction(tx),
+		InvoiceID:         nil,
+		Wallet:            walletResp,
+	}, nil
 }
 
-func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Context, walletID string, idempotencyKey *string, req *dto.TopUpWalletRequest) (string, error) {
+func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Context, walletID string, idempotencyKey *string, req *dto.TopUpWalletRequest) (string, string, error) {
 	// Initialize required services
 	invoiceService := NewInvoiceService(s.ServiceParams)
 
 	// Retrieve wallet and customer details
 	w, err := s.WalletRepo.GetWalletByID(ctx, walletID)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	var walletTransactionID string
+	var invoiceID string
 	err = s.DB.WithTx(ctx, func(ctx context.Context) error {
 		// Step 1: Create a pending wallet transaction (no balance update yet)
 		tx := &wallet.Transaction{
@@ -443,6 +482,8 @@ func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Con
 				Mark(ierr.ErrInternal)
 		}
 
+		invoiceID = invoice.ID
+
 		s.Logger.Infow("created pending credit purchase",
 			"wallet_transaction_id", walletTransactionID,
 			"invoice_id", invoice.ID,
@@ -454,7 +495,7 @@ func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Con
 		return nil
 	})
 
-	return walletTransactionID, err
+	return walletTransactionID, invoiceID, err
 }
 
 // CompletePurchasedCreditTransaction completes a pending wallet transaction when payment succeeds
@@ -895,6 +936,22 @@ func (s *walletService) CreditWallet(ctx context.Context, req *wallet.WalletOper
 	return s.processWalletOperation(ctx, req)
 }
 
+// creditWalletWithID processes a credit operation and returns the transaction ID
+func (s *walletService) creditWalletWithID(ctx context.Context, req *wallet.WalletOperation) (string, error) {
+	if req.Type != types.TransactionTypeCredit {
+		return "", ierr.NewError("invalid transaction type").
+			WithHint("Invalid transaction type").
+			Mark(ierr.ErrValidation)
+	}
+
+	if req.ReferenceType == "" || req.ReferenceID == "" {
+		req.ReferenceType = types.WalletTxReferenceTypeRequest
+		req.ReferenceID = types.GenerateUUIDWithPrefix(types.UUID_PREFIX_WALLET_TRANSACTION)
+	}
+
+	return s.processWalletOperationWithID(ctx, req)
+}
+
 // Wallet operations
 
 // validateWalletOperation validates the wallet operation request
@@ -970,17 +1027,23 @@ func (s *walletService) processDebitOperation(ctx context.Context, req *wallet.W
 
 // processWalletOperation handles both credit and debit operations
 func (s *walletService) processWalletOperation(ctx context.Context, req *wallet.WalletOperation) error {
+	_, err := s.processWalletOperationWithID(ctx, req)
+	return err
+}
+
+// processWalletOperationWithID handles both credit and debit operations and returns the transaction ID
+func (s *walletService) processWalletOperationWithID(ctx context.Context, req *wallet.WalletOperation) (string, error) {
 	s.Logger.Debugw("Processing wallet operation", "req", req)
 
 	// Get wallet
 	w, err := s.WalletRepo.GetWalletByID(ctx, req.WalletID)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Validate operation
 	if err := s.validateWalletOperation(w, req); err != nil {
-		return err
+		return "", err
 	}
 
 	var newCreditBalance decimal.Decimal
@@ -991,7 +1054,7 @@ func (s *walletService) processWalletOperation(ctx context.Context, req *wallet.
 		// Process debit operation first
 		err = s.processDebitOperation(ctx, req)
 		if err != nil {
-			return err
+			return "", err
 		}
 	} else {
 		// Process credit operation
@@ -1033,6 +1096,8 @@ func (s *walletService) processWalletOperation(ctx context.Context, req *wallet.
 		tx.ExpiryDate = types.ParseYYYYMMDDToDate(req.ExpiryDate)
 	}
 
+	transactionID := tx.ID
+
 	err = s.DB.WithTx(ctx, func(ctx context.Context) error {
 
 		if err := s.WalletRepo.CreateTransaction(ctx, tx); err != nil {
@@ -1049,7 +1114,7 @@ func (s *walletService) processWalletOperation(ctx context.Context, req *wallet.
 		return nil
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Check credit balance alerts after wallet operation
@@ -1118,7 +1183,7 @@ func (s *walletService) processWalletOperation(ctx context.Context, req *wallet.
 			"alert_status", alertStatus,
 		)
 	}
-	return nil
+	return transactionID, nil
 }
 
 // ExpireCredits expires credits for a given transaction

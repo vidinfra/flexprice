@@ -440,6 +440,16 @@ func (r *TopUpWalletRequest) Validate() error {
 	return nil
 }
 
+// TopUpWalletResponse represents the response for topping up a wallet
+type TopUpWalletResponse struct {
+	// Wallet transaction created (could be PENDING or COMPLETED)
+	WalletTransaction *WalletTransactionResponse `json:"wallet_transaction"`
+	// Invoice ID if an invoice was created (only for PURCHASED_CREDIT_INVOICED)
+	InvoiceID *string `json:"invoice_id,omitempty"`
+	// Wallet details after the operation
+	Wallet *WalletResponse `json:"wallet"`
+}
+
 // WalletBalanceResponse represents the response for getting wallet balance
 type WalletBalanceResponse struct {
 	*wallet.Wallet
