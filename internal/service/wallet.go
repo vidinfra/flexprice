@@ -591,15 +591,15 @@ func (s *walletService) CompletePurchasedCreditTransaction(ctx context.Context, 
 			"new_balance", newCreditBalance.String(),
 		)
 
-		// Publish webhook event
-		s.publishInternalTransactionWebhookEvent(ctx, types.WebhookEventWalletTransactionCreated, tx.ID)
-
 		return nil
 	})
 
 	if err != nil {
 		return err
 	}
+
+	// Publish webhook event after transaction commits
+	s.publishInternalTransactionWebhookEvent(ctx, types.WebhookEventWalletTransactionCreated, tx.ID)
 
 	// Log credit balance alert after transaction completes
 	if err := s.logCreditBalanceAlert(ctx, w, w.CreditBalance.Add(tx.CreditAmount)); err != nil {
@@ -1139,12 +1139,14 @@ func (s *walletService) processWalletOperationWithID(ctx context.Context, req *w
 		}
 
 		s.Logger.Debugw("Wallet operation completed")
-		s.publishInternalTransactionWebhookEvent(ctx, types.WebhookEventWalletTransactionCreated, tx.ID)
 		return nil
 	})
 	if err != nil {
 		return "", err
 	}
+
+	// Publish webhook event after transaction commits
+	s.publishInternalTransactionWebhookEvent(ctx, types.WebhookEventWalletTransactionCreated, tx.ID)
 
 	// Log credit balance alert after wallet operation
 	if err := s.logCreditBalanceAlert(ctx, w, newCreditBalance); err != nil {
