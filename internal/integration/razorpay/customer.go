@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
 	ierr "github.com/flexprice/flexprice/internal/errors"
@@ -44,9 +45,6 @@ func NewCustomerService(
 
 // EnsureCustomerSyncedToRazorpay ensures a customer is synced to Razorpay
 func (s *CustomerService) EnsureCustomerSyncedToRazorpay(ctx context.Context, customerID string, customerService interfaces.CustomerService) (*customer.Customer, error) {
-	s.logger.Infow("ensuring customer is synced to Razorpay",
-		"customer_id", customerID)
-
 	// Get FlexPrice customer
 	customerResp, err := customerService.GetCustomer(ctx, customerID)
 	if err != nil {
@@ -59,29 +57,84 @@ func (s *CustomerService) EnsureCustomerSyncedToRazorpay(ctx context.Context, cu
 	}
 	flexpriceCustomer := customerResp.Customer
 
-	// Check if customer already has Razorpay mapping
-	razorpayCustomerID, err := s.GetRazorpayCustomerID(ctx, customerID)
-	if err == nil && razorpayCustomerID != "" {
+	// Check if customer already has Razorpay ID in metadata
+	if razorpayID, exists := flexpriceCustomer.Metadata["razorpay_customer_id"]; exists && razorpayID != "" {
 		s.logger.Infow("customer already synced to Razorpay",
 			"customer_id", customerID,
-			"razorpay_customer_id", razorpayCustomerID)
-
-		// Update customer metadata with Razorpay customer ID
-		if flexpriceCustomer.Metadata == nil {
-			flexpriceCustomer.Metadata = types.Metadata{}
-		}
-		flexpriceCustomer.Metadata["razorpay_customer_id"] = razorpayCustomerID
-
+			"razorpay_customer_id", razorpayID)
 		return flexpriceCustomer, nil
 	}
 
-	// Customer not synced, create in Razorpay
-	s.logger.Infow("customer not found in Razorpay, creating new customer",
-		"customer_id", customerID)
+	// Check if customer is synced via integration mapping table
+	if s.entityIntegrationMappingRepo != nil {
+		filter := &types.EntityIntegrationMappingFilter{
+			EntityID:      customerID,
+			EntityType:    types.IntegrationEntityTypeCustomer,
+			ProviderTypes: []string{string(types.SecretProviderRazorpay)},
+		}
 
-	razorpayCustomerID, err = s.SyncCustomerToRazorpay(ctx, flexpriceCustomer)
+		existingMappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
+		if err == nil && existingMappings != nil && len(existingMappings) > 0 {
+			existingMapping := existingMappings[0]
+			s.logger.Infow("customer already mapped to Razorpay via integration mapping",
+				"customer_id", customerID,
+				"razorpay_customer_id", existingMapping.ProviderEntityID)
+
+			// Update customer metadata with Razorpay ID for faster future lookups
+			updateReq := dto.UpdateCustomerRequest{
+				Metadata: s.mergeCustomerMetadata(flexpriceCustomer.Metadata, map[string]string{
+					"razorpay_customer_id": existingMapping.ProviderEntityID,
+				}),
+			}
+			updatedCustomerResp, err := customerService.UpdateCustomer(ctx, flexpriceCustomer.ID, updateReq)
+			if err != nil {
+				s.logger.Warnw("failed to update customer metadata with Razorpay customer ID",
+					"customer_id", customerID,
+					"error", err)
+				// Return original customer info if update fails
+				return flexpriceCustomer, nil
+			}
+			return updatedCustomerResp.Customer, nil
+		}
+	}
+
+	// Customer is not synced, create in Razorpay
+	s.logger.Infow("customer not synced to Razorpay, creating in Razorpay",
+		"customer_id", customerID)
+	err = s.CreateCustomerInRazorpay(ctx, customerID, customerService)
 	if err != nil {
-		return nil, ierr.WithError(err).
+		return nil, err
+	}
+
+	// Get updated customer after sync
+	updatedCustomerResp, err := customerService.GetCustomer(ctx, customerID)
+	if err != nil {
+		return nil, err
+	}
+
+	return updatedCustomerResp.Customer, nil
+}
+
+// CreateCustomerInRazorpay creates a customer in Razorpay and updates our customer with Razorpay ID
+func (s *CustomerService) CreateCustomerInRazorpay(ctx context.Context, customerID string, customerService interfaces.CustomerService) error {
+	// Get FlexPrice customer
+	customerResp, err := customerService.GetCustomer(ctx, customerID)
+	if err != nil {
+		return err
+	}
+	flexpriceCustomer := customerResp.Customer
+
+	// Check if customer already has Razorpay ID
+	if razorpayID, exists := flexpriceCustomer.Metadata["razorpay_customer_id"]; exists && razorpayID != "" {
+		return ierr.NewError("customer already has Razorpay ID").
+			WithHint("Customer is already synced with Razorpay").
+			Mark(ierr.ErrAlreadyExists)
+	}
+
+	// Create customer in Razorpay
+	razorpayCustomerID, err := s.SyncCustomerToRazorpay(ctx, flexpriceCustomer)
+	if err != nil {
+		return ierr.WithError(err).
 			WithHint("Failed to sync customer to Razorpay").
 			WithReportableDetails(map[string]interface{}{
 				"customer_id": customerID,
@@ -89,17 +142,19 @@ func (s *CustomerService) EnsureCustomerSyncedToRazorpay(ctx context.Context, cu
 			Mark(ierr.ErrSystem)
 	}
 
-	// Update customer metadata
-	if flexpriceCustomer.Metadata == nil {
-		flexpriceCustomer.Metadata = types.Metadata{}
+	// Update our customer with Razorpay ID
+	updateReq := dto.UpdateCustomerRequest{
+		Metadata: s.mergeCustomerMetadata(flexpriceCustomer.Metadata, map[string]string{
+			"razorpay_customer_id": razorpayCustomerID,
+		}),
 	}
-	flexpriceCustomer.Metadata["razorpay_customer_id"] = razorpayCustomerID
 
-	s.logger.Infow("successfully synced customer to Razorpay",
-		"customer_id", customerID,
-		"razorpay_customer_id", razorpayCustomerID)
+	_, err = customerService.UpdateCustomer(ctx, flexpriceCustomer.ID, updateReq)
+	if err != nil {
+		return err
+	}
 
-	return flexpriceCustomer, nil
+	return nil
 }
 
 // SyncCustomerToRazorpay creates a customer in Razorpay and stores the mapping
@@ -113,10 +168,6 @@ func (s *CustomerService) SyncCustomerToRazorpay(ctx context.Context, flexpriceC
 	if flexpriceCustomer.Email != "" {
 		customerData["email"] = flexpriceCustomer.Email
 	}
-
-	// Add contact/phone if available (using a generic contact field if available in metadata)
-	// Note: FlexPrice customer model doesn't have a phone field, so we skip this for now
-	// or could extract from metadata if needed
 
 	// Add notes with FlexPrice customer ID
 	customerData["notes"] = map[string]interface{}{
@@ -206,4 +257,21 @@ func (s *CustomerService) GetRazorpayCustomerID(ctx context.Context, customerID 
 	}
 
 	return mappings[0].ProviderEntityID, nil
+}
+
+// mergeCustomerMetadata merges new metadata with existing customer metadata
+func (s *CustomerService) mergeCustomerMetadata(existingMetadata map[string]string, newMetadata map[string]string) map[string]string {
+	merged := make(map[string]string)
+
+	// Copy existing metadata
+	for k, v := range existingMetadata {
+		merged[k] = v
+	}
+
+	// Add/override with new metadata
+	for k, v := range newMetadata {
+		merged[k] = v
+	}
+
+	return merged
 }

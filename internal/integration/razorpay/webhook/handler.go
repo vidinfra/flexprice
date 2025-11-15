@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
@@ -94,10 +95,23 @@ func (h *Handler) handlePaymentCaptured(ctx context.Context, event *RazorpayWebh
 	// Get FlexPrice payment ID from notes
 	flexpricePaymentID, ok := payment.Notes["flexprice_payment_id"].(string)
 	if !ok || flexpricePaymentID == "" {
-		h.logger.Warnw("no flexprice_payment_id found in payment notes",
+		h.logger.Infow("no flexprice_payment_id found in payment notes, checking for external payment",
 			"razorpay_payment_id", payment.ID,
+			"razorpay_invoice_id", payment.InvoiceID,
 			"notes", payment.Notes)
-		return nil // Not a FlexPrice-initiated payment
+
+		// No flexprice_payment_id - this might be an external Razorpay payment
+		// Convert Payment struct to map for processing
+		paymentMap := convertPaymentToMap(payment)
+		err := h.paymentSvc.HandleExternalRazorpayPaymentFromWebhook(ctx, paymentMap, services.PaymentService, services.InvoiceService)
+		if err != nil {
+			h.logger.Errorw("failed to handle external Razorpay payment from webhook, skipping event",
+				"error", err,
+				"razorpay_payment_id", payment.ID,
+				"razorpay_invoice_id", payment.InvoiceID)
+			return nil // Don't fail webhook processing
+		}
+		return nil
 	}
 
 	h.logger.Infow("processing FlexPrice payment capture",
@@ -297,4 +311,25 @@ func (h *Handler) handlePaymentFailed(ctx context.Context, event *RazorpayWebhoo
 		"error_description", payment.ErrorDescription)
 
 	return nil
+}
+
+// convertPaymentToMap converts a Payment struct to a map using JSON marshaling
+func convertPaymentToMap(payment Payment) map[string]interface{} {
+	// Use JSON marshal/unmarshal to convert struct to map (leverages existing struct tags)
+	var paymentMap map[string]interface{}
+
+	// Marshal to JSON bytes
+	jsonBytes, err := json.Marshal(payment)
+	if err != nil {
+		// Fallback to empty map if marshaling fails (should never happen)
+		return make(map[string]interface{})
+	}
+
+	// Unmarshal to map
+	if err := json.Unmarshal(jsonBytes, &paymentMap); err != nil {
+		// Fallback to empty map if unmarshaling fails (should never happen)
+		return make(map[string]interface{})
+	}
+
+	return paymentMap
 }

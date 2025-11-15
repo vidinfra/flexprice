@@ -6,30 +6,35 @@ import (
 	"strings"
 	"time"
 
+	"github.com/flexprice/flexprice/internal/api/dto"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/interfaces"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
 // PaymentService handles Razorpay payment operations
 type PaymentService struct {
-	client      RazorpayClient
-	customerSvc RazorpayCustomerService
-	logger      *logger.Logger
+	client         RazorpayClient
+	customerSvc    RazorpayCustomerService
+	invoiceSyncSvc *InvoiceSyncService
+	logger         *logger.Logger
 }
 
 // NewPaymentService creates a new Razorpay payment service
 func NewPaymentService(
 	client RazorpayClient,
 	customerSvc RazorpayCustomerService,
+	invoiceSyncSvc *InvoiceSyncService,
 	logger *logger.Logger,
 ) *PaymentService {
 	return &PaymentService{
-		client:      client,
-		customerSvc: customerSvc,
-		logger:      logger,
+		client:         client,
+		customerSvc:    customerSvc,
+		invoiceSyncSvc: invoiceSyncSvc,
+		logger:         logger,
 	}
 }
 
@@ -101,6 +106,41 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req *CreatePayme
 			Mark(ierr.ErrValidation)
 	}
 
+	// Check if invoice is already synced to Razorpay
+	// If yes, return the Razorpay invoice payment URL from entity mapping metadata
+	if s.invoiceSyncSvc != nil {
+		razorpayInvoiceMapping, err := s.invoiceSyncSvc.GetExistingRazorpayMapping(ctx, req.InvoiceID)
+		if err == nil && razorpayInvoiceMapping != nil {
+			// Check if payment URL is stored in metadata
+			if paymentURL, ok := razorpayInvoiceMapping.Metadata["razorpay_payment_url"].(string); ok && paymentURL != "" {
+				razorpayInvoiceID := razorpayInvoiceMapping.ProviderEntityID
+
+				s.logger.Infow("invoice already synced to Razorpay, returning stored payment URL",
+					"flexprice_invoice_id", req.InvoiceID,
+					"razorpay_invoice_id", razorpayInvoiceID,
+					"payment_url", paymentURL)
+
+				// Return the Razorpay invoice payment URL
+				// Payments made through this URL will automatically be associated with the Razorpay invoice
+				return &RazorpayPaymentLinkResponse{
+					ID:                    razorpayInvoiceID,
+					PaymentURL:            paymentURL,
+					Amount:                req.Amount,
+					Currency:              req.Currency,
+					Status:                "created",
+					PaymentID:             req.PaymentID,
+					IsRazorpayInvoiceLink: true,
+				}, nil
+			}
+
+			// If no payment URL in metadata, log and continue to create separate payment link
+			s.logger.Debugw("invoice synced to Razorpay but no payment URL found in metadata",
+				"flexprice_invoice_id", req.InvoiceID,
+				"razorpay_invoice_id", razorpayInvoiceMapping.ProviderEntityID)
+		}
+	}
+
+	// Continue with creating separate payment link...
 	// Ensure customer is synced to Razorpay before creating payment link
 	flexpriceCustomer, err := s.customerSvc.EnsureCustomerSyncedToRazorpay(ctx, req.CustomerID, customerService)
 	if err != nil {
@@ -341,29 +381,20 @@ func (s *PaymentService) ReconcilePaymentWithInvoice(ctx context.Context, paymen
 		return err
 	}
 
-	s.logger.Infow("got payment record for reconciliation",
-		"payment_id", paymentID,
-		"invoice_id", payment.DestinationID,
-		"payment_amount", payment.Amount.String())
+	// Reconcile the invoice
+	return s.reconcileInvoice(ctx, payment.DestinationID, paymentAmount, invoiceService)
+}
 
+// reconcileInvoice is the shared logic for invoice reconciliation
+func (s *PaymentService) reconcileInvoice(ctx context.Context, invoiceID string, paymentAmount decimal.Decimal, invoiceService interfaces.InvoiceService) error {
 	// Get the invoice
-	invoiceResp, err := invoiceService.GetInvoice(ctx, payment.DestinationID)
+	invoiceResp, err := invoiceService.GetInvoice(ctx, invoiceID)
 	if err != nil {
-		s.logger.Errorw("failed to get invoice for payment reconciliation",
+		s.logger.Errorw("failed to get invoice for reconciliation",
 			"error", err,
-			"payment_id", paymentID,
-			"invoice_id", payment.DestinationID)
+			"invoice_id", invoiceID)
 		return err
 	}
-
-	s.logger.Infow("got invoice for reconciliation",
-		"payment_id", paymentID,
-		"invoice_id", payment.DestinationID,
-		"invoice_amount_due", invoiceResp.AmountDue.String(),
-		"invoice_amount_paid", invoiceResp.AmountPaid.String(),
-		"invoice_amount_remaining", invoiceResp.AmountRemaining.String(),
-		"invoice_payment_status", invoiceResp.PaymentStatus,
-		"invoice_status", invoiceResp.InvoiceStatus)
 
 	// Calculate new amounts
 	newAmountPaid := invoiceResp.AmountPaid.Add(paymentAmount)
@@ -374,47 +405,310 @@ func (s *PaymentService) ReconcilePaymentWithInvoice(ctx context.Context, paymen
 	if newAmountRemaining.IsZero() {
 		newPaymentStatus = types.PaymentStatusSucceeded
 	} else if newAmountRemaining.IsNegative() {
-		// Invoice is overpaid
 		newPaymentStatus = types.PaymentStatusOverpaid
-		// For overpaid invoices, amount_remaining should be 0
 		newAmountRemaining = decimal.Zero
 	} else {
 		newPaymentStatus = types.PaymentStatusPending
 	}
 
 	s.logger.Infow("calculated new amounts for reconciliation",
-		"payment_id", paymentID,
-		"invoice_id", payment.DestinationID,
+		"invoice_id", invoiceID,
 		"payment_amount", paymentAmount.String(),
 		"new_amount_paid", newAmountPaid.String(),
 		"new_amount_remaining", newAmountRemaining.String(),
 		"new_payment_status", newPaymentStatus)
 
-	// Update invoice payment status and amounts using reconciliation method
-	s.logger.Infow("calling invoice reconciliation",
-		"payment_id", paymentID,
-		"invoice_id", payment.DestinationID,
-		"payment_amount", paymentAmount.String(),
-		"new_payment_status", newPaymentStatus)
-
-	err = invoiceService.ReconcilePaymentStatus(ctx, payment.DestinationID, newPaymentStatus, &paymentAmount)
+	// Update invoice
+	err = invoiceService.ReconcilePaymentStatus(ctx, invoiceID, newPaymentStatus, &paymentAmount)
 	if err != nil {
-		s.logger.Errorw("failed to update invoice payment status during reconciliation",
+		s.logger.Errorw("failed to update invoice payment status",
 			"error", err,
-			"payment_id", paymentID,
-			"invoice_id", payment.DestinationID,
-			"payment_amount", paymentAmount.String(),
-			"new_payment_status", newPaymentStatus)
+			"invoice_id", invoiceID)
 		return err
 	}
 
-	s.logger.Infow("successfully reconciled payment with invoice",
-		"payment_id", paymentID,
-		"invoice_id", payment.DestinationID,
+	s.logger.Infow("successfully reconciled invoice",
+		"invoice_id", invoiceID,
 		"payment_amount", paymentAmount.String(),
-		"new_payment_status", newPaymentStatus,
-		"new_amount_paid", newAmountPaid.String(),
-		"new_amount_remaining", newAmountRemaining.String())
+		"new_payment_status", newPaymentStatus)
 
 	return nil
+}
+
+// HandleExternalRazorpayPaymentFromWebhook handles external Razorpay payment from webhook event
+// This is called when a payment.captured webhook is received without a flexprice_payment_id
+func (s *PaymentService) HandleExternalRazorpayPaymentFromWebhook(
+	ctx context.Context,
+	payment map[string]interface{},
+	paymentService interfaces.PaymentService,
+	invoiceService interfaces.InvoiceService,
+) error {
+	razorpayPaymentID := lo.FromPtrOr(extractStringFromMap(payment, "id"), "")
+	razorpayInvoiceID := lo.FromPtrOr(extractStringFromMap(payment, "invoice_id"), "")
+
+	s.logger.Infow("no FlexPrice payment ID found, processing as external Razorpay payment",
+		"razorpay_payment_id", razorpayPaymentID,
+		"razorpay_invoice_id", razorpayInvoiceID)
+
+	// Check if invoice ID exists (payment must be linked to an invoice)
+	if razorpayInvoiceID == "" {
+		s.logger.Infow("no Razorpay invoice ID found in external payment, skipping",
+			"razorpay_payment_id", razorpayPaymentID)
+		return nil
+	}
+
+	// Check if invoice sync is enabled for this connection
+	conn, err := s.client.GetConnection(ctx)
+	if err != nil {
+		s.logger.Errorw("failed to get connection for invoice sync check, skipping external payment",
+			"error", err,
+			"razorpay_payment_id", razorpayPaymentID)
+		return nil
+	}
+
+	if !conn.IsInvoiceOutboundEnabled() {
+		s.logger.Infow("invoice outbound sync disabled, skipping external payment",
+			"razorpay_payment_id", razorpayPaymentID,
+			"razorpay_invoice_id", razorpayInvoiceID,
+			"connection_id", conn.ID)
+		return nil
+	}
+
+	// Process external Razorpay payment
+	if err := s.ProcessExternalRazorpayPayment(ctx, payment, razorpayInvoiceID, paymentService, invoiceService); err != nil {
+		s.logger.Errorw("failed to process external Razorpay payment",
+			"error", err,
+			"razorpay_payment_id", razorpayPaymentID,
+			"razorpay_invoice_id", razorpayInvoiceID)
+		return ierr.WithError(err).
+			WithHint("Failed to process external payment").
+			Mark(ierr.ErrSystem)
+	}
+
+	s.logger.Infow("successfully processed external Razorpay payment",
+		"razorpay_payment_id", razorpayPaymentID,
+		"razorpay_invoice_id", razorpayInvoiceID)
+	return nil
+}
+
+// ProcessExternalRazorpayPayment processes a payment that was made directly in Razorpay (external to FlexPrice)
+func (s *PaymentService) ProcessExternalRazorpayPayment(
+	ctx context.Context,
+	payment map[string]interface{},
+	razorpayInvoiceID string,
+	paymentService interfaces.PaymentService,
+	invoiceService interfaces.InvoiceService,
+) error {
+	razorpayPaymentID := lo.FromPtrOr(extractStringFromMap(payment, "id"), "")
+
+	s.logger.Infow("processing external Razorpay payment",
+		"razorpay_payment_id", razorpayPaymentID,
+		"razorpay_invoice_id", razorpayInvoiceID)
+
+	// Step 1: Check if payment already exists (idempotency check)
+	exists, err := s.PaymentExistsByGatewayPaymentID(ctx, razorpayPaymentID, paymentService)
+	if err != nil {
+		s.logger.Errorw("failed to check if payment exists",
+			"error", err,
+			"razorpay_payment_id", razorpayPaymentID)
+		// Continue processing on error
+	} else if exists {
+		s.logger.Infow("payment already exists for this Razorpay payment, skipping",
+			"razorpay_payment_id", razorpayPaymentID,
+			"razorpay_invoice_id", razorpayInvoiceID)
+		return nil
+	}
+
+	// Step 2: Get FlexPrice invoice ID from Razorpay invoice
+
+	flexpriceInvoiceID, err := s.invoiceSyncSvc.GetFlexPriceInvoiceID(ctx, razorpayInvoiceID)
+	if err != nil {
+		s.logger.Errorw("failed to get FlexPrice invoice ID",
+			"error", err,
+			"razorpay_invoice_id", razorpayInvoiceID)
+		return err
+	}
+
+	s.logger.Infow("found FlexPrice invoice for external payment",
+		"razorpay_payment_id", razorpayPaymentID,
+		"razorpay_invoice_id", razorpayInvoiceID,
+		"flexprice_invoice_id", flexpriceInvoiceID)
+
+	// Step 3: Create external payment record
+	err = s.createExternalPaymentRecord(ctx, payment, flexpriceInvoiceID, paymentService)
+	if err != nil {
+		s.logger.Errorw("failed to create external payment record",
+			"error", err,
+			"razorpay_payment_id", razorpayPaymentID)
+		return err
+	}
+
+	// Step 4: Reconcile invoice with external payment
+	amount := extractAmountFromPayment(payment)
+	err = s.reconcileInvoice(ctx, flexpriceInvoiceID, amount, invoiceService)
+	if err != nil {
+		s.logger.Errorw("failed to reconcile invoice with external payment",
+			"error", err,
+			"invoice_id", flexpriceInvoiceID,
+			"amount", amount.String())
+		return err
+	}
+
+	s.logger.Infow("successfully processed external Razorpay payment",
+		"razorpay_payment_id", razorpayPaymentID,
+		"flexprice_invoice_id", flexpriceInvoiceID,
+		"amount", amount.String())
+
+	return nil
+}
+
+// createExternalPaymentRecord creates a payment record for an external Razorpay payment
+func (s *PaymentService) createExternalPaymentRecord(
+	ctx context.Context,
+	payment map[string]interface{},
+	invoiceID string,
+	paymentService interfaces.PaymentService,
+) error {
+	razorpayPaymentID := lo.FromPtrOr(extractStringFromMap(payment, "id"), "")
+	amount := extractAmountFromPayment(payment)
+	currency := lo.FromPtrOr(extractStringFromMap(payment, "currency"), "INR")
+	method := lo.FromPtrOr(extractStringFromMap(payment, "method"), "")
+	email := lo.FromPtrOr(extractStringFromMap(payment, "email"), "")
+	contact := lo.FromPtrOr(extractStringFromMap(payment, "contact"), "")
+
+	s.logger.Infow("creating external payment record",
+		"razorpay_payment_id", razorpayPaymentID,
+		"invoice_id", invoiceID,
+		"amount", amount.String(),
+		"currency", currency,
+		"method", method)
+
+	// Extract payment method ID based on method type
+	paymentMethodID := extractPaymentMethodID(payment, method)
+
+	// Create payment record with all details in metadata (for traceability)
+	now := time.Now().UTC()
+	gatewayType := types.PaymentGatewayTypeRazorpay
+	createReq := &dto.CreatePaymentRequest{
+		DestinationType:   types.PaymentDestinationTypeInvoice,
+		DestinationID:     invoiceID,
+		PaymentMethodType: types.PaymentMethodTypeCard, // Default to card
+		Amount:            amount,
+		Currency:          strings.ToUpper(currency),
+		PaymentGateway:    &gatewayType,
+		ProcessPayment:    false, // Don't process - already succeeded in Razorpay
+		PaymentMethodID:   paymentMethodID,
+		Metadata: types.Metadata{
+			"payment_source":      "razorpay_external",
+			"razorpay_payment_id": razorpayPaymentID,
+			"razorpay_method":     method,
+			"webhook_event_id":    razorpayPaymentID, // For idempotency
+			"succeeded_at":        now.Format(time.RFC3339),
+			"customer_email":      email,
+			"customer_contact":    contact,
+		},
+	}
+
+	paymentResp, err := paymentService.CreatePayment(ctx, createReq)
+	if err != nil {
+		s.logger.Errorw("failed to create external payment record",
+			"error", err,
+			"razorpay_payment_id", razorpayPaymentID,
+			"invoice_id", invoiceID)
+		return err
+	}
+
+	// Update payment to succeeded status
+	// Note: We need to update because CreatePaymentRequest doesn't support setting status directly
+	updateReq := dto.UpdatePaymentRequest{
+		PaymentStatus:    lo.ToPtr(string(types.PaymentStatusSucceeded)),
+		GatewayPaymentID: lo.ToPtr(razorpayPaymentID),
+		SucceededAt:      lo.ToPtr(now),
+	}
+
+	_, err = paymentService.UpdatePayment(ctx, paymentResp.ID, updateReq)
+	if err != nil {
+		s.logger.Errorw("failed to update external payment status",
+			"error", err,
+			"payment_id", paymentResp.ID,
+			"razorpay_payment_id", razorpayPaymentID)
+		return err
+	}
+
+	s.logger.Infow("successfully created external payment record",
+		"payment_id", paymentResp.ID,
+		"razorpay_payment_id", razorpayPaymentID,
+		"invoice_id", invoiceID,
+		"amount", amount.String())
+
+	return nil
+}
+
+// PaymentExistsByGatewayPaymentID checks if a payment already exists with the given gateway payment ID
+func (s *PaymentService) PaymentExistsByGatewayPaymentID(
+	ctx context.Context,
+	gatewayPaymentID string,
+	paymentService interfaces.PaymentService,
+) (bool, error) {
+	if gatewayPaymentID == "" {
+		return false, nil
+	}
+
+	// Create filter to query payments by gateway_payment_id
+	filter := types.NewNoLimitPaymentFilter()
+	limit := 1
+	filter.QueryFilter.Limit = &limit
+	filter.GatewayPaymentID = &gatewayPaymentID
+
+	// Query payments
+	payments, err := paymentService.ListPayments(ctx, filter)
+	if err != nil {
+		return false, err
+	}
+
+	// Return true if any payment exists with this gateway payment ID
+	return len(payments.Items) > 0, nil
+}
+
+// extractStringFromMap safely extracts a string value from map
+func extractStringFromMap(data map[string]interface{}, key string) *string {
+	if val, ok := data[key].(string); ok {
+		return &val
+	}
+	return nil
+}
+
+// extractAmountFromPayment extracts and converts amount from payment data
+func extractAmountFromPayment(payment map[string]interface{}) decimal.Decimal {
+	// Razorpay amount is in smallest currency unit (paise)
+	if amountInt, ok := payment["amount"].(int64); ok {
+		return decimal.NewFromInt(amountInt).Div(decimal.NewFromInt(100))
+	}
+	if amountFloat, ok := payment["amount"].(float64); ok {
+		return decimal.NewFromFloat(amountFloat).Div(decimal.NewFromInt(100))
+	}
+	return decimal.Zero
+}
+
+// extractPaymentMethodID extracts payment method ID based on method type
+func extractPaymentMethodID(payment map[string]interface{}, method string) string {
+	switch method {
+	case "card":
+		if cardID, ok := payment["card_id"].(string); ok {
+			return cardID
+		}
+	case "upi":
+		if vpa, ok := payment["vpa"].(string); ok {
+			return vpa
+		}
+	case "wallet":
+		if wallet, ok := payment["wallet"].(string); ok {
+			return wallet
+		}
+	case "netbanking":
+		if bank, ok := payment["bank"].(string); ok {
+			return bank
+		}
+	}
+	return ""
 }

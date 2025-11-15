@@ -20,8 +20,11 @@ type RazorpayClient interface {
 	GetDecryptedRazorpayConfig(conn *connection.Connection) (*RazorpayConfig, error)
 	GetRazorpaySDKClient(ctx context.Context) (*razorpay.Client, *RazorpayConfig, error)
 	HasRazorpayConnection(ctx context.Context) bool
+	GetConnection(ctx context.Context) (*connection.Connection, error)
 	CreateCustomer(ctx context.Context, customerData map[string]interface{}) (map[string]interface{}, error)
 	CreatePaymentLink(ctx context.Context, paymentLinkData map[string]interface{}) (map[string]interface{}, error)
+	CreateInvoice(ctx context.Context, invoiceData map[string]interface{}) (map[string]interface{}, error)
+	GetInvoice(ctx context.Context, invoiceID string) (map[string]interface{}, error)
 	VerifyWebhookSignature(ctx context.Context, payload []byte, signature string) error
 }
 
@@ -187,6 +190,22 @@ func (c *Client) HasRazorpayConnection(ctx context.Context) bool {
 	return err == nil && conn != nil && conn.Status == types.StatusPublished
 }
 
+// GetConnection retrieves the Razorpay connection for the current context
+func (c *Client) GetConnection(ctx context.Context) (*connection.Connection, error) {
+	conn, err := c.connectionRepo.GetByProvider(ctx, types.SecretProviderRazorpay)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get Razorpay connection").
+			Mark(ierr.ErrDatabase)
+	}
+	if conn == nil {
+		return nil, ierr.NewError("Razorpay connection not found").
+			WithHint("Razorpay connection not configured for this environment").
+			Mark(ierr.ErrNotFound)
+	}
+	return conn, nil
+}
+
 // CreateCustomer creates a customer in Razorpay
 func (c *Client) CreateCustomer(ctx context.Context, customerData map[string]interface{}) (map[string]interface{}, error) {
 	razorpayClient, _, err := c.GetRazorpaySDKClient(ctx)
@@ -223,6 +242,8 @@ func (c *Client) CreatePaymentLink(ctx context.Context, paymentLinkData map[stri
 	}
 
 	razorpayPaymentLink, err := razorpayClient.PaymentLink.Create(paymentLinkData, nil)
+	// todo
+	// lets make a struct from here
 	if err != nil {
 		c.logger.Errorw("failed to create payment link in Razorpay", "error", err)
 		return nil, ierr.NewError("failed to create payment link in Razorpay").
@@ -275,4 +296,61 @@ func (c *Client) VerifyWebhookSignature(ctx context.Context, payload []byte, sig
 	c.logger.Infow("webhook signature verified successfully",
 		"using_webhook_secret", config.WebhookSecret != "")
 	return nil
+}
+
+// CreateInvoice creates an invoice in Razorpay with inline line items
+func (c *Client) CreateInvoice(ctx context.Context, invoiceData map[string]interface{}) (map[string]interface{}, error) {
+	razorpayClient, _, err := c.GetRazorpaySDKClient(ctx)
+	if err != nil {
+		c.logger.Errorw("failed to get Razorpay client", "error", err)
+		return nil, ierr.NewError("failed to initialize Razorpay client").
+			WithHint("Unable to connect to Razorpay").
+			Mark(ierr.ErrInternal)
+	}
+
+	razorpayInvoice, err := razorpayClient.Invoice.Create(invoiceData, nil)
+	if err != nil {
+		c.logger.Errorw("failed to create invoice in Razorpay", "error", err)
+		return nil, ierr.NewError("failed to create invoice in Razorpay").
+			WithHint("Unable to create invoice in Razorpay").
+			WithReportableDetails(map[string]interface{}{
+				"error": err.Error(),
+			}).
+			Mark(ierr.ErrInternal)
+	}
+
+	c.logger.Infow("successfully created invoice in Razorpay",
+		"invoice_id", razorpayInvoice["id"],
+		"status", razorpayInvoice["status"])
+	return razorpayInvoice, nil
+}
+
+// GetInvoice retrieves an invoice from Razorpay by ID
+func (c *Client) GetInvoice(ctx context.Context, invoiceID string) (map[string]interface{}, error) {
+	razorpayClient, _, err := c.GetRazorpaySDKClient(ctx)
+	if err != nil {
+		c.logger.Errorw("failed to get Razorpay client", "error", err)
+		return nil, ierr.NewError("failed to initialize Razorpay client").
+			WithHint("Unable to connect to Razorpay").
+			Mark(ierr.ErrInternal)
+	}
+
+	razorpayInvoice, err := razorpayClient.Invoice.Fetch(invoiceID, nil, nil)
+	if err != nil {
+		c.logger.Errorw("failed to fetch invoice from Razorpay",
+			"error", err,
+			"invoice_id", invoiceID)
+		return nil, ierr.NewError("failed to fetch invoice from Razorpay").
+			WithHint("Unable to retrieve invoice from Razorpay").
+			WithReportableDetails(map[string]interface{}{
+				"invoice_id": invoiceID,
+				"error":      err.Error(),
+			}).
+			Mark(ierr.ErrInternal)
+	}
+
+	c.logger.Infow("successfully fetched invoice from Razorpay",
+		"invoice_id", invoiceID,
+		"status", razorpayInvoice["status"])
+	return razorpayInvoice, nil
 }
