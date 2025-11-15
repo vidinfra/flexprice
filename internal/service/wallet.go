@@ -448,10 +448,16 @@ func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Con
 
 		// Step 2: Create invoice for credit purchase with wallet_transaction_id in metadata
 		amount := s.GetCurrencyAmountFromCredits(req.CreditsToAdd, w.ConversionRate)
-		invoiceMetadata := req.Metadata
-		if invoiceMetadata == nil {
-			invoiceMetadata = make(types.Metadata)
+		invoiceMetadata := make(types.Metadata)
+
+		// Copy existing metadata from request if provided
+		if req.Metadata != nil {
+			for key, value := range req.Metadata {
+				invoiceMetadata[key] = value
+			}
 		}
+
+		// Add required fields
 		invoiceMetadata["wallet_transaction_id"] = walletTransactionID
 		invoiceMetadata["wallet_id"] = walletID
 		invoiceMetadata["credits_amount"] = req.CreditsToAdd.String()
