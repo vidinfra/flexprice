@@ -387,7 +387,7 @@ type TopUpWalletRequest struct {
 	// default is nil which means no priority at all
 	Priority *int `json:"priority,omitempty"`
 	// idempotency_key is a unique key for the transaction
-	IdempotencyKey *string `json:"idempotency_key" binding:"required"`
+	IdempotencyKey *string `json:"idempotency_key,omitempty"`
 	// description to add any specific details about the transaction
 	Description string `json:"description,omitempty"`
 	// metadata is a map of key-value pairs to store any additional information about the transaction

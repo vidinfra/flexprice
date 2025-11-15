@@ -11,6 +11,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/subscription"
 	"github.com/flexprice/flexprice/internal/domain/wallet"
 	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/idempotency"
 	"github.com/flexprice/flexprice/internal/types"
 	webhookDto "github.com/flexprice/flexprice/internal/webhook/dto"
 	"github.com/samber/lo"
@@ -89,12 +90,14 @@ type WalletService interface {
 
 type walletService struct {
 	ServiceParams
+	idempGen *idempotency.Generator
 }
 
 // NewWalletService creates a new instance of WalletService
 func NewWalletService(params ServiceParams) WalletService {
 	return &walletService{
 		ServiceParams: params,
+		idempGen:      idempotency.NewGenerator(),
 	}
 }
 
@@ -160,7 +163,12 @@ func (s *walletService) CreateWallet(ctx context.Context, req *dto.CreateWalletR
 
 		// Load initial credits to wallet
 		if req.InitialCreditsToLoad.GreaterThan(decimal.Zero) {
-			idempotencyKey := types.GenerateUUID()
+			idempotencyKey := s.idempGen.GenerateKey(idempotency.ScopeCreditGrant, map[string]interface{}{
+				"wallet_id":          w.ID,
+				"credits_to_add":     req.InitialCreditsToLoad,
+				"transaction_reason": types.TransactionReasonFreeCredit,
+				"timestamp":          time.Now().UTC().Format(time.RFC3339),
+			})
 			topUpResp, err := s.TopUpWallet(ctx, w.ID, &dto.TopUpWalletRequest{
 				CreditsToAdd:      req.InitialCreditsToLoad,
 				TransactionReason: types.TransactionReasonFreeCredit,
@@ -306,12 +314,17 @@ func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *d
 			Mark(ierr.ErrValidation)
 	}
 
-	// Generate or use provided idempotency key
+	// Generate idempotency key
 	var idempotencyKey string
 	if lo.FromPtr(req.IdempotencyKey) != "" {
 		idempotencyKey = lo.FromPtr(req.IdempotencyKey)
 	} else {
-		idempotencyKey = types.GenerateUUID()
+		idempotencyKey = s.idempGen.GenerateKey(idempotency.ScopeWalletTopUp, map[string]interface{}{
+			"wallet_id":          walletID,
+			"credits_to_add":     req.CreditsToAdd,
+			"transaction_reason": req.TransactionReason,
+			"timestamp":          time.Now().UTC().Format(time.RFC3339),
+		})
 	}
 
 	// Handle special case for purchased credits with invoice
