@@ -198,13 +198,14 @@ func (s *InvoiceSyncService) buildInvoiceData(
 // buildLineItems converts FlexPrice line items to Razorpay format
 func (s *InvoiceSyncService) buildLineItems(flexInvoice *invoice.Invoice) (map[string]interface{}, error) {
 	lineItems := make(map[string]interface{})
+	lineItemIndex := 0
 
-	for idx, item := range flexInvoice.LineItems {
+	for _, item := range flexInvoice.LineItems {
 		// Skip zero-amount items
 		if item.Amount.IsZero() {
 			s.logger.Debugw("skipping zero-amount line item",
 				"invoice_id", flexInvoice.ID,
-				"item_index", idx)
+				"line_item_index", lineItemIndex)
 			continue
 		}
 
@@ -247,8 +248,10 @@ func (s *InvoiceSyncService) buildLineItems(flexInvoice *invoice.Invoice) (map[s
 			Quantity:    quantity,
 		}
 
-		// Add to line items map (Razorpay expects indexed map)
-		lineItems[fmt.Sprintf("%d", idx)] = razorpayLineItem
+		// Add to line items map (Razorpay expects sequential indexed map)
+		// Use separate counter to ensure sequential indices even when items are skipped
+		lineItems[fmt.Sprintf("%d", lineItemIndex)] = razorpayLineItem
+		lineItemIndex++
 	}
 
 	return lineItems, nil
