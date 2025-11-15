@@ -15,6 +15,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/tenant"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/idempotency"
+	"github.com/flexprice/flexprice/internal/integration/razorpay"
 	"github.com/flexprice/flexprice/internal/integration/stripe"
 	"github.com/flexprice/flexprice/internal/interfaces"
 	"github.com/flexprice/flexprice/internal/s3"
@@ -744,6 +745,14 @@ func (s *invoiceService) ProcessDraftInvoice(ctx context.Context, id string, pay
 		}
 	}
 
+	// Sync to Razorpay if Razorpay connection is enabled
+	if err := s.syncInvoiceToRazorpayIfEnabled(ctx, inv); err != nil {
+		// Log error but don't fail the entire process
+		s.Logger.Errorw("failed to sync invoice to Razorpay",
+			"error", err,
+			"invoice_id", inv.ID)
+	}
+
 	// Sync to HubSpot if HubSpot connection is enabled (async via Temporal)
 	s.triggerHubSpotInvoiceSyncWorkflow(ctx, inv.ID, inv.CustomerID)
 
@@ -826,6 +835,90 @@ func (s *invoiceService) syncInvoiceToStripeIfEnabled(ctx context.Context, inv *
 		"invoice_id", inv.ID,
 		"stripe_invoice_id", syncResponse.StripeInvoiceID,
 		"status", syncResponse.Status)
+
+	return nil
+}
+
+// syncInvoiceToRazorpayIfEnabled syncs the invoice to Razorpay if Razorpay connection is enabled
+func (s *invoiceService) syncInvoiceToRazorpayIfEnabled(ctx context.Context, inv *invoice.Invoice) error {
+	// Check if Razorpay connection exists
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderRazorpay)
+	if err != nil || conn == nil {
+		s.Logger.Debugw("Razorpay connection not available, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"error", err)
+		return nil // Not an error, just skip sync
+	}
+
+	// Check if invoice sync is enabled for this connection
+	if !conn.IsInvoiceOutboundEnabled() {
+		s.Logger.Debugw("invoice sync disabled for Razorpay connection, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"connection_id", conn.ID)
+		return nil // Not an error, just skip sync
+	}
+
+	// Get Razorpay integration
+	razorpayIntegration, err := s.IntegrationFactory.GetRazorpayIntegration(ctx)
+	if err != nil {
+		s.Logger.Errorw("failed to get Razorpay integration, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"error", err)
+		return nil // Don't fail the entire process, just skip invoice sync
+	}
+
+	s.Logger.Infow("syncing invoice to Razorpay",
+		"invoice_id", inv.ID,
+		"customer_id", inv.CustomerID)
+
+	// Create customer service instance
+	customerService := NewCustomerService(s.ServiceParams)
+
+	// Create sync request
+	syncRequest := razorpay.RazorpayInvoiceSyncRequest{
+		InvoiceID: inv.ID,
+	}
+
+	// Perform the sync
+	syncResponse, err := razorpayIntegration.InvoiceSyncSvc.SyncInvoiceToRazorpay(ctx, syncRequest, customerService)
+	if err != nil {
+		return err
+	}
+
+	s.Logger.Infow("successfully synced invoice to Razorpay",
+		"invoice_id", inv.ID,
+		"razorpay_invoice_id", syncResponse.RazorpayInvoiceID,
+		"status", syncResponse.Status,
+		"payment_url", syncResponse.ShortURL)
+
+	// Save Razorpay URLs in invoice metadata
+	if syncResponse.ShortURL != "" {
+		metadata := inv.Metadata
+		if metadata == nil {
+			metadata = types.Metadata{}
+		}
+
+		metadata["razorpay_invoice_id"] = syncResponse.RazorpayInvoiceID
+		metadata["razorpay_payment_url"] = syncResponse.ShortURL
+
+		// Update invoice with new metadata
+		updateReq := dto.UpdateInvoiceRequest{
+			Metadata: &metadata,
+		}
+
+		_, err = s.UpdateInvoice(ctx, inv.ID, updateReq)
+		if err != nil {
+			s.Logger.Warnw("failed to update invoice metadata with Razorpay URLs",
+				"error", err,
+				"invoice_id", inv.ID)
+			// Don't fail the sync, just log the warning
+		} else {
+			s.Logger.Infow("saved Razorpay URLs in invoice metadata",
+				"invoice_id", inv.ID,
+				"razorpay_invoice_id", syncResponse.RazorpayInvoiceID,
+				"payment_url", syncResponse.ShortURL)
+		}
+	}
 
 	return nil
 }
