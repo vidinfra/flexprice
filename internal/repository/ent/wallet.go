@@ -477,6 +477,45 @@ func (r *walletRepository) GetTransactionByID(ctx context.Context, id string) (*
 	return walletdomain.TransactionFromEnt(t), nil
 }
 
+func (r *walletRepository) GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey string) (*walletdomain.Transaction, error) {
+	// Start a span for this repository operation
+	span := StartRepositorySpan(ctx, "wallet", "get_transaction_by_idempotency_key", map[string]interface{}{
+		"idempotency_key": idempotencyKey,
+		"tenant_id":       types.GetTenantID(ctx),
+	})
+	defer FinishSpan(span)
+
+	client := r.client.Reader(ctx)
+	t, err := client.WalletTransaction.Query().
+		Where(
+			wallettransaction.IdempotencyKey(idempotencyKey),
+			wallettransaction.TenantID(types.GetTenantID(ctx)),
+			wallettransaction.StatusEQ(string(types.StatusPublished)),
+			wallettransaction.EnvironmentID(types.GetEnvironmentID(ctx)),
+		).
+		Only(ctx)
+
+	if err != nil {
+		SetSpanError(span, err)
+		if ent.IsNotFound(err) {
+			return nil, ierr.WithError(err).
+				WithHint("Transaction not found").
+				WithReportableDetails(map[string]interface{}{
+					"idempotency_key": idempotencyKey,
+				}).
+				Mark(ierr.ErrNotFound)
+		}
+		return nil, ierr.WithError(err).
+			WithHint("Failed to retrieve transaction by idempotency key").
+			WithReportableDetails(map[string]interface{}{
+				"idempotency_key": idempotencyKey,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	return walletdomain.TransactionFromEnt(t), nil
+}
+
 func (r *walletRepository) ListWalletTransactions(ctx context.Context, f *types.WalletTransactionFilter) ([]*walletdomain.Transaction, error) {
 	// Start a span for this repository operation
 	span := StartRepositorySpan(ctx, "wallet", "list_wallet_transactions", map[string]interface{}{

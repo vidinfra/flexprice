@@ -20,6 +20,7 @@ type Repository interface {
 
 	// Transaction operations
 	GetTransactionByID(ctx context.Context, id string) (*Transaction, error)
+	GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey string) (*Transaction, error)
 	ListWalletTransactions(ctx context.Context, f *types.WalletTransactionFilter) ([]*Transaction, error)
 	ListAllWalletTransactions(ctx context.Context, f *types.WalletTransactionFilter) ([]*Transaction, error)
 	CountWalletTransactions(ctx context.Context, f *types.WalletTransactionFilter) (int, error)

@@ -389,13 +389,19 @@ func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *d
 	}
 
 	// Process wallet credit immediately
-	transactionID, err := s.creditWalletWithID(ctx, creditReq)
+	err = s.processWalletOperation(ctx, creditReq)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get the wallet transaction by ID
-	tx, err := s.WalletRepo.GetTransactionByID(ctx, transactionID)
+	// // Get the wallet transaction by ID
+	// tx, err := s.WalletRepo.GetTransactionByID(ctx, transactionID)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// Get the wallet transaction by idempotency key
+	tx, err := s.WalletRepo.GetTransactionByIdempotencyKey(ctx, idempotencyKey)
 	if err != nil {
 		return nil, err
 	}
@@ -978,22 +984,6 @@ func (s *walletService) CreditWallet(ctx context.Context, req *wallet.WalletOper
 	return s.processWalletOperation(ctx, req)
 }
 
-// creditWalletWithID processes a credit operation and returns the transaction ID
-func (s *walletService) creditWalletWithID(ctx context.Context, req *wallet.WalletOperation) (string, error) {
-	if req.Type != types.TransactionTypeCredit {
-		return "", ierr.NewError("invalid transaction type").
-			WithHint("Invalid transaction type").
-			Mark(ierr.ErrValidation)
-	}
-
-	if req.ReferenceType == "" || req.ReferenceID == "" {
-		req.ReferenceType = types.WalletTxReferenceTypeRequest
-		req.ReferenceID = types.GenerateUUIDWithPrefix(types.UUID_PREFIX_WALLET_TRANSACTION)
-	}
-
-	return s.processWalletOperationWithID(ctx, req)
-}
-
 // Wallet operations
 
 // validateWalletOperation validates the wallet operation request
@@ -1069,23 +1059,17 @@ func (s *walletService) processDebitOperation(ctx context.Context, req *wallet.W
 
 // processWalletOperation handles both credit and debit operations
 func (s *walletService) processWalletOperation(ctx context.Context, req *wallet.WalletOperation) error {
-	_, err := s.processWalletOperationWithID(ctx, req)
-	return err
-}
-
-// processWalletOperationWithID handles both credit and debit operations and returns the transaction ID
-func (s *walletService) processWalletOperationWithID(ctx context.Context, req *wallet.WalletOperation) (string, error) {
 	s.Logger.Debugw("Processing wallet operation", "req", req)
 
 	// Get wallet
 	w, err := s.WalletRepo.GetWalletByID(ctx, req.WalletID)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// Validate operation
 	if err := s.validateWalletOperation(w, req); err != nil {
-		return "", err
+		return err
 	}
 
 	var newCreditBalance decimal.Decimal
@@ -1096,7 +1080,7 @@ func (s *walletService) processWalletOperationWithID(ctx context.Context, req *w
 		// Process debit operation first
 		err = s.processDebitOperation(ctx, req)
 		if err != nil {
-			return "", err
+			return err
 		}
 	} else {
 		// Process credit operation
@@ -1138,8 +1122,6 @@ func (s *walletService) processWalletOperationWithID(ctx context.Context, req *w
 		tx.ExpiryDate = types.ParseYYYYMMDDToDate(req.ExpiryDate)
 	}
 
-	transactionID := tx.ID
-
 	err = s.DB.WithTx(ctx, func(ctx context.Context) error {
 
 		if err := s.WalletRepo.CreateTransaction(ctx, tx); err != nil {
@@ -1155,7 +1137,7 @@ func (s *walletService) processWalletOperationWithID(ctx context.Context, req *w
 		return nil
 	})
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	// Publish webhook event after transaction commits
@@ -1170,7 +1152,7 @@ func (s *walletService) processWalletOperationWithID(ctx context.Context, req *w
 		)
 	}
 
-	return transactionID, nil
+	return nil
 }
 
 // ExpireCredits expires credits for a given transaction
