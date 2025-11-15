@@ -1127,18 +1127,13 @@ func (s *subscriptionService) CancelSubscription(
 		return nil, err
 	}
 
-	// Step 5: Validate cancellation timing
-	if err := s.validateCancellationTiming(subscription, req.CancellationType, effectiveDate); err != nil {
-		return nil, err
-	}
-
 	var prorationDetails []dto.ProrationDetail
 	totalCreditAmount := decimal.Zero
 
-	// Step 6: Execute in transaction
+	// Step 5: Execute in transaction
 	err = s.DB.WithTx(ctx, func(ctx context.Context) error {
 
-		// Step 7: Calculate proration using unified function
+		// Step 6: Calculate proration using unified function
 		if req.ProrationBehavior == types.ProrationBehaviorCreateProrations {
 			prorationService := NewProrationService(s.ServiceParams)
 			prorationResult, err := prorationService.CalculateSubscriptionCancellationProration(
@@ -1172,20 +1167,20 @@ func (s *subscriptionService) CancelSubscription(
 			}
 
 		}
-		// Step 8: Update subscription status
+		// Step 7: Update subscription status
 		err = s.updateSubscriptionForCancellation(ctx, subscription, req.CancellationType, effectiveDate, req.Reason)
 		if err != nil {
 			return err
 		}
 
-		// Step 9: Cancel future credit grants
+		// Step 8: Cancel future credit grants
 		creditGrantService := NewCreditGrantService(s.ServiceParams)
 		err = creditGrantService.CancelFutureCreditGrantsOfSubscription(ctx, subscription.ID)
 		if err != nil {
 			return err
 		}
 
-		// Step 10: Top up wallet for proration credit (only if there's a credit amount)
+		// Step 9: Top up wallet for proration credit (only if there's a credit amount)
 		if totalCreditAmount.GreaterThan(decimal.Zero) {
 			walletService := NewWalletService(s.ServiceParams)
 			err = walletService.TopUpWalletForProratedCharge(ctx, subscription.CustomerID, totalCreditAmount.Abs(), subscription.Currency)
