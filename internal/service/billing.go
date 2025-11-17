@@ -1382,7 +1382,7 @@ func (s *billingService) CalculateChargesForPreview(
 
 	if includeUsage {
 		subscriptionService := NewSubscriptionService(s.ServiceParams)
-		usage, err = subscriptionService.GetFeatureUsageBySubscription(ctx, &dto.GetUsageBySubscriptionRequest{
+		usage, err = subscriptionService.GetUsageBySubscription(ctx, &dto.GetUsageBySubscriptionRequest{
 			SubscriptionID: sub.ID,
 			StartTime:      periodStart,
 			EndTime:        periodEnd,
