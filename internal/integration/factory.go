@@ -205,10 +205,20 @@ func (f *Factory) GetRazorpayIntegration(ctx context.Context) (*RazorpayIntegrat
 		f.logger,
 	)
 
+	// Create invoice sync service
+	invoiceSyncSvc := razorpay.NewInvoiceSyncService(
+		razorpayClient,
+		customerSvc.(*razorpay.CustomerService),
+		f.invoiceRepo,
+		f.entityIntegrationMappingRepo,
+		f.logger,
+	)
+
 	// Create payment service
 	paymentSvc := razorpay.NewPaymentService(
 		razorpayClient,
 		customerSvc,
+		invoiceSyncSvc,
 		f.logger,
 	)
 
@@ -224,6 +234,7 @@ func (f *Factory) GetRazorpayIntegration(ctx context.Context) (*RazorpayIntegrat
 		Client:         razorpayClient,
 		CustomerSvc:    customerSvc,
 		PaymentSvc:     paymentSvc,
+		InvoiceSyncSvc: invoiceSyncSvc,
 		WebhookHandler: webhookHandler,
 	}, nil
 }
@@ -290,6 +301,7 @@ type RazorpayIntegration struct {
 	Client         razorpay.RazorpayClient
 	CustomerSvc    razorpay.RazorpayCustomerService
 	PaymentSvc     *razorpay.PaymentService
+	InvoiceSyncSvc *razorpay.InvoiceSyncService
 	WebhookHandler *razorpaywebhook.Handler
 }
 

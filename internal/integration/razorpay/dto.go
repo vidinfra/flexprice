@@ -82,11 +82,51 @@ type CreatePaymentLinkRequest struct {
 
 // RazorpayPaymentLinkResponse represents the response after creating a payment link
 type RazorpayPaymentLinkResponse struct {
-	ID         string          // Razorpay payment link ID
-	PaymentURL string          // Short URL for the payment link
-	Amount     decimal.Decimal // Amount in original currency
-	Currency   string          // Currency code
-	Status     string          // Payment link status
-	CreatedAt  int64           // Unix timestamp
-	PaymentID  string          // FlexPrice payment ID
+	ID                    string          // Razorpay payment link ID
+	PaymentURL            string          // Short URL for the payment link
+	Amount                decimal.Decimal // Amount in original currency
+	Currency              string          // Currency code
+	Status                string          // Payment link status
+	CreatedAt             int64           // Unix timestamp
+	PaymentID             string          // FlexPrice payment ID
+	IsRazorpayInvoiceLink bool            // Whether the payment link is a Razorpay invoice link
 }
+
+// RazorpayInvoiceSyncRequest represents a request to sync FlexPrice invoice to Razorpay
+type RazorpayInvoiceSyncRequest struct {
+	InvoiceID string // FlexPrice invoice ID to sync
+}
+
+// RazorpayInvoiceSyncResponse represents the response after syncing invoice to Razorpay
+type RazorpayInvoiceSyncResponse struct {
+	RazorpayInvoiceID string          // Razorpay invoice ID
+	InvoiceNumber     string          // Invoice number in Razorpay
+	ShortURL          string          // Payment URL for the invoice
+	Status            string          // Invoice status (draft, issued, paid, etc.)
+	Amount            decimal.Decimal // Invoice total amount
+	AmountDue         decimal.Decimal // Amount remaining to be paid
+	Currency          string          // Currency code
+	CreatedAt         int64           // Unix timestamp
+}
+
+// RazorpayLineItem represents a line item in Razorpay invoice
+type RazorpayLineItem struct {
+	Name        string `json:"name"`                  // Line item name
+	Description string `json:"description,omitempty"` // Line item description
+	Amount      int64  `json:"amount"`                // Amount in smallest currency unit
+	Currency    string `json:"currency"`              // Currency code
+	Quantity    int    `json:"quantity"`              // Quantity (default: 1)
+}
+
+// RazorpayInvoiceStatus represents Razorpay invoice status values
+type RazorpayInvoiceStatus string
+
+const (
+	RazorpayInvoiceStatusDraft         RazorpayInvoiceStatus = "draft"
+	RazorpayInvoiceStatusIssued        RazorpayInvoiceStatus = "issued"
+	RazorpayInvoiceStatusPartiallyPaid RazorpayInvoiceStatus = "partially_paid"
+	RazorpayInvoiceStatusPaid          RazorpayInvoiceStatus = "paid"
+	RazorpayInvoiceStatusCancelled     RazorpayInvoiceStatus = "cancelled"
+	RazorpayInvoiceStatusExpired       RazorpayInvoiceStatus = "expired"
+	RazorpayInvoiceStatusDeleted       RazorpayInvoiceStatus = "deleted"
+)
