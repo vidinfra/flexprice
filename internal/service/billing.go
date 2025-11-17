@@ -948,7 +948,7 @@ func (s *billingService) CalculateAllCharges(
 	}, nil
 }
 
-func (s *billingService) CalculateAllChargesForPreview(
+func (s *billingService) calculateAllChargesForPreview(
 	ctx context.Context,
 	sub *subscription.Subscription,
 	usage *dto.GetUsageBySubscriptionResponse,
@@ -1111,7 +1111,7 @@ func (s *billingService) PrepareSubscriptionInvoiceRequest(
 		// but don't filter out already invoiced items
 
 		// For current period arrear charges
-		arrearResult, err := s.CalculateChargesForPreview(
+		arrearResult, err := s.calculateChargesForPreview(
 			ctx,
 			sub,
 			classification.CurrentPeriodArrear,
@@ -1124,7 +1124,7 @@ func (s *billingService) PrepareSubscriptionInvoiceRequest(
 		}
 
 		// For next period advance charges
-		advanceResult, err := s.CalculateChargesForPreview(
+		advanceResult, err := s.calculateChargesForPreview(
 			ctx,
 			sub,
 			classification.NextPeriodAdvance,
@@ -1364,7 +1364,7 @@ func (s *billingService) FilterLineItemsToBeInvoiced(
 	return filteredLineItems, nil
 }
 
-func (s *billingService) CalculateChargesForPreview(
+func (s *billingService) calculateChargesForPreview(
 	ctx context.Context,
 	sub *subscription.Subscription,
 	lineItems []*subscription.SubscriptionLineItem,
@@ -1382,7 +1382,7 @@ func (s *billingService) CalculateChargesForPreview(
 
 	if includeUsage {
 		subscriptionService := NewSubscriptionService(s.ServiceParams)
-		usage, err = subscriptionService.GetUsageBySubscription(ctx, &dto.GetUsageBySubscriptionRequest{
+		usage, err = subscriptionService.GetFeatureUsageBySubscription(ctx, &dto.GetUsageBySubscriptionRequest{
 			SubscriptionID: sub.ID,
 			StartTime:      periodStart,
 			EndTime:        periodEnd,
@@ -1393,7 +1393,7 @@ func (s *billingService) CalculateChargesForPreview(
 	}
 
 	// Calculate charges
-	return s.CalculateAllChargesForPreview(ctx, &filteredSub, usage, periodStart, periodEnd)
+	return s.calculateAllChargesForPreview(ctx, &filteredSub, usage, periodStart, periodEnd)
 }
 
 // CalculateCharges calculates charges for the given line items and period

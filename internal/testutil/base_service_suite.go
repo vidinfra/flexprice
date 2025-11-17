@@ -86,6 +86,7 @@ type Stores struct {
 	EntityIntegrationMappingRepo entityintegrationmapping.Repository
 	SettingsRepo                 settings.Repository
 	AlertLogsRepo                alertlogs.Repository
+	FeatureUsageRepo             events.FeatureUsageRepository
 }
 
 // BaseServiceTestSuite provides common functionality for all service test suites
@@ -218,6 +219,7 @@ func (s *BaseServiceTestSuite) setupStores() {
 		EntityIntegrationMappingRepo: NewInMemoryEntityIntegrationMappingStore(),
 		SettingsRepo:                 NewInMemorySettingsStore(),
 		AlertLogsRepo:                NewInMemoryAlertLogsStore(),
+		FeatureUsageRepo:             NewInMemoryFeatureUsageStore(),
 	}
 
 	s.db = NewMockPostgresClient(s.logger)
