@@ -9,6 +9,7 @@ import (
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/entitlement"
+	"github.com/flexprice/flexprice/internal/domain/events"
 	"github.com/flexprice/flexprice/internal/domain/invoice"
 	"github.com/flexprice/flexprice/internal/domain/meter"
 	"github.com/flexprice/flexprice/internal/domain/price"
@@ -648,18 +649,21 @@ func (s *billingService) CalculateUsageChargesForPreview(
 			// Handle bucketed max meters first - this should always be checked regardless of entitlements
 			if meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
 				// Get usage with bucketed values
-				usageRequest := &dto.GetUsageByMeterRequest{
-					MeterID:            item.MeterID,
-					PriceID:            item.PriceID,
-					ExternalCustomerID: customer.ExternalID,
-					StartTime:          item.GetPeriodStart(periodStart),
-					EndTime:            item.GetPeriodEnd(periodEnd),
-					WindowSize:         types.WindowSizeMonth, // Set monthly window size for custom billing periods
-					BillingAnchor:      &sub.BillingAnchor,
+				usageRequest := &events.FeatureUsageParams{
+					PriceID: item.PriceID,
+					MeterID: item.MeterID,
+					UsageParams: &events.UsageParams{
+						ExternalCustomerID: customer.ExternalID,
+						AggregationType:    types.AggregationMax,
+						StartTime:          item.GetPeriodStart(periodStart),
+						EndTime:            item.GetPeriodEnd(periodEnd),
+						WindowSize:         meter.Aggregation.BucketSize, // Set monthly window size for custom billing periods
+						BillingAnchor:      &sub.BillingAnchor,
+					},
 				}
 
 				// Get usage data with buckets
-				usageResult, err := eventService.GetUsageByMeter(ctx, usageRequest)
+				usageResult, err := s.FeatureUsageRepo.GetUsageForMaxMetersWithBuckets(ctx, usageRequest)
 				if err != nil {
 					return nil, decimal.Zero, err
 				}
@@ -672,7 +676,7 @@ func (s *billingService) CalculateUsageChargesForPreview(
 
 				// Calculate cost using bucketed values
 				adjustedAmount := priceService.CalculateBucketedCost(ctx, matchingCharge.Price, bucketedValues)
-				matchingCharge.Amount = adjustedAmount.InexactFloat64()
+				matchingCharge.Amount = price.FormatAmountToFloat64WithPrecision(adjustedAmount, matchingCharge.Price.Currency)
 
 				// Update quantity to reflect the sum of all bucket maxes
 				totalBucketQuantity := decimal.Zero
@@ -832,7 +836,7 @@ func (s *billingService) CalculateUsageChargesForPreview(
 					if matchingCharge.Price != nil {
 						// For regular pricing, use standard cost calculation
 						adjustedAmount := priceService.CalculateCost(ctx, matchingCharge.Price, quantityForCalculation)
-						matchingCharge.Amount = adjustedAmount.InexactFloat64()
+						matchingCharge.Amount = price.FormatAmountToFloat64WithPrecision(adjustedAmount, matchingCharge.Price.Currency)
 					}
 				} else {
 					// unlimited usage allowed, so we set the usage quantity for calculation to 0
@@ -842,7 +846,7 @@ func (s *billingService) CalculateUsageChargesForPreview(
 			} else if !meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
 				// For non-bucketed meters without entitlements, calculate cost normally
 				adjustedAmount := priceService.CalculateCost(ctx, matchingCharge.Price, quantityForCalculation)
-				matchingCharge.Amount = adjustedAmount.InexactFloat64()
+				matchingCharge.Amount = price.FormatAmountToFloat64WithPrecision(adjustedAmount, matchingCharge.Price.Currency)
 			}
 
 			// Add the amount to total usage cost

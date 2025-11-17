@@ -1566,3 +1566,130 @@ func (r *FeatureUsageRepository) GetFeatureUsageForExport(ctx context.Context, s
 
 	return results, nil
 }
+
+func (r *FeatureUsageRepository) GetUsageForMaxMetersWithBuckets(ctx context.Context, params *events.FeatureUsageParams) (*events.AggregationResult, error) {
+	// Start a span for this repository operation
+	span := StartRepositorySpan(ctx, "event", "get_usage", map[string]interface{}{
+		"price_id":    params.PriceID,
+		"meter_id":    params.MeterID,
+		"window_size": params.WindowSize,
+	})
+	defer FinishSpan(span)
+
+	query := r.getWindowedQuery(ctx, params)
+	log.Printf("Executing query: %s", query)
+
+	rows, err := r.store.GetConn().Query(ctx, query)
+	if err != nil {
+		SetSpanError(span, err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to execute usage query").
+			WithReportableDetails(map[string]interface{}{
+				"price_id":    params.PriceID,
+				"meter_id":    params.MeterID,
+				"window_size": params.WindowSize,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	defer rows.Close()
+
+	var result events.AggregationResult
+	result.Type = params.UsageParams.AggregationType
+
+	// For windowed queries, we need to process all rows
+	for rows.Next() {
+		var windowSize time.Time
+		var value decimal.Decimal
+		var total decimal.Decimal
+		if err := rows.Scan(&total, &windowSize, &value); err != nil {
+			SetSpanError(span, err)
+			return nil, ierr.WithError(err).
+				WithHint("Failed to scan decimal result").
+				WithReportableDetails(map[string]interface{}{
+					"window_size": windowSize,
+					"value":       value,
+					"total":       total,
+				}).
+				Mark(ierr.ErrDatabase)
+		}
+		// Set the overall maximum as the result value
+		result.Value = total
+
+		result.Results = append(result.Results, events.UsageResult{
+			WindowSize: windowSize,
+			Value:      value,
+		})
+	}
+
+	SetSpanSuccess(span)
+	return &result, nil
+}
+
+func (r *FeatureUsageRepository) getWindowedQuery(ctx context.Context, params *events.FeatureUsageParams) string {
+	bucketWindow := r.formatWindowSize(params.UsageParams.WindowSize, params.UsageParams.BillingAnchor)
+
+	externalCustomerFilter := ""
+	if params.UsageParams.ExternalCustomerID != "" {
+		externalCustomerFilter = fmt.Sprintf("AND external_customer_id = '%s'", params.ExternalCustomerID)
+	}
+
+	featureFilter := ""
+	if params.FeatureID != "" {
+		featureFilter = fmt.Sprintf("AND feature_id = '%s'", params.FeatureID)
+	}
+
+	priceFilter := ""
+	if params.PriceID != "" {
+		priceFilter = fmt.Sprintf("AND price_id = '%s'", params.PriceID)
+	}
+
+	meterFilter := ""
+	if params.MeterID != "" {
+		meterFilter = fmt.Sprintf("AND meter_id = '%s'", params.MeterID)
+	}
+
+	subLineItemFilter := ""
+	if params.SubLineItemID != "" {
+		subLineItemFilter = fmt.Sprintf("AND sub_line_item_id = '%s'", params.SubLineItemID)
+	}
+
+	filterConditions := buildFilterConditions(params.Filters)
+	timeConditions := buildTimeConditions(params.UsageParams)
+
+	// First get max values per bucket, then get the max across all buckets
+	return fmt.Sprintf(`
+		WITH bucket_maxes AS (
+			SELECT
+				%s as bucket_start,
+				max(qty_total * sign) as bucket_max
+			FROM feature_usage
+			PREWHERE tenant_id = '%s'
+				AND environment_id = '%s'
+				%s
+				%s
+				%s
+				%s
+				%s
+				%s
+				%s
+			GROUP BY bucket_start
+			ORDER BY bucket_start
+		)
+		SELECT
+			(SELECT sum(bucket_max) FROM bucket_maxes) as total,
+			bucket_start as timestamp,
+			bucket_max as value
+		FROM bucket_maxes
+		ORDER BY bucket_start
+	`,
+		bucketWindow,
+		types.GetTenantID(ctx),
+		types.GetEnvironmentID(ctx),
+		externalCustomerFilter,
+		featureFilter,
+		priceFilter,
+		meterFilter,
+		subLineItemFilter,
+		filterConditions,
+		timeConditions)
+}
