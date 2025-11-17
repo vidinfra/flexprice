@@ -215,23 +215,12 @@ func (s *InvoiceSyncService) buildLineItems(flexInvoice *invoice.Invoice) (map[s
 		// Get item description (entity type for clarity)
 		itemDescription := s.getLineItemDescription(item)
 
-		// Get quantity (default to 1 if not set)
+		// Keep quantity as 1 and use total line item amount
 		quantity := 1
-		if !item.Quantity.IsZero() {
-			quantity = int(item.Quantity.IntPart())
-		}
 
-		// CRITICAL: Razorpay expects unit price (amount per unit), not total amount
-		// item.Amount is the total amount for the line item (already multiplied by quantity)
-		// We need to calculate: unit price = total amount / quantity
-		unitPrice := item.Amount
-		if quantity > 0 {
-			unitPrice = item.Amount.Div(decimal.NewFromInt(int64(quantity)))
-		}
-
-		// Convert unit price to smallest currency unit (paise/cents)
+		// Convert total line item amount to smallest currency unit (paise/cents)
 		// Razorpay expects integer amount in smallest unit
-		amountInSmallestUnit := unitPrice.Mul(decimal.NewFromInt(100)).IntPart()
+		amountInSmallestUnit := item.Amount.Mul(decimal.NewFromInt(100)).IntPart()
 
 		// Build Razorpay line item
 		// Use line item currency (convert to uppercase as Razorpay expects uppercase currency codes)
