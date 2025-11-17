@@ -692,7 +692,7 @@ func (s *billingService) CalculateUsageChargesForPreview(
 			// 2. There is a matching entitlement
 			// 3. The entitlement is enabled
 			// 4. This is not a bucketed max meter (already handled above)
-			if !matchingCharge.IsOverage && entitlementOk && matchingEntitlement.IsEnabled && !meter.IsBucketedMaxMeter() {
+			if !matchingCharge.IsOverage && entitlementOk && matchingEntitlement.IsEnabled {
 				if matchingEntitlement.UsageLimit != nil {
 
 					// consider the usage reset period
