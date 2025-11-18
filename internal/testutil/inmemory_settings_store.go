@@ -67,7 +67,37 @@ func (s *InMemorySettingsStore) GetByKey(ctx context.Context, key types.SettingK
 		}
 	}
 
-	return nil, &ent.NotFoundError{}
+	return nil, ierr.WithError(&ent.NotFoundError{}).
+		WithHintf("Setting with key %s was not found", key.String()).
+		WithReportableDetails(map[string]any{
+			"key": key.String(),
+		}).
+		Mark(ierr.ErrNotFound)
+}
+
+// GetTenantSettingByKey retrieves a tenant-level setting by key (without environment_id)
+func (s *InMemorySettingsStore) GetTenantSettingByKey(ctx context.Context, key types.SettingKey) (*domainSettings.Setting, error) {
+	tenantID := types.GetTenantID(ctx)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Find setting by tenant, empty environment_id, and key
+	for _, setting := range s.items {
+		if setting.TenantID == tenantID &&
+			setting.EnvironmentID == "" &&
+			setting.Key == key.String() &&
+			setting.Status == types.StatusPublished {
+			return setting, nil
+		}
+	}
+
+	return nil, ierr.WithError(&ent.NotFoundError{}).
+		WithHintf("Setting with key %s was not found", key.String()).
+		WithReportableDetails(map[string]any{
+			"key": key.String(),
+		}).
+		Mark(ierr.ErrNotFound)
 }
 
 // DeleteByKey deletes a setting by key for a specific tenant and environment
