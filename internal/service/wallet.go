@@ -495,7 +495,7 @@ func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Con
 			InvoiceType:    types.InvoiceTypeOneOff, // Changed from CREDIT to ONE_OFF
 			DueDate:        lo.ToPtr(time.Now().UTC()),
 			IdempotencyKey: idempotencyKey,
-			InvoiceStatus:  lo.ToPtr(types.InvoiceStatusDraft), // Changed from FINALIZED to DRAFT
+			InvoiceStatus:  lo.ToPtr(types.InvoiceStatusFinalized),
 			LineItems: []dto.CreateInvoiceLineItemRequest{
 				{
 					Amount:      amount,
