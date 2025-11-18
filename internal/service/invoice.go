@@ -1185,7 +1185,7 @@ func (s *invoiceService) ReconcilePaymentStatus(ctx context.Context, id string, 
 			// Only complete the transaction if payment is fully succeeded
 			if status == types.PaymentStatusSucceeded || status == types.PaymentStatusOverpaid {
 				walletService := NewWalletService(s.ServiceParams)
-				if err := walletService.CompletePurchasedCreditTransaction(ctx, walletTransactionID); err != nil {
+				if err := walletService.CompletePurchasedCreditTransactionWithRetry(ctx, walletTransactionID); err != nil {
 					s.Logger.Errorw("failed to complete purchased credit transaction",
 						"error", err,
 						"invoice_id", inv.ID,
