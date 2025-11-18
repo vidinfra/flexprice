@@ -126,6 +126,20 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		return types.ConnectionMetadata{
 			Razorpay: razorpayMetadata,
 		}
+	case types.SecretProviderChargebee:
+		chargebeeMetadata := &types.ChargebeeConnectionMetadata{}
+		if site, ok := metadata["site"].(string); ok {
+			chargebeeMetadata.Site = site
+		}
+		if apiKey, ok := metadata["api_key"].(string); ok {
+			chargebeeMetadata.APIKey = apiKey
+		}
+		if webhookSecret, ok := metadata["webhook_secret"].(string); ok {
+			chargebeeMetadata.WebhookSecret = webhookSecret
+		}
+		return types.ConnectionMetadata{
+			Chargebee: chargebeeMetadata,
+		}
 	default:
 		// For other providers or unknown types, use generic format
 		return types.ConnectionMetadata{

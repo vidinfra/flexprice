@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/flexprice/flexprice/ent"
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/price"
 	ierr "github.com/flexprice/flexprice/internal/errors"
@@ -240,6 +241,52 @@ func (s *priceService) CreateBulkPrice(ctx context.Context, req dto.CreateBulkPr
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Sync prices to Chargebee if integration is available and prices are for a plan
+	if s.IntegrationFactory != nil && response != nil && len(response.Items) > 0 {
+		// Group prices by plan
+		planPrices := make(map[string][]*price.Price)
+		for _, priceResp := range response.Items {
+			if priceResp.Price.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
+				planID := priceResp.Price.EntityID
+				planPrices[planID] = append(planPrices[planID], priceResp.Price)
+			}
+		}
+
+		// Sync each plan's prices to Chargebee
+		for planID, prices := range planPrices {
+			chargebeeIntegration, err := s.IntegrationFactory.GetChargebeeIntegration(ctx)
+			if err == nil && chargebeeIntegration != nil {
+				// Get ent.Plan
+				entPlan, err := s.DB.Reader(ctx).Plan.Get(ctx, planID)
+				if err == nil {
+					// Convert domain prices to ent prices
+					var entPrices []*ent.Price
+					for _, p := range prices {
+						entPrice, err := s.DB.Reader(ctx).Price.Get(ctx, p.ID)
+						if err == nil {
+							entPrices = append(entPrices, entPrice)
+						}
+					}
+
+					// Sync to Chargebee (non-blocking - log errors but don't fail price creation)
+					if len(entPrices) > 0 {
+						if syncErr := chargebeeIntegration.PlanSyncSvc.SyncPlanToChargebee(ctx, entPlan, entPrices); syncErr != nil {
+							s.Logger.Errorw("failed to sync prices to Chargebee",
+								"plan_id", planID,
+								"price_count", len(entPrices),
+								"error", syncErr)
+							// Don't fail price creation if Chargebee sync fails
+						} else {
+							s.Logger.Infow("successfully synced prices to Chargebee",
+								"plan_id", planID,
+								"price_count", len(entPrices))
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return response, nil
