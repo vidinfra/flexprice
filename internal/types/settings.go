@@ -14,6 +14,7 @@ const (
 	SettingKeyInvoiceConfig      SettingKey = "invoice_config"
 	SettingKeySubscriptionConfig SettingKey = "subscription_config"
 	SettingKeyInvoicePDFConfig   SettingKey = "invoice_pdf_config"
+	SettingKeyEnvPermitConfig    SettingKey = "env_permit_config"
 )
 
 func (s SettingKey) String() string {
@@ -135,6 +136,15 @@ func GetDefaultSettings() map[SettingKey]DefaultSettingValue {
 			Description: "Default configuration for invoice PDF generation",
 			Required:    true,
 		},
+		SettingKeyEnvPermitConfig: {
+			Key: SettingKeyEnvPermitConfig,
+			DefaultValue: map[string]interface{}{
+				string(EnvironmentProduction):  1,
+				string(EnvironmentDevelopment): 2,
+			},
+			Description: "Default configuration for environment creation limits (production and sandbox)",
+			Required:    true,
+		},
 	}
 }
 
@@ -157,6 +167,8 @@ func ValidateSettingValue(key string, value map[string]interface{}) error {
 		return ValidateSubscriptionConfig(value)
 	case SettingKeyInvoicePDFConfig:
 		return ValidateInvoicePDFConfig(value)
+	case SettingKeyEnvPermitConfig:
+		return ValidateEnvPermitConfig(value)
 	default:
 		return ierr.NewErrorf("unknown setting key: %s", key).
 			WithHintf("Unknown setting key: %s", key).
@@ -521,4 +533,82 @@ func validateTimezone(timezone string) error {
 	resolvedTimezone := ResolveTimezone(timezone)
 	_, err := time.LoadLocation(resolvedTimezone)
 	return err
+}
+
+// ValidateEnvPermitConfig validates environment permit configuration settings
+func ValidateEnvPermitConfig(value map[string]interface{}) error {
+	if value == nil {
+		return errors.New("env_permit_config value cannot be nil")
+	}
+
+	// Define valid keys - only production and development are allowed
+	validKeys := map[string]bool{
+		string(EnvironmentProduction):  true,
+		string(EnvironmentDevelopment): true,
+	}
+
+	// Check for invalid keys
+	for key := range value {
+		if !validKeys[key] {
+			return ierr.NewErrorf("env_permit_config: invalid key '%s'. Only '%s' and '%s' are allowed", key, EnvironmentProduction, EnvironmentDevelopment).
+				WithHintf("Environment permit config only accepts keys: '%s' and '%s'", EnvironmentProduction, EnvironmentDevelopment).
+				Mark(ierr.ErrValidation)
+		}
+	}
+
+	// Validate production environment limit if provided
+	prodEnvKey := string(EnvironmentProduction)
+	if prodEnvRaw, exists := value[prodEnvKey]; exists {
+		var prodEnv int
+		switch v := prodEnvRaw.(type) {
+		case int:
+			prodEnv = v
+		case float64:
+			if v != float64(int(v)) {
+				return ierr.NewErrorf("env_permit_config: '%s' must be a whole number", prodEnvKey).
+					WithHintf("Environment permit config for %s must be a whole number", prodEnvKey).
+					Mark(ierr.ErrValidation)
+			}
+			prodEnv = int(v)
+		default:
+			return ierr.NewErrorf("env_permit_config: '%s' must be an integer, got %T", prodEnvKey, prodEnvRaw).
+				WithHintf("Environment permit config for %s must be an integer, got %T", prodEnvKey, prodEnvRaw).
+				Mark(ierr.ErrValidation)
+		}
+
+		if prodEnv < 0 {
+			return ierr.NewErrorf("env_permit_config: '%s' must be greater than or equal to 0", prodEnvKey).
+				WithHintf("Environment permit config for %s must be greater than or equal to 0", prodEnvKey).
+				Mark(ierr.ErrValidation)
+		}
+	}
+
+	// Validate development (sandbox) environment limit if provided
+	sandboxEnvKey := string(EnvironmentDevelopment)
+	if sandboxEnvRaw, exists := value[sandboxEnvKey]; exists {
+		var sandboxEnv int
+		switch v := sandboxEnvRaw.(type) {
+		case int:
+			sandboxEnv = v
+		case float64:
+			if v != float64(int(v)) {
+				return ierr.NewErrorf("env_permit_config: '%s' must be a whole number", sandboxEnvKey).
+					WithHintf("Environment permit config for %s must be a whole number", sandboxEnvKey).
+					Mark(ierr.ErrValidation)
+			}
+			sandboxEnv = int(v)
+		default:
+			return ierr.NewErrorf("env_permit_config: '%s' must be an integer, got %T", sandboxEnvKey, sandboxEnvRaw).
+				WithHintf("Environment permit config for %s must be an integer, got %T", sandboxEnvKey, sandboxEnvRaw).
+				Mark(ierr.ErrValidation)
+		}
+
+		if sandboxEnv < 0 {
+			return ierr.NewErrorf("env_permit_config: '%s' must be greater than or equal to 0", sandboxEnvKey).
+				WithHintf("Environment permit config for %s must be greater than or equal to 0", sandboxEnvKey).
+				Mark(ierr.ErrValidation)
+		}
+	}
+
+	return nil
 }

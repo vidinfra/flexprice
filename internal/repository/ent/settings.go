@@ -41,8 +41,13 @@ func (r *settingsRepository) Create(ctx context.Context, s *domainSettings.Setti
 	)
 
 	// Set environment ID from context if not already set
-	if s.EnvironmentID == "" {
+	// EXCEPT for env_permit_config which must be tenant-level only (empty environment_id)
+	if s.EnvironmentID == "" && s.Key != string(types.SettingKeyEnvPermitConfig) {
 		s.EnvironmentID = types.GetEnvironmentID(ctx)
+	}
+	// For env_permit_config, ensure environment_id is always empty
+	if s.Key == string(types.SettingKeyEnvPermitConfig) {
+		s.EnvironmentID = ""
 	}
 
 	setting, err := client.Settings.Create().
@@ -95,11 +100,17 @@ func (r *settingsRepository) Update(ctx context.Context, s *domainSettings.Setti
 		"key", s.Key,
 	)
 
+	// For env_permit_config, use empty environment_id (tenant-level)
+	environmentID := types.GetEnvironmentID(ctx)
+	if s.Key == string(types.SettingKeyEnvPermitConfig) {
+		environmentID = ""
+	}
+
 	_, err := client.Settings.Update().
 		Where(
 			settings.ID(s.ID),
 			settings.TenantID(s.TenantID),
-			settings.EnvironmentID(types.GetEnvironmentID(ctx)),
+			settings.EnvironmentID(environmentID),
 			settings.Status(string(types.StatusPublished)),
 		).
 		SetValue(s.Value).
@@ -227,6 +238,38 @@ func (r *settingsRepository) GetByKey(ctx context.Context, key types.SettingKey)
 		}
 		return nil, ierr.WithError(err).
 			WithHint("Failed to get setting by key").
+			Mark(ierr.ErrDatabase)
+	}
+
+	setting := domainSettings.FromEnt(s)
+	return setting, nil
+}
+
+// GetTenantSettingByKey retrieves a tenant-level setting by key (without environment_id)
+func (r *settingsRepository) GetTenantSettingByKey(ctx context.Context, key types.SettingKey) (*domainSettings.Setting, error) {
+	client := r.client.Reader(ctx)
+	r.log.Debugw("getting tenant setting by key", "key", key)
+
+	s, err := client.Settings.Query().
+		Where(
+			settings.Key(key.String()),
+			settings.TenantID(types.GetTenantID(ctx)),
+			settings.EnvironmentID(""),
+			settings.Status(string(types.StatusPublished)),
+		).
+		Only(ctx)
+
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ierr.WithError(err).
+				WithHintf("Setting with key %s was not found", key.String()).
+				WithReportableDetails(map[string]any{
+					"key": key.String(),
+				}).
+				Mark(ierr.ErrNotFound)
+		}
+		return nil, ierr.WithError(err).
+			WithHint("Failed to get tenant setting by key").
 			Mark(ierr.ErrDatabase)
 	}
 

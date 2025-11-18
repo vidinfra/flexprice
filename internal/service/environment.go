@@ -7,6 +7,7 @@ import (
 
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/environment"
+	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
 )
 
@@ -20,12 +21,16 @@ type EnvironmentService interface {
 type environmentService struct {
 	repo             environment.Repository
 	envAccessService EnvAccessService
+	settingsService  SettingsService
+	ServiceParams
 }
 
-func NewEnvironmentService(repo environment.Repository, envAccessService EnvAccessService) EnvironmentService {
+func NewEnvironmentService(repo environment.Repository, envAccessService EnvAccessService, settingsService SettingsService, params ServiceParams) EnvironmentService {
 	return &environmentService{
 		repo:             repo,
 		envAccessService: envAccessService,
+		settingsService:  settingsService,
+		ServiceParams:    params,
 	}
 }
 
@@ -35,12 +40,112 @@ func (s *environmentService) CreateEnvironment(ctx context.Context, req dto.Crea
 	}
 
 	env := req.ToEnvironment(ctx)
+	envType := types.EnvironmentType(req.Type)
+
+	// Check environment limits for prod and sandbox environments
+	if envType == types.EnvironmentProduction || envType == types.EnvironmentDevelopment {
+		// Get env permit config with defaults (tenant-level, no environment_id)
+		config, err := s.getEnvPermitConfig(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		// Get current count of environments of this type
+		currentCount, err := s.repo.CountByType(ctx, envType)
+		if err != nil {
+			return nil, err
+		}
+
+		// Determine the limit based on environment type
+		envTypeKey := string(envType)
+		limitRaw, exists := config[envTypeKey]
+		if !exists {
+			return nil, ierr.NewErrorf("environment limit not configured for type: %s", envTypeKey).
+				WithHintf("Environment limit configuration missing for type: %s", envTypeKey).
+				Mark(ierr.ErrValidation)
+		}
+
+		// Handle type conversion (could be int or float64 from JSON)
+		var limit int
+		switch v := limitRaw.(type) {
+		case int:
+			limit = v
+		case float64:
+			limit = int(v)
+		default:
+			return nil, ierr.NewErrorf("invalid limit type for environment type %s: expected int, got %T", envTypeKey, limitRaw).
+				WithHintf("Invalid limit configuration for environment type: %s", envTypeKey).
+				Mark(ierr.ErrValidation)
+		}
+
+		// Check if limit is reached
+		if currentCount >= limit {
+			envTypeName := "production"
+			if envType == types.EnvironmentDevelopment {
+				envTypeName = "sandbox"
+			}
+			return nil, ierr.NewErrorf("environment limit reached: maximum %d %s environment(s) allowed", limit, envTypeName).
+				WithHintf("You have reached the maximum limit of %d %s environment(s) for this tenant", limit, envTypeName).
+				Mark(ierr.ErrValidation)
+		}
+	}
 
 	if err := s.repo.Create(ctx, env); err != nil {
 		return nil, err
 	}
 
 	return dto.NewEnvironmentResponse(env), nil
+}
+
+// getEnvPermitConfig retrieves the environment permit configuration with defaults
+// This queries tenant-level settings only (no environment_id)
+func (s *environmentService) getEnvPermitConfig(ctx context.Context) (map[string]interface{}, error) {
+	// Try to get the tenant-level setting from the database (no environment_id)
+	setting, err := s.SettingsRepo.GetTenantSettingByKey(ctx, types.SettingKeyEnvPermitConfig)
+	if err != nil {
+		// If setting not found, use default values
+		// Check if it's a not found error by checking the error type
+		if ierr.IsNotFound(err) {
+			defaultSettings := types.GetDefaultSettings()
+			if defaultSetting, exists := defaultSettings[types.SettingKeyEnvPermitConfig]; exists {
+				return defaultSetting.DefaultValue, nil
+			}
+		}
+		return nil, ierr.NewErrorf("failed to get env permit config: %w", err).
+			WithHint("Failed to get env permit config").
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Merge with defaults to ensure all fields are present
+	defaultSettings := types.GetDefaultSettings()
+	defaultSetting := defaultSettings[types.SettingKeyEnvPermitConfig]
+
+	result := make(map[string]interface{})
+
+	// First, copy default values
+	for k, v := range defaultSetting.DefaultValue {
+		result[k] = v
+	}
+
+	// Then, override with stored values
+	for k, v := range setting.Value {
+		result[k] = v
+	}
+
+	// Ensure types are correct (handle float64 from JSON)
+	// Convert both production and development limits
+	for envTypeKey := range result {
+		if limitRaw, exists := result[envTypeKey]; exists {
+			switch v := limitRaw.(type) {
+			case float64:
+				result[envTypeKey] = int(v)
+			case int:
+				result[envTypeKey] = v
+			}
+		}
+	}
+
+	return result, nil
 }
 
 func (s *environmentService) GetEnvironment(ctx context.Context, id string) (*dto.EnvironmentResponse, error) {

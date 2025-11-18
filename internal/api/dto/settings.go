@@ -99,9 +99,15 @@ func (r *CreateSettingRequest) Validate() error {
 }
 
 func (r *CreateSettingRequest) ToSetting(ctx context.Context) *settings.Setting {
+	// env_permit_config must be tenant-level only (no environment_id)
+	environmentID := types.GetEnvironmentID(ctx)
+	if r.Key == types.SettingKeyEnvPermitConfig {
+		environmentID = ""
+	}
+
 	return &settings.Setting{
 		ID:            types.GenerateUUIDWithPrefix(types.UUID_PREFIX_SETTING),
-		EnvironmentID: types.GetEnvironmentID(ctx),
+		EnvironmentID: environmentID,
 		BaseModel:     types.GetDefaultBaseModel(ctx),
 		Key:           r.Key.String(),
 		Value:         r.Value,
