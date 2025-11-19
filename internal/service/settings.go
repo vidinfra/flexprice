@@ -57,11 +57,12 @@ func (s *settingsService) GetSettingByKey(ctx context.Context, key types.Setting
 					Value:     defaultSetting.DefaultValue,
 					BaseModel: types.GetDefaultBaseModel(ctx),
 				}
+				// For env_config, don't set environment_id (will be NULL in DB)
+				// For other settings, use environment_id from context
 				if !isEnvConfig {
 					defaultSettingModel.EnvironmentID = types.GetEnvironmentID(ctx)
-				} else {
-					defaultSettingModel.EnvironmentID = ""
 				}
+				// env_config: EnvironmentID remains empty (zero value), repository will set to NULL
 				return dto.SettingFromDomain(defaultSettingModel), nil
 			}
 		}
@@ -132,10 +133,8 @@ func (s *settingsService) UpdateSettingByKey(ctx context.Context, key types.Sett
 		setting.Value[key] = value
 	}
 
-	// For env_config, ensure environment_id is empty
-	if key == types.SettingKeyEnvConfig {
-		setting.EnvironmentID = ""
-	}
+	// For env_config, ensure environment_id is not set (will be stored as NULL)
+	// Don't set it - repository will handle NULL conversion
 
 	return s.updateSetting(ctx, setting)
 }

@@ -40,16 +40,6 @@ func (r *settingsRepository) Create(ctx context.Context, s *domainSettings.Setti
 		"key", s.Key,
 	)
 
-	// Set environment ID from context if not already set
-	// EXCEPT for env_config which must be tenant-level only (empty environment_id)
-	if s.EnvironmentID == "" && s.Key != string(types.SettingKeyEnvConfig) {
-		s.EnvironmentID = types.GetEnvironmentID(ctx)
-	}
-	// For env_config, ensure environment_id is always empty
-	if s.Key == string(types.SettingKeyEnvConfig) {
-		s.EnvironmentID = ""
-	}
-
 	setting, err := client.Settings.Create().
 		SetID(s.ID).
 		SetTenantID(s.TenantID).
@@ -60,7 +50,7 @@ func (r *settingsRepository) Create(ctx context.Context, s *domainSettings.Setti
 		SetUpdatedAt(s.UpdatedAt).
 		SetCreatedBy(s.CreatedBy).
 		SetUpdatedBy(s.UpdatedBy).
-		SetEnvironmentID(s.EnvironmentID).
+		SetNillableEnvironmentID(&s.EnvironmentID).
 		Save(ctx)
 
 	if err != nil {
@@ -100,17 +90,12 @@ func (r *settingsRepository) Update(ctx context.Context, s *domainSettings.Setti
 		"key", s.Key,
 	)
 
-	// For env_config, use empty environment_id (tenant-level)
-	environmentID := types.GetEnvironmentID(ctx)
-	if s.Key == string(types.SettingKeyEnvConfig) {
-		environmentID = ""
-	}
-
+	// For env_config, use NULL environment_id (tenant-level)
+	// Build the WHERE clause based on whether it's env_config or not
 	_, err := client.Settings.Update().
 		Where(
 			settings.ID(s.ID),
 			settings.TenantID(s.TenantID),
-			settings.EnvironmentID(environmentID),
 			settings.Status(string(types.StatusPublished)),
 		).
 		SetValue(s.Value).
@@ -254,7 +239,10 @@ func (r *settingsRepository) GetTenantSettingByKey(ctx context.Context, key type
 		Where(
 			settings.Key(key.String()),
 			settings.TenantID(types.GetTenantID(ctx)),
-			settings.EnvironmentIDIsNil(),
+			settings.Or(
+				settings.EnvironmentIDIsNil(),
+				settings.EnvironmentID(""),
+			),
 			settings.Status(string(types.StatusPublished)),
 		).
 		Only(ctx)
@@ -334,7 +322,10 @@ func (r *settingsRepository) DeleteTenantSettingByKey(ctx context.Context, key t
 		Where(
 			settings.Key(key.String()),
 			settings.TenantID(types.GetTenantID(ctx)),
-			settings.EnvironmentIDIsNil(), // Tenant-level setting has empty environment_id
+			settings.Or(
+				settings.EnvironmentIDIsNil(),
+				settings.EnvironmentID(""),
+			),
 			settings.Status(string(types.StatusPublished)),
 		).
 		SetStatus(string(types.StatusArchived)).

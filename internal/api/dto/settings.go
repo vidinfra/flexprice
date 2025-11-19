@@ -99,19 +99,21 @@ func (r *CreateSettingRequest) Validate() error {
 }
 
 func (r *CreateSettingRequest) ToSetting(ctx context.Context) *settings.Setting {
-	// env_config must be tenant-level only (no environment_id)
-	environmentID := types.GetEnvironmentID(ctx)
-	if r.Key == types.SettingKeyEnvConfig {
-		environmentID = ""
+	setting := &settings.Setting{
+		ID:        types.GenerateUUIDWithPrefix(types.UUID_PREFIX_SETTING),
+		BaseModel: types.GetDefaultBaseModel(ctx),
+		Key:       r.Key.String(),
+		Value:     r.Value,
 	}
 
-	return &settings.Setting{
-		ID:            types.GenerateUUIDWithPrefix(types.UUID_PREFIX_SETTING),
-		EnvironmentID: environmentID,
-		BaseModel:     types.GetDefaultBaseModel(ctx),
-		Key:           r.Key.String(),
-		Value:         r.Value,
+	// For env_config, don't set environment_id (will be NULL in DB)
+	// For other settings, use environment_id from context
+	if r.Key != types.SettingKeyEnvConfig {
+		setting.EnvironmentID = types.GetEnvironmentID(ctx)
 	}
+	// env_config: EnvironmentID remains empty (zero value), repository will set to NULL
+
+	return setting
 }
 
 type UpdateSettingRequest struct {
