@@ -44,8 +44,8 @@ func (s *environmentService) CreateEnvironment(ctx context.Context, req dto.Crea
 
 	// Check environment limits for prod and sandbox environments
 	if envType == types.EnvironmentProduction || envType == types.EnvironmentDevelopment {
-		// Get env permit config with defaults (tenant-level, no environment_id)
-		config, err := s.getEnvPermitConfig(ctx)
+		// Get env config with defaults (tenant-level, no environment_id)
+		config, err := s.getEnvConfig(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -57,6 +57,7 @@ func (s *environmentService) CreateEnvironment(ctx context.Context, req dto.Crea
 		}
 
 		// Determine the limit based on environment type
+		// getEnvConfig already handles type conversion, so we can directly use the value
 		envTypeKey := string(envType)
 		limitRaw, exists := config[envTypeKey]
 		if !exists {
@@ -65,14 +66,9 @@ func (s *environmentService) CreateEnvironment(ctx context.Context, req dto.Crea
 				Mark(ierr.ErrValidation)
 		}
 
-		// Handle type conversion (could be int or float64 from JSON)
-		var limit int
-		switch v := limitRaw.(type) {
-		case int:
-			limit = v
-		case float64:
-			limit = int(v)
-		default:
+		// Type conversion is already handled in getEnvConfig, so this should always be int
+		limit, ok := limitRaw.(int)
+		if !ok {
 			return nil, ierr.NewErrorf("invalid limit type for environment type %s: expected int, got %T", envTypeKey, limitRaw).
 				WithHintf("Invalid limit configuration for environment type: %s", envTypeKey).
 				Mark(ierr.ErrValidation)
@@ -80,10 +76,7 @@ func (s *environmentService) CreateEnvironment(ctx context.Context, req dto.Crea
 
 		// Check if limit is reached
 		if currentCount >= limit {
-			envTypeName := "production"
-			if envType == types.EnvironmentDevelopment {
-				envTypeName = "sandbox"
-			}
+			envTypeName := string(envType)
 			return nil, ierr.NewErrorf("environment limit reached: maximum %d %s environment(s) allowed", limit, envTypeName).
 				WithHintf("You have reached the maximum limit of %d %s environment(s) for this tenant", limit, envTypeName).
 				Mark(ierr.ErrValidation)
@@ -97,28 +90,28 @@ func (s *environmentService) CreateEnvironment(ctx context.Context, req dto.Crea
 	return dto.NewEnvironmentResponse(env), nil
 }
 
-// getEnvPermitConfig retrieves the environment permit configuration with defaults
+// getEnvConfig retrieves the environment configuration with defaults
 // This queries tenant-level settings only (no environment_id)
-func (s *environmentService) getEnvPermitConfig(ctx context.Context) (map[string]interface{}, error) {
+func (s *environmentService) getEnvConfig(ctx context.Context) (map[string]interface{}, error) {
 	// Try to get the tenant-level setting from the database (no environment_id)
-	setting, err := s.SettingsRepo.GetTenantSettingByKey(ctx, types.SettingKeyEnvPermitConfig)
+	setting, err := s.SettingsRepo.GetTenantSettingByKey(ctx, types.SettingKeyEnvConfig)
 	if err != nil {
 		// If setting not found, use default values
 		// Check if it's a not found error by checking the error type
 		if ierr.IsNotFound(err) {
 			defaultSettings := types.GetDefaultSettings()
-			if defaultSetting, exists := defaultSettings[types.SettingKeyEnvPermitConfig]; exists {
+			if defaultSetting, exists := defaultSettings[types.SettingKeyEnvConfig]; exists {
 				return defaultSetting.DefaultValue, nil
 			}
 		}
-		return nil, ierr.NewErrorf("failed to get env permit config: %w", err).
-			WithHint("Failed to get env permit config").
+		return nil, ierr.NewErrorf("failed to get env config: %w", err).
+			WithHint("Failed to get env config").
 			Mark(ierr.ErrDatabase)
 	}
 
 	// Merge with defaults to ensure all fields are present
 	defaultSettings := types.GetDefaultSettings()
-	defaultSetting := defaultSettings[types.SettingKeyEnvPermitConfig]
+	defaultSetting := defaultSettings[types.SettingKeyEnvConfig]
 
 	result := make(map[string]interface{})
 

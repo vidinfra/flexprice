@@ -18,6 +18,7 @@ type Repository interface {
 	GetByKey(ctx context.Context, key types.SettingKey) (*Setting, error)
 	GetTenantSettingByKey(ctx context.Context, key types.SettingKey) (*Setting, error)
 	DeleteByKey(ctx context.Context, key types.SettingKey) error
+	DeleteTenantSettingByKey(ctx context.Context, key types.SettingKey) error
 
 	// Config operations
 	ListAllTenantEnvSettingsByKey(ctx context.Context, key types.SettingKey) ([]*types.TenantEnvConfig, error)

@@ -41,12 +41,12 @@ func (r *settingsRepository) Create(ctx context.Context, s *domainSettings.Setti
 	)
 
 	// Set environment ID from context if not already set
-	// EXCEPT for env_permit_config which must be tenant-level only (empty environment_id)
-	if s.EnvironmentID == "" && s.Key != string(types.SettingKeyEnvPermitConfig) {
+	// EXCEPT for env_config which must be tenant-level only (empty environment_id)
+	if s.EnvironmentID == "" && s.Key != string(types.SettingKeyEnvConfig) {
 		s.EnvironmentID = types.GetEnvironmentID(ctx)
 	}
-	// For env_permit_config, ensure environment_id is always empty
-	if s.Key == string(types.SettingKeyEnvPermitConfig) {
+	// For env_config, ensure environment_id is always empty
+	if s.Key == string(types.SettingKeyEnvConfig) {
 		s.EnvironmentID = ""
 	}
 
@@ -100,9 +100,9 @@ func (r *settingsRepository) Update(ctx context.Context, s *domainSettings.Setti
 		"key", s.Key,
 	)
 
-	// For env_permit_config, use empty environment_id (tenant-level)
+	// For env_config, use empty environment_id (tenant-level)
 	environmentID := types.GetEnvironmentID(ctx)
-	if s.Key == string(types.SettingKeyEnvPermitConfig) {
+	if s.Key == string(types.SettingKeyEnvConfig) {
 		environmentID = ""
 	}
 
@@ -255,6 +255,7 @@ func (r *settingsRepository) GetTenantSettingByKey(ctx context.Context, key type
 			settings.Key(key.String()),
 			settings.TenantID(types.GetTenantID(ctx)),
 			settings.EnvironmentID(""),
+			settings.KeyEQ(string(types.SettingKeyEnvConfig)),
 			settings.Status(string(types.StatusPublished)),
 		).
 		Only(ctx)
@@ -311,6 +312,49 @@ func (r *settingsRepository) DeleteByKey(ctx context.Context, key types.SettingK
 		}
 		return ierr.WithError(err).
 			WithHint("Failed to delete setting by key").
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Delete from cache
+	r.DeleteCache(ctx, setting)
+	return nil
+}
+
+func (r *settingsRepository) DeleteTenantSettingByKey(ctx context.Context, key types.SettingKey) error {
+	// Get the tenant-level setting first for cache invalidation
+	setting, err := r.GetTenantSettingByKey(ctx, key)
+	if err != nil {
+		return err
+	}
+
+	client := r.client.Writer(ctx)
+
+	r.log.Debugw("deleting tenant-level setting by key", "key", key.String())
+
+	_, err = client.Settings.Update().
+		Where(
+			settings.Key(key.String()),
+			settings.TenantID(types.GetTenantID(ctx)),
+			settings.KeyEQ(string(types.SettingKeyEnvConfig)),
+			settings.EnvironmentID(""), // Tenant-level setting has empty environment_id
+			settings.Status(string(types.StatusPublished)),
+		).
+		SetStatus(string(types.StatusArchived)).
+		SetUpdatedAt(time.Now().UTC()).
+		SetUpdatedBy(types.GetUserID(ctx)).
+		Save(ctx)
+
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return ierr.WithError(err).
+				WithHintf("Tenant-level setting with key %s was not found", key.String()).
+				WithReportableDetails(map[string]any{
+					"key": key.String(),
+				}).
+				Mark(ierr.ErrNotFound)
+		}
+		return ierr.WithError(err).
+			WithHint("Failed to delete tenant-level setting by key").
 			Mark(ierr.ErrDatabase)
 	}
 

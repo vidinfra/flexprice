@@ -33,10 +33,12 @@ func NewSettingsService(params ServiceParams) SettingsService {
 }
 
 func (s *settingsService) GetSettingByKey(ctx context.Context, key types.SettingKey) (*dto.SettingResponse, error) {
-	// For env_permit_config, use tenant-level query (no environment_id)
+	// For env_config, use tenant-level query (no environment_id)
 	var setting *settings.Setting
 	var err error
-	if key == types.SettingKeyEnvPermitConfig {
+	isEnvConfig := key == types.SettingKeyEnvConfig
+
+	if isEnvConfig {
 		setting, err = s.SettingsRepo.GetTenantSettingByKey(ctx, key)
 	} else {
 		setting, err = s.SettingsRepo.GetByKey(ctx, key)
@@ -48,17 +50,17 @@ func (s *settingsService) GetSettingByKey(ctx context.Context, key types.Setting
 			// Check if this key has default values
 			if defaultSetting, exists := types.GetDefaultSettings()[key]; exists {
 				// Create and return a setting with default values
-				// For env_permit_config, environment_id should be empty
-				environmentID := types.GetEnvironmentID(ctx)
-				if key == types.SettingKeyEnvPermitConfig {
-					environmentID = ""
-				}
+
 				defaultSettingModel := &settings.Setting{
-					ID:            types.GenerateUUIDWithPrefix(types.UUID_PREFIX_SETTING),
-					Key:           defaultSetting.Key.String(),
-					Value:         defaultSetting.DefaultValue,
-					EnvironmentID: environmentID,
-					BaseModel:     types.GetDefaultBaseModel(ctx),
+					ID:        types.GenerateUUIDWithPrefix(types.UUID_PREFIX_SETTING),
+					Key:       defaultSetting.Key.String(),
+					Value:     defaultSetting.DefaultValue,
+					BaseModel: types.GetDefaultBaseModel(ctx),
+				}
+				if !isEnvConfig {
+					defaultSettingModel.EnvironmentID = types.GetEnvironmentID(ctx)
+				} else {
+					defaultSettingModel.EnvironmentID = ""
 				}
 				return dto.SettingFromDomain(defaultSettingModel), nil
 			}
@@ -96,10 +98,10 @@ func (s *settingsService) UpdateSettingByKey(ctx context.Context, key types.Sett
 	}
 
 	// STEP 2: Check if the setting exists
-	// For env_permit_config, use tenant-level query (no environment_id)
+	// For env_config, use tenant-level query (no environment_id)
 	var setting *settings.Setting
 	var err error
-	if key == types.SettingKeyEnvPermitConfig {
+	if key == types.SettingKeyEnvConfig {
 		setting, err = s.SettingsRepo.GetTenantSettingByKey(ctx, key)
 	} else {
 		setting, err = s.SettingsRepo.GetByKey(ctx, key)
@@ -130,8 +132,8 @@ func (s *settingsService) UpdateSettingByKey(ctx context.Context, key types.Sett
 		setting.Value[key] = value
 	}
 
-	// For env_permit_config, ensure environment_id is empty
-	if key == types.SettingKeyEnvPermitConfig {
+	// For env_config, ensure environment_id is empty
+	if key == types.SettingKeyEnvConfig {
 		setting.EnvironmentID = ""
 	}
 
@@ -139,23 +141,12 @@ func (s *settingsService) UpdateSettingByKey(ctx context.Context, key types.Sett
 }
 
 func (s *settingsService) DeleteSettingByKey(ctx context.Context, key types.SettingKey) error {
-	// For env_permit_config, we need to delete tenant-level setting
-	// But DeleteByKey uses environment_id from context, so we need to handle it differently
-	// Actually, we should update DeleteByKey to handle tenant-level settings
-	// For now, get the setting first and delete by ID
-	if key == types.SettingKeyEnvPermitConfig {
-		setting, err := s.SettingsRepo.GetTenantSettingByKey(ctx, key)
-		if err != nil {
-			return err
-		}
-		return s.SettingsRepo.Delete(ctx, setting.ID)
+	// For env_config, delete tenant-level setting (empty environment_id)
+	if key == types.SettingKeyEnvConfig {
+		return s.SettingsRepo.DeleteTenantSettingByKey(ctx, key)
 	}
 
-	err := s.SettingsRepo.DeleteByKey(ctx, key)
-	if err != nil {
-		return err
-	}
-	return nil
+	return s.SettingsRepo.DeleteByKey(ctx, key)
 }
 
 // GetSettingWithDefaults retrieves a setting by key and merges it with provided default values
