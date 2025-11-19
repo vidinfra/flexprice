@@ -55,7 +55,7 @@ func (s *EnvironmentServiceSuite) SetupTest() {
 	}
 }
 
-// mockSettingsService is a simple mock that returns defaults for env_permit_config
+// mockSettingsService is a simple mock that returns defaults for env_config
 type mockSettingsService struct {
 	repo *testutil.InMemorySettingsStore
 }
@@ -64,7 +64,7 @@ func (m *mockSettingsService) GetSettingByKey(ctx context.Context, key types.Set
 	// Try to get from repo first
 	setting, err := m.repo.GetByKey(ctx, key)
 	if err != nil {
-		// If not found and it's env_permit_config, return error so service can use defaults
+		// If not found and it's env_config, return error so service can use defaults
 		// For other settings, also return error
 		return nil, err
 	}
