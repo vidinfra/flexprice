@@ -239,10 +239,7 @@ func (r *settingsRepository) GetTenantSettingByKey(ctx context.Context, key type
 		Where(
 			settings.Key(key.String()),
 			settings.TenantID(types.GetTenantID(ctx)),
-			settings.Or(
-				settings.EnvironmentIDIsNil(),
-				settings.EnvironmentID(""),
-			),
+			settings.EnvironmentIDIsNil(),
 			settings.Status(string(types.StatusPublished)),
 		).
 		Only(ctx)
@@ -322,10 +319,7 @@ func (r *settingsRepository) DeleteTenantSettingByKey(ctx context.Context, key t
 		Where(
 			settings.Key(key.String()),
 			settings.TenantID(types.GetTenantID(ctx)),
-			settings.Or(
-				settings.EnvironmentIDIsNil(),
-				settings.EnvironmentID(""),
-			),
+			settings.EnvironmentIDIsNil(),
 			settings.Status(string(types.StatusPublished)),
 		).
 		SetStatus(string(types.StatusArchived)).

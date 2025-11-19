@@ -36,8 +36,8 @@ func (s *settingsService) GetSettingByKey(ctx context.Context, key types.Setting
 	// For env_config, use tenant-level query (no environment_id)
 	var setting *settings.Setting
 	var err error
-	isEnvConfig := key == types.SettingKeyEnvConfig
 
+	isEnvConfig := key == types.SettingKeyEnvConfig
 	if isEnvConfig {
 		setting, err = s.SettingsRepo.GetTenantSettingByKey(ctx, key)
 	} else {
@@ -52,14 +52,15 @@ func (s *settingsService) GetSettingByKey(ctx context.Context, key types.Setting
 				// Create and return a setting with default values
 
 				defaultSettingModel := &settings.Setting{
-					ID:        types.GenerateUUIDWithPrefix(types.UUID_PREFIX_SETTING),
-					Key:       defaultSetting.Key.String(),
-					Value:     defaultSetting.DefaultValue,
-					BaseModel: types.GetDefaultBaseModel(ctx),
+					ID:            types.GenerateUUIDWithPrefix(types.UUID_PREFIX_SETTING),
+					Key:           defaultSetting.Key.String(),
+					Value:         defaultSetting.DefaultValue,
+					EnvironmentID: types.GetEnvironmentID(ctx),
+					BaseModel:     types.GetDefaultBaseModel(ctx),
 				}
-				// For env_config, don't set environment_id (will be NULL in DB)
-				// For other settings, use environment_id from context
-				if !isEnvConfig {
+				if isEnvConfig {
+					defaultSettingModel.EnvironmentID = ""
+				} else {
 					defaultSettingModel.EnvironmentID = types.GetEnvironmentID(ctx)
 				}
 				// env_config: EnvironmentID remains empty (zero value), repository will set to NULL
@@ -154,6 +155,7 @@ func (s *settingsService) DeleteSettingByKey(ctx context.Context, key types.Sett
 // giving preference to stored values for fields that exist in both
 func (s *settingsService) GetSettingWithDefaults(ctx context.Context, key types.SettingKey) (*dto.SettingResponse, error) {
 	// First, get the setting using GetSettingByKey which handles defaults for non-existent settings
+
 	setting, err := s.GetSettingByKey(ctx, key)
 	if err != nil {
 		return nil, err
