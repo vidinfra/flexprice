@@ -2,8 +2,8 @@ package chargebee
 
 import (
 	"context"
+	"time"
 
-	customerAction "github.com/chargebee/chargebee-go/v3/actions/customer"
 	"github.com/chargebee/chargebee-go/v3/enum"
 	"github.com/chargebee/chargebee-go/v3/models/customer"
 	"github.com/flexprice/flexprice/internal/api/dto"
@@ -146,8 +146,8 @@ func (s *CustomerService) SyncCustomerToChargebee(ctx context.Context, flexprice
 		}
 	}
 
-	// Create customer in Chargebee
-	result, err := customerAction.Create(createParams).Request()
+	// Create customer in Chargebee using client wrapper
+	result, err := s.client.CreateCustomer(ctx, createParams)
 	if err != nil {
 		s.logger.Errorw("failed to create customer in Chargebee",
 			"customer_id", flexpriceCustomer.ID,
@@ -198,8 +198,8 @@ func (s *CustomerService) SyncCustomerToChargebee(ctx context.Context, flexprice
 		Company:         chargebeeCustomer.Company,
 		Phone:           chargebeeCustomer.Phone,
 		AutoCollection:  string(chargebeeCustomer.AutoCollection),
-		CreatedAt:       timestampToTime(chargebeeCustomer.CreatedAt),
-		UpdatedAt:       timestampToTime(chargebeeCustomer.UpdatedAt),
+		CreatedAt:       time.Unix(chargebeeCustomer.CreatedAt, 0),
+		UpdatedAt:       time.Unix(chargebeeCustomer.UpdatedAt, 0),
 		ResourceVersion: chargebeeCustomer.ResourceVersion,
 	}
 
@@ -329,11 +329,4 @@ func (s *CustomerService) mergeCustomerMetadata(existingMetadata map[string]stri
 	}
 
 	return merged
-}
-
-func stringOrEmpty(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }

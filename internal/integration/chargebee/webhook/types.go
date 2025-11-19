@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"encoding/json"
+	"time"
 )
 
 // ChargebeeWebhookEvent represents the structure of a Chargebee webhook event
@@ -120,3 +121,8 @@ const (
 	EventInvoiceGenerated ChargebeeEventType = "invoice_generated"
 	EventInvoiceUpdated   ChargebeeEventType = "invoice_updated"
 )
+
+// timestampToTime converts a Unix timestamp (int64) to time.Time
+func timestampToTime(timestamp int64) time.Time {
+	return time.Unix(timestamp, 0).UTC()
+}

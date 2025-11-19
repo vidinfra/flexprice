@@ -7,6 +7,16 @@ import (
 	"encoding/hex"
 
 	"github.com/chargebee/chargebee-go/v3"
+	customerAction "github.com/chargebee/chargebee-go/v3/actions/customer"
+	invoiceAction "github.com/chargebee/chargebee-go/v3/actions/invoice"
+	itemAction "github.com/chargebee/chargebee-go/v3/actions/item"
+	itemFamilyAction "github.com/chargebee/chargebee-go/v3/actions/itemfamily"
+	itemPriceAction "github.com/chargebee/chargebee-go/v3/actions/itemprice"
+	"github.com/chargebee/chargebee-go/v3/models/customer"
+	chargebeeInvoice "github.com/chargebee/chargebee-go/v3/models/invoice"
+	"github.com/chargebee/chargebee-go/v3/models/item"
+	"github.com/chargebee/chargebee-go/v3/models/itemfamily"
+	"github.com/chargebee/chargebee-go/v3/models/itemprice"
 	"github.com/flexprice/flexprice/internal/domain/connection"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/logger"
@@ -16,12 +26,33 @@ import (
 
 // ChargebeeClient defines the interface for Chargebee API operations
 type ChargebeeClient interface {
+	// Configuration and initialization
 	GetChargebeeConfig(ctx context.Context) (*ChargebeeConfig, error)
 	GetDecryptedChargebeeConfig(conn *connection.Connection) (*ChargebeeConfig, error)
 	HasChargebeeConnection(ctx context.Context) bool
 	GetConnection(ctx context.Context) (*connection.Connection, error)
 	InitializeChargebeeSDK(ctx context.Context) error
 	VerifyWebhookSignature(ctx context.Context, payload []byte, signature string) error
+
+	// Item Family API wrappers
+	CreateItemFamily(ctx context.Context, params *itemfamily.CreateRequestParams) (*chargebee.Result, error)
+	ListItemFamilies(ctx context.Context, params *itemfamily.ListRequestParams) (*chargebee.ResultList, error)
+
+	// Item API wrappers
+	CreateItem(ctx context.Context, params *item.CreateRequestParams) (*chargebee.Result, error)
+	RetrieveItem(ctx context.Context, itemID string) (*chargebee.Result, error)
+
+	// Item Price API wrappers
+	CreateItemPrice(ctx context.Context, params *itemprice.CreateRequestParams) (*chargebee.Result, error)
+	RetrieveItemPrice(ctx context.Context, itemPriceID string) (*chargebee.Result, error)
+
+	// Customer API wrappers
+	CreateCustomer(ctx context.Context, params *customer.CreateRequestParams) (*chargebee.Result, error)
+	RetrieveCustomer(ctx context.Context, customerID string) (*chargebee.Result, error)
+
+	// Invoice API wrappers
+	CreateInvoice(ctx context.Context, params *chargebeeInvoice.CreateForChargeItemsAndChargesRequestParams) (*chargebee.Result, error)
+	RetrieveInvoice(ctx context.Context, invoiceID string, params *chargebeeInvoice.RetrieveRequestParams) (*chargebee.Result, error)
 }
 
 // Client handles Chargebee API client setup and configuration
@@ -260,4 +291,197 @@ func (c *Client) VerifyWebhookSignature(ctx context.Context, payload []byte, sig
 
 	c.logger.Infow("webhook signature verified successfully")
 	return nil
+}
+
+// Item Family API Wrappers
+// CreateItemFamily creates an item family in Chargebee
+func (c *Client) CreateItemFamily(ctx context.Context, params *itemfamily.CreateRequestParams) (*chargebee.Result, error) {
+	if err := c.InitializeChargebeeSDK(ctx); err != nil {
+		return nil, err
+	}
+
+	result, err := itemFamilyAction.Create(params).Request()
+	if err != nil {
+		c.logger.Errorw("failed to create item family in Chargebee API",
+			"family_id", params.Id,
+			"error", err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to create item family in Chargebee").
+			Mark(ierr.ErrValidation)
+	}
+
+	return result, nil
+}
+
+// ListItemFamilies lists item families from Chargebee
+func (c *Client) ListItemFamilies(ctx context.Context, params *itemfamily.ListRequestParams) (*chargebee.ResultList, error) {
+	if err := c.InitializeChargebeeSDK(ctx); err != nil {
+		return nil, err
+	}
+
+	result, err := itemFamilyAction.List(params).ListRequest()
+	if err != nil {
+		c.logger.Errorw("failed to list item families from Chargebee API", "error", err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to list item families from Chargebee").
+			Mark(ierr.ErrValidation)
+	}
+
+	return result, nil
+}
+
+// Item API Wrappers
+// CreateItem creates an item in Chargebee
+func (c *Client) CreateItem(ctx context.Context, params *item.CreateRequestParams) (*chargebee.Result, error) {
+	if err := c.InitializeChargebeeSDK(ctx); err != nil {
+		return nil, err
+	}
+
+	result, err := itemAction.Create(params).Request()
+	if err != nil {
+		c.logger.Errorw("failed to create item in Chargebee API",
+			"item_id", params.Id,
+			"error", err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to create item in Chargebee").
+			Mark(ierr.ErrValidation)
+	}
+
+	return result, nil
+}
+
+// RetrieveItem retrieves an item from Chargebee
+func (c *Client) RetrieveItem(ctx context.Context, itemID string) (*chargebee.Result, error) {
+	if err := c.InitializeChargebeeSDK(ctx); err != nil {
+		return nil, err
+	}
+
+	result, err := itemAction.Retrieve(itemID).Request()
+	if err != nil {
+		c.logger.Errorw("failed to retrieve item from Chargebee API",
+			"item_id", itemID,
+			"error", err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to retrieve item from Chargebee").
+			Mark(ierr.ErrNotFound)
+	}
+
+	return result, nil
+}
+
+// Item Price API Wrappers
+// CreateItemPrice creates an item price in Chargebee
+func (c *Client) CreateItemPrice(ctx context.Context, params *itemprice.CreateRequestParams) (*chargebee.Result, error) {
+	if err := c.InitializeChargebeeSDK(ctx); err != nil {
+		return nil, err
+	}
+
+	result, err := itemPriceAction.Create(params).Request()
+	if err != nil {
+		c.logger.Errorw("failed to create item price in Chargebee API",
+			"item_price_id", params.Id,
+			"error", err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to create item price in Chargebee").
+			Mark(ierr.ErrValidation)
+	}
+
+	return result, nil
+}
+
+// RetrieveItemPrice retrieves an item price from Chargebee
+func (c *Client) RetrieveItemPrice(ctx context.Context, itemPriceID string) (*chargebee.Result, error) {
+	if err := c.InitializeChargebeeSDK(ctx); err != nil {
+		return nil, err
+	}
+
+	result, err := itemPriceAction.Retrieve(itemPriceID).Request()
+	if err != nil {
+		c.logger.Errorw("failed to retrieve item price from Chargebee API",
+			"item_price_id", itemPriceID,
+			"error", err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to retrieve item price from Chargebee").
+			Mark(ierr.ErrNotFound)
+	}
+
+	return result, nil
+}
+
+// Customer API Wrappers
+// CreateCustomer creates a customer in Chargebee
+func (c *Client) CreateCustomer(ctx context.Context, params *customer.CreateRequestParams) (*chargebee.Result, error) {
+	if err := c.InitializeChargebeeSDK(ctx); err != nil {
+		return nil, err
+	}
+
+	result, err := customerAction.Create(params).Request()
+	if err != nil {
+		c.logger.Errorw("failed to create customer in Chargebee API",
+			"customer_id", params.Id,
+			"error", err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to create customer in Chargebee").
+			Mark(ierr.ErrValidation)
+	}
+
+	return result, nil
+}
+
+// RetrieveCustomer retrieves a customer from Chargebee
+func (c *Client) RetrieveCustomer(ctx context.Context, customerID string) (*chargebee.Result, error) {
+	if err := c.InitializeChargebeeSDK(ctx); err != nil {
+		return nil, err
+	}
+
+	result, err := customerAction.Retrieve(customerID).Request()
+	if err != nil {
+		c.logger.Errorw("failed to retrieve customer from Chargebee API",
+			"customer_id", customerID,
+			"error", err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to retrieve customer from Chargebee").
+			Mark(ierr.ErrNotFound)
+	}
+
+	return result, nil
+}
+
+// Invoice API Wrappers
+// CreateInvoice creates an invoice in Chargebee
+func (c *Client) CreateInvoice(ctx context.Context, params *chargebeeInvoice.CreateForChargeItemsAndChargesRequestParams) (*chargebee.Result, error) {
+	if err := c.InitializeChargebeeSDK(ctx); err != nil {
+		return nil, err
+	}
+
+	result, err := invoiceAction.CreateForChargeItemsAndCharges(params).Request()
+	if err != nil {
+		c.logger.Errorw("failed to create invoice in Chargebee API",
+			"customer_id", params.CustomerId,
+			"error", err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to create invoice in Chargebee").
+			Mark(ierr.ErrValidation)
+	}
+
+	return result, nil
+}
+
+// RetrieveInvoice retrieves an invoice from Chargebee
+func (c *Client) RetrieveInvoice(ctx context.Context, invoiceID string, params *chargebeeInvoice.RetrieveRequestParams) (*chargebee.Result, error) {
+	if err := c.InitializeChargebeeSDK(ctx); err != nil {
+		return nil, err
+	}
+
+	result, err := invoiceAction.Retrieve(invoiceID, params).Request()
+	if err != nil {
+		c.logger.Errorw("failed to retrieve invoice from Chargebee API",
+			"invoice_id", invoiceID,
+			"error", err)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to retrieve invoice from Chargebee").
+			Mark(ierr.ErrNotFound)
+	}
+
+	return result, nil
 }

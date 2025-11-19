@@ -299,7 +299,6 @@ func (f *Factory) GetChargebeeIntegration(ctx context.Context) (*ChargebeeIntegr
 	webhookHandler := chargebeewebhook.NewHandler(
 		chargebeeClient,
 		invoiceSvc.(*chargebee.InvoiceService),
-		f.entityIntegrationMappingRepo,
 		f.logger,
 	)
 

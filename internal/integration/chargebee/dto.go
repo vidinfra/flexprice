@@ -15,12 +15,12 @@ type ItemFamilyCreateRequest struct {
 
 // ItemFamilyResponse represents an item family response from Chargebee
 type ItemFamilyResponse struct {
-	ID             string    `json:"id"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description"`
-	Status         string    `json:"status"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Description     string    `json:"description"`
+	Status          string    `json:"status"`
 	ResourceVersion int64     `json:"resource_version"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // ============================================================================
@@ -29,42 +29,52 @@ type ItemFamilyResponse struct {
 
 // ItemCreateRequest represents the request to create an item
 type ItemCreateRequest struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Type           string `json:"type"` // "charge" for one-time charges
-	ItemFamilyID   string `json:"item_family_id"`
-	Description    string `json:"description,omitempty"`
-	ExternalName   string `json:"external_name,omitempty"`
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Type            string `json:"type"` // "charge" for one-time charges
+	ItemFamilyID    string `json:"item_family_id"`
+	Description     string `json:"description,omitempty"`
+	ExternalName    string `json:"external_name,omitempty"`
 	EnabledInPortal bool   `json:"enabled_in_portal"`
 }
 
 // ItemResponse represents an item response from Chargebee
 type ItemResponse struct {
-	ID             string    `json:"id"`
-	Name           string    `json:"name"`
-	Type           string    `json:"type"`
-	ItemFamilyID   string    `json:"item_family_id"`
-	Description    string    `json:"description"`
-	ExternalName   string    `json:"external_name"`
-	Status         string    `json:"status"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Type            string    `json:"type"`
+	ItemFamilyID    string    `json:"item_family_id"`
+	Description     string    `json:"description"`
+	ExternalName    string    `json:"external_name"`
+	Status          string    `json:"status"`
 	ResourceVersion int64     `json:"resource_version"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // ============================================================================
 // Item Price DTOs
 // ============================================================================
 
+// ChargebeeTier represents a pricing tier for Chargebee item prices
+type ChargebeeTier struct {
+	StartingUnit int64  `json:"starting_unit"`         // Starting quantity for this tier (0-based)
+	EndingUnit   *int64 `json:"ending_unit,omitempty"` // Ending quantity (nil for last tier)
+	Price        int64  `json:"price"`                 // Price per unit in smallest currency unit
+}
+
 // ItemPriceCreateRequest represents the request to create an item price
 type ItemPriceCreateRequest struct {
-	ID           string `json:"id"`
-	ItemID       string `json:"item_id"`
-	Name         string `json:"name"`
-	ExternalName string `json:"external_name,omitempty"`
-	PricingModel string `json:"pricing_model"` // "flat_fee", "per_unit", "tiered", etc.
-	Price        int64  `json:"price"`         // Amount in cents
-	CurrencyCode string `json:"currency_code"` // "USD", "INR", etc.
-	Description  string `json:"description,omitempty"`
+	ID           string          `json:"id"`
+	ItemID       string          `json:"item_id"`
+	Name         string          `json:"name"`
+	ExternalName string          `json:"external_name,omitempty"`
+	PricingModel string          `json:"pricing_model"` // "flat_fee", "per_unit", "tiered", "volume", "package", "stairstep"
+	Price        int64           `json:"price"`         // Amount in cents (for flat_fee/per_unit)
+	CurrencyCode string          `json:"currency_code"` // "USD", "INR", etc.
+	Description  string          `json:"description,omitempty"`
+	Tiers        []ChargebeeTier `json:"tiers,omitempty"`       // For tiered/volume pricing
+	Period       *int            `json:"period,omitempty"`      // For package pricing (optional)
+	PeriodUnit   string          `json:"period_unit,omitempty"` // For package pricing: "day", "week", "month", "year"
 }
 
 // ItemPriceResponse represents an item price response from Chargebee
@@ -117,17 +127,17 @@ type BillingAddressRequest struct {
 
 // CustomerResponse represents a customer response from Chargebee
 type CustomerResponse struct {
-	ID               string           `json:"id"`
-	FirstName        string           `json:"first_name"`
-	LastName         string           `json:"last_name"`
-	Email            string           `json:"email"`
-	Company          string           `json:"company"`
-	Phone            string           `json:"phone"`
-	AutoCollection   string           `json:"auto_collection"`
-	CreatedAt        time.Time        `json:"created_at"`
-	UpdatedAt        time.Time        `json:"updated_at"`
-	ResourceVersion  int64            `json:"resource_version"`
-	BillingAddress   *BillingAddress  `json:"billing_address,omitempty"`
+	ID              string          `json:"id"`
+	FirstName       string          `json:"first_name"`
+	LastName        string          `json:"last_name"`
+	Email           string          `json:"email"`
+	Company         string          `json:"company"`
+	Phone           string          `json:"phone"`
+	AutoCollection  string          `json:"auto_collection"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+	ResourceVersion int64           `json:"resource_version"`
+	BillingAddress  *BillingAddress `json:"billing_address,omitempty"`
 }
 
 // BillingAddress represents billing address in customer response
@@ -153,52 +163,52 @@ type BillingAddress struct {
 
 // InvoiceCreateRequest represents the request to create an invoice
 type InvoiceCreateRequest struct {
-	CustomerID     string               `json:"customer_id"`
-	AutoCollection string               `json:"auto_collection"` // ALWAYS SET TO "on" for Chargebee payments
-	LineItems      []InvoiceLineItem    `json:"line_items"`
-	Date           *time.Time           `json:"date,omitempty"`
-	DueDate        *time.Time           `json:"due_date,omitempty"`
+	CustomerID     string            `json:"customer_id"`
+	AutoCollection string            `json:"auto_collection"` // ALWAYS SET TO "on" for Chargebee payments
+	LineItems      []InvoiceLineItem `json:"line_items"`
+	Date           *time.Time        `json:"date,omitempty"`
+	DueDate        *time.Time        `json:"due_date,omitempty"`
 }
 
 // InvoiceLineItem represents a line item in invoice request
 type InvoiceLineItem struct {
-	ItemPriceID    string  `json:"item_price_id"`
-	Quantity       int     `json:"quantity"`
-	UnitAmount     int64   `json:"unit_amount,omitempty"` // Amount in cents
-	Description    string  `json:"description,omitempty"`
-	DateFrom       *time.Time `json:"date_from,omitempty"`
-	DateTo         *time.Time `json:"date_to,omitempty"`
+	ItemPriceID string     `json:"item_price_id"`
+	Quantity    int        `json:"quantity"`
+	UnitAmount  int64      `json:"unit_amount,omitempty"` // Amount in cents
+	Description string     `json:"description,omitempty"`
+	DateFrom    *time.Time `json:"date_from,omitempty"`
+	DateTo      *time.Time `json:"date_to,omitempty"`
 }
 
 // InvoiceResponse represents an invoice response from Chargebee
 type InvoiceResponse struct {
-	ID               string              `json:"id"`
-	CustomerID       string              `json:"customer_id"`
-	Status           string              `json:"status"`
-	AutoCollection   string              `json:"auto_collection"`
-	Total            int64               `json:"total"`
-	AmountDue        int64               `json:"amount_due"`
-	AmountPaid       int64               `json:"amount_paid"`
-	CurrencyCode     string              `json:"currency_code"`
-	Date             time.Time           `json:"date"`
-	DueDate          *time.Time          `json:"due_date,omitempty"`
-	CreatedAt        time.Time           `json:"created_at"`
-	UpdatedAt        time.Time           `json:"updated_at"`
-	ResourceVersion  int64               `json:"resource_version"`
-	LineItems        []InvoiceLineItemResponse `json:"line_items,omitempty"`
+	ID              string                    `json:"id"`
+	CustomerID      string                    `json:"customer_id"`
+	Status          string                    `json:"status"`
+	AutoCollection  string                    `json:"auto_collection"`
+	Total           int64                     `json:"total"`
+	AmountDue       int64                     `json:"amount_due"`
+	AmountPaid      int64                     `json:"amount_paid"`
+	CurrencyCode    string                    `json:"currency_code"`
+	Date            time.Time                 `json:"date"`
+	DueDate         *time.Time                `json:"due_date,omitempty"`
+	CreatedAt       time.Time                 `json:"created_at"`
+	UpdatedAt       time.Time                 `json:"updated_at"`
+	ResourceVersion int64                     `json:"resource_version"`
+	LineItems       []InvoiceLineItemResponse `json:"line_items,omitempty"`
 }
 
 // InvoiceLineItemResponse represents a line item in invoice response
 type InvoiceLineItemResponse struct {
-	ID             string    `json:"id"`
-	ItemPriceID    string    `json:"item_price_id"`
-	EntityType     string    `json:"entity_type"`
-	Quantity       int       `json:"quantity"`
-	UnitAmount     int64     `json:"unit_amount"`
-	Amount         int64     `json:"amount"`
-	Description    string    `json:"description"`
-	DateFrom       time.Time `json:"date_from"`
-	DateTo         time.Time `json:"date_to"`
+	ID          string    `json:"id"`
+	ItemPriceID string    `json:"item_price_id"`
+	EntityType  string    `json:"entity_type"`
+	Quantity    int       `json:"quantity"`
+	UnitAmount  int64     `json:"unit_amount"`
+	Amount      int64     `json:"amount"`
+	Description string    `json:"description"`
+	DateFrom    time.Time `json:"date_from"`
+	DateTo      time.Time `json:"date_to"`
 }
 
 // ============================================================================
@@ -207,9 +217,8 @@ type InvoiceLineItemResponse struct {
 
 // ErrorResponse represents an error response from Chargebee
 type ErrorResponse struct {
-	Message    string `json:"message"`
-	Type       string `json:"type"`
+	Message      string `json:"message"`
+	Type         string `json:"type"`
 	APIErrorCode string `json:"api_error_code"`
-	Param      string `json:"param,omitempty"`
+	Param        string `json:"param,omitempty"`
 }
-

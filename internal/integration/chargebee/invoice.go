@@ -2,17 +2,18 @@ package chargebee
 
 import (
 	"context"
+	"time"
 
-	customerAction "github.com/chargebee/chargebee-go/v3/actions/customer"
-	invoiceAction "github.com/chargebee/chargebee-go/v3/actions/invoice"
 	"github.com/chargebee/chargebee-go/v3/enum"
 	chargebeeInvoice "github.com/chargebee/chargebee-go/v3/models/invoice"
+	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
 	"github.com/flexprice/flexprice/internal/domain/invoice"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/interfaces"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
@@ -65,11 +66,6 @@ type ChargebeeInvoiceSyncResponse struct {
 
 // CreateInvoice creates a new invoice in Chargebee using charge items
 func (s *InvoiceService) CreateInvoice(ctx context.Context, req *InvoiceCreateRequest) (*InvoiceResponse, error) {
-	// Initialize Chargebee SDK
-	if err := s.client.(*Client).InitializeChargebeeSDK(ctx); err != nil {
-		return nil, err
-	}
-
 	s.logger.Infow("creating invoice in Chargebee",
 		"customer_id", req.CustomerID,
 		"auto_collection", req.AutoCollection,
@@ -87,19 +83,19 @@ func (s *InvoiceService) CreateInvoice(ctx context.Context, req *InvoiceCreateRe
 		for _, item := range req.LineItems {
 			itemPrice := &chargebeeInvoice.CreateForChargeItemsAndChargesItemPriceParams{
 				ItemPriceId: item.ItemPriceID,
-				Quantity:    int32Ptr(int32(item.Quantity)),
+				Quantity:    lo.ToPtr(int32(item.Quantity)),
 			}
 
 			if item.UnitAmount > 0 {
-				itemPrice.UnitPrice = int64Ptr(item.UnitAmount)
+				itemPrice.UnitPrice = lo.ToPtr(item.UnitAmount)
 			}
 
 			if item.DateFrom != nil {
-				itemPrice.DateFrom = int64Ptr(item.DateFrom.Unix())
+				itemPrice.DateFrom = lo.ToPtr(item.DateFrom.Unix())
 			}
 
 			if item.DateTo != nil {
-				itemPrice.DateTo = int64Ptr(item.DateTo.Unix())
+				itemPrice.DateTo = lo.ToPtr(item.DateTo.Unix())
 			}
 
 			itemPrices = append(itemPrices, itemPrice)
@@ -109,11 +105,11 @@ func (s *InvoiceService) CreateInvoice(ctx context.Context, req *InvoiceCreateRe
 
 	// Add optional dates
 	if req.Date != nil {
-		createParams.InvoiceDate = int64Ptr(req.Date.Unix())
+		createParams.InvoiceDate = lo.ToPtr(req.Date.Unix())
 	}
 
-	// Create invoice
-	result, err := invoiceAction.CreateForChargeItemsAndCharges(createParams).Request()
+	// Create invoice using client wrapper
+	result, err := s.client.CreateInvoice(ctx, createParams)
 	if err != nil {
 		s.logger.Errorw("failed to create invoice in Chargebee",
 			"customer_id", req.CustomerID,
@@ -145,14 +141,14 @@ func (s *InvoiceService) CreateInvoice(ctx context.Context, req *InvoiceCreateRe
 		AmountDue:       invoiceData.AmountDue,
 		AmountPaid:      invoiceData.AmountPaid,
 		CurrencyCode:    invoiceData.CurrencyCode,
-		Date:            timestampToTime(invoiceData.Date),
-		CreatedAt:       timestampToTime(invoiceData.GeneratedAt), // Use GeneratedAt as CreatedAt
-		UpdatedAt:       timestampToTime(invoiceData.UpdatedAt),
+		Date:            time.Unix(invoiceData.Date, 0),
+		CreatedAt:       time.Unix(invoiceData.GeneratedAt, 0), // Use GeneratedAt as CreatedAt
+		UpdatedAt:       time.Unix(invoiceData.UpdatedAt, 0),
 		ResourceVersion: invoiceData.ResourceVersion,
 	}
 
 	if invoiceData.DueDate > 0 {
-		dueDate := timestampToTime(invoiceData.DueDate)
+		dueDate := time.Unix(invoiceData.DueDate, 0)
 		invoiceResponse.DueDate = &dueDate
 	}
 
@@ -168,8 +164,8 @@ func (s *InvoiceService) CreateInvoice(ctx context.Context, req *InvoiceCreateRe
 				UnitAmount:  item.UnitAmount,
 				Amount:      item.Amount,
 				Description: item.Description,
-				DateFrom:    timestampToTime(item.DateFrom),
-				DateTo:      timestampToTime(item.DateTo),
+				DateFrom:    time.Unix(item.DateFrom, 0),
+				DateTo:      time.Unix(item.DateTo, 0),
 			}
 			lineItems = append(lineItems, lineItem)
 		}
@@ -352,8 +348,8 @@ func (s *InvoiceService) buildLineItems(ctx context.Context, flexInvoice *invoic
 			continue
 		}
 
-		// Get Chargebee item price ID from entity mapping using FlexPrice price ID
-		chargebeeItemPriceID, err := s.getChargebeeItemPriceID(ctx, *item.PriceID)
+		// Get Chargebee item price ID AND check if it's tiered
+		chargebeeItemPriceID, isTiered, err := s.getChargebeeItemPriceIDAndCheckTiered(ctx, *item.PriceID)
 		if err != nil {
 			s.logger.Errorw("failed to get Chargebee item price ID for line item",
 				"invoice_id", flexInvoice.ID,
@@ -364,13 +360,30 @@ func (s *InvoiceService) buildLineItems(ctx context.Context, flexInvoice *invoic
 			continue
 		}
 
-		// Convert amount to cents
-		unitAmount := item.Amount.Mul(decimal.NewFromInt(100)).IntPart()
-
 		lineItem := InvoiceLineItem{
 			ItemPriceID: chargebeeItemPriceID,
-			Quantity:    1, // Default to 1
-			UnitAmount:  unitAmount,
+		}
+
+		// CRITICAL: Different handling based on pricing model
+		if isTiered {
+			// For tiered/volume/stairstep pricing: Send ONLY quantity, let Chargebee calculate
+			// NOTE: Chargebee's calculation may differ slightly due to tier precision rounding
+			lineItem.Quantity = int(item.Quantity.IntPart())
+			// DO NOT set UnitAmount - Chargebee will reject it
+			s.logger.Debugw("tiered price line item - using quantity only",
+				"item_price_id", chargebeeItemPriceID,
+				"quantity", lineItem.Quantity,
+				"flexprice_amount", item.Amount.String())
+		} else {
+			// For flat_fee/per_unit/package pricing: Use Quantity=1 + exact amount for precision
+			// This ensures exact amount matching with FlexPrice's calculation
+			lineItem.Quantity = 1
+			lineItem.UnitAmount = convertAmountToSmallestUnit(item.Amount.InexactFloat64(), flexInvoice.Currency)
+			s.logger.Debugw("non-tiered price line item - using exact amount",
+				"item_price_id", chargebeeItemPriceID,
+				"quantity", 1,
+				"unit_amount", lineItem.UnitAmount,
+				"flexprice_amount", item.Amount.String())
 		}
 
 		// Add description if available (use DisplayName or PlanDisplayName)
@@ -394,8 +407,61 @@ func (s *InvoiceService) buildLineItems(ctx context.Context, flexInvoice *invoic
 	return lineItems, nil
 }
 
-// getChargebeeItemPriceID retrieves the Chargebee item price ID from entity mapping
-func (s *InvoiceService) getChargebeeItemPriceID(ctx context.Context, flexPriceID string) (string, error) {
+// getChargebeeItemPriceIDAndCheckTiered retrieves the Chargebee item price ID and checks if it uses tiered pricing
+func (s *InvoiceService) getChargebeeItemPriceIDAndCheckTiered(ctx context.Context, flexPriceID string) (string, bool, error) {
+	if flexPriceID == "" {
+		return "", false, ierr.NewError("price ID is required").
+			WithHint("Line item must have a price ID").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Query entity mapping table for price ID
+	filter := types.NewEntityIntegrationMappingFilter()
+	filter.EntityID = flexPriceID
+	filter.EntityType = types.IntegrationEntityTypeItemPrice
+	filter.ProviderTypes = []string{string(types.SecretProviderChargebee)}
+
+	mappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
+	if err != nil {
+		return "", false, ierr.WithError(err).
+			WithHint("Failed to get Chargebee item price mapping").
+			Mark(ierr.ErrDatabase)
+	}
+
+	if len(mappings) == 0 {
+		return "", false, ierr.NewError("Chargebee item price not found for FlexPrice price").
+			WithHint("Price must be synced to Chargebee before creating invoice").
+			WithReportableDetails(map[string]interface{}{
+				"flexprice_price_id": flexPriceID,
+			}).
+			Mark(ierr.ErrNotFound)
+	}
+
+	chargebeeItemPriceID := mappings[0].ProviderEntityID
+
+	// Fetch the item price from Chargebee to check its pricing model
+	result, err := s.client.RetrieveItemPrice(ctx, chargebeeItemPriceID)
+	if err != nil {
+		s.logger.Warnw("failed to retrieve item price from Chargebee, assuming flat_fee",
+			"item_price_id", chargebeeItemPriceID,
+			"error", err)
+		// Fallback: assume flat_fee if we can't fetch
+		return chargebeeItemPriceID, false, nil
+	}
+
+	pricingModel := string(result.ItemPrice.PricingModel)
+	isTiered := pricingModel == "tiered" || pricingModel == "volume" || pricingModel == "stairstep"
+
+	s.logger.Debugw("retrieved pricing model for item price",
+		"item_price_id", chargebeeItemPriceID,
+		"pricing_model", pricingModel,
+		"is_tiered", isTiered)
+
+	return chargebeeItemPriceID, isTiered, nil
+}
+
+// getChargebeeItemPriceIDSimple retrieves the Chargebee item price ID from entity mapping
+func (s *InvoiceService) getChargebeeItemPriceIDSimple(ctx context.Context, flexPriceID string) (string, error) {
 	if flexPriceID == "" {
 		return "", ierr.NewError("price ID is required").
 			WithHint("Line item must have a price ID").
@@ -478,13 +544,8 @@ func (s *InvoiceService) createInvoiceMapping(ctx context.Context, invoiceID, ch
 
 // customerHasPaymentMethod checks if a Chargebee customer has a payment method
 func (s *InvoiceService) customerHasPaymentMethod(ctx context.Context, chargebeeCustomerID string) (bool, error) {
-	// Initialize Chargebee SDK
-	if err := s.client.(*Client).InitializeChargebeeSDK(ctx); err != nil {
-		return false, err
-	}
-
-	// Retrieve customer from Chargebee
-	result, err := customerAction.Retrieve(chargebeeCustomerID).Request()
+	// Retrieve customer from Chargebee using client wrapper
+	result, err := s.client.RetrieveCustomer(ctx, chargebeeCustomerID)
 	if err != nil {
 		return false, ierr.WithError(err).
 			WithHint("Failed to retrieve customer from Chargebee").
@@ -501,16 +562,11 @@ func (s *InvoiceService) customerHasPaymentMethod(ctx context.Context, chargebee
 
 // RetrieveInvoice retrieves an invoice from Chargebee
 func (s *InvoiceService) RetrieveInvoice(ctx context.Context, invoiceID string) (*InvoiceResponse, error) {
-	// Initialize Chargebee SDK
-	if err := s.client.(*Client).InitializeChargebeeSDK(ctx); err != nil {
-		return nil, err
-	}
-
 	s.logger.Infow("retrieving invoice from Chargebee",
 		"invoice_id", invoiceID)
 
-	// Retrieve invoice
-	result, err := invoiceAction.Retrieve(invoiceID, &chargebeeInvoice.RetrieveRequestParams{}).Request()
+	// Retrieve invoice using client wrapper
+	result, err := s.client.RetrieveInvoice(ctx, invoiceID, &chargebeeInvoice.RetrieveRequestParams{})
 	if err != nil {
 		s.logger.Errorw("failed to retrieve invoice from Chargebee",
 			"invoice_id", invoiceID,
@@ -540,14 +596,14 @@ func (s *InvoiceService) RetrieveInvoice(ctx context.Context, invoiceID string) 
 		AmountDue:       invoiceData.AmountDue,
 		AmountPaid:      invoiceData.AmountPaid,
 		CurrencyCode:    invoiceData.CurrencyCode,
-		Date:            timestampToTime(invoiceData.Date),
-		CreatedAt:       timestampToTime(invoiceData.GeneratedAt), // Use GeneratedAt as CreatedAt
-		UpdatedAt:       timestampToTime(invoiceData.UpdatedAt),
+		Date:            time.Unix(invoiceData.Date, 0),
+		CreatedAt:       time.Unix(invoiceData.GeneratedAt, 0), // Use GeneratedAt as CreatedAt
+		UpdatedAt:       time.Unix(invoiceData.UpdatedAt, 0),
 		ResourceVersion: invoiceData.ResourceVersion,
 	}
 
 	if invoiceData.DueDate > 0 {
-		dueDate := timestampToTime(invoiceData.DueDate)
+		dueDate := time.Unix(invoiceData.DueDate, 0)
 		invoiceResponse.DueDate = &dueDate
 	}
 
@@ -563,8 +619,8 @@ func (s *InvoiceService) RetrieveInvoice(ctx context.Context, invoiceID string) 
 				UnitAmount:  item.UnitAmount,
 				Amount:      item.Amount,
 				Description: item.Description,
-				DateFrom:    timestampToTime(item.DateFrom),
-				DateTo:      timestampToTime(item.DateTo),
+				DateFrom:    time.Unix(item.DateFrom, 0),
+				DateTo:      time.Unix(item.DateTo, 0),
 			}
 			lineItems = append(lineItems, lineItem)
 		}
@@ -625,6 +681,148 @@ func (s *InvoiceService) ReconcileInvoicePayment(ctx context.Context, invoiceID 
 		"invoice_id", invoiceID,
 		"payment_amount", paymentAmount.String(),
 		"new_payment_status", newPaymentStatus)
+
+	return nil
+}
+
+// GetFlexPriceInvoiceIDByChargebeeInvoiceID retrieves the FlexPrice invoice ID from entity mapping
+func (s *InvoiceService) GetFlexPriceInvoiceIDByChargebeeInvoiceID(ctx context.Context, chargebeeInvoiceID string) (string, error) {
+	filter := types.NewEntityIntegrationMappingFilter()
+	filter.ProviderEntityIDs = []string{chargebeeInvoiceID}
+	filter.ProviderTypes = []string{string(types.SecretProviderChargebee)}
+	filter.EntityType = types.IntegrationEntityTypeInvoice
+
+	mappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
+	if err != nil {
+		return "", ierr.WithError(err).
+			WithHint("Failed to get FlexPrice invoice mapping").
+			Mark(ierr.ErrDatabase)
+	}
+
+	if len(mappings) == 0 {
+		return "", ierr.NewError("FlexPrice invoice not found for Chargebee invoice").
+			WithHint("Chargebee invoice not synced to FlexPrice").
+			WithReportableDetails(map[string]interface{}{
+				"chargebee_invoice_id": chargebeeInvoiceID,
+			}).
+			Mark(ierr.ErrNotFound)
+	}
+
+	return mappings[0].EntityID, nil
+}
+
+// ProcessChargebeePaymentFromWebhook processes a Chargebee payment and creates a FlexPrice payment record
+func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
+	ctx context.Context,
+	flexpriceInvoiceID string,
+	chargebeeTransactionID string,
+	chargebeeInvoiceID string,
+	amount decimal.Decimal,
+	currency string,
+	paymentMethod string,
+	invoiceService interfaces.InvoiceService,
+	paymentService interfaces.PaymentService,
+) error {
+	s.logger.Infow("processing Chargebee payment from webhook",
+		"flexprice_invoice_id", flexpriceInvoiceID,
+		"chargebee_invoice_id", chargebeeInvoiceID,
+		"chargebee_transaction_id", chargebeeTransactionID,
+		"amount", amount.String(),
+		"currency", currency)
+
+	// Get FlexPrice invoice
+	invoiceResp, err := invoiceService.GetInvoice(ctx, flexpriceInvoiceID)
+	if err != nil {
+		s.logger.Errorw("failed to get FlexPrice invoice",
+			"error", err,
+			"flexprice_invoice_id", flexpriceInvoiceID)
+		return ierr.WithError(err).
+			WithHint("Failed to get FlexPrice invoice").
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Check if invoice is already succeeded
+	if invoiceResp.PaymentStatus == types.PaymentStatusSucceeded {
+		s.logger.Infow("invoice already succeeded, skipping duplicate payment",
+			"flexprice_invoice_id", flexpriceInvoiceID,
+			"chargebee_invoice_id", chargebeeInvoiceID)
+		return nil
+	}
+
+	// Create payment record in FlexPrice
+	now := time.Now()
+	createPaymentReq := dto.CreatePaymentRequest{
+		Amount:            amount,
+		Currency:          currency,
+		PaymentMethodType: types.PaymentMethodTypeCard, // Default to card
+		DestinationType:   types.PaymentDestinationTypeInvoice,
+		DestinationID:     flexpriceInvoiceID,
+		ProcessPayment:    false, // Already processed by Chargebee
+		Metadata: types.Metadata{
+			"chargebee_transaction_id": chargebeeTransactionID,
+			"chargebee_invoice_id":     chargebeeInvoiceID,
+			"payment_method":           paymentMethod,
+			"source":                   "chargebee_webhook",
+		},
+	}
+
+	payment, err := paymentService.CreatePayment(ctx, &createPaymentReq)
+	if err != nil {
+		s.logger.Errorw("failed to create payment record",
+			"error", err,
+			"flexprice_invoice_id", flexpriceInvoiceID,
+			"chargebee_transaction_id", chargebeeTransactionID)
+		return ierr.WithError(err).
+			WithHint("Failed to create payment record").
+			Mark(ierr.ErrDatabase)
+	}
+
+	s.logger.Infow("created payment record",
+		"payment_id", payment.ID,
+		"flexprice_invoice_id", flexpriceInvoiceID,
+		"chargebee_transaction_id", chargebeeTransactionID,
+		"amount", amount.String())
+
+	// Update payment to succeeded status
+	paymentStatus := string(types.PaymentStatusSucceeded)
+	updatePaymentReq := dto.UpdatePaymentRequest{
+		PaymentStatus:    &paymentStatus,
+		GatewayPaymentID: &chargebeeTransactionID,
+		SucceededAt:      &now,
+	}
+
+	_, err = paymentService.UpdatePayment(ctx, payment.ID, updatePaymentReq)
+	if err != nil {
+		s.logger.Errorw("failed to update payment to succeeded",
+			"error", err,
+			"payment_id", payment.ID,
+			"chargebee_transaction_id", chargebeeTransactionID)
+		return ierr.WithError(err).
+			WithHint("Failed to update payment status").
+			Mark(ierr.ErrDatabase)
+	}
+
+	s.logger.Infow("updated payment to succeeded",
+		"payment_id", payment.ID,
+		"chargebee_transaction_id", chargebeeTransactionID,
+		"amount", amount.String())
+
+	// Reconcile invoice
+	err = s.ReconcileInvoicePayment(ctx, flexpriceInvoiceID, amount, invoiceService)
+	if err != nil {
+		s.logger.Errorw("failed to reconcile payment with invoice",
+			"error", err,
+			"flexprice_invoice_id", flexpriceInvoiceID,
+			"amount", amount.String())
+		return ierr.WithError(err).
+			WithHint("Failed to reconcile invoice payment").
+			Mark(ierr.ErrDatabase)
+	}
+
+	s.logger.Infow("successfully processed Chargebee payment",
+		"payment_id", payment.ID,
+		"flexprice_invoice_id", flexpriceInvoiceID,
+		"chargebee_transaction_id", chargebeeTransactionID)
 
 	return nil
 }
