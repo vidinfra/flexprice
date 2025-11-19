@@ -932,6 +932,11 @@ func (s *priceService) UpdatePrice(ctx context.Context, id string, req dto.Updat
 			"entity_type", existingPrice.EntityType,
 			"entity_id", existingPrice.EntityID)
 
+		// Sync new price to Chargebee if it belongs to a plan
+		if newPriceResp.Price.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
+			s.syncPriceToChargebeeIfEnabled(ctx, newPriceResp.Price.ID, newPriceResp.Price.EntityID)
+		}
+
 		return newPriceResp, nil
 	} else {
 		// No critical fields - simple update
@@ -1395,4 +1400,63 @@ func (s *priceService) validateGroup(ctx context.Context, prices []*price.Price)
 		return err
 	}
 	return nil
+}
+
+// syncPriceToChargebeeIfEnabled syncs a price to Chargebee if the integration is enabled
+// This is a non-blocking operation - errors are logged but don't fail the price operation
+func (s *priceService) syncPriceToChargebeeIfEnabled(ctx context.Context, priceID, planID string) {
+	// Early return if integration factory is not available
+	if s.IntegrationFactory == nil {
+		return
+	}
+
+	// Get Chargebee integration
+	chargebeeIntegration, err := s.IntegrationFactory.GetChargebeeIntegration(ctx)
+	if err != nil {
+		s.Logger.Debugw("Chargebee integration not available, skipping sync",
+			"price_id", priceID,
+			"plan_id", planID,
+			"error", err)
+		return
+	}
+
+	// Check if Chargebee connection exists
+	if !chargebeeIntegration.Client.HasChargebeeConnection(ctx) {
+		s.Logger.Debugw("Chargebee connection not configured, skipping sync",
+			"price_id", priceID,
+			"plan_id", planID)
+		return
+	}
+
+	// Get ent.Plan
+	entPlan, err := s.DB.Reader(ctx).Plan.Get(ctx, planID)
+	if err != nil {
+		s.Logger.Errorw("failed to get plan for Chargebee sync",
+			"price_id", priceID,
+			"plan_id", planID,
+			"error", err)
+		return
+	}
+
+	// Get ent.Price
+	entPrice, err := s.DB.Reader(ctx).Price.Get(ctx, priceID)
+	if err != nil {
+		s.Logger.Errorw("failed to get price for Chargebee sync",
+			"price_id", priceID,
+			"plan_id", planID,
+			"error", err)
+		return
+	}
+
+	// Sync to Chargebee (non-blocking - log errors but don't fail)
+	if syncErr := chargebeeIntegration.PlanSyncSvc.SyncPlanToChargebee(ctx, entPlan, []*ent.Price{entPrice}); syncErr != nil {
+		s.Logger.Errorw("failed to sync price to Chargebee",
+			"price_id", priceID,
+			"plan_id", planID,
+			"error", syncErr)
+	} else {
+		s.Logger.Infow("successfully synced price to Chargebee",
+			"price_id", priceID,
+			"plan_id", planID)
+	}
 }
