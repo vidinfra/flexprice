@@ -85,7 +85,7 @@ type WalletService interface {
 	TopUpWalletForProratedCharge(ctx context.Context, customerID string, amount decimal.Decimal, currency string) error
 
 	// CompletePurchasedCreditTransaction completes a pending wallet transaction when payment succeeds
-	CompletePurchasedCreditTransaction(ctx context.Context, walletTransactionID string) error
+	CompletePurchasedCreditTransactionWithRetry(ctx context.Context, walletTransactionID string) error
 }
 
 type walletService struct {
@@ -495,7 +495,7 @@ func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Con
 			InvoiceType:    types.InvoiceTypeOneOff, // Changed from CREDIT to ONE_OFF
 			DueDate:        lo.ToPtr(time.Now().UTC()),
 			IdempotencyKey: idempotencyKey,
-			InvoiceStatus:  lo.ToPtr(types.InvoiceStatusDraft), // Changed from FINALIZED to DRAFT
+			InvoiceStatus:  lo.ToPtr(types.InvoiceStatusFinalized),
 			LineItems: []dto.CreateInvoiceLineItemRequest{
 				{
 					Amount:      amount,
@@ -528,9 +528,55 @@ func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Con
 	return walletTransactionID, invoiceID, err
 }
 
-// CompletePurchasedCreditTransaction completes a pending wallet transaction when payment succeeds
-// This is called by the payment processor after invoice payment is successful
-func (s *walletService) CompletePurchasedCreditTransaction(ctx context.Context, walletTransactionID string) error {
+// CompletePurchasedCreditTransactionWithRetry completes a pending wallet transaction when payment succeeds
+// Includes simple retry logic for transient failures
+func (s *walletService) CompletePurchasedCreditTransactionWithRetry(ctx context.Context, walletTransactionID string) error {
+	maxRetries := 3
+	var lastErr error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		err := s.completePurchasedCreditTransaction(ctx, walletTransactionID)
+		if err == nil {
+			if attempt > 0 {
+				s.Logger.Infow("successfully completed purchased credit transaction after retry",
+					"wallet_transaction_id", walletTransactionID,
+					"attempt", attempt+1,
+				)
+			}
+			return nil
+		}
+
+		lastErr = err
+
+		// Don't retry validation errors or if already completed
+		if ierr.IsValidation(err) || ierr.IsInvalidOperation(err) {
+			return err
+		}
+
+		// Log retry attempt
+		if attempt < maxRetries-1 {
+			s.Logger.Debugw("failed to complete purchased credit transaction, retrying",
+				"error", err,
+				"wallet_transaction_id", walletTransactionID,
+				"attempt", attempt+1,
+				"max_retries", maxRetries,
+			)
+			// Simple backoff: 100ms, 200ms
+			time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+		}
+	}
+
+	// All retries failed
+	s.Logger.Errorw("failed to complete purchased credit transaction after all retries",
+		"error", lastErr,
+		"wallet_transaction_id", walletTransactionID,
+		"attempts", maxRetries,
+	)
+	return lastErr
+}
+
+// completePurchasedCreditTransaction performs the actual completion logic
+func (s *walletService) completePurchasedCreditTransaction(ctx context.Context, walletTransactionID string) error {
 	// Get the pending transaction
 	tx, err := s.WalletRepo.GetTransactionByID(ctx, walletTransactionID)
 	if err != nil {

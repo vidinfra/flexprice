@@ -1178,6 +1178,31 @@ func (s *invoiceService) ReconcilePaymentStatus(ctx context.Context, id string, 
 		return err
 	}
 
+	// Check if this invoice is for a purchased credit (has wallet_transaction_id in metadata)
+	// If so, complete the wallet transaction to credit the wallet
+	if inv.Metadata != nil {
+		if walletTransactionID, ok := inv.Metadata["wallet_transaction_id"]; ok && walletTransactionID != "" {
+			// Only complete the transaction if payment is fully succeeded
+			if status == types.PaymentStatusSucceeded || status == types.PaymentStatusOverpaid {
+				walletService := NewWalletService(s.ServiceParams)
+				if err := walletService.CompletePurchasedCreditTransactionWithRetry(ctx, walletTransactionID); err != nil {
+					s.Logger.Errorw("failed to complete purchased credit transaction",
+						"error", err,
+						"invoice_id", inv.ID,
+						"wallet_transaction_id", walletTransactionID,
+					)
+					// Don't fail the payment, but log the error
+					// The transaction can be manually completed later
+				} else {
+					s.Logger.Infow("successfully completed purchased credit transaction",
+						"invoice_id", inv.ID,
+						"wallet_transaction_id", walletTransactionID,
+					)
+				}
+			}
+		}
+	}
+
 	// Publish webhook events
 	s.publishInternalWebhookEvent(ctx, types.WebhookEventInvoiceUpdatePayment, inv.ID)
 
