@@ -7,7 +7,9 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/connection"
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
+	"github.com/flexprice/flexprice/internal/domain/feature"
 	"github.com/flexprice/flexprice/internal/domain/invoice"
+	"github.com/flexprice/flexprice/internal/domain/meter"
 	"github.com/flexprice/flexprice/internal/domain/payment"
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
@@ -37,6 +39,8 @@ type Factory struct {
 	paymentRepo                  payment.Repository
 	priceRepo                    price.Repository
 	entityIntegrationMappingRepo entityintegrationmapping.Repository
+	meterRepo                    meter.Repository
+	featureRepo                  feature.Repository
 	encryptionService            security.EncryptionService
 
 	// Storage clients (cached for reuse)
@@ -54,6 +58,8 @@ func NewFactory(
 	paymentRepo payment.Repository,
 	priceRepo price.Repository,
 	entityIntegrationMappingRepo entityintegrationmapping.Repository,
+	meterRepo meter.Repository,
+	featureRepo feature.Repository,
 	encryptionService security.EncryptionService,
 ) *Factory {
 	return &Factory{
@@ -66,6 +72,8 @@ func NewFactory(
 		paymentRepo:                  paymentRepo,
 		priceRepo:                    priceRepo,
 		entityIntegrationMappingRepo: entityIntegrationMappingRepo,
+		meterRepo:                    meterRepo,
+		featureRepo:                  featureRepo,
 		encryptionService:            encryptionService,
 	}
 }
@@ -292,6 +300,8 @@ func (f *Factory) GetChargebeeIntegration(ctx context.Context) (*ChargebeeIntegr
 		itemSvc,
 		itemPriceSvc,
 		f.entityIntegrationMappingRepo,
+		f.meterRepo,
+		f.featureRepo,
 		f.logger,
 	)
 

@@ -14,6 +14,8 @@ import (
 	itempriceEnum "github.com/chargebee/chargebee-go/v3/models/itemprice/enum"
 	"github.com/flexprice/flexprice/ent"
 	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
+	"github.com/flexprice/flexprice/internal/domain/feature"
+	"github.com/flexprice/flexprice/internal/domain/meter"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
@@ -71,6 +73,8 @@ type PlanSyncService struct {
 	itemService                  ChargebeeItemService
 	itemPriceService             ChargebeeItemPriceService
 	entityIntegrationMappingRepo entityintegrationmapping.Repository
+	meterRepo                    meter.Repository
+	featureRepo                  feature.Repository
 	logger                       *logger.Logger
 }
 
@@ -118,6 +122,8 @@ func NewPlanSyncService(
 	itemService ChargebeeItemService,
 	itemPriceService ChargebeeItemPriceService,
 	entityIntegrationMappingRepo entityintegrationmapping.Repository,
+	meterRepo meter.Repository,
+	featureRepo feature.Repository,
 	logger *logger.Logger,
 ) ChargebeePlanSyncService {
 	return &PlanSyncService{
@@ -126,6 +132,8 @@ func NewPlanSyncService(
 		itemService:                  itemService,
 		itemPriceService:             itemPriceService,
 		entityIntegrationMappingRepo: entityIntegrationMappingRepo,
+		meterRepo:                    meterRepo,
+		featureRepo:                  featureRepo,
 		logger:                       logger,
 	}
 }
@@ -581,6 +589,57 @@ func convertTiersForChargebee(flexPriceTiers []*types.PriceTier, currency string
 	return chargebeeTiers
 }
 
+// getDisplayNameForPrice returns the display name for a price
+// If price has a MeterID (feature price), returns feature name
+// Otherwise returns plan name
+func (s *PlanSyncService) getDisplayNameForPrice(ctx context.Context, price *ent.Price, planName string) string {
+	// If price has no meter, it's a plan price - use plan name
+	if price.MeterID == nil || *price.MeterID == "" {
+		return planName
+	}
+
+	meterID := *price.MeterID
+
+	// Try to get meter
+	meter, err := s.meterRepo.GetMeter(ctx, meterID)
+	if err != nil {
+		s.logger.Debugw("failed to get meter for price, using plan name",
+			"price_id", price.ID,
+			"meter_id", meterID,
+			"error", err)
+		return planName
+	}
+
+	// Try to get feature from meter
+	featureFilter := types.NewNoLimitFeatureFilter()
+	featureFilter.MeterIDs = []string{meterID}
+	features, err := s.featureRepo.List(ctx, featureFilter)
+	if err != nil || len(features) == 0 {
+		s.logger.Debugw("failed to get feature for meter, using meter name",
+			"price_id", price.ID,
+			"meter_id", meterID,
+			"error", err)
+		// Fallback to meter name if feature not found
+		if meter != nil && meter.Name != "" {
+			return meter.Name
+		}
+		return planName
+	}
+
+	// Use feature name (first feature found)
+	if len(features) > 0 && features[0].Name != "" {
+		return features[0].Name
+	}
+
+	// Fallback to meter name
+	if meter != nil && meter.Name != "" {
+		return meter.Name
+	}
+
+	// Final fallback to plan name
+	return planName
+}
+
 // SyncPlanToChargebee syncs a FlexPrice plan and its prices to Chargebee
 // Creates a separate charge item for each price to avoid currency conflicts
 func (s *PlanSyncService) SyncPlanToChargebee(ctx context.Context, plan *ent.Plan, prices []*ent.Price) error {
@@ -614,13 +673,21 @@ func (s *PlanSyncService) SyncPlanToChargebee(ctx context.Context, plan *ent.Pla
 		uniqueUUID := types.GenerateUUID()
 		itemID := fmt.Sprintf("charge_%s", uniqueUUID)
 
+		// Get display name (feature name if price has meter, otherwise plan name)
+		displayName := s.getDisplayNameForPrice(ctx, price, plan.Name)
+
+		// Use display name as external name for better invoice display
+		// Format: {display_name} - {currency} (e.g., "API Calls - USD" or "Pro Plan - USD")
+		// This makes invoices more readable than showing price_id
+		externalName := fmt.Sprintf("%s - %s", displayName, price.Currency)
+
 		itemReq := &ItemCreateRequest{
 			ID:              itemID,
-			Name:            itemID,   // Name matches ID format
+			Name:            itemID,   // Name matches ID format (must be unique)
 			Type:            "charge", // Charge type for one-time/recurring charges
 			ItemFamilyID:    itemFamily.ID,
 			Description:     plan.Description,
-			ExternalName:    itemID,
+			ExternalName:    externalName, // Customer-facing name on invoices
 			EnabledInPortal: true,
 		}
 
@@ -647,12 +714,16 @@ func (s *PlanSyncService) SyncPlanToChargebee(ctx context.Context, plan *ent.Pla
 		// Map FlexPrice pricing model to Chargebee pricing model
 		pricingModel := mapPricingModel(price)
 
+		// Use display name as external name for better invoice display
+		// Same format as item external_name: {display_name} - {currency}
+		itemPriceExternalName := fmt.Sprintf("%s - %s", displayName, price.Currency)
+
 		// Build item price request
 		itemPriceReq := &ItemPriceCreateRequest{
 			ID:           itemPriceID,
 			ItemID:       item.ID,
 			Name:         itemPriceID,
-			ExternalName: itemPriceID,
+			ExternalName: itemPriceExternalName, // Customer-facing name on invoices
 			PricingModel: pricingModel,
 			CurrencyCode: price.Currency,
 			Description:  plan.Description,
