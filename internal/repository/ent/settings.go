@@ -50,7 +50,7 @@ func (r *settingsRepository) Create(ctx context.Context, s *domainSettings.Setti
 		SetUpdatedAt(s.UpdatedAt).
 		SetCreatedBy(s.CreatedBy).
 		SetUpdatedBy(s.UpdatedBy).
-		SetNillableEnvironmentID(&s.EnvironmentID).
+		SetEnvironmentID(s.EnvironmentID).
 		Save(ctx)
 
 	if err != nil {
@@ -239,7 +239,7 @@ func (r *settingsRepository) GetTenantSettingByKey(ctx context.Context, key type
 		Where(
 			settings.Key(key.String()),
 			settings.TenantID(types.GetTenantID(ctx)),
-			settings.EnvironmentIDIsNil(),
+			settings.EnvironmentID(""),
 			settings.Status(string(types.StatusPublished)),
 		).
 		Only(ctx)
@@ -319,7 +319,7 @@ func (r *settingsRepository) DeleteTenantSettingByKey(ctx context.Context, key t
 		Where(
 			settings.Key(key.String()),
 			settings.TenantID(types.GetTenantID(ctx)),
-			settings.EnvironmentIDIsNil(),
+			settings.EnvironmentID(""),
 			settings.Status(string(types.StatusPublished)),
 		).
 		SetStatus(string(types.StatusArchived)).
