@@ -57,15 +57,18 @@ func (s *CustomerService) GetChargebeeCustomerID(ctx context.Context, flexpriceC
 	// Get entity mapping
 	mappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
 	if err != nil {
-		return "", ierr.NewError("failed to get entity mapping").
+		// Preserve the underlying error and mark as database error
+		// This prevents treating DB failures as "not mapped"
+		return "", ierr.WithError(err).
+			WithHint("Failed to query entity mapping for customer").
 			WithReportableDetails(map[string]interface{}{
-				"error":                 err.Error(),
 				"flexprice_customer_id": flexpriceCustomerID,
 			}).
-			Mark(ierr.ErrNotFound)
+			Mark(ierr.ErrDatabase)
 	}
 
 	if len(mappings) == 0 {
+		// This is the genuine "not mapped" case
 		return "", ierr.NewError("customer not synced to Chargebee").
 			WithHint("Please sync customer to Chargebee first").
 			WithReportableDetails(map[string]interface{}{
@@ -88,7 +91,16 @@ func (s *CustomerService) GetOrCreateChargebeeCustomer(ctx context.Context, flex
 		return chargebeeCustomerID, nil
 	}
 
-	// Customer doesn't exist in Chargebee, create new one
+	// Check if error is "not found" (customer not synced) vs database error
+	if err != nil && !ierr.IsNotFound(err) {
+		// Database or infrastructure error - propagate it instead of creating duplicate
+		s.logger.Errorw("failed to check customer mapping due to infrastructure error",
+			"flexprice_customer_id", flexpriceCustomer.ID,
+			"error", err)
+		return "", err
+	}
+
+	// Customer doesn't exist in Chargebee (genuine not found), create new one
 	s.logger.Infow("creating new customer in Chargebee",
 		"flexprice_customer_id", flexpriceCustomer.ID,
 		"email", flexpriceCustomer.Email)

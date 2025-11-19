@@ -111,9 +111,11 @@ func (r *RazorpayConnectionMetadata) Validate() error {
 
 // ChargebeeConnectionMetadata represents Chargebee-specific connection metadata
 type ChargebeeConnectionMetadata struct {
-	Site          string `json:"site"`                     // Chargebee site name (not encrypted)
-	APIKey        string `json:"api_key"`                  // Chargebee API key (encrypted)
-	WebhookSecret string `json:"webhook_secret,omitempty"` // Chargebee Webhook Secret (encrypted, optional)
+	Site            string `json:"site"`                       // Chargebee site name (not encrypted)
+	APIKey          string `json:"api_key"`                    // Chargebee API key (encrypted)
+	WebhookSecret   string `json:"webhook_secret,omitempty"`   // Chargebee Webhook Secret (encrypted, optional, NOT USED in v2)
+	WebhookUsername string `json:"webhook_username,omitempty"` // Basic Auth username for webhooks (encrypted)
+	WebhookPassword string `json:"webhook_password,omitempty"` // Basic Auth password for webhooks (encrypted)
 }
 
 // Validate validates the Chargebee connection metadata

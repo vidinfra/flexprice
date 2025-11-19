@@ -2,9 +2,6 @@ package chargebee
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 
 	"github.com/chargebee/chargebee-go/v3"
 	customerAction "github.com/chargebee/chargebee-go/v3/actions/customer"
@@ -33,6 +30,7 @@ type ChargebeeClient interface {
 	GetConnection(ctx context.Context) (*connection.Connection, error)
 	InitializeChargebeeSDK(ctx context.Context) error
 	VerifyWebhookSignature(ctx context.Context, payload []byte, signature string) error
+	VerifyWebhookBasicAuth(ctx context.Context, username, password string) error
 
 	// Item Family API wrappers
 	CreateItemFamily(ctx context.Context, params *itemfamily.CreateRequestParams) (*chargebee.Result, error)
@@ -65,9 +63,11 @@ type Client struct {
 
 // ChargebeeConfig holds decrypted Chargebee configuration
 type ChargebeeConfig struct {
-	Site          string // Chargebee site name (e.g., "acme-test")
-	APIKey        string // Chargebee API key
-	WebhookSecret string // Webhook secret for verification (optional)
+	Site            string // Chargebee site name (e.g., "acme-test")
+	APIKey          string // Chargebee API key
+	WebhookSecret   string // Webhook secret for verification (optional, NOT USED in v2)
+	WebhookUsername string // Basic Auth username for webhook verification (Chargebee v2 security)
+	WebhookPassword string // Basic Auth password for webhook verification (Chargebee v2 security)
 }
 
 // NewClient creates a new Chargebee client
@@ -149,10 +149,19 @@ func (c *Client) GetDecryptedChargebeeConfig(conn *connection.Connection) (*Char
 		chargebeeConfig.WebhookSecret = webhookSecret
 	}
 
+	if webhookUsername, exists := decryptedMetadata["webhook_username"]; exists {
+		chargebeeConfig.WebhookUsername = webhookUsername
+	}
+
+	if webhookPassword, exists := decryptedMetadata["webhook_password"]; exists {
+		chargebeeConfig.WebhookPassword = webhookPassword
+	}
+
 	c.logger.Infow("retrieved Chargebee config",
 		"site", chargebeeConfig.Site,
 		"has_api_key", chargebeeConfig.APIKey != "",
-		"has_webhook_secret", chargebeeConfig.WebhookSecret != "")
+		"has_webhook_secret", chargebeeConfig.WebhookSecret != "",
+		"has_webhook_auth", chargebeeConfig.WebhookUsername != "" && chargebeeConfig.WebhookPassword != "")
 
 	return chargebeeConfig, nil
 }
@@ -182,7 +191,7 @@ func (c *Client) decryptConnectionMetadata(conn *connection.Connection) (types.M
 			return nil, ierr.NewError("failed to decrypt API key").Mark(ierr.ErrInternal)
 		}
 
-		// Decrypt webhook secret (optional field)
+		// Decrypt webhook secret (optional field, NOT USED in v2)
 		var webhookSecret string
 		if conn.EncryptedSecretData.Chargebee.WebhookSecret != "" {
 			webhookSecret, err = c.encryptionService.Decrypt(conn.EncryptedSecretData.Chargebee.WebhookSecret)
@@ -193,17 +202,42 @@ func (c *Client) decryptConnectionMetadata(conn *connection.Connection) (types.M
 			}
 		}
 
+		// Decrypt webhook username (optional field)
+		var webhookUsername string
+		if conn.EncryptedSecretData.Chargebee.WebhookUsername != "" {
+			webhookUsername, err = c.encryptionService.Decrypt(conn.EncryptedSecretData.Chargebee.WebhookUsername)
+			if err != nil {
+				c.logger.Warnw("failed to decrypt webhook username", "connection_id", conn.ID, "error", err)
+				// Don't fail - webhook username is optional
+				webhookUsername = ""
+			}
+		}
+
+		// Decrypt webhook password (optional field)
+		var webhookPassword string
+		if conn.EncryptedSecretData.Chargebee.WebhookPassword != "" {
+			webhookPassword, err = c.encryptionService.Decrypt(conn.EncryptedSecretData.Chargebee.WebhookPassword)
+			if err != nil {
+				c.logger.Warnw("failed to decrypt webhook password", "connection_id", conn.ID, "error", err)
+				// Don't fail - webhook password is optional
+				webhookPassword = ""
+			}
+		}
+
 		decryptedMetadata := types.Metadata{
-			"site":           site,
-			"api_key":        apiKey,
-			"webhook_secret": webhookSecret,
+			"site":             site,
+			"api_key":          apiKey,
+			"webhook_secret":   webhookSecret,
+			"webhook_username": webhookUsername,
+			"webhook_password": webhookPassword,
 		}
 
 		c.logger.Infow("successfully decrypted chargebee credentials",
 			"connection_id", conn.ID,
 			"site", site,
 			"has_api_key", apiKey != "",
-			"has_webhook_secret", webhookSecret != "")
+			"has_webhook_secret", webhookSecret != "",
+			"has_webhook_auth", webhookUsername != "" && webhookPassword != "")
 
 		return decryptedMetadata, nil
 	}
@@ -257,39 +291,41 @@ func (c *Client) InitializeChargebeeSDK(ctx context.Context) error {
 
 // VerifyWebhookSignature verifies the Chargebee webhook signature
 func (c *Client) VerifyWebhookSignature(ctx context.Context, payload []byte, signature string) error {
+	c.logger.Debugw("Chargebee v2 webhook signature verification skipped - not supported",
+		"note", "Use Basic Auth and IP whitelisting for security")
+	return nil
+}
+
+// VerifyWebhookBasicAuth verifies Basic Authentication credentials for Chargebee webhooks
+// Chargebee v2 uses Basic Auth (username/password) as the primary webhook security mechanism
+func (c *Client) VerifyWebhookBasicAuth(ctx context.Context, username, password string) error {
 	config, err := c.GetChargebeeConfig(ctx)
 	if err != nil {
-		c.logger.Errorw("failed to get Chargebee config for signature verification", "error", err)
-		return ierr.NewError("failed to verify webhook signature").
-			WithHint("Unable to verify Chargebee webhook signature").
+		c.logger.Errorw("failed to get Chargebee config for Basic Auth verification", "error", err)
+		return ierr.NewError("failed to verify webhook authentication").
+			WithHint("Unable to verify Chargebee webhook Basic Auth").
 			Mark(ierr.ErrInternal)
 	}
 
-	// Check if webhook secret is configured
-	if config.WebhookSecret == "" {
-		c.logger.Warnw("webhook secret not configured, skipping signature verification")
-		// Allow webhook to proceed without verification if secret is not configured
-		// This is useful for initial testing or if webhooks are behind authentication
-		return nil
+	// Check if webhook auth is configured
+	// Note: WebhookUsername and WebhookPassword should be stored in your Chargebee connection config
+	// These are the credentials you set in Chargebee UI: "Protect webhook URL with basic authentication"
+	if config.WebhookUsername == "" || config.WebhookPassword == "" {
+		c.logger.Warnw("webhook Basic Auth credentials not configured, skipping verification",
+			"note", "Configure username/password in Chargebee webhook settings for security")
+		return nil // Allow webhook without auth if not configured
 	}
 
-	// Verify signature using HMAC SHA256
-	// Chargebee uses HMAC SHA256 to sign the webhook body
-	mac := hmac.New(sha256.New, []byte(config.WebhookSecret))
-	mac.Write(payload)
-	expectedSignature := hex.EncodeToString(mac.Sum(nil))
-
-	if expectedSignature != signature {
-		c.logger.Errorw("webhook signature mismatch",
-			"expected_signature_length", len(expectedSignature),
-			"received_signature_length", len(signature),
-			"payload_length", len(payload))
-		return ierr.NewError("webhook signature verification failed").
-			WithHint("Invalid webhook signature").
+	// Verify credentials match what was configured
+	if username != config.WebhookUsername || password != config.WebhookPassword {
+		c.logger.Errorw("webhook Basic Auth verification failed",
+			"remote_addr", "masked_for_security") // Don't log credentials or usernames
+		return ierr.NewError("webhook authentication failed").
+			WithHint("Invalid Basic Auth credentials").
 			Mark(ierr.ErrValidation)
 	}
 
-	c.logger.Infow("webhook signature verified successfully")
+	c.logger.Infow("webhook Basic Auth verified successfully")
 	return nil
 }
 

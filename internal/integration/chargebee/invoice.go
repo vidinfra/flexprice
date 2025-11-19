@@ -730,7 +730,23 @@ func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
 		"amount", amount.String(),
 		"currency", currency)
 
-	// Get FlexPrice invoice
+	// Step 1: Check if payment already exists (idempotency check)
+	// This prevents duplicate payment records when Chargebee retries webhooks
+	exists, err := s.PaymentExistsByGatewayPaymentID(ctx, chargebeeTransactionID, paymentService)
+	if err != nil {
+		s.logger.Errorw("failed to check if payment exists by gateway payment ID",
+			"error", err,
+			"chargebee_transaction_id", chargebeeTransactionID)
+		// Continue processing on error - fail-safe behavior
+	} else if exists {
+		s.logger.Infow("payment already exists for this Chargebee transaction, skipping",
+			"chargebee_transaction_id", chargebeeTransactionID,
+			"chargebee_invoice_id", chargebeeInvoiceID,
+			"flexprice_invoice_id", flexpriceInvoiceID)
+		return nil
+	}
+
+	// Step 2: Get FlexPrice invoice
 	invoiceResp, err := invoiceService.GetInvoice(ctx, flexpriceInvoiceID)
 	if err != nil {
 		s.logger.Errorw("failed to get FlexPrice invoice",
@@ -741,7 +757,7 @@ func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
 			Mark(ierr.ErrDatabase)
 	}
 
-	// Check if invoice is already succeeded
+	// Step 3: Check if invoice is already succeeded (secondary check)
 	if invoiceResp.PaymentStatus == types.PaymentStatusSucceeded {
 		s.logger.Infow("invoice already succeeded, skipping duplicate payment",
 			"flexprice_invoice_id", flexpriceInvoiceID,
@@ -749,7 +765,7 @@ func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
 		return nil
 	}
 
-	// Create payment record in FlexPrice
+	// Step 3: Create payment record in FlexPrice
 	now := time.Now()
 	createPaymentReq := dto.CreatePaymentRequest{
 		Amount:            amount,
@@ -807,7 +823,7 @@ func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
 		"chargebee_transaction_id", chargebeeTransactionID,
 		"amount", amount.String())
 
-	// Reconcile invoice
+	// Step 4: Reconcile invoice
 	err = s.ReconcileInvoicePayment(ctx, flexpriceInvoiceID, amount, invoiceService)
 	if err != nil {
 		s.logger.Errorw("failed to reconcile payment with invoice",
@@ -825,4 +841,31 @@ func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
 		"chargebee_transaction_id", chargebeeTransactionID)
 
 	return nil
+}
+
+// PaymentExistsByGatewayPaymentID checks if a payment already exists with the given gateway payment ID
+// This is used for idempotency checks to prevent duplicate payment records from webhook retries
+func (s *InvoiceService) PaymentExistsByGatewayPaymentID(
+	ctx context.Context,
+	gatewayPaymentID string,
+	paymentService interfaces.PaymentService,
+) (bool, error) {
+	if gatewayPaymentID == "" {
+		return false, nil
+	}
+
+	// Create filter to query payments by gateway_payment_id
+	filter := types.NewNoLimitPaymentFilter()
+	limit := 1
+	filter.QueryFilter.Limit = &limit
+	filter.GatewayPaymentID = &gatewayPaymentID
+
+	// Query payments
+	payments, err := paymentService.ListPayments(ctx, filter)
+	if err != nil {
+		return false, err
+	}
+
+	// Return true if any payment exists with this gateway payment ID
+	return len(payments.Items) > 0, nil
 }

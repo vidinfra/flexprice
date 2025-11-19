@@ -131,6 +131,12 @@ func convertFlatMetadataToStructured(flatMetadata map[string]interface{}, provid
 		if webhookSecret, ok := flatMetadata["webhook_secret"].(string); ok {
 			chargebeeMetadata.WebhookSecret = webhookSecret
 		}
+		if webhookUsername, ok := flatMetadata["webhook_username"].(string); ok {
+			chargebeeMetadata.WebhookUsername = webhookUsername
+		}
+		if webhookPassword, ok := flatMetadata["webhook_password"].(string); ok {
+			chargebeeMetadata.WebhookPassword = webhookPassword
+		}
 
 		return types.ConnectionMetadata{
 			Chargebee: chargebeeMetadata,

@@ -518,7 +518,7 @@ func (s *ItemPriceService) RetrieveItemPrice(ctx context.Context, itemPriceID st
 func convertAmountToSmallestUnit(amount float64, currency string) int64 {
 	precision := types.GetCurrencyPrecision(currency)
 	multiplier := math.Pow(10, float64(precision))
-	return int64(amount * multiplier)
+	return int64(math.Round(amount * multiplier))
 }
 
 // mapPricingModel maps FlexPrice billing model to Chargebee pricing model

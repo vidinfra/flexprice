@@ -521,9 +521,10 @@ func (h *WebhookHandler) HandleRazorpayWebhook(c *gin.Context) {
 // @Produce json
 // @Param tenant_id path string true "Tenant ID"
 // @Param environment_id path string true "Environment ID"
-// @Param chargebee-signature header string false "Chargebee webhook signature"
+// @Param Authorization header string false "Basic Auth credentials"
 // @Success 200 {object} map[string]interface{} "Webhook processed successfully"
-// @Failure 400 {object} map[string]interface{} "Bad request - missing parameters or invalid signature"
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 400 {object} map[string]interface{} "Bad request"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /webhooks/chargebee/{tenant_id}/{environment_id} [post]
 func (h *WebhookHandler) HandleChargebeeWebhook(c *gin.Context) {
@@ -552,21 +553,6 @@ func (h *WebhookHandler) HandleChargebeeWebhook(c *gin.Context) {
 		return
 	}
 
-	// Get Chargebee signature from headers (try both possible header names)
-	signature := c.GetHeader("chargebee-signature")
-	if signature == "" {
-		signature = c.GetHeader("X-Chargebee-Signature")
-	}
-
-	// Log if signature is missing (but don't fail - it might be configured without secret)
-	if signature == "" {
-		h.logger.Warnw("missing chargebee-signature header - webhook test or signature not configured",
-			"tenant_id", tenantID,
-			"environment_id", environmentID,
-			"has_body", len(body) > 0,
-			"content_type", c.GetHeader("Content-Type"))
-	}
-
 	// Set context with tenant and environment IDs
 	ctx := types.SetTenantID(c.Request.Context(), tenantID)
 	ctx = types.SetEnvironmentID(ctx, environmentID)
@@ -579,13 +565,60 @@ func (h *WebhookHandler) HandleChargebeeWebhook(c *gin.Context) {
 		return
 	}
 
-	// Verify webhook signature (if signature is present)
-	if signature != "" {
-		err = chargebeeIntegration.Client.VerifyWebhookSignature(ctx, body, signature)
+	// Verify Basic Authentication (Chargebee v2 security - OPTIONAL)
+	// Only verify if credentials are configured in connection settings
+	username, password, hasAuth := c.Request.BasicAuth()
+
+	// Get connection to check if webhook auth is configured
+	conn, err := chargebeeIntegration.Client.GetConnection(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get Chargebee connection", "error", err)
+		return
+	}
+
+	// Check if webhook auth is configured in FlexPrice
+	hasWebhookAuthConfigured := conn.EncryptedSecretData.Chargebee != nil &&
+		conn.EncryptedSecretData.Chargebee.WebhookUsername != "" &&
+		conn.EncryptedSecretData.Chargebee.WebhookPassword != ""
+
+	// Case 1: Auth configured in FlexPrice but webhook request has no auth
+	if hasWebhookAuthConfigured && !hasAuth {
+		h.logger.Errorw("webhook auth is configured but request has no Basic Auth credentials",
+			"remote_addr", c.ClientIP(),
+			"tenant_id", tenantID,
+			"environment_id", environmentID)
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	// Case 2: Auth NOT configured in FlexPrice but webhook request has auth
+	if !hasWebhookAuthConfigured && hasAuth {
+		h.logger.Errorw("webhook request has Basic Auth but no credentials configured in FlexPrice",
+			"remote_addr", c.ClientIP(),
+			"tenant_id", tenantID,
+			"environment_id", environmentID,
+			"note", "Configure webhook_username and webhook_password in connection settings")
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	} else if hasWebhookAuthConfigured && hasAuth {
+		// Case 3: Both sides have auth - verify it
+		err = chargebeeIntegration.Client.VerifyWebhookBasicAuth(ctx, username, password)
 		if err != nil {
-			h.logger.Errorw("failed to verify Chargebee webhook signature", "error", err)
+			h.logger.Errorw("Chargebee webhook basic auth verification failed",
+				"error", err,
+				"remote_addr", c.ClientIP())
+			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
+		h.logger.Debugw("Chargebee webhook basic auth verified",
+			"remote_addr", c.ClientIP())
+	} else {
+		// Case 4: Neither side has auth - allow but warn
+		h.logger.Infow("Chargebee webhook processing without authentication",
+			"remote_addr", c.ClientIP(),
+			"tenant_id", tenantID,
+			"environment_id", environmentID,
+			"note", "Consider configuring Basic Auth for security")
 	}
 
 	// Parse webhook event

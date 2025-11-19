@@ -57,7 +57,7 @@ type ItemResponse struct {
 
 // ChargebeeTier represents a pricing tier for Chargebee item prices
 type ChargebeeTier struct {
-	StartingUnit int64  `json:"starting_unit"`         // Starting quantity for this tier (0-based)
+	StartingUnit int64  `json:"starting_unit"`         // Starting quantity for this tier (1-based, Chargebee requirement)
 	EndingUnit   *int64 `json:"ending_unit,omitempty"` // Ending quantity (nil for last tier)
 	Price        int64  `json:"price"`                 // Price per unit in smallest currency unit
 }
@@ -104,7 +104,7 @@ type CustomerCreateRequest struct {
 	Email          string                 `json:"email,omitempty"`
 	Company        string                 `json:"company,omitempty"`
 	Phone          string                 `json:"phone,omitempty"`
-	AutoCollection string                 `json:"auto_collection"` // ALWAYS SET TO "on" for Chargebee payments
+	AutoCollection string                 `json:"auto_collection"` // "on" to enable automatic payment collection, "off" for manual
 	BillingAddress *BillingAddressRequest `json:"billing_address,omitempty"`
 }
 
@@ -162,12 +162,13 @@ type BillingAddress struct {
 // ============================================================================
 
 // InvoiceCreateRequest represents the request to create an invoice
+// Note: Chargebee calculates due dates automatically based on customer payment terms
+// and site settings. The due_date cannot be set during invoice creation.
 type InvoiceCreateRequest struct {
 	CustomerID     string            `json:"customer_id"`
-	AutoCollection string            `json:"auto_collection"` // ALWAYS SET TO "on" for Chargebee payments
+	AutoCollection string            `json:"auto_collection"` // "on" if customer has payment method, "off" otherwise
 	LineItems      []InvoiceLineItem `json:"line_items"`
 	Date           *time.Time        `json:"date,omitempty"`
-	DueDate        *time.Time        `json:"due_date,omitempty"`
 }
 
 // InvoiceLineItem represents a line item in invoice request

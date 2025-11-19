@@ -137,6 +137,12 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		if webhookSecret, ok := metadata["webhook_secret"].(string); ok {
 			chargebeeMetadata.WebhookSecret = webhookSecret
 		}
+		if webhookUsername, ok := metadata["webhook_username"].(string); ok {
+			chargebeeMetadata.WebhookUsername = webhookUsername
+		}
+		if webhookPassword, ok := metadata["webhook_password"].(string); ok {
+			chargebeeMetadata.WebhookPassword = webhookPassword
+		}
 		return types.ConnectionMetadata{
 			Chargebee: chargebeeMetadata,
 		}

@@ -121,10 +121,30 @@ func (s *connectionService) encryptMetadata(encryptedSecretData types.Connection
 				}
 			}
 
+			// Encrypt webhook username if provided
+			var encryptedWebhookUsername string
+			if encryptedSecretData.Chargebee.WebhookUsername != "" {
+				encryptedWebhookUsername, err = s.encryptionService.Encrypt(encryptedSecretData.Chargebee.WebhookUsername)
+				if err != nil {
+					return types.ConnectionMetadata{}, err
+				}
+			}
+
+			// Encrypt webhook password if provided
+			var encryptedWebhookPassword string
+			if encryptedSecretData.Chargebee.WebhookPassword != "" {
+				encryptedWebhookPassword, err = s.encryptionService.Encrypt(encryptedSecretData.Chargebee.WebhookPassword)
+				if err != nil {
+					return types.ConnectionMetadata{}, err
+				}
+			}
+
 			encryptedMetadata.Chargebee = &types.ChargebeeConnectionMetadata{
-				Site:          encryptedSecretData.Chargebee.Site, // Site name is not sensitive
-				APIKey:        encryptedAPIKey,
-				WebhookSecret: encryptedWebhookSecret,
+				Site:            encryptedSecretData.Chargebee.Site, // Site name is not sensitive
+				APIKey:          encryptedAPIKey,
+				WebhookSecret:   encryptedWebhookSecret,
+				WebhookUsername: encryptedWebhookUsername,
+				WebhookPassword: encryptedWebhookPassword,
 			}
 		}
 

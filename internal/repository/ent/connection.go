@@ -253,6 +253,14 @@ func convertConnectionMetadataToMap(encryptedSecretData types.ConnectionMetadata
 			if encryptedSecretData.Chargebee.WebhookSecret != "" {
 				result["webhook_secret"] = encryptedSecretData.Chargebee.WebhookSecret
 			}
+			// Add webhook_username if present
+			if encryptedSecretData.Chargebee.WebhookUsername != "" {
+				result["webhook_username"] = encryptedSecretData.Chargebee.WebhookUsername
+			}
+			// Add webhook_password if present
+			if encryptedSecretData.Chargebee.WebhookPassword != "" {
+				result["webhook_password"] = encryptedSecretData.Chargebee.WebhookPassword
+			}
 			return result
 		}
 	default:
