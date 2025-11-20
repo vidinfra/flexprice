@@ -243,6 +243,26 @@ func convertConnectionMetadataToMap(encryptedSecretData types.ConnectionMetadata
 			}
 			return result
 		}
+	case types.SecretProviderChargebee:
+		if encryptedSecretData.Chargebee != nil {
+			result := map[string]interface{}{
+				"site":    encryptedSecretData.Chargebee.Site,
+				"api_key": encryptedSecretData.Chargebee.APIKey,
+			}
+			// Add webhook_secret if present
+			if encryptedSecretData.Chargebee.WebhookSecret != "" {
+				result["webhook_secret"] = encryptedSecretData.Chargebee.WebhookSecret
+			}
+			// Add webhook_username if present
+			if encryptedSecretData.Chargebee.WebhookUsername != "" {
+				result["webhook_username"] = encryptedSecretData.Chargebee.WebhookUsername
+			}
+			// Add webhook_password if present
+			if encryptedSecretData.Chargebee.WebhookPassword != "" {
+				result["webhook_password"] = encryptedSecretData.Chargebee.WebhookPassword
+			}
+			return result
+		}
 	default:
 		// For other providers or unknown types, use generic format
 		if encryptedSecretData.Generic != nil {

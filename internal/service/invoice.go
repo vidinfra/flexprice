@@ -15,6 +15,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/tenant"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/idempotency"
+	"github.com/flexprice/flexprice/internal/integration/chargebee"
 	"github.com/flexprice/flexprice/internal/integration/razorpay"
 	"github.com/flexprice/flexprice/internal/integration/stripe"
 	"github.com/flexprice/flexprice/internal/interfaces"
@@ -755,6 +756,14 @@ func (s *invoiceService) ProcessDraftInvoice(ctx context.Context, id string, pay
 	// Sync to HubSpot if HubSpot connection is enabled (async via Temporal)
 	s.triggerHubSpotInvoiceSyncWorkflow(ctx, inv.ID, inv.CustomerID)
 
+	// Sync to Chargebee if Chargebee connection is enabled
+	if err := s.syncInvoiceToChargebeeIfEnabled(ctx, inv); err != nil {
+		// Log error but don't fail the entire process
+		s.Logger.Errorw("failed to sync invoice to Chargebee",
+			"error", err,
+			"invoice_id", inv.ID)
+	}
+
 	// try to process payment for the invoice based on behavior and log any errors
 	// Pass the subscription object to avoid extra DB call
 	// Error handling logic is properly handled in attemptPaymentForSubscriptionInvoice
@@ -918,6 +927,62 @@ func (s *invoiceService) syncInvoiceToRazorpayIfEnabled(ctx context.Context, inv
 				"payment_url", syncResponse.ShortURL)
 		}
 	}
+
+	return nil
+}
+
+// syncInvoiceToChargebeeIfEnabled syncs the invoice to Chargebee if Chargebee connection is enabled
+func (s *invoiceService) syncInvoiceToChargebeeIfEnabled(ctx context.Context, inv *invoice.Invoice) error {
+	// Check if Chargebee connection exists
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderChargebee)
+	if err != nil || conn == nil {
+		s.Logger.Debugw("Chargebee connection not available, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"error", err)
+		return nil // Not an error, just skip sync
+	}
+
+	// Check if invoice sync is enabled for this connection
+	if !conn.IsInvoiceOutboundEnabled() {
+		s.Logger.Debugw("invoice sync disabled for Chargebee connection, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"connection_id", conn.ID)
+		return nil // Not an error, just skip sync
+	}
+
+	// Get Chargebee integration
+	chargebeeIntegration, err := s.IntegrationFactory.GetChargebeeIntegration(ctx)
+	if err != nil {
+		s.Logger.Errorw("failed to get Chargebee integration, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"error", err)
+		return nil // Don't fail the entire process, just skip invoice sync
+	}
+
+	s.Logger.Infow("syncing invoice to Chargebee",
+		"invoice_id", inv.ID,
+		"customer_id", inv.CustomerID)
+
+	// Create customer service instance
+	customerService := NewCustomerService(s.ServiceParams)
+
+	// Create sync request
+	syncRequest := chargebee.ChargebeeInvoiceSyncRequest{
+		InvoiceID: inv.ID,
+	}
+
+	// Perform the sync
+	syncResponse, err := chargebeeIntegration.InvoiceSvc.SyncInvoiceToChargebee(ctx, syncRequest, customerService)
+	if err != nil {
+		return err
+	}
+
+	s.Logger.Infow("successfully synced invoice to Chargebee",
+		"invoice_id", inv.ID,
+		"chargebee_invoice_id", syncResponse.ChargebeeInvoiceID,
+		"status", syncResponse.Status,
+		"total", syncResponse.Total,
+		"amount_due", syncResponse.AmountDue)
 
 	return nil
 }
