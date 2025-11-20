@@ -263,6 +263,18 @@ func convertConnectionMetadataToMap(encryptedSecretData types.ConnectionMetadata
 			}
 			return result
 		}
+	case types.SecretProviderRazorpay:
+		if encryptedSecretData.Razorpay != nil {
+			result := map[string]interface{}{
+				"key_id":     encryptedSecretData.Razorpay.KeyID,
+				"secret_key": encryptedSecretData.Razorpay.SecretKey,
+			}
+			// Add webhook_secret if present (optional)
+			if encryptedSecretData.Razorpay.WebhookSecret != "" {
+				result["webhook_secret"] = encryptedSecretData.Razorpay.WebhookSecret
+			}
+			return result
+		}
 	default:
 		// For other providers or unknown types, use generic format
 		if encryptedSecretData.Generic != nil {

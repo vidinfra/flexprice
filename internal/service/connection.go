@@ -148,6 +148,33 @@ func (s *connectionService) encryptMetadata(encryptedSecretData types.Connection
 			}
 		}
 
+	case types.SecretProviderRazorpay:
+		if encryptedSecretData.Razorpay != nil {
+			encryptedKeyID, err := s.encryptionService.Encrypt(encryptedSecretData.Razorpay.KeyID)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+			encryptedSecretKey, err := s.encryptionService.Encrypt(encryptedSecretData.Razorpay.SecretKey)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+
+			// Encrypt webhook secret if provided (optional)
+			var encryptedWebhookSecret string
+			if encryptedSecretData.Razorpay.WebhookSecret != "" {
+				encryptedWebhookSecret, err = s.encryptionService.Encrypt(encryptedSecretData.Razorpay.WebhookSecret)
+				if err != nil {
+					return types.ConnectionMetadata{}, err
+				}
+			}
+
+			encryptedMetadata.Razorpay = &types.RazorpayConnectionMetadata{
+				KeyID:         encryptedKeyID,
+				SecretKey:     encryptedSecretKey,
+				WebhookSecret: encryptedWebhookSecret,
+			}
+		}
+
 	default:
 		// For other providers or unknown types, use generic format
 		if encryptedSecretData.Generic != nil {
