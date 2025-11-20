@@ -187,6 +187,16 @@ func (s *settingsService) GetSettingWithDefaults(ctx context.Context, key types.
 		return nil, err
 	}
 
+	for k, v := range mergedValues {
+		// Convert limit to int (handle float64 from JSON)
+		if v, ok := v.(int); ok {
+			mergedValues[k] = v
+		}
+		if v, ok := v.(float64); ok {
+			mergedValues[k] = int(v)
+		}
+	}
+
 	// Create a response with the merged values
 	settingModel := &settings.Setting{
 		ID:            setting.ID,

@@ -45,9 +45,8 @@ func (s *environmentService) CreateEnvironment(ctx context.Context, req dto.Crea
 	// Check environment limits for prod and sandbox environments
 	if envType == types.EnvironmentProduction || envType == types.EnvironmentDevelopment {
 		// Get env config with defaults (tenant-level, no environment_id)
-		settingService := NewSettingsService(s.ServiceParams)
 
-		config, err := settingService.GetSettingWithDefaults(ctx, types.SettingKeyEnvConfig)
+		config, err := s.settingsService.GetSettingWithDefaults(ctx, types.SettingKeyEnvConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -59,25 +58,16 @@ func (s *environmentService) CreateEnvironment(ctx context.Context, req dto.Crea
 		}
 
 		// Determine the limit based on environment type
-		// getEnvConfig already handles type conversion, so we can directly use the value
 		envTypeKey := string(envType)
-		limitRaw, exists := config.Value[envTypeKey]
+		limit, exists := config.Value[envTypeKey]
 		if !exists {
 			return nil, ierr.NewErrorf("environment limit not configured for type: %s", envTypeKey).
 				WithHintf("Environment limit configuration missing for type: %s", envTypeKey).
 				Mark(ierr.ErrValidation)
 		}
 
-		// Type conversion is already handled in getEnvConfig, so this should always be int
-		limit, ok := limitRaw.(int)
-		if !ok {
-			return nil, ierr.NewErrorf("invalid limit type for environment type %s: expected int, got %T", envTypeKey, limitRaw).
-				WithHintf("Invalid limit configuration for environment type: %s", envTypeKey).
-				Mark(ierr.ErrValidation)
-		}
-
 		// Check if limit is reached
-		if currentCount >= limit {
+		if currentCount >= limit.(int) {
 			envTypeName := string(envType)
 			return nil, ierr.NewErrorf("environment limit reached: maximum %d %s environment(s) allowed", limit, envTypeName).
 				WithHintf("You have reached the maximum limit of %d %s environment(s) for this tenant", limit, envTypeName).
