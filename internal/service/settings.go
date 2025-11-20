@@ -188,7 +188,6 @@ func (s *settingsService) GetSettingWithDefaults(ctx context.Context, key types.
 	}
 
 	for k, v := range mergedValues {
-		// Convert limit to int (handle float64 from JSON)
 		if v, ok := v.(int); ok {
 			mergedValues[k] = v
 		}
