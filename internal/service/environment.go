@@ -70,7 +70,7 @@ func (s *environmentService) CreateEnvironment(ctx context.Context, req dto.Crea
 		if currentCount >= limit.(int) {
 			envTypeName := string(envType)
 			return nil, ierr.NewErrorf("environment limit reached: maximum %d %s environment(s) allowed", limit, envTypeName).
-				WithHintf("You have reached the maximum limit of %d %s environment(s) for this tenant", limit, envTypeName).
+				WithHintf("You have reached the maximum limit of %d %s environment(s)", limit, envTypeName).
 				Mark(ierr.ErrValidation)
 		}
 	}
