@@ -637,18 +637,8 @@ func (h *WebhookHandler) HandleChargebeeWebhook(c *gin.Context) {
 		"event_type", event.EventType,
 		"occurred_at", event.OccurredAt)
 
-	// Prepare service dependencies
-	services := &interfaces.ServiceDependencies{
-		CustomerService:                 h.customerService,
-		PaymentService:                  h.paymentService,
-		InvoiceService:                  h.invoiceService,
-		PlanService:                     h.planService,
-		SubscriptionService:             h.subscriptionService,
-		EntityIntegrationMappingService: h.entityIntegrationMappingService,
-	}
-
 	// Handle the event
-	err = chargebeeIntegration.WebhookHandler.HandleWebhookEvent(ctx, &event, environmentID, services)
+	err = chargebeeIntegration.WebhookHandler.HandleWebhookEvent(ctx, &event, environmentID)
 	if err != nil {
 		h.logger.Errorw("error processing Chargebee webhook event",
 			"error", err,

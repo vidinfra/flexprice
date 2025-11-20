@@ -6,11 +6,9 @@ import (
 
 	"github.com/chargebee/chargebee-go/v3/enum"
 	"github.com/chargebee/chargebee-go/v3/models/customer"
-	"github.com/flexprice/flexprice/internal/api/dto"
 	customerDomain "github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
 	ierr "github.com/flexprice/flexprice/internal/errors"
-	"github.com/flexprice/flexprice/internal/interfaces"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
 )
@@ -20,29 +18,26 @@ type ChargebeeCustomerService interface {
 	SyncCustomerToChargebee(ctx context.Context, flexpriceCustomer *customerDomain.Customer) (*CustomerResponse, error)
 	GetOrCreateChargebeeCustomer(ctx context.Context, flexpriceCustomer *customerDomain.Customer) (string, error)
 	GetChargebeeCustomerID(ctx context.Context, flexpriceCustomerID string) (string, error)
-	EnsureCustomerSyncedToChargebee(ctx context.Context, customerID string, customerService interfaces.CustomerService) (*customerDomain.Customer, error)
+	EnsureCustomerSyncedToChargebee(ctx context.Context, customerID string) (*customerDomain.Customer, error)
+}
+
+// CustomerServiceParams holds dependencies for CustomerService
+type CustomerServiceParams struct {
+	Client                       ChargebeeClient
+	CustomerRepo                 customerDomain.Repository
+	EntityIntegrationMappingRepo entityintegrationmapping.Repository
+	Logger                       *logger.Logger
 }
 
 // CustomerService handles Chargebee customer synchronization
 type CustomerService struct {
-	client                       ChargebeeClient
-	customerRepo                 customerDomain.Repository
-	entityIntegrationMappingRepo entityintegrationmapping.Repository
-	logger                       *logger.Logger
+	CustomerServiceParams
 }
 
 // NewCustomerService creates a new Chargebee customer service
-func NewCustomerService(
-	client ChargebeeClient,
-	customerRepo customerDomain.Repository,
-	entityIntegrationMappingRepo entityintegrationmapping.Repository,
-	logger *logger.Logger,
-) ChargebeeCustomerService {
+func NewCustomerService(params CustomerServiceParams) ChargebeeCustomerService {
 	return &CustomerService{
-		client:                       client,
-		customerRepo:                 customerRepo,
-		entityIntegrationMappingRepo: entityIntegrationMappingRepo,
-		logger:                       logger,
+		CustomerServiceParams: params,
 	}
 }
 
@@ -55,7 +50,7 @@ func (s *CustomerService) GetChargebeeCustomerID(ctx context.Context, flexpriceC
 	filter.ProviderTypes = []string{string(types.SecretProviderChargebee)}
 
 	// Get entity mapping
-	mappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
+	mappings, err := s.EntityIntegrationMappingRepo.List(ctx, filter)
 	if err != nil {
 		// Preserve the underlying error and mark as database error
 		// This prevents treating DB failures as "not mapped"
@@ -85,7 +80,7 @@ func (s *CustomerService) GetOrCreateChargebeeCustomer(ctx context.Context, flex
 	// Check if customer already exists in Chargebee via entity mapping
 	chargebeeCustomerID, err := s.GetChargebeeCustomerID(ctx, flexpriceCustomer.ID)
 	if err == nil && chargebeeCustomerID != "" {
-		s.logger.Infow("customer already synced to Chargebee",
+		s.Logger.Infow("customer already synced to Chargebee",
 			"flexprice_customer_id", flexpriceCustomer.ID,
 			"chargebee_customer_id", chargebeeCustomerID)
 		return chargebeeCustomerID, nil
@@ -94,14 +89,14 @@ func (s *CustomerService) GetOrCreateChargebeeCustomer(ctx context.Context, flex
 	// Check if error is "not found" (customer not synced) vs database error
 	if err != nil && !ierr.IsNotFound(err) {
 		// Database or infrastructure error - propagate it instead of creating duplicate
-		s.logger.Errorw("failed to check customer mapping due to infrastructure error",
+		s.Logger.Errorw("failed to check customer mapping due to infrastructure error",
 			"flexprice_customer_id", flexpriceCustomer.ID,
 			"error", err)
 		return "", err
 	}
 
 	// Customer doesn't exist in Chargebee (genuine not found), create new one
-	s.logger.Infow("creating new customer in Chargebee",
+	s.Logger.Infow("creating new customer in Chargebee",
 		"flexprice_customer_id", flexpriceCustomer.ID,
 		"email", flexpriceCustomer.Email)
 
@@ -116,11 +111,11 @@ func (s *CustomerService) GetOrCreateChargebeeCustomer(ctx context.Context, flex
 // SyncCustomerToChargebee syncs FlexPrice customer to Chargebee
 func (s *CustomerService) SyncCustomerToChargebee(ctx context.Context, flexpriceCustomer *customerDomain.Customer) (*CustomerResponse, error) {
 	// Initialize Chargebee SDK
-	if err := s.client.(*Client).InitializeChargebeeSDK(ctx); err != nil {
+	if err := s.Client.(*Client).InitializeChargebeeSDK(ctx); err != nil {
 		return nil, err
 	}
 
-	s.logger.Infow("syncing customer to Chargebee",
+	s.Logger.Infow("syncing customer to Chargebee",
 		"customer_id", flexpriceCustomer.ID,
 		"email", flexpriceCustomer.Email)
 
@@ -159,9 +154,9 @@ func (s *CustomerService) SyncCustomerToChargebee(ctx context.Context, flexprice
 	}
 
 	// Create customer in Chargebee using client wrapper
-	result, err := s.client.CreateCustomer(ctx, createParams)
+	result, err := s.Client.CreateCustomer(ctx, createParams)
 	if err != nil {
-		s.logger.Errorw("failed to create customer in Chargebee",
+		s.Logger.Errorw("failed to create customer in Chargebee",
 			"customer_id", flexpriceCustomer.ID,
 			"error", err)
 		return nil, ierr.NewError("failed to create customer in Chargebee").
@@ -175,7 +170,7 @@ func (s *CustomerService) SyncCustomerToChargebee(ctx context.Context, flexprice
 
 	chargebeeCustomer := result.Customer
 
-	s.logger.Infow("successfully created customer in Chargebee",
+	s.Logger.Infow("successfully created customer in Chargebee",
 		"flexprice_customer_id", flexpriceCustomer.ID,
 		"chargebee_customer_id", chargebeeCustomer.Id,
 		"email", chargebeeCustomer.Email)
@@ -192,9 +187,9 @@ func (s *CustomerService) SyncCustomerToChargebee(ctx context.Context, flexprice
 	}
 	mapping.TenantID = flexpriceCustomer.TenantID
 
-	err = s.entityIntegrationMappingRepo.Create(ctx, mapping)
+	err = s.EntityIntegrationMappingRepo.Create(ctx, mapping)
 	if err != nil {
-		s.logger.Errorw("failed to save entity mapping",
+		s.Logger.Errorw("failed to save entity mapping",
 			"customer_id", flexpriceCustomer.ID,
 			"chargebee_customer_id", chargebeeCustomer.Id,
 			"error", err)
@@ -219,9 +214,9 @@ func (s *CustomerService) SyncCustomerToChargebee(ctx context.Context, flexprice
 }
 
 // EnsureCustomerSyncedToChargebee ensures a customer is synced to Chargebee
-func (s *CustomerService) EnsureCustomerSyncedToChargebee(ctx context.Context, customerID string, customerService interfaces.CustomerService) (*customerDomain.Customer, error) {
-	// Get FlexPrice customer
-	customerResp, err := customerService.GetCustomer(ctx, customerID)
+func (s *CustomerService) EnsureCustomerSyncedToChargebee(ctx context.Context, customerID string) (*customerDomain.Customer, error) {
+	// Get FlexPrice customer using repository
+	flexpriceCustomer, err := s.CustomerRepo.Get(ctx, customerID)
 	if err != nil {
 		return nil, ierr.WithError(err).
 			WithHint("Failed to get customer").
@@ -230,74 +225,70 @@ func (s *CustomerService) EnsureCustomerSyncedToChargebee(ctx context.Context, c
 			}).
 			Mark(ierr.ErrNotFound)
 	}
-	flexpriceCustomer := customerResp.Customer
 
 	// Check if customer already has Chargebee ID in metadata
 	if chargebeeID, exists := flexpriceCustomer.Metadata["chargebee_customer_id"]; exists && chargebeeID != "" {
-		s.logger.Infow("customer already synced to Chargebee",
+		s.Logger.Infow("customer already synced to Chargebee",
 			"customer_id", customerID,
 			"chargebee_customer_id", chargebeeID)
 		return flexpriceCustomer, nil
 	}
 
 	// Check if customer is synced via integration mapping table
-	if s.entityIntegrationMappingRepo != nil {
+	if s.EntityIntegrationMappingRepo != nil {
 		filter := &types.EntityIntegrationMappingFilter{
 			EntityID:      customerID,
 			EntityType:    types.IntegrationEntityTypeCustomer,
 			ProviderTypes: []string{string(types.SecretProviderChargebee)},
 		}
 
-		existingMappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
+		existingMappings, err := s.EntityIntegrationMappingRepo.List(ctx, filter)
 		if err == nil && existingMappings != nil && len(existingMappings) > 0 {
 			existingMapping := existingMappings[0]
-			s.logger.Infow("customer already mapped to Chargebee via integration mapping",
+			s.Logger.Infow("customer already mapped to Chargebee via integration mapping",
 				"customer_id", customerID,
 				"chargebee_customer_id", existingMapping.ProviderEntityID)
 
 			// Update customer metadata with Chargebee ID for faster future lookups
-			updateReq := dto.UpdateCustomerRequest{
-				Metadata: s.mergeCustomerMetadata(flexpriceCustomer.Metadata, map[string]string{
-					"chargebee_customer_id": existingMapping.ProviderEntityID,
-				}),
-			}
-			updatedCustomerResp, err := customerService.UpdateCustomer(ctx, flexpriceCustomer.ID, updateReq)
+			flexpriceCustomer.Metadata = s.mergeCustomerMetadata(flexpriceCustomer.Metadata, map[string]string{
+				"chargebee_customer_id": existingMapping.ProviderEntityID,
+			})
+			err = s.CustomerRepo.Update(ctx, flexpriceCustomer)
 			if err != nil {
-				s.logger.Warnw("failed to update customer metadata with Chargebee customer ID",
+				s.Logger.Warnw("failed to update customer metadata with Chargebee customer ID",
 					"customer_id", customerID,
 					"error", err)
 				// Return original customer info if update fails
 				return flexpriceCustomer, nil
 			}
-			return updatedCustomerResp.Customer, nil
+			return flexpriceCustomer, nil
 		}
 	}
 
 	// Customer is not synced, create in Chargebee
-	s.logger.Infow("customer not synced to Chargebee, creating in Chargebee",
+	s.Logger.Infow("customer not synced to Chargebee, creating in Chargebee",
 		"customer_id", customerID)
-	err = s.CreateCustomerInChargebee(ctx, customerID, customerService)
+	err = s.CreateCustomerInChargebee(ctx, customerID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Get updated customer after sync
-	updatedCustomerResp, err := customerService.GetCustomer(ctx, customerID)
+	updatedCustomer, err := s.CustomerRepo.Get(ctx, customerID)
 	if err != nil {
 		return nil, err
 	}
 
-	return updatedCustomerResp.Customer, nil
+	return updatedCustomer, nil
 }
 
 // CreateCustomerInChargebee creates a customer in Chargebee and updates our customer with Chargebee ID
-func (s *CustomerService) CreateCustomerInChargebee(ctx context.Context, customerID string, customerService interfaces.CustomerService) error {
-	// Get FlexPrice customer
-	customerResp, err := customerService.GetCustomer(ctx, customerID)
+func (s *CustomerService) CreateCustomerInChargebee(ctx context.Context, customerID string) error {
+	// Get FlexPrice customer using repository
+	flexpriceCustomer, err := s.CustomerRepo.Get(ctx, customerID)
 	if err != nil {
 		return err
 	}
-	flexpriceCustomer := customerResp.Customer
 
 	// Sync customer to Chargebee
 	customerRespChargebee, err := s.SyncCustomerToChargebee(ctx, flexpriceCustomer)
@@ -308,15 +299,13 @@ func (s *CustomerService) CreateCustomerInChargebee(ctx context.Context, custome
 	chargebeeCustomerID := customerRespChargebee.ID
 
 	// Update customer metadata with Chargebee ID
-	updateReq := dto.UpdateCustomerRequest{
-		Metadata: s.mergeCustomerMetadata(flexpriceCustomer.Metadata, map[string]string{
-			"chargebee_customer_id": chargebeeCustomerID,
-		}),
-	}
+	flexpriceCustomer.Metadata = s.mergeCustomerMetadata(flexpriceCustomer.Metadata, map[string]string{
+		"chargebee_customer_id": chargebeeCustomerID,
+	})
 
-	_, err = customerService.UpdateCustomer(ctx, customerID, updateReq)
+	err = s.CustomerRepo.Update(ctx, flexpriceCustomer)
 	if err != nil {
-		s.logger.Warnw("failed to update customer metadata with Chargebee customer ID",
+		s.Logger.Warnw("failed to update customer metadata with Chargebee customer ID",
 			"customer_id", customerID,
 			"chargebee_customer_id", chargebeeCustomerID,
 			"error", err)

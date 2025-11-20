@@ -963,16 +963,13 @@ func (s *invoiceService) syncInvoiceToChargebeeIfEnabled(ctx context.Context, in
 		"invoice_id", inv.ID,
 		"customer_id", inv.CustomerID)
 
-	// Create customer service instance
-	customerService := NewCustomerService(s.ServiceParams)
-
 	// Create sync request
 	syncRequest := chargebee.ChargebeeInvoiceSyncRequest{
 		InvoiceID: inv.ID,
 	}
 
 	// Perform the sync
-	syncResponse, err := chargebeeIntegration.InvoiceSvc.SyncInvoiceToChargebee(ctx, syncRequest, customerService)
+	syncResponse, err := chargebeeIntegration.InvoiceSvc.SyncInvoiceToChargebee(ctx, syncRequest)
 	if err != nil {
 		return err
 	}
