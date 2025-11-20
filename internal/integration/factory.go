@@ -259,51 +259,49 @@ func (f *Factory) GetChargebeeIntegration(ctx context.Context) (*ChargebeeIntegr
 	)
 
 	// Create item family service
-	itemFamilySvc := chargebee.NewItemFamilyService(
-		chargebeeClient,
-		f.logger,
-	)
+	itemFamilySvc := chargebee.NewItemFamilyService(chargebee.ItemFamilyServiceParams{
+		Client: chargebeeClient,
+		Logger: f.logger,
+	})
 
 	// Create item service
-	itemSvc := chargebee.NewItemService(
-		chargebeeClient,
-		f.logger,
-	)
+	itemSvc := chargebee.NewItemService(chargebee.ItemServiceParams{
+		Client: chargebeeClient,
+		Logger: f.logger,
+	})
 
 	// Create item price service
-	itemPriceSvc := chargebee.NewItemPriceService(
-		chargebeeClient,
-		f.logger,
-	)
+	itemPriceSvc := chargebee.NewItemPriceService(chargebee.ItemPriceServiceParams{
+		Client: chargebeeClient,
+		Logger: f.logger,
+	})
 
 	// Create customer service
-	customerSvc := chargebee.NewCustomerService(
-		chargebeeClient,
-		f.customerRepo,
-		f.entityIntegrationMappingRepo,
-		f.logger,
-	)
+	customerSvc := chargebee.NewCustomerService(chargebee.CustomerServiceParams{
+		Client:                       chargebeeClient,
+		CustomerRepo:                 f.customerRepo,
+		EntityIntegrationMappingRepo: f.entityIntegrationMappingRepo,
+		Logger:                       f.logger,
+	})
 
 	// Create invoice service
-	invoiceSvc := chargebee.NewInvoiceService(
-		chargebeeClient,
-		customerSvc,
-		f.invoiceRepo,
-		f.entityIntegrationMappingRepo,
-		f.logger,
-	)
+	invoiceSvc := chargebee.NewInvoiceService(chargebee.InvoiceServiceParams{
+		Client:                       chargebeeClient,
+		CustomerSvc:                  customerSvc,
+		InvoiceRepo:                  f.invoiceRepo,
+		PaymentRepo:                  f.paymentRepo,
+		EntityIntegrationMappingRepo: f.entityIntegrationMappingRepo,
+		Logger:                       f.logger,
+	})
 
 	// Create plan sync service
-	planSyncSvc := chargebee.NewPlanSyncService(
-		chargebeeClient,
-		itemFamilySvc,
-		itemSvc,
-		itemPriceSvc,
-		f.entityIntegrationMappingRepo,
-		f.meterRepo,
-		f.featureRepo,
-		f.logger,
-	)
+	planSyncSvc := chargebee.NewPlanSyncService(chargebee.PlanSyncServiceParams{
+		Client:                       chargebeeClient,
+		EntityIntegrationMappingRepo: f.entityIntegrationMappingRepo,
+		MeterRepo:                    f.meterRepo,
+		FeatureRepo:                  f.featureRepo,
+		Logger:                       f.logger,
+	})
 
 	// Create webhook handler
 	webhookHandler := chargebeewebhook.NewHandler(

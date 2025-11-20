@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/flexprice/flexprice/internal/integration/chargebee"
-	"github.com/flexprice/flexprice/internal/interfaces"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/shopspring/decimal"
 )
@@ -30,11 +29,8 @@ func NewHandler(
 	}
 }
 
-// ServiceDependencies contains all service dependencies needed by webhook handlers
-type ServiceDependencies = interfaces.ServiceDependencies
-
 // HandleWebhookEvent processes a Chargebee webhook event
-func (h *Handler) HandleWebhookEvent(ctx context.Context, event *ChargebeeWebhookEvent, environmentID string, services *ServiceDependencies) error {
+func (h *Handler) HandleWebhookEvent(ctx context.Context, event *ChargebeeWebhookEvent, environmentID string) error {
 	h.logger.Infow("processing Chargebee webhook event",
 		"event_type", event.EventType,
 		"event_id", event.ID,
@@ -46,7 +42,7 @@ func (h *Handler) HandleWebhookEvent(ctx context.Context, event *ChargebeeWebhoo
 
 	switch eventType {
 	case EventPaymentSucceeded:
-		return h.handlePaymentSucceeded(ctx, event, environmentID, services)
+		return h.handlePaymentSucceeded(ctx, event, environmentID)
 	default:
 		h.logger.Infow("unhandled Chargebee webhook event type", "type", event.EventType)
 		return nil // Not an error, just unhandled
@@ -54,7 +50,7 @@ func (h *Handler) HandleWebhookEvent(ctx context.Context, event *ChargebeeWebhoo
 }
 
 // handlePaymentSucceeded handles payment_succeeded webhook
-func (h *Handler) handlePaymentSucceeded(ctx context.Context, event *ChargebeeWebhookEvent, environmentID string, services *ServiceDependencies) error {
+func (h *Handler) handlePaymentSucceeded(ctx context.Context, event *ChargebeeWebhookEvent, environmentID string) error {
 	// Parse the webhook content
 	var content ChargebeeWebhookContent
 	if err := json.Unmarshal(event.Content, &content); err != nil {
@@ -111,8 +107,6 @@ func (h *Handler) handlePaymentSucceeded(ctx context.Context, event *ChargebeeWe
 		paymentAmount,
 		transaction.CurrencyCode,
 		transaction.PaymentMethod,
-		services.InvoiceService,
-		services.PaymentService,
 	)
 	if err != nil {
 		h.logger.Errorw("failed to process Chargebee payment",

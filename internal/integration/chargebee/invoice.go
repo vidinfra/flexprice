@@ -9,8 +9,8 @@ import (
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
 	"github.com/flexprice/flexprice/internal/domain/invoice"
+	"github.com/flexprice/flexprice/internal/domain/payment"
 	ierr "github.com/flexprice/flexprice/internal/errors"
-	"github.com/flexprice/flexprice/internal/interfaces"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/samber/lo"
@@ -21,32 +21,28 @@ import (
 type ChargebeeInvoiceService interface {
 	CreateInvoice(ctx context.Context, req *InvoiceCreateRequest) (*InvoiceResponse, error)
 	RetrieveInvoice(ctx context.Context, invoiceID string) (*InvoiceResponse, error)
-	SyncInvoiceToChargebee(ctx context.Context, req ChargebeeInvoiceSyncRequest, customerService interfaces.CustomerService) (*ChargebeeInvoiceSyncResponse, error)
+	SyncInvoiceToChargebee(ctx context.Context, req ChargebeeInvoiceSyncRequest) (*ChargebeeInvoiceSyncResponse, error)
+}
+
+// InvoiceServiceParams holds dependencies for InvoiceService
+type InvoiceServiceParams struct {
+	Client                       ChargebeeClient
+	CustomerSvc                  ChargebeeCustomerService
+	InvoiceRepo                  invoice.Repository
+	PaymentRepo                  payment.Repository
+	EntityIntegrationMappingRepo entityintegrationmapping.Repository
+	Logger                       *logger.Logger
 }
 
 // InvoiceService handles Chargebee invoice operations
 type InvoiceService struct {
-	client                       ChargebeeClient
-	customerSvc                  ChargebeeCustomerService
-	invoiceRepo                  invoice.Repository
-	entityIntegrationMappingRepo entityintegrationmapping.Repository
-	logger                       *logger.Logger
+	InvoiceServiceParams
 }
 
 // NewInvoiceService creates a new Chargebee invoice service
-func NewInvoiceService(
-	client ChargebeeClient,
-	customerSvc ChargebeeCustomerService,
-	invoiceRepo invoice.Repository,
-	entityIntegrationMappingRepo entityintegrationmapping.Repository,
-	logger *logger.Logger,
-) ChargebeeInvoiceService {
+func NewInvoiceService(params InvoiceServiceParams) ChargebeeInvoiceService {
 	return &InvoiceService{
-		client:                       client,
-		customerSvc:                  customerSvc,
-		invoiceRepo:                  invoiceRepo,
-		entityIntegrationMappingRepo: entityIntegrationMappingRepo,
-		logger:                       logger,
+		InvoiceServiceParams: params,
 	}
 }
 
@@ -66,7 +62,7 @@ type ChargebeeInvoiceSyncResponse struct {
 
 // CreateInvoice creates a new invoice in Chargebee using charge items
 func (s *InvoiceService) CreateInvoice(ctx context.Context, req *InvoiceCreateRequest) (*InvoiceResponse, error) {
-	s.logger.Infow("creating invoice in Chargebee",
+	s.Logger.Infow("creating invoice in Chargebee",
 		"customer_id", req.CustomerID,
 		"auto_collection", req.AutoCollection,
 		"line_items_count", len(req.LineItems))
@@ -109,9 +105,9 @@ func (s *InvoiceService) CreateInvoice(ctx context.Context, req *InvoiceCreateRe
 	}
 
 	// Create invoice using client wrapper
-	result, err := s.client.CreateInvoice(ctx, createParams)
+	result, err := s.Client.CreateInvoice(ctx, createParams)
 	if err != nil {
-		s.logger.Errorw("failed to create invoice in Chargebee",
+		s.Logger.Errorw("failed to create invoice in Chargebee",
 			"customer_id", req.CustomerID,
 			"error", err)
 		return nil, ierr.NewError("failed to create invoice in Chargebee").
@@ -125,7 +121,7 @@ func (s *InvoiceService) CreateInvoice(ctx context.Context, req *InvoiceCreateRe
 
 	invoiceData := result.Invoice
 
-	s.logger.Infow("successfully created invoice in Chargebee",
+	s.Logger.Infow("successfully created invoice in Chargebee",
 		"invoice_id", invoiceData.Id,
 		"customer_id", invoiceData.CustomerId,
 		"status", invoiceData.Status,
@@ -179,20 +175,19 @@ func (s *InvoiceService) CreateInvoice(ctx context.Context, req *InvoiceCreateRe
 func (s *InvoiceService) SyncInvoiceToChargebee(
 	ctx context.Context,
 	req ChargebeeInvoiceSyncRequest,
-	customerService interfaces.CustomerService,
 ) (*ChargebeeInvoiceSyncResponse, error) {
-	s.logger.Infow("starting Chargebee invoice sync",
+	s.Logger.Infow("starting Chargebee invoice sync",
 		"invoice_id", req.InvoiceID)
 
 	// Step 1: Check if Chargebee connection exists
-	if !s.client.HasChargebeeConnection(ctx) {
+	if !s.Client.HasChargebeeConnection(ctx) {
 		return nil, ierr.NewError("Chargebee connection not available").
 			WithHint("Chargebee integration must be configured for invoice sync").
 			Mark(ierr.ErrNotFound)
 	}
 
 	// Step 2: Get FlexPrice invoice
-	flexInvoice, err := s.invoiceRepo.Get(ctx, req.InvoiceID)
+	flexInvoice, err := s.InvoiceRepo.Get(ctx, req.InvoiceID)
 	if err != nil {
 		return nil, ierr.WithError(err).
 			WithHint("Failed to get FlexPrice invoice").
@@ -208,7 +203,7 @@ func (s *InvoiceService) SyncInvoiceToChargebee(
 	var chargebeeInvoiceID string
 	if existingMapping != nil {
 		chargebeeInvoiceID = existingMapping.ProviderEntityID
-		s.logger.Infow("invoice already synced to Chargebee",
+		s.Logger.Infow("invoice already synced to Chargebee",
 			"invoice_id", req.InvoiceID,
 			"chargebee_invoice_id", chargebeeInvoiceID)
 		// Fetch existing invoice details and return
@@ -226,7 +221,7 @@ func (s *InvoiceService) SyncInvoiceToChargebee(
 	}
 
 	// Step 4: Ensure customer is synced to Chargebee
-	flexpriceCustomer, err := s.customerSvc.EnsureCustomerSyncedToChargebee(ctx, flexInvoice.CustomerID, customerService)
+	flexpriceCustomer, err := s.CustomerSvc.EnsureCustomerSyncedToChargebee(ctx, flexInvoice.CustomerID)
 	if err != nil {
 		return nil, ierr.WithError(err).
 			WithHint("Failed to sync customer to Chargebee").
@@ -236,7 +231,7 @@ func (s *InvoiceService) SyncInvoiceToChargebee(
 	chargebeeCustomerID := flexpriceCustomer.Metadata["chargebee_customer_id"]
 	if chargebeeCustomerID == "" {
 		// Try to get from entity mapping if not in metadata
-		chargebeeCustomerID, err = s.customerSvc.GetChargebeeCustomerID(ctx, flexInvoice.CustomerID)
+		chargebeeCustomerID, err = s.CustomerSvc.GetChargebeeCustomerID(ctx, flexInvoice.CustomerID)
 		if err != nil {
 			return nil, ierr.WithError(err).
 				WithHint("Failed to get Chargebee customer ID").
@@ -244,14 +239,14 @@ func (s *InvoiceService) SyncInvoiceToChargebee(
 		}
 	}
 
-	s.logger.Infow("customer synced to Chargebee",
+	s.Logger.Infow("customer synced to Chargebee",
 		"customer_id", flexInvoice.CustomerID,
 		"chargebee_customer_id", chargebeeCustomerID)
 
 	// Step 5: Check if customer has payment method and set auto_collection accordingly
 	hasPaymentMethod, err := s.customerHasPaymentMethod(ctx, chargebeeCustomerID)
 	if err != nil {
-		s.logger.Warnw("failed to check customer payment method, defaulting to auto_collection off",
+		s.Logger.Warnw("failed to check customer payment method, defaulting to auto_collection off",
 			"error", err,
 			"chargebee_customer_id", chargebeeCustomerID)
 		hasPaymentMethod = false
@@ -262,7 +257,7 @@ func (s *InvoiceService) SyncInvoiceToChargebee(
 		autoCollection = "on"
 	}
 
-	s.logger.Infow("determined auto_collection setting",
+	s.Logger.Infow("determined auto_collection setting",
 		"chargebee_customer_id", chargebeeCustomerID,
 		"has_payment_method", hasPaymentMethod,
 		"auto_collection", autoCollection)
@@ -303,13 +298,13 @@ func (s *InvoiceService) SyncInvoiceToChargebee(
 	}
 
 	chargebeeInvoiceID = chargebeeInvoice.ID
-	s.logger.Infow("successfully created invoice in Chargebee",
+	s.Logger.Infow("successfully created invoice in Chargebee",
 		"invoice_id", req.InvoiceID,
 		"chargebee_invoice_id", chargebeeInvoiceID)
 
 	// Step 8: Create entity integration mapping
 	if err := s.createInvoiceMapping(ctx, req.InvoiceID, chargebeeInvoiceID, flexInvoice.EnvironmentID); err != nil {
-		s.logger.Errorw("failed to create invoice mapping",
+		s.Logger.Errorw("failed to create invoice mapping",
 			"error", err,
 			"invoice_id", req.InvoiceID,
 			"chargebee_invoice_id", chargebeeInvoiceID)
@@ -334,7 +329,7 @@ func (s *InvoiceService) buildLineItems(ctx context.Context, flexInvoice *invoic
 	for _, item := range flexInvoice.LineItems {
 		// Skip zero-amount items
 		if item.Amount.IsZero() {
-			s.logger.Debugw("skipping zero-amount line item",
+			s.Logger.Debugw("skipping zero-amount line item",
 				"invoice_id", flexInvoice.ID,
 				"line_item_id", item.ID)
 			continue
@@ -342,7 +337,7 @@ func (s *InvoiceService) buildLineItems(ctx context.Context, flexInvoice *invoic
 
 		// Skip if price ID is not available
 		if item.PriceID == nil || *item.PriceID == "" {
-			s.logger.Debugw("line item has no price ID, skipping",
+			s.Logger.Debugw("line item has no price ID, skipping",
 				"invoice_id", flexInvoice.ID,
 				"line_item_id", item.ID)
 			continue
@@ -351,7 +346,7 @@ func (s *InvoiceService) buildLineItems(ctx context.Context, flexInvoice *invoic
 		// Get Chargebee item price ID AND check if it's tiered
 		chargebeeItemPriceID, isTiered, err := s.getChargebeeItemPriceIDAndCheckTiered(ctx, *item.PriceID)
 		if err != nil {
-			s.logger.Errorw("failed to get Chargebee item price ID for line item",
+			s.Logger.Errorw("failed to get Chargebee item price ID for line item",
 				"invoice_id", flexInvoice.ID,
 				"line_item_id", item.ID,
 				"price_id", *item.PriceID,
@@ -370,7 +365,7 @@ func (s *InvoiceService) buildLineItems(ctx context.Context, flexInvoice *invoic
 			// NOTE: Chargebee's calculation may differ slightly due to tier precision rounding
 			lineItem.Quantity = int(item.Quantity.IntPart())
 			// DO NOT set UnitAmount - Chargebee will reject it
-			s.logger.Debugw("tiered price line item - using quantity only",
+			s.Logger.Debugw("tiered price line item - using quantity only",
 				"item_price_id", chargebeeItemPriceID,
 				"quantity", lineItem.Quantity,
 				"flexprice_amount", item.Amount.String())
@@ -379,7 +374,7 @@ func (s *InvoiceService) buildLineItems(ctx context.Context, flexInvoice *invoic
 			// This ensures exact amount matching with FlexPrice's calculation
 			lineItem.Quantity = 1
 			lineItem.UnitAmount = convertAmountToSmallestUnit(item.Amount.InexactFloat64(), flexInvoice.Currency)
-			s.logger.Debugw("non-tiered price line item - using exact amount",
+			s.Logger.Debugw("non-tiered price line item - using exact amount",
 				"item_price_id", chargebeeItemPriceID,
 				"quantity", 1,
 				"unit_amount", lineItem.UnitAmount,
@@ -421,7 +416,7 @@ func (s *InvoiceService) getChargebeeItemPriceIDAndCheckTiered(ctx context.Conte
 	filter.EntityType = types.IntegrationEntityTypeItemPrice
 	filter.ProviderTypes = []string{string(types.SecretProviderChargebee)}
 
-	mappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
+	mappings, err := s.EntityIntegrationMappingRepo.List(ctx, filter)
 	if err != nil {
 		return "", false, ierr.WithError(err).
 			WithHint("Failed to get Chargebee item price mapping").
@@ -440,9 +435,9 @@ func (s *InvoiceService) getChargebeeItemPriceIDAndCheckTiered(ctx context.Conte
 	chargebeeItemPriceID := mappings[0].ProviderEntityID
 
 	// Fetch the item price from Chargebee to check its pricing model
-	result, err := s.client.RetrieveItemPrice(ctx, chargebeeItemPriceID)
+	result, err := s.Client.RetrieveItemPrice(ctx, chargebeeItemPriceID)
 	if err != nil {
-		s.logger.Warnw("failed to retrieve item price from Chargebee, assuming flat_fee",
+		s.Logger.Warnw("failed to retrieve item price from Chargebee, assuming flat_fee",
 			"item_price_id", chargebeeItemPriceID,
 			"error", err)
 		// Fallback: assume flat_fee if we can't fetch
@@ -452,7 +447,7 @@ func (s *InvoiceService) getChargebeeItemPriceIDAndCheckTiered(ctx context.Conte
 	pricingModel := string(result.ItemPrice.PricingModel)
 	isTiered := pricingModel == "tiered" || pricingModel == "volume" || pricingModel == "stairstep"
 
-	s.logger.Debugw("retrieved pricing model for item price",
+	s.Logger.Debugw("retrieved pricing model for item price",
 		"item_price_id", chargebeeItemPriceID,
 		"pricing_model", pricingModel,
 		"is_tiered", isTiered)
@@ -474,7 +469,7 @@ func (s *InvoiceService) getChargebeeItemPriceIDSimple(ctx context.Context, flex
 	filter.EntityType = types.IntegrationEntityTypeItemPrice
 	filter.ProviderTypes = []string{string(types.SecretProviderChargebee)}
 
-	mappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
+	mappings, err := s.EntityIntegrationMappingRepo.List(ctx, filter)
 	if err != nil {
 		return "", ierr.WithError(err).
 			WithHint("Failed to get Chargebee item price mapping").
@@ -500,7 +495,7 @@ func (s *InvoiceService) getExistingChargebeeMapping(ctx context.Context, invoic
 	filter.EntityType = types.IntegrationEntityTypeInvoice
 	filter.ProviderTypes = []string{string(types.SecretProviderChargebee)}
 
-	mappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
+	mappings, err := s.EntityIntegrationMappingRepo.List(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -527,12 +522,12 @@ func (s *InvoiceService) createInvoiceMapping(ctx context.Context, invoiceID, ch
 
 	// Get tenant_id from context or invoice
 	// We'll need to get it from the invoice entity
-	inv, err := s.invoiceRepo.Get(ctx, invoiceID)
+	inv, err := s.InvoiceRepo.Get(ctx, invoiceID)
 	if err == nil {
 		mapping.TenantID = inv.TenantID
 	}
 
-	err = s.entityIntegrationMappingRepo.Create(ctx, mapping)
+	err = s.EntityIntegrationMappingRepo.Create(ctx, mapping)
 	if err != nil {
 		return ierr.WithError(err).
 			WithHint("Failed to create invoice mapping").
@@ -545,7 +540,7 @@ func (s *InvoiceService) createInvoiceMapping(ctx context.Context, invoiceID, ch
 // customerHasPaymentMethod checks if a Chargebee customer has a payment method
 func (s *InvoiceService) customerHasPaymentMethod(ctx context.Context, chargebeeCustomerID string) (bool, error) {
 	// Retrieve customer from Chargebee using client wrapper
-	result, err := s.client.RetrieveCustomer(ctx, chargebeeCustomerID)
+	result, err := s.Client.RetrieveCustomer(ctx, chargebeeCustomerID)
 	if err != nil {
 		return false, ierr.WithError(err).
 			WithHint("Failed to retrieve customer from Chargebee").
@@ -562,13 +557,13 @@ func (s *InvoiceService) customerHasPaymentMethod(ctx context.Context, chargebee
 
 // RetrieveInvoice retrieves an invoice from Chargebee
 func (s *InvoiceService) RetrieveInvoice(ctx context.Context, invoiceID string) (*InvoiceResponse, error) {
-	s.logger.Infow("retrieving invoice from Chargebee",
+	s.Logger.Infow("retrieving invoice from Chargebee",
 		"invoice_id", invoiceID)
 
 	// Retrieve invoice using client wrapper
-	result, err := s.client.RetrieveInvoice(ctx, invoiceID, &chargebeeInvoice.RetrieveRequestParams{})
+	result, err := s.Client.RetrieveInvoice(ctx, invoiceID, &chargebeeInvoice.RetrieveRequestParams{})
 	if err != nil {
-		s.logger.Errorw("failed to retrieve invoice from Chargebee",
+		s.Logger.Errorw("failed to retrieve invoice from Chargebee",
 			"invoice_id", invoiceID,
 			"error", err)
 		return nil, ierr.NewError("failed to retrieve invoice from Chargebee").
@@ -582,7 +577,7 @@ func (s *InvoiceService) RetrieveInvoice(ctx context.Context, invoiceID string) 
 
 	invoiceData := result.Invoice
 
-	s.logger.Infow("successfully retrieved invoice from Chargebee",
+	s.Logger.Infow("successfully retrieved invoice from Chargebee",
 		"invoice_id", invoiceData.Id,
 		"customer_id", invoiceData.CustomerId)
 
@@ -632,52 +627,68 @@ func (s *InvoiceService) RetrieveInvoice(ctx context.Context, invoiceID string) 
 
 // ReconcileInvoicePayment reconciles an invoice payment when a payment succeeds in Chargebee
 // This is called from the webhook handler after a payment_succeeded event
-func (s *InvoiceService) ReconcileInvoicePayment(ctx context.Context, invoiceID string, paymentAmount decimal.Decimal, invoiceService interfaces.InvoiceService) error {
-	s.logger.Infow("starting payment reconciliation with invoice",
+// This method replicates the logic from invoiceService.ReconcilePaymentStatus but uses repositories directly
+func (s *InvoiceService) ReconcileInvoicePayment(ctx context.Context, invoiceID string, paymentAmount decimal.Decimal) error {
+	s.Logger.Infow("starting payment reconciliation with invoice",
 		"invoice_id", invoiceID,
 		"payment_amount", paymentAmount.String())
 
-	// Get the invoice
-	invoiceResp, err := invoiceService.GetInvoice(ctx, invoiceID)
+	// Get the invoice using repository
+	inv, err := s.InvoiceRepo.Get(ctx, invoiceID)
 	if err != nil {
-		s.logger.Errorw("failed to get invoice for reconciliation",
+		s.Logger.Errorw("failed to get invoice for reconciliation",
 			"error", err,
 			"invoice_id", invoiceID)
 		return err
 	}
 
-	// Calculate new amounts
-	newAmountPaid := invoiceResp.AmountPaid.Add(paymentAmount)
-	newAmountRemaining := invoiceResp.AmountDue.Sub(newAmountPaid)
+	// Calculate new amounts (matching ReconcilePaymentStatus logic)
+	newAmountPaid := inv.AmountPaid.Add(paymentAmount)
 
-	// Determine payment status
+	// Determine payment status based on amounts
 	var newPaymentStatus types.PaymentStatus
-	if newAmountRemaining.IsZero() {
-		newPaymentStatus = types.PaymentStatusSucceeded
-	} else if newAmountRemaining.IsNegative() {
+	var newAmountRemaining decimal.Decimal
+
+	// Check if invoice is overpaid
+	if newAmountPaid.GreaterThan(inv.AmountDue) {
 		newPaymentStatus = types.PaymentStatusOverpaid
+		// For overpaid invoices, amount_remaining is always 0
+		newAmountRemaining = decimal.Zero
+	} else if newAmountPaid.Equal(inv.AmountDue) {
+		newPaymentStatus = types.PaymentStatusSucceeded
 		newAmountRemaining = decimal.Zero
 	} else {
 		newPaymentStatus = types.PaymentStatusPending
+		newAmountRemaining = inv.AmountDue.Sub(newAmountPaid)
 	}
 
-	s.logger.Infow("calculated new amounts for reconciliation",
+	s.Logger.Infow("calculated new amounts for reconciliation",
 		"invoice_id", invoiceID,
 		"payment_amount", paymentAmount.String(),
 		"new_amount_paid", newAmountPaid.String(),
 		"new_amount_remaining", newAmountRemaining.String(),
 		"new_payment_status", newPaymentStatus)
 
-	// Update invoice
-	err = invoiceService.ReconcilePaymentStatus(ctx, invoiceID, newPaymentStatus, &paymentAmount)
+	// Update invoice using repository
+	inv.AmountPaid = newAmountPaid
+	inv.AmountRemaining = newAmountRemaining
+	inv.PaymentStatus = newPaymentStatus
+
+	// Set PaidAt timestamp if payment succeeded or overpaid (and not already set)
+	if (newPaymentStatus == types.PaymentStatusSucceeded || newPaymentStatus == types.PaymentStatusOverpaid) && inv.PaidAt == nil {
+		now := time.Now().UTC()
+		inv.PaidAt = &now
+	}
+
+	err = s.InvoiceRepo.Update(ctx, inv)
 	if err != nil {
-		s.logger.Errorw("failed to update invoice payment status",
+		s.Logger.Errorw("failed to update invoice payment status",
 			"error", err,
 			"invoice_id", invoiceID)
 		return err
 	}
 
-	s.logger.Infow("successfully reconciled invoice",
+	s.Logger.Infow("successfully reconciled invoice",
 		"invoice_id", invoiceID,
 		"payment_amount", paymentAmount.String(),
 		"new_payment_status", newPaymentStatus)
@@ -692,7 +703,7 @@ func (s *InvoiceService) GetFlexPriceInvoiceIDByChargebeeInvoiceID(ctx context.C
 	filter.ProviderTypes = []string{string(types.SecretProviderChargebee)}
 	filter.EntityType = types.IntegrationEntityTypeInvoice
 
-	mappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
+	mappings, err := s.EntityIntegrationMappingRepo.List(ctx, filter)
 	if err != nil {
 		return "", ierr.WithError(err).
 			WithHint("Failed to get FlexPrice invoice mapping").
@@ -720,10 +731,8 @@ func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
 	amount decimal.Decimal,
 	currency string,
 	paymentMethod string,
-	invoiceService interfaces.InvoiceService,
-	paymentService interfaces.PaymentService,
 ) error {
-	s.logger.Infow("processing Chargebee payment from webhook",
+	s.Logger.Infow("processing Chargebee payment from webhook",
 		"flexprice_invoice_id", flexpriceInvoiceID,
 		"chargebee_invoice_id", chargebeeInvoiceID,
 		"chargebee_transaction_id", chargebeeTransactionID,
@@ -732,24 +741,24 @@ func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
 
 	// Step 1: Check if payment already exists (idempotency check)
 	// This prevents duplicate payment records when Chargebee retries webhooks
-	exists, err := s.PaymentExistsByGatewayPaymentID(ctx, chargebeeTransactionID, paymentService)
+	exists, err := s.PaymentExistsByGatewayPaymentID(ctx, chargebeeTransactionID)
 	if err != nil {
-		s.logger.Errorw("failed to check if payment exists by gateway payment ID",
+		s.Logger.Errorw("failed to check if payment exists by gateway payment ID",
 			"error", err,
 			"chargebee_transaction_id", chargebeeTransactionID)
 		// Continue processing on error - fail-safe behavior
 	} else if exists {
-		s.logger.Infow("payment already exists for this Chargebee transaction, skipping",
+		s.Logger.Infow("payment already exists for this Chargebee transaction, skipping",
 			"chargebee_transaction_id", chargebeeTransactionID,
 			"chargebee_invoice_id", chargebeeInvoiceID,
 			"flexprice_invoice_id", flexpriceInvoiceID)
 		return nil
 	}
 
-	// Step 2: Get FlexPrice invoice
-	invoiceResp, err := invoiceService.GetInvoice(ctx, flexpriceInvoiceID)
+	// Step 2: Get FlexPrice invoice using repository
+	inv, err := s.InvoiceRepo.Get(ctx, flexpriceInvoiceID)
 	if err != nil {
-		s.logger.Errorw("failed to get FlexPrice invoice",
+		s.Logger.Errorw("failed to get FlexPrice invoice",
 			"error", err,
 			"flexprice_invoice_id", flexpriceInvoiceID)
 		return ierr.WithError(err).
@@ -758,16 +767,17 @@ func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
 	}
 
 	// Step 3: Check if invoice is already succeeded (secondary check)
-	if invoiceResp.PaymentStatus == types.PaymentStatusSucceeded {
-		s.logger.Infow("invoice already succeeded, skipping duplicate payment",
+	if inv.PaymentStatus == types.PaymentStatusSucceeded {
+		s.Logger.Infow("invoice already succeeded, skipping duplicate payment",
 			"flexprice_invoice_id", flexpriceInvoiceID,
 			"chargebee_invoice_id", chargebeeInvoiceID)
 		return nil
 	}
 
-	// Step 3: Create payment record in FlexPrice
+	// Step 3: Create payment record in FlexPrice using repository
 	now := time.Now()
 	createPaymentReq := dto.CreatePaymentRequest{
+		IdempotencyKey:    chargebeeTransactionID, // Use transaction ID as idempotency key to prevent duplicates
 		Amount:            amount,
 		Currency:          currency,
 		PaymentMethodType: types.PaymentMethodTypeCard, // Default to card
@@ -782,9 +792,24 @@ func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
 		},
 	}
 
-	payment, err := paymentService.CreatePayment(ctx, &createPaymentReq)
+	paymentModel, err := createPaymentReq.ToPayment(ctx)
 	if err != nil {
-		s.logger.Errorw("failed to create payment record",
+		s.Logger.Errorw("failed to convert payment request to domain model",
+			"error", err,
+			"flexprice_invoice_id", flexpriceInvoiceID)
+		return ierr.WithError(err).
+			WithHint("Failed to create payment record").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Set gateway payment ID and succeeded status
+	paymentModel.GatewayPaymentID = &chargebeeTransactionID
+	paymentModel.PaymentStatus = types.PaymentStatusSucceeded
+	paymentModel.SucceededAt = &now
+
+	err = s.PaymentRepo.Create(ctx, paymentModel)
+	if err != nil {
+		s.Logger.Errorw("failed to create payment record",
 			"error", err,
 			"flexprice_invoice_id", flexpriceInvoiceID,
 			"chargebee_transaction_id", chargebeeTransactionID)
@@ -793,40 +818,16 @@ func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
 			Mark(ierr.ErrDatabase)
 	}
 
-	s.logger.Infow("created payment record",
-		"payment_id", payment.ID,
+	s.Logger.Infow("created payment record",
+		"payment_id", paymentModel.ID,
 		"flexprice_invoice_id", flexpriceInvoiceID,
 		"chargebee_transaction_id", chargebeeTransactionID,
 		"amount", amount.String())
 
-	// Update payment to succeeded status
-	paymentStatus := string(types.PaymentStatusSucceeded)
-	updatePaymentReq := dto.UpdatePaymentRequest{
-		PaymentStatus:    &paymentStatus,
-		GatewayPaymentID: &chargebeeTransactionID,
-		SucceededAt:      &now,
-	}
-
-	_, err = paymentService.UpdatePayment(ctx, payment.ID, updatePaymentReq)
-	if err != nil {
-		s.logger.Errorw("failed to update payment to succeeded",
-			"error", err,
-			"payment_id", payment.ID,
-			"chargebee_transaction_id", chargebeeTransactionID)
-		return ierr.WithError(err).
-			WithHint("Failed to update payment status").
-			Mark(ierr.ErrDatabase)
-	}
-
-	s.logger.Infow("updated payment to succeeded",
-		"payment_id", payment.ID,
-		"chargebee_transaction_id", chargebeeTransactionID,
-		"amount", amount.String())
-
 	// Step 4: Reconcile invoice
-	err = s.ReconcileInvoicePayment(ctx, flexpriceInvoiceID, amount, invoiceService)
+	err = s.ReconcileInvoicePayment(ctx, flexpriceInvoiceID, amount)
 	if err != nil {
-		s.logger.Errorw("failed to reconcile payment with invoice",
+		s.Logger.Errorw("failed to reconcile payment with invoice",
 			"error", err,
 			"flexprice_invoice_id", flexpriceInvoiceID,
 			"amount", amount.String())
@@ -835,8 +836,8 @@ func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
 			Mark(ierr.ErrDatabase)
 	}
 
-	s.logger.Infow("successfully processed Chargebee payment",
-		"payment_id", payment.ID,
+	s.Logger.Infow("successfully processed Chargebee payment",
+		"payment_id", paymentModel.ID,
 		"flexprice_invoice_id", flexpriceInvoiceID,
 		"chargebee_transaction_id", chargebeeTransactionID)
 
@@ -848,7 +849,6 @@ func (s *InvoiceService) ProcessChargebeePaymentFromWebhook(
 func (s *InvoiceService) PaymentExistsByGatewayPaymentID(
 	ctx context.Context,
 	gatewayPaymentID string,
-	paymentService interfaces.PaymentService,
 ) (bool, error) {
 	if gatewayPaymentID == "" {
 		return false, nil
@@ -860,12 +860,12 @@ func (s *InvoiceService) PaymentExistsByGatewayPaymentID(
 	filter.QueryFilter.Limit = &limit
 	filter.GatewayPaymentID = &gatewayPaymentID
 
-	// Query payments
-	payments, err := paymentService.ListPayments(ctx, filter)
+	// Query payments using repository
+	payments, err := s.PaymentRepo.List(ctx, filter)
 	if err != nil {
 		return false, err
 	}
 
 	// Return true if any payment exists with this gateway payment ID
-	return len(payments.Items) > 0, nil
+	return len(payments) > 0, nil
 }
