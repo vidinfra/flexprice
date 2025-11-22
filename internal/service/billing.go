@@ -541,7 +541,61 @@ func (s *billingService) CalculateUsageCharges(
 		}
 	}
 
+	// Add commitment true-up line item if there's remaining commitment
+	commitmentAmount := lo.FromPtr(sub.CommitmentAmount)
+	overageFactor := lo.FromPtr(sub.OverageFactor)
+	hasCommitment := commitmentAmount.GreaterThan(decimal.Zero) && overageFactor.GreaterThan(decimal.NewFromInt(1))
+
+	if hasCommitment && usage != nil {
+		remainingCommitment := s.calculateRemainingCommitment(usage, commitmentAmount)
+
+		if remainingCommitment.GreaterThan(decimal.Zero) {
+			commitmentUtilized := commitmentAmount.Sub(remainingCommitment)
+			trueUpLineItem := dto.CreateInvoiceLineItemRequest{
+				EntityID:    lo.ToPtr(sub.PlanID),
+				EntityType:  lo.ToPtr(string(types.SubscriptionLineItemEntityTypePlan)),
+				PriceType:   lo.ToPtr(string(types.PRICE_TYPE_FIXED)),
+				DisplayName: lo.ToPtr("Commitment Shortfall"),
+				Amount:      remainingCommitment,
+				Quantity:    decimal.NewFromInt(1),
+				PeriodStart: &periodStart,
+				PeriodEnd:   &periodEnd,
+				PriceID:     lo.ToPtr(types.GenerateUUIDWithPrefix(types.UUID_PREFIX_PRICE)),
+				Metadata: types.Metadata{
+					"is_commitment_trueup": "true",
+					"description":          "Remaining commitment amount for billing period",
+					"commitment_amount":    commitmentAmount.String(),
+					"commitment_utilized":  commitmentUtilized.String(),
+				},
+			}
+
+			usageCharges = append(usageCharges, trueUpLineItem)
+			totalUsageCost = totalUsageCost.Add(remainingCommitment)
+
+			s.Logger.Infow("added commitment true-up line item",
+				"subscription_id", sub.ID,
+				"remaining_commitment", remainingCommitment.String(),
+				"commitment_amount", commitmentAmount.String(),
+				"commitment_utilized", commitmentUtilized.String())
+		}
+	}
+
 	return usageCharges, totalUsageCost, nil
+}
+
+// calculateRemainingCommitment calculates the remaining commitment amount
+// that needs to be charged as a true-up
+func (s *billingService) calculateRemainingCommitment(
+	usage *dto.GetUsageBySubscriptionResponse,
+	commitmentAmount decimal.Decimal,
+) decimal.Decimal {
+	if usage == nil {
+		return decimal.Zero
+	}
+
+	commitmentUtilized := decimal.NewFromFloat(usage.CommitmentUtilized)
+	remainingCommitment := commitmentAmount.Sub(commitmentUtilized)
+	return decimal.Max(remainingCommitment, decimal.Zero)
 }
 
 func (s *billingService) CalculateUsageChargesForPreview(
@@ -647,7 +701,8 @@ func (s *billingService) CalculateUsageChargesForPreview(
 			matchingEntitlement, entitlementOk := entitlementsByMeterID[item.MeterID]
 
 			// Handle bucketed max meters first - this should always be checked regardless of entitlements
-			if meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
+			// But skip overage charges as they already have the correct amount with overage factor applied
+			if !matchingCharge.IsOverage && meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
 				// Get usage with bucketed values
 				usageRequest := &events.FeatureUsageParams{
 					PriceID: item.PriceID,
@@ -843,8 +898,10 @@ func (s *billingService) CalculateUsageChargesForPreview(
 					quantityForCalculation = decimal.Zero
 					matchingCharge.Amount = 0
 				}
-			} else if !meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
-				// For non-bucketed meters without entitlements, calculate cost normally
+			} else if !matchingCharge.IsOverage && !meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
+				// For non-bucketed meters without entitlements (but not overage charges),
+				// calculate cost normally. Overage charges already have the correct amount
+				// calculated by GetFeatureUsageBySubscription with the overage factor applied.
 				adjustedAmount := priceService.CalculateCost(ctx, matchingCharge.Price, quantityForCalculation)
 				matchingCharge.Amount = price.FormatAmountToFloat64WithPrecision(adjustedAmount, matchingCharge.Price.Currency)
 			}
@@ -919,6 +976,46 @@ func (s *billingService) CalculateUsageChargesForPreview(
 				PeriodEnd:        lo.ToPtr(item.GetPeriodEnd(periodEnd)),
 				Metadata:         metadata,
 			})
+		}
+	}
+
+	// Add commitment true-up line item if there's remaining commitment
+	commitmentAmount := lo.FromPtr(sub.CommitmentAmount)
+	overageFactor := lo.FromPtr(sub.OverageFactor)
+	hasCommitment := commitmentAmount.GreaterThan(decimal.Zero) && overageFactor.GreaterThan(decimal.NewFromInt(1))
+
+	if hasCommitment && usage != nil {
+		remainingCommitment := s.calculateRemainingCommitment(usage, commitmentAmount)
+
+		if remainingCommitment.GreaterThan(decimal.Zero) {
+
+			commitmentUtilized := commitmentAmount.Sub(remainingCommitment)
+			trueUpLineItem := dto.CreateInvoiceLineItemRequest{
+				EntityID:    lo.ToPtr(sub.PlanID),
+				EntityType:  lo.ToPtr(string(types.SubscriptionLineItemEntityTypePlan)),
+				PriceType:   lo.ToPtr(string(types.PRICE_TYPE_FIXED)),
+				DisplayName: lo.ToPtr("Commitment Shortfall"),
+				Amount:      remainingCommitment,
+				Quantity:    decimal.NewFromInt(1),
+				PeriodStart: &periodStart,
+				PeriodEnd:   &periodEnd,
+				PriceID:     lo.ToPtr(types.GenerateUUIDWithPrefix(types.UUID_PREFIX_PRICE)),
+				Metadata: types.Metadata{
+					"is_commitment_trueup": "true",
+					"description":          "Remaining commitment amount for billing period",
+					"commitment_amount":    commitmentAmount.String(),
+					"commitment_utilized":  commitmentUtilized.String(),
+				},
+			}
+
+			usageCharges = append(usageCharges, trueUpLineItem)
+			totalUsageCost = totalUsageCost.Add(remainingCommitment)
+
+			s.Logger.Infow("added commitment true-up line item for preview",
+				"subscription_id", sub.ID,
+				"remaining_commitment", remainingCommitment.String(),
+				"commitment_amount", commitmentAmount.String(),
+				"commitment_utilized", commitmentUtilized.String())
 		}
 	}
 
