@@ -550,29 +550,17 @@ func (s *billingService) CalculateUsageCharges(
 		remainingCommitment := s.calculateRemainingCommitment(usage, commitmentAmount)
 
 		if remainingCommitment.GreaterThan(decimal.Zero) {
-			// Create true-up line item
-			planDisplayName := ""
-			if sub.PlanID != "" {
-				// Try to get plan display name from first line item if available
-				for _, item := range sub.LineItems {
-					if item.PlanDisplayName != "" {
-						planDisplayName = item.PlanDisplayName
-						break
-					}
-				}
-			}
-
 			commitmentUtilized := commitmentAmount.Sub(remainingCommitment)
 			trueUpLineItem := dto.CreateInvoiceLineItemRequest{
-				EntityID:        lo.ToPtr(sub.PlanID),
-				EntityType:      lo.ToPtr(string(types.SubscriptionLineItemEntityTypePlan)),
-				PlanDisplayName: lo.ToPtr(planDisplayName),
-				PriceType:       lo.ToPtr(string(types.PRICE_TYPE_FIXED)),
-				DisplayName:     lo.ToPtr("Commitment True-Up"),
-				Amount:          remainingCommitment,
-				Quantity:        decimal.Zero,
-				PeriodStart:     &periodStart,
-				PeriodEnd:       &periodEnd,
+				EntityID:    lo.ToPtr(sub.PlanID),
+				EntityType:  lo.ToPtr(string(types.SubscriptionLineItemEntityTypePlan)),
+				PriceType:   lo.ToPtr(string(types.PRICE_TYPE_FIXED)),
+				DisplayName: lo.ToPtr("Commitment Shortfall"),
+				Amount:      remainingCommitment,
+				Quantity:    decimal.NewFromInt(1),
+				PeriodStart: &periodStart,
+				PeriodEnd:   &periodEnd,
+				PriceID:     lo.ToPtr(types.GenerateUUIDWithPrefix(types.UUID_PREFIX_PRICE)),
 				Metadata: types.Metadata{
 					"is_commitment_trueup": "true",
 					"description":          "Remaining commitment amount for billing period",
@@ -713,7 +701,8 @@ func (s *billingService) CalculateUsageChargesForPreview(
 			matchingEntitlement, entitlementOk := entitlementsByMeterID[item.MeterID]
 
 			// Handle bucketed max meters first - this should always be checked regardless of entitlements
-			if meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
+			// But skip overage charges as they already have the correct amount with overage factor applied
+			if !matchingCharge.IsOverage && meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
 				// Get usage with bucketed values
 				usageRequest := &events.FeatureUsageParams{
 					PriceID: item.PriceID,
@@ -909,8 +898,10 @@ func (s *billingService) CalculateUsageChargesForPreview(
 					quantityForCalculation = decimal.Zero
 					matchingCharge.Amount = 0
 				}
-			} else if !meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
-				// For non-bucketed meters without entitlements, calculate cost normally
+			} else if !matchingCharge.IsOverage && !meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
+				// For non-bucketed meters without entitlements (but not overage charges),
+				// calculate cost normally. Overage charges already have the correct amount
+				// calculated by GetFeatureUsageBySubscription with the overage factor applied.
 				adjustedAmount := priceService.CalculateCost(ctx, matchingCharge.Price, quantityForCalculation)
 				matchingCharge.Amount = price.FormatAmountToFloat64WithPrecision(adjustedAmount, matchingCharge.Price.Currency)
 			}
@@ -997,29 +988,18 @@ func (s *billingService) CalculateUsageChargesForPreview(
 		remainingCommitment := s.calculateRemainingCommitment(usage, commitmentAmount)
 
 		if remainingCommitment.GreaterThan(decimal.Zero) {
-			// Create true-up line item
-			planDisplayName := ""
-			if sub.PlanID != "" {
-				// Try to get plan display name from first line item if available
-				for _, item := range sub.LineItems {
-					if item.PlanDisplayName != "" {
-						planDisplayName = item.PlanDisplayName
-						break
-					}
-				}
-			}
 
 			commitmentUtilized := commitmentAmount.Sub(remainingCommitment)
 			trueUpLineItem := dto.CreateInvoiceLineItemRequest{
-				EntityID:        lo.ToPtr(sub.PlanID),
-				EntityType:      lo.ToPtr(string(types.SubscriptionLineItemEntityTypePlan)),
-				PlanDisplayName: lo.ToPtr(planDisplayName),
-				PriceType:       lo.ToPtr(string(types.PRICE_TYPE_FIXED)),
-				DisplayName:     lo.ToPtr("Commitment True-Up"),
-				Amount:          remainingCommitment,
-				Quantity:        decimal.NewFromInt(1),
-				PeriodStart:     &periodStart,
-				PeriodEnd:       &periodEnd,
+				EntityID:    lo.ToPtr(sub.PlanID),
+				EntityType:  lo.ToPtr(string(types.SubscriptionLineItemEntityTypePlan)),
+				PriceType:   lo.ToPtr(string(types.PRICE_TYPE_FIXED)),
+				DisplayName: lo.ToPtr("Commitment Shortfall"),
+				Amount:      remainingCommitment,
+				Quantity:    decimal.NewFromInt(1),
+				PeriodStart: &periodStart,
+				PeriodEnd:   &periodEnd,
+				PriceID:     lo.ToPtr(types.GenerateUUIDWithPrefix(types.UUID_PREFIX_PRICE)),
 				Metadata: types.Metadata{
 					"is_commitment_trueup": "true",
 					"description":          "Remaining commitment amount for billing period",
