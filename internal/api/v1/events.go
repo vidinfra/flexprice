@@ -460,3 +460,31 @@ func (h *EventsHandler) GetMonitoringData(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response)
 }
+
+// @Summary Get hugging face inferece data
+// @Description Retrieve monitoring data for events including consumer lag and event metrics (last 24 hours by default)
+// @Tags Events
+// @Produce json
+// @Security ApiKeyAuth
+// @Success 200 {object} dto.GetHuggingFaceInferenceResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /events/huggingface-inference [post]
+func (h *EventsHandler) GetHuggingfaceInference(c *gin.Context) {
+	ctx := c.Request.Context()
+	var err error
+
+	var req dto.GetHuggingFaceInferenceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(ierr.WithError(err).
+			WithHint("Please check the request payload").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	response, err := h.featureUsageTrackingService.GetHuggingFaceInferece(ctx, &req)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, response)
+}

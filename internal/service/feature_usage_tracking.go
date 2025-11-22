@@ -52,6 +52,9 @@ type FeatureUsageTrackingService interface {
 
 	// Reprocess events for a specific customer or with other filters
 	ReprocessEvents(ctx context.Context, params *events.ReprocessEventsParams) error
+
+	// Get HuggingFace Inferece
+	GetHuggingFaceInferece(ctx context.Context, req *dto.GetHuggingFaceInferenceRequest) (*dto.GetHuggingFaceInfereceResponse, error)
 }
 
 type featureUsageTrackingService struct {
@@ -2315,4 +2318,167 @@ func (s *featureUsageTrackingService) mergeAnalyticsData(aggregated *AnalyticsDa
 			aggregated.Addons[id] = addon
 		}
 	}
+}
+
+func (s *featureUsageTrackingService) GetHuggingFaceInferece(ctx context.Context, params *dto.GetHuggingFaceInferenceRequest) (*dto.GetHuggingFaceInfereceResponse, error) {
+	response := &dto.GetHuggingFaceInfereceResponse{
+		Data: make(map[string]*dto.EventCostInfo),
+	}
+
+	if len(params.EventIDs) == 0 {
+		return response, nil
+	}
+
+	// Query feature_usage table directly by event IDs
+	featureUsageRecords, err := s.featureUsageRepo.GetFeatureUsageByEventIDs(ctx, params.EventIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Group by event ID (an event can have multiple feature_usage records if it matches multiple prices/meters)
+	usageByEventID := make(map[string][]*events.FeatureUsage)
+	for _, record := range featureUsageRecords {
+		usageByEventID[record.ID] = append(usageByEventID[record.ID], record)
+	}
+
+	// Collect unique price IDs to fetch prices in bulk
+	priceIDs := make([]string, 0)
+	priceIDSet := make(map[string]bool)
+	for _, records := range usageByEventID {
+		for _, record := range records {
+			if record.PriceID != "" && !priceIDSet[record.PriceID] {
+				priceIDs = append(priceIDs, record.PriceID)
+				priceIDSet[record.PriceID] = true
+			}
+		}
+	}
+
+	// Fetch all prices in bulk
+	priceMap := make(map[string]*price.Price)
+	if len(priceIDs) > 0 {
+		priceFilter := types.NewNoLimitPriceFilter().
+			WithPriceIDs(priceIDs).
+			WithStatus(types.StatusPublished)
+		prices, err := s.PriceRepo.List(ctx, priceFilter)
+		if err != nil {
+			s.Logger.Warnw("failed to fetch prices",
+				"error", err,
+				"price_count", len(priceIDs),
+			)
+		} else {
+			for _, p := range prices {
+				priceMap[p.ID] = p
+			}
+		}
+	}
+
+	// Collect unique feature IDs to fetch features in bulk
+	featureIDs := make([]string, 0)
+	featureIDSet := make(map[string]bool)
+	for _, records := range usageByEventID {
+		for _, record := range records {
+			if record.FeatureID != "" && !featureIDSet[record.FeatureID] {
+				featureIDs = append(featureIDs, record.FeatureID)
+				featureIDSet[record.FeatureID] = true
+			}
+		}
+	}
+
+	// Fetch all features in bulk
+	featureMap := make(map[string]*feature.Feature)
+	if len(featureIDs) > 0 {
+		featureFilter := types.NewNoLimitFeatureFilter()
+		featureFilter.FeatureIDs = featureIDs
+		features, err := s.FeatureRepo.List(ctx, featureFilter)
+		if err != nil {
+			s.Logger.Warnw("failed to fetch features",
+				"error", err,
+				"feature_count", len(featureIDs),
+			)
+		} else {
+			for _, f := range features {
+				featureMap[f.ID] = f
+			}
+		}
+	}
+
+	// Calculate cost for each event
+	priceService := NewPriceService(s.ServiceParams)
+	for eventID, records := range usageByEventID {
+		costInfo := s.calculateCostFromFeatureUsage(ctx, eventID, records, priceMap, featureMap, priceService)
+		response.Data[eventID] = costInfo
+	}
+
+	// Handle events that were not found in feature_usage table
+	for _, eventID := range params.EventIDs {
+		if _, exists := response.Data[eventID]; !exists {
+			response.Data[eventID] = &dto.EventCostInfo{
+				EventID: eventID,
+				Error:   "Event not found in feature_usage table (event may not be processed yet)",
+			}
+		}
+	}
+
+	return response, nil
+}
+
+// calculateCostFromFeatureUsage calculates cost from feature_usage records
+func (s *featureUsageTrackingService) calculateCostFromFeatureUsage(
+	ctx context.Context,
+	eventID string,
+	records []*events.FeatureUsage,
+	priceMap map[string]*price.Price,
+	featureMap map[string]*feature.Feature,
+	priceService PriceService,
+) *dto.EventCostInfo {
+	costInfo := &dto.EventCostInfo{
+		EventID:  eventID,
+		Cost:     decimal.Zero,
+		Quantity: decimal.Zero,
+	}
+
+	// Sum up costs from all records (an event can match multiple prices/meters)
+	totalCost := decimal.Zero
+	var selectedPrice *price.Price
+
+	for _, record := range records {
+		// Get price for this record
+		price, ok := priceMap[record.PriceID]
+		if !ok {
+			s.Logger.Warnw("price not found for feature_usage record",
+				"event_id", eventID,
+				"price_id", record.PriceID,
+			)
+			continue
+		}
+
+		// Calculate cost using the quantity from feature_usage (already processed)
+		// Note: qty_total is already the processed quantity, we need to account for sign
+		quantity := record.QtyTotal.Mul(decimal.NewFromInt(int64(record.Sign)))
+
+		// Calculate cost
+		cost := priceService.CalculateCost(ctx, price, quantity)
+		totalCost = totalCost.Add(cost)
+
+		// Store metadata from first record
+		if selectedPrice == nil {
+			selectedPrice = price
+			costInfo.Quantity = quantity
+			costInfo.PriceID = record.PriceID
+			costInfo.MeterID = record.MeterID
+			costInfo.FeatureID = record.FeatureID
+			costInfo.SubscriptionID = record.SubscriptionID
+
+			if feature, ok := featureMap[record.FeatureID]; ok {
+				costInfo.FeatureName = feature.Name
+			}
+		}
+	}
+
+	costInfo.Cost = totalCost
+	if selectedPrice != nil {
+		costInfo.Currency = selectedPrice.Currency
+	}
+
+	return costInfo
 }
