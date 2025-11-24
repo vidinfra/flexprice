@@ -366,5 +366,5 @@ type EventCostInfo struct {
 }
 
 type GetHuggingFaceInferenceResponse struct {
-	Data map[string]*EventCostInfo `json:"data"`
+	Data []EventCostInfo `json:"data"`
 }

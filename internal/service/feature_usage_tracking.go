@@ -2321,12 +2321,10 @@ func (s *featureUsageTrackingService) mergeAnalyticsData(aggregated *AnalyticsDa
 }
 
 func (s *featureUsageTrackingService) GetHuggingFaceInference(ctx context.Context, params *dto.GetHuggingFaceInferenceRequest) (*dto.GetHuggingFaceInferenceResponse, error) {
-	response := &dto.GetHuggingFaceInferenceResponse{
-		Data: make(map[string]*dto.EventCostInfo, len(params.EventIDs)),
-	}
-
 	if len(params.EventIDs) == 0 {
-		return response, nil
+		return &dto.GetHuggingFaceInferenceResponse{
+			Data: make([]dto.EventCostInfo, 0),
+		}, nil
 	}
 
 	// Query feature_usage table directly by event IDs
@@ -2335,19 +2333,22 @@ func (s *featureUsageTrackingService) GetHuggingFaceInference(ctx context.Contex
 		return nil, err
 	}
 
-	// Group by event ID and collect unique price/feature IDs in one pass
-	usageByEventID := make(map[string][]*events.FeatureUsage, len(params.EventIDs))
-	priceIDSet := make(map[string]bool)
-	featureIDSet := make(map[string]bool)
+	if len(featureUsageRecords) == 0 {
+		return &dto.GetHuggingFaceInferenceResponse{
+			Data: make([]dto.EventCostInfo, 0),
+		}, nil
+	}
+
+	// Collect unique price/feature IDs in one pass
+	priceIDSet := make(map[string]struct{}, len(featureUsageRecords))
+	featureIDSet := make(map[string]struct{}, len(featureUsageRecords))
 
 	for _, record := range featureUsageRecords {
-		usageByEventID[record.ID] = append(usageByEventID[record.ID], record)
-
 		if record.PriceID != "" {
-			priceIDSet[record.PriceID] = true
+			priceIDSet[record.PriceID] = struct{}{}
 		}
 		if record.FeatureID != "" {
-			featureIDSet[record.FeatureID] = true
+			featureIDSet[record.FeatureID] = struct{}{}
 		}
 	}
 
@@ -2397,21 +2398,16 @@ func (s *featureUsageTrackingService) GetHuggingFaceInference(ctx context.Contex
 		}
 	}
 
-	// Calculate cost for each event
-	priceService := NewPriceService(s.ServiceParams)
-	for eventID, records := range usageByEventID {
-		costInfo := s.calculateCostFromFeatureUsage(ctx, eventID, records, priceMap, featureMap, priceService)
-		response.Data[eventID] = costInfo
+	// Pre-allocate response slice with exact capacity
+	response := &dto.GetHuggingFaceInferenceResponse{
+		Data: make([]dto.EventCostInfo, 0, len(featureUsageRecords)),
 	}
 
-	// Handle events that were not found in feature_usage table
-	for _, eventID := range params.EventIDs {
-		if _, exists := response.Data[eventID]; !exists {
-			response.Data[eventID] = &dto.EventCostInfo{
-				EventID: eventID,
-				Error:   "Event not found in feature_usage table (event may not be processed yet)",
-			}
-		}
+	// Calculate cost for each event
+	priceService := NewPriceService(s.ServiceParams)
+	for i := range featureUsageRecords {
+		costInfo := s.calculateCostFromFeatureUsage(ctx, featureUsageRecords[i].ID, []*events.FeatureUsage{featureUsageRecords[i]}, priceMap, featureMap, priceService)
+		response.Data = append(response.Data, costInfo)
 	}
 
 	return response, nil
@@ -2425,8 +2421,8 @@ func (s *featureUsageTrackingService) calculateCostFromFeatureUsage(
 	priceMap map[string]*price.Price,
 	featureMap map[string]*feature.Feature,
 	priceService PriceService,
-) *dto.EventCostInfo {
-	costInfo := &dto.EventCostInfo{
+) dto.EventCostInfo {
+	costInfo := dto.EventCostInfo{
 		EventID:  eventID,
 		Cost:     decimal.Zero,
 		Quantity: decimal.Zero,
@@ -2438,7 +2434,7 @@ func (s *featureUsageTrackingService) calculateCostFromFeatureUsage(
 
 	for _, record := range records {
 		// Get price for this record
-		price, ok := priceMap[record.PriceID]
+		p, ok := priceMap[record.PriceID]
 		if !ok {
 			s.Logger.Warnw("price not found for feature_usage record",
 				"event_id", eventID,
@@ -2448,20 +2444,20 @@ func (s *featureUsageTrackingService) calculateCostFromFeatureUsage(
 		}
 
 		// Calculate cost
-		cost := priceService.CalculateCost(ctx, price, record.QtyTotal)
+		cost := priceService.CalculateCost(ctx, p, record.QtyTotal)
 		totalCost = totalCost.Add(cost)
 
 		// Store metadata from first record
 		if selectedPrice == nil {
-			selectedPrice = price
+			selectedPrice = p
 			costInfo.Quantity = record.QtyTotal
 			costInfo.PriceID = record.PriceID
 			costInfo.MeterID = record.MeterID
 			costInfo.FeatureID = record.FeatureID
 			costInfo.SubscriptionID = record.SubscriptionID
 
-			if feature, ok := featureMap[record.FeatureID]; ok {
-				costInfo.FeatureName = feature.Name
+			if f, ok := featureMap[record.FeatureID]; ok {
+				costInfo.FeatureName = f.Name
 			}
 		}
 	}
