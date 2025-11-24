@@ -348,23 +348,15 @@ type GetMonitoringDataResponse struct {
 	PostProcessingLag int64  `json:"post_processing_lag"`
 }
 
-type GetHuggingFaceInferenceRequest struct {
-	EventIDs []string `json:"event_ids" binding:"required,min=1"`
+type GetHuggingFaceBillingDataRequest struct {
+	RequestIDs []string `json:"requestIds" binding:"required,min=1"`
 }
 
 type EventCostInfo struct {
-	EventID        string          `json:"event_id"`
-	Cost           decimal.Decimal `json:"cost"`
-	Currency       string          `json:"currency,omitempty"`
-	Quantity       decimal.Decimal `json:"quantity"`
-	PriceID        string          `json:"price_id,omitempty"`
-	MeterID        string          `json:"meter_id,omitempty"`
-	FeatureID      string          `json:"feature_id,omitempty"`
-	FeatureName    string          `json:"feature_name,omitempty"`
-	SubscriptionID string          `json:"subscription_id,omitempty"`
-	Error          string          `json:"error,omitempty"`
+	RequestID     string          `json:"requestId"`
+	CostInNanoUSD decimal.Decimal `json:"costNanoUsd"`
 }
 
-type GetHuggingFaceInferenceResponse struct {
-	Data []EventCostInfo `json:"data"`
+type GetHuggingFaceBillingDataResponse struct {
+	Data []EventCostInfo `json:"requests"`
 }

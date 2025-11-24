@@ -466,14 +466,14 @@ func (h *EventsHandler) GetMonitoringData(c *gin.Context) {
 // @Tags Events
 // @Produce json
 // @Security ApiKeyAuth
-// @Success 200 {object} dto.GetHuggingFaceInferenceResponse
+// @Success 200 {object} dto.GetHuggingFaceBillingDataResponse
 // @Failure 500 {object} ierr.ErrorResponse
 // @Router /events/huggingface-inference [post]
-func (h *EventsHandler) GetHuggingFaceInference(c *gin.Context) {
+func (h *EventsHandler) GetHuggingFaceBillingData(c *gin.Context) {
 	ctx := c.Request.Context()
 	var err error
 
-	var req dto.GetHuggingFaceInferenceRequest
+	var req dto.GetHuggingFaceBillingDataRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.Error(ierr.WithError(err).
 			WithHint("Please check the request payload").
@@ -481,7 +481,7 @@ func (h *EventsHandler) GetHuggingFaceInference(c *gin.Context) {
 		return
 	}
 
-	response, err := h.featureUsageTrackingService.GetHuggingFaceInference(ctx, &req)
+	response, err := h.featureUsageTrackingService.GetHuggingFaceBillingData(ctx, &req)
 	if err != nil {
 		c.Error(err)
 		return

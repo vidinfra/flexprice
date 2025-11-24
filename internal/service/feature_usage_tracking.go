@@ -54,7 +54,7 @@ type FeatureUsageTrackingService interface {
 	ReprocessEvents(ctx context.Context, params *events.ReprocessEventsParams) error
 
 	// Get HuggingFace Inference
-	GetHuggingFaceInference(ctx context.Context, req *dto.GetHuggingFaceInferenceRequest) (*dto.GetHuggingFaceInferenceResponse, error)
+	GetHuggingFaceBillingData(ctx context.Context, req *dto.GetHuggingFaceBillingDataRequest) (*dto.GetHuggingFaceBillingDataResponse, error)
 }
 
 type featureUsageTrackingService struct {
@@ -2320,35 +2320,30 @@ func (s *featureUsageTrackingService) mergeAnalyticsData(aggregated *AnalyticsDa
 	}
 }
 
-func (s *featureUsageTrackingService) GetHuggingFaceInference(ctx context.Context, params *dto.GetHuggingFaceInferenceRequest) (*dto.GetHuggingFaceInferenceResponse, error) {
-	if len(params.EventIDs) == 0 {
-		return &dto.GetHuggingFaceInferenceResponse{
+func (s *featureUsageTrackingService) GetHuggingFaceBillingData(ctx context.Context, params *dto.GetHuggingFaceBillingDataRequest) (*dto.GetHuggingFaceBillingDataResponse, error) {
+	if len(params.RequestIDs) == 0 {
+		return &dto.GetHuggingFaceBillingDataResponse{
 			Data: make([]dto.EventCostInfo, 0),
 		}, nil
 	}
 
 	// Query feature_usage table directly by event IDs
-	featureUsageRecords, err := s.featureUsageRepo.GetFeatureUsageByEventIDs(ctx, params.EventIDs)
+	featureUsageRecords, err := s.featureUsageRepo.GetFeatureUsageByEventIDs(ctx, params.RequestIDs)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(featureUsageRecords) == 0 {
-		return &dto.GetHuggingFaceInferenceResponse{
+		return &dto.GetHuggingFaceBillingDataResponse{
 			Data: make([]dto.EventCostInfo, 0),
 		}, nil
 	}
 
-	// Collect unique price/feature IDs in one pass
+	// Collect unique price IDs in one pass (removed featureIDSet as features aren't used)
 	priceIDSet := make(map[string]struct{}, len(featureUsageRecords))
-	featureIDSet := make(map[string]struct{}, len(featureUsageRecords))
-
-	for _, record := range featureUsageRecords {
-		if record.PriceID != "" {
-			priceIDSet[record.PriceID] = struct{}{}
-		}
-		if record.FeatureID != "" {
-			featureIDSet[record.FeatureID] = struct{}{}
+	for i := range featureUsageRecords {
+		if featureUsageRecords[i].PriceID != "" {
+			priceIDSet[featureUsageRecords[i].PriceID] = struct{}{}
 		}
 	}
 
@@ -2370,102 +2365,46 @@ func (s *featureUsageTrackingService) GetHuggingFaceInference(ctx context.Contex
 				WithHint("Failed to fetch prices").
 				Mark(ierr.ErrDatabase)
 		}
-		for _, p := range prices {
-			priceMap[p.ID] = p
-		}
-	}
-
-	// Fetch all features in bulk
-	featureMap := make(map[string]*feature.Feature, len(featureIDSet))
-	if len(featureIDSet) > 0 {
-		featureIDs := make([]string, 0, len(featureIDSet))
-		for id := range featureIDSet {
-			featureIDs = append(featureIDs, id)
-		}
-
-		featureFilter := types.NewNoLimitFeatureFilter()
-		featureFilter.FeatureIDs = featureIDs
-		features, err := s.FeatureRepo.List(ctx, featureFilter)
-		if err != nil {
-			s.Logger.Warnw("failed to fetch features",
-				"error", err,
-				"feature_count", len(featureIDs),
-			)
-		} else {
-			for _, f := range features {
-				featureMap[f.ID] = f
-			}
+		for i := range prices {
+			priceMap[prices[i].ID] = prices[i]
 		}
 	}
 
 	// Pre-allocate response slice with exact capacity
-	response := &dto.GetHuggingFaceInferenceResponse{
-		Data: make([]dto.EventCostInfo, 0, len(featureUsageRecords)),
-	}
+	responseData := make([]dto.EventCostInfo, 0, len(featureUsageRecords))
 
-	// Calculate cost for each event
+	// Calculate cost for each request
 	priceService := NewPriceService(s.ServiceParams)
+	nanoUSDMultiplier := decimal.NewFromInt(1_000_000_000)
+
 	for i := range featureUsageRecords {
-		costInfo := s.calculateCostFromFeatureUsage(ctx, featureUsageRecords[i].ID, []*events.FeatureUsage{featureUsageRecords[i]}, priceMap, featureMap, priceService)
-		response.Data = append(response.Data, costInfo)
-	}
+		record := featureUsageRecords[i]
 
-	return response, nil
-}
-
-// calculateCostFromFeatureUsage calculates cost from feature_usage records
-func (s *featureUsageTrackingService) calculateCostFromFeatureUsage(
-	ctx context.Context,
-	eventID string,
-	records []*events.FeatureUsage,
-	priceMap map[string]*price.Price,
-	featureMap map[string]*feature.Feature,
-	priceService PriceService,
-) dto.EventCostInfo {
-	costInfo := dto.EventCostInfo{
-		EventID:  eventID,
-		Cost:     decimal.Zero,
-		Quantity: decimal.Zero,
-	}
-
-	// Sum up costs from all records (an event can match multiple prices/meters)
-	totalCost := decimal.Zero
-	var selectedPrice *price.Price
-
-	for _, record := range records {
 		// Get price for this record
 		p, ok := priceMap[record.PriceID]
 		if !ok {
 			s.Logger.Warnw("price not found for feature_usage record",
-				"event_id", eventID,
+				"request_id", record.ID,
 				"price_id", record.PriceID,
 			)
+			responseData = append(responseData, dto.EventCostInfo{
+				RequestID:     record.ID,
+				CostInNanoUSD: decimal.Zero,
+			})
 			continue
 		}
 
-		// Calculate cost
+		// Calculate cost in the price's currency and convert to nano-USD
 		cost := priceService.CalculateCost(ctx, p, record.QtyTotal)
-		totalCost = totalCost.Add(cost)
+		costInNanoUSD := cost.Mul(nanoUSDMultiplier)
 
-		// Store metadata from first record
-		if selectedPrice == nil {
-			selectedPrice = p
-			costInfo.Quantity = record.QtyTotal
-			costInfo.PriceID = record.PriceID
-			costInfo.MeterID = record.MeterID
-			costInfo.FeatureID = record.FeatureID
-			costInfo.SubscriptionID = record.SubscriptionID
-
-			if f, ok := featureMap[record.FeatureID]; ok {
-				costInfo.FeatureName = f.Name
-			}
-		}
+		responseData = append(responseData, dto.EventCostInfo{
+			RequestID:     record.ID,
+			CostInNanoUSD: costInNanoUSD,
+		})
 	}
 
-	costInfo.Cost = totalCost
-	if selectedPrice != nil {
-		costInfo.Currency = selectedPrice.Currency
-	}
-
-	return costInfo
+	return &dto.GetHuggingFaceBillingDataResponse{
+		Data: responseData,
+	}, nil
 }
