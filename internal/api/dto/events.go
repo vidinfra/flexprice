@@ -349,7 +349,7 @@ type GetMonitoringDataResponse struct {
 }
 
 type GetHuggingFaceBillingDataRequest struct {
-	RequestIDs []string `json:"requestIds" binding:"required,min=1"`
+	EventIDs []string `json:"requestIds" binding:"required,min=1"`
 }
 
 type EventCostInfo struct {

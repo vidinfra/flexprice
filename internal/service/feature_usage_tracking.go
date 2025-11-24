@@ -2321,14 +2321,14 @@ func (s *featureUsageTrackingService) mergeAnalyticsData(aggregated *AnalyticsDa
 }
 
 func (s *featureUsageTrackingService) GetHuggingFaceBillingData(ctx context.Context, params *dto.GetHuggingFaceBillingDataRequest) (*dto.GetHuggingFaceBillingDataResponse, error) {
-	if len(params.RequestIDs) == 0 {
+	if len(params.EventIDs) == 0 {
 		return &dto.GetHuggingFaceBillingDataResponse{
 			Data: make([]dto.EventCostInfo, 0),
 		}, nil
 	}
 
 	// Query feature_usage table directly by event IDs
-	featureUsageRecords, err := s.featureUsageRepo.GetFeatureUsageByEventIDs(ctx, params.RequestIDs)
+	featureUsageRecords, err := s.featureUsageRepo.GetFeatureUsageByEventIDs(ctx, params.EventIDs)
 	if err != nil {
 		return nil, err
 	}
