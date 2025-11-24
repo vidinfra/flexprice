@@ -1166,9 +1166,7 @@ func (s *billingService) PrepareSubscriptionInvoiceRequest(
 		// Combine both sets of line items
 		combinedLineItems := append(arrearLineItems, advanceLineItems...)
 		if len(combinedLineItems) == 0 {
-			return nil, ierr.NewError("no charges to invoice").
-				WithHint("All charges have already been invoiced").
-				Mark(ierr.ErrAlreadyExists)
+			return zeroAmountInvoice, nil
 		}
 
 		// For current period arrear charges
