@@ -273,6 +273,11 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		sub.SubscriptionStatus = req.SubscriptionStatus
 	}
 
+	// Set draft status if this is a draft subscription
+	if req.DraftSubscription {
+		sub.SubscriptionStatus = types.SubscriptionStatusDraft
+	}
+
 	invoiceService := NewInvoiceService(s.ServiceParams)
 	var invoice *dto.InvoiceResponse
 	var updatedSub *subscription.Subscription
@@ -354,6 +359,161 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		}
 
 		// Create invoice for the subscription (in case it has advance charges)
+		// Skip invoice creation for draft subscriptions
+		if !req.DraftSubscription {
+			paymentParams := dto.NewPaymentParametersFromSubscription(sub.CollectionMethod, sub.PaymentBehavior, sub.GatewayPaymentMethodID)
+			// Apply backward compatibility normalization
+			paymentParams = paymentParams.NormalizePaymentParameters()
+			invoice, updatedSub, err = invoiceService.CreateSubscriptionInvoice(ctx, &dto.CreateSubscriptionInvoiceRequest{
+				SubscriptionID: sub.ID,
+				PeriodStart:    sub.CurrentPeriodStart,
+				PeriodEnd:      sub.CurrentPeriodEnd,
+				ReferencePoint: types.ReferencePointPeriodStart,
+			}, paymentParams, types.InvoiceFlowSubscriptionCreation)
+			if err != nil {
+				return err
+			}
+
+			// Use the updated subscription from CreateSubscriptionInvoice to avoid extra DB call
+			if updatedSub != nil {
+				sub = updatedSub
+			}
+
+			// if the subscription is created with incomplete status, but it doesn't create an invoice, we need to mark it as active
+			// This applies regardless of collection method - if there's no invoice to pay, the subscription should be active
+			if (req.Workflow != nil && *req.Workflow != types.TemporalStripeIntegrationWorkflow) && sub.SubscriptionStatus == types.SubscriptionStatusIncomplete && (invoice == nil || invoice.PaymentStatus == types.PaymentStatusSucceeded) {
+				sub.SubscriptionStatus = types.SubscriptionStatusActive
+				err = s.SubRepo.Update(ctx, sub)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle subscription phases if provided
+	// Skip phases for draft subscriptions
+	if !req.DraftSubscription && len(phases) > 0 {
+		err = s.handleSubscriptionPhases(ctx, sub, phases, req.Phases, plan, validPrices)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Update response to ensure it has the latest subscription data
+	response.Subscription = sub
+
+	// Include latest invoice if created
+	if invoice != nil {
+		response.LatestInvoice = invoice
+	}
+
+	// Sync subscription to HubSpot deal (async via Temporal - no goroutine needed)
+	// Skip HubSpot sync for draft subscriptions (only sync on activation)
+	if !req.DraftSubscription {
+		s.triggerHubSpotDealSyncWorkflow(ctx, sub.ID, customer.ID)
+	}
+
+	// Publish appropriate webhook event
+	if req.DraftSubscription {
+		s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionDraftCreated, sub.ID)
+	} else {
+		s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionCreated, sub.ID)
+	}
+	return response, nil
+}
+
+func (s *subscriptionService) ActivateDraftSubscription(ctx context.Context, subID string, req dto.ActivateDraftSubscriptionRequest) (*dto.SubscriptionResponse, error) {
+	// Validate request
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Get subscription with line items
+	sub, lineItems, err := s.SubRepo.GetWithLineItems(ctx, subID)
+	if err != nil {
+		return nil, err
+	}
+	sub.LineItems = lineItems
+
+	// Validate subscription is in draft status
+	if sub.SubscriptionStatus != types.SubscriptionStatusDraft {
+		return nil, ierr.NewError("subscription is not in draft status").
+			WithHint("Only draft subscriptions can be activated").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_id": subID,
+				"current_status":  sub.SubscriptionStatus,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Get customer for HubSpot sync
+	customer, err := s.CustomerRepo.Get(ctx, sub.CustomerID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Recalculate all dates with new start date
+	newStartDate := req.StartDate.UTC()
+	sub.StartDate = newStartDate
+
+	// Calculate billing anchor
+	if sub.BillingCycle == types.BillingCycleCalendar {
+		sub.BillingAnchor = types.CalculateCalendarBillingAnchor(sub.StartDate, sub.BillingPeriod)
+	} else {
+		// default to start date for anniversary billing
+		sub.BillingAnchor = sub.StartDate
+	}
+
+	// Calculate the first billing period end date
+	nextBillingDate, err := types.NextBillingDate(sub.StartDate, sub.BillingAnchor, sub.BillingPeriodCount, sub.BillingPeriod, sub.EndDate)
+	if err != nil {
+		return nil, err
+	}
+
+	sub.CurrentPeriodStart = sub.StartDate
+	sub.CurrentPeriodEnd = nextBillingDate
+
+	// Update line item start dates and end dates
+	for _, item := range sub.LineItems {
+		// Get price to check if it has a start date
+		price, err := s.PriceRepo.Get(ctx, item.PriceID)
+		if err != nil {
+			return nil, err
+		}
+		// Set start date to the price start date if it is after the subscription start date
+		if price.StartDate != nil && price.StartDate.After(sub.StartDate) {
+			item.StartDate = lo.FromPtr(price.StartDate)
+		} else {
+			item.StartDate = sub.StartDate
+		}
+	}
+
+	invoiceService := NewInvoiceService(s.ServiceParams)
+	var invoice *dto.InvoiceResponse
+	var updatedSub *subscription.Subscription
+
+	err = s.DB.WithTx(ctx, func(ctx context.Context) error {
+		// Update subscription with new dates
+		err = s.SubRepo.Update(ctx, sub)
+		if err != nil {
+			return err
+		}
+
+		// Update line items with new start dates
+		for _, item := range sub.LineItems {
+			err = s.SubscriptionLineItemRepo.Update(ctx, item)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Create invoice for the subscription
 		paymentParams := dto.NewPaymentParametersFromSubscription(sub.CollectionMethod, sub.PaymentBehavior, sub.GatewayPaymentMethodID)
 		// Apply backward compatibility normalization
 		paymentParams = paymentParams.NormalizePaymentParameters()
@@ -374,7 +534,7 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 
 		// if the subscription is created with incomplete status, but it doesn't create an invoice, we need to mark it as active
 		// This applies regardless of collection method - if there's no invoice to pay, the subscription should be active
-		if (req.Workflow != nil && *req.Workflow != types.TemporalStripeIntegrationWorkflow) && sub.SubscriptionStatus == types.SubscriptionStatusIncomplete && (invoice == nil || invoice.PaymentStatus == types.PaymentStatusSucceeded) {
+		if sub.SubscriptionStatus == types.SubscriptionStatusIncomplete && (invoice == nil || invoice.PaymentStatus == types.PaymentStatusSucceeded) {
 			sub.SubscriptionStatus = types.SubscriptionStatusActive
 			err = s.SubRepo.Update(ctx, sub)
 			if err != nil {
@@ -388,16 +548,8 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		return nil, err
 	}
 
-	// Handle subscription phases if provided
-	if len(phases) > 0 {
-		err = s.handleSubscriptionPhases(ctx, sub, phases, req.Phases, plan, validPrices)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Update response to ensure it has the latest subscription data
-	response.Subscription = sub
+	// Create response
+	response := &dto.SubscriptionResponse{Subscription: sub}
 
 	// Include latest invoice if created
 	if invoice != nil {
@@ -407,7 +559,9 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 	// Sync subscription to HubSpot deal (async via Temporal - no goroutine needed)
 	s.triggerHubSpotDealSyncWorkflow(ctx, sub.ID, customer.ID)
 
-	s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionCreated, sub.ID)
+	// Publish activation webhook
+	s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionActivated, sub.ID)
+
 	return response, nil
 }
 

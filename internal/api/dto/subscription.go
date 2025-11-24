@@ -174,6 +174,10 @@ type CreateSubscriptionRequest struct {
 	// Workflow
 	Workflow           *types.TemporalWorkflowType `json:"-"`
 	SubscriptionStatus types.SubscriptionStatus    `json:"-,omitempty"`
+
+	// DraftSubscription indicates if this subscription should be created as a draft
+	// Draft subscriptions skip invoice creation and payment processing
+	DraftSubscription bool `json:"draft_subscription,omitempty"`
 }
 
 // AddAddonRequest is used by body-based endpoint /subscriptions/addon
@@ -266,6 +270,27 @@ func (r *CancelSubscriptionRequest) Validate() error {
 	// Set default proration behavior if not provided
 	if r.ProrationBehavior == "" {
 		r.ProrationBehavior = types.ProrationBehaviorNone
+	}
+
+	return nil
+}
+
+// ActivateDraftSubscriptionRequest represents the request to activate a draft subscription
+type ActivateDraftSubscriptionRequest struct {
+	// start_date is the new start date for the subscription when activating
+	StartDate *time.Time `json:"start_date" validate:"required"`
+}
+
+// Validate validates the activation request
+func (r *ActivateDraftSubscriptionRequest) Validate() error {
+	if err := validator.ValidateRequest(r); err != nil {
+		return err
+	}
+
+	if r.StartDate == nil {
+		return ierr.NewError("start_date is required").
+			WithHint("Start date is required to activate a draft subscription").
+			Mark(ierr.ErrValidation)
 	}
 
 	return nil
@@ -441,6 +466,15 @@ func (r *CreateSubscriptionRequest) Validate() error {
 				"trial_end":  *r.TrialEnd,
 			}).
 			Mark(ierr.ErrValidation)
+	}
+
+	// Validate draft subscription constraints
+	if r.DraftSubscription {
+		if len(r.Phases) > 0 {
+			return ierr.NewError("phases are not allowed for draft subscriptions").
+				WithHint("Draft subscriptions cannot have phases").
+				Mark(ierr.ErrValidation)
+		}
 	}
 
 	// Validate commitment amount and overage factor
