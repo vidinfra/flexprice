@@ -962,7 +962,9 @@ func (s *subscriptionService) GetSubscription(ctx context.Context, id string) (*
 		return nil, err
 	}
 
-	response := &dto.SubscriptionResponse{Subscription: sub}
+	response := &dto.SubscriptionResponse{
+		Subscription: sub,
+	}
 
 	// if subscription pause status is not none, get all pauses
 	if sub.PauseStatus != types.PauseStatusNone {
@@ -1038,6 +1040,17 @@ func (s *subscriptionService) GetSubscription(ctx context.Context, id string) (*
 		lineItem.Price = priceMap[lineItem.PriceID]
 	}
 
+	// expand credit grants
+	creditGrantService := NewCreditGrantService(s.ServiceParams)
+	creditGrantsResponse, err := creditGrantService.GetCreditGrantsBySubscription(ctx, id)
+	if err != nil {
+		s.Logger.Errorw("failed to get credit grants for subscription",
+			"subscription_id", id,
+			"error", err)
+		return nil, err
+	}
+	response.CreditGrants = creditGrantsResponse.Items
+
 	return response, nil
 }
 
@@ -1064,6 +1077,7 @@ func (s *subscriptionService) UpdateSubscription(ctx context.Context, subscripti
 
 	if req.CancelAt != nil {
 		subscription.CancelAt = req.CancelAt
+		subscription.EndDate = req.CancelAt
 	}
 
 	subscription.CancelAtPeriodEnd = req.CancelAtPeriodEnd
@@ -2100,16 +2114,10 @@ func (s *subscriptionService) processSubscriptionPeriod(ctx context.Context, sub
 				sub = updatedSub
 			}
 
-			s.Logger.Infow("created invoice for period",
-				"subscription_id", sub.ID,
-				"period_start", period.start,
-				"period_end", period.end,
-				"period_index", i)
-
 			// Check for cancellation at this period end
 			if sub.CancelAtPeriodEnd && sub.CancelAt != nil && !sub.CancelAt.After(period.end) {
 				sub.SubscriptionStatus = types.SubscriptionStatusCancelled
-				sub.CancelledAt = sub.CancelAt
+				sub.EndDate = sub.CancelAt
 				break
 			}
 
@@ -2125,7 +2133,7 @@ func (s *subscriptionService) processSubscriptionPeriod(ctx context.Context, sub
 			}
 
 			if inv == nil {
-				s.Logger.Errorw("skipping period as no invoice was created",
+				s.Logger.Infow("no invoice was created for period",
 					"subscription_id", sub.ID,
 					"period_start", period.start,
 					"period_end", period.end,
@@ -2149,7 +2157,6 @@ func (s *subscriptionService) processSubscriptionPeriod(ctx context.Context, sub
 		// Final cancellation check
 		if sub.CancelAtPeriodEnd && sub.CancelAt != nil && !sub.CancelAt.After(newPeriod.end) {
 			sub.SubscriptionStatus = types.SubscriptionStatusCancelled
-			sub.CancelledAt = sub.CancelAt
 		}
 
 		// Check if the new period end matches the subscription end date
@@ -3764,8 +3771,6 @@ func (s *subscriptionService) updateSubscriptionForCancellation(
 
 	// Update cancellation fields
 	subscription.CancelledAt = &now
-	subscription.UpdatedAt = now
-	subscription.UpdatedBy = types.GetUserID(ctx)
 
 	// Add cancellation metadata
 	if subscription.Metadata == nil {
@@ -3781,11 +3786,13 @@ func (s *subscriptionService) updateSubscriptionForCancellation(
 		subscription.SubscriptionStatus = types.SubscriptionStatusCancelled
 		subscription.CancelAt = &effectiveDate
 		subscription.CancelAtPeriodEnd = false
+		subscription.EndDate = &effectiveDate
 
 	case types.CancellationTypeEndOfPeriod:
 		// Don't change status immediately - will be cancelled at period end
 		subscription.CancelAtPeriodEnd = true
 		subscription.CancelAt = &effectiveDate
+		subscription.EndDate = &effectiveDate
 	default:
 		return ierr.NewError("invalid cancellation type").
 			WithHintf("Unsupported cancellation type: %s", cancellationType).
@@ -4666,4 +4673,96 @@ func (s *subscriptionService) ProcessSubscriptionEntitlementOverrides(
 	}
 
 	return nil
+}
+
+func (s *subscriptionService) GetUpcomingCreditGrantApplications(ctx context.Context, req *dto.GetUpcomingCreditGrantApplicationsRequest) (*dto.ListCreditGrantApplicationsResponse, error) {
+	// Validate request
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+
+	// Verify each subscription exists
+	subFilter := types.NewNoLimitSubscriptionFilter()
+	subFilter.SubscriptionIDs = req.SubscriptionIDs
+	subscriptions, err := s.SubRepo.List(ctx, subFilter)
+	if err != nil {
+		return nil, err
+	}
+
+	subscriptionIDToSubscriptionMap := make(map[string]*subscription.Subscription, len(subscriptions))
+	for _, sub := range subscriptions {
+		subscriptionIDToSubscriptionMap[sub.ID] = sub
+	}
+
+	for _, subscriptionID := range req.SubscriptionIDs {
+		if _, exists := subscriptionIDToSubscriptionMap[subscriptionID]; !exists {
+			return nil, ierr.NewError("subscription not found").
+				WithHint("Please verify the subscription ID is correct").
+				WithReportableDetails(map[string]interface{}{
+					"subscription_id":  subscriptionID,
+					"subscription_ids": req.SubscriptionIDs,
+				}).
+				Mark(ierr.ErrNotFound)
+		}
+	}
+
+	// Get credit grant service
+	creditGrantService := NewCreditGrantService(s.ServiceParams)
+
+	// Create filter for upcoming grants
+	// Include pending and failed statuses (failed ones can be retried)
+	now := time.Now().UTC()
+	filter := types.NewNoLimitCreditGrantApplicationFilter()
+	filter.SubscriptionIDs = req.SubscriptionIDs
+	filter.ApplicationStatuses = []types.ApplicationStatus{
+		types.ApplicationStatusPending,
+		types.ApplicationStatusFailed,
+	}
+
+	// Get all applications for the specified subscriptions with pending/failed status
+	response, err := creditGrantService.ListCreditGrantApplications(ctx, filter)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to list credit grant applications").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_ids": req.SubscriptionIDs,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+
+	// Filter to only include upcoming grants (scheduled_for > now)
+	upcomingItems := make([]*dto.CreditGrantApplicationResponse, 0)
+	for _, item := range response.Items {
+		if item.CreditGrantApplication != nil && item.ScheduledFor.After(now) {
+			upcomingItems = append(upcomingItems, item)
+		}
+	}
+
+	// Sort by scheduled_for date (ascending - earliest first)
+	sort.Slice(upcomingItems, func(i, j int) bool {
+		return upcomingItems[i].ScheduledFor.Before(upcomingItems[j].ScheduledFor)
+	})
+
+	// Update response with filtered items
+	response.Items = upcomingItems
+	response.Pagination.Total = len(upcomingItems)
+
+	return response, nil
+}
+
+// ListByCustomerID retrieves all active subscriptions for a customer
+// This method returns subscriptions with Active or Trialing status and includes line items
+func (s *subscriptionService) ListByCustomerID(ctx context.Context, customerID string) ([]*subscription.Subscription, error) {
+	if customerID == "" {
+		return nil, ierr.NewError("customer ID is required").
+			WithHint("Please provide a valid customer ID").
+			Mark(ierr.ErrValidation)
+	}
+
+	subscriptions, err := s.SubRepo.ListByCustomerID(ctx, customerID)
+	if err != nil {
+		return nil, err
+	}
+
+	return subscriptions, nil
 }

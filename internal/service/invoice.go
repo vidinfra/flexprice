@@ -15,6 +15,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/tenant"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/idempotency"
+	"github.com/flexprice/flexprice/internal/integration/chargebee"
 	"github.com/flexprice/flexprice/internal/integration/razorpay"
 	"github.com/flexprice/flexprice/internal/integration/stripe"
 	"github.com/flexprice/flexprice/internal/interfaces"
@@ -755,6 +756,14 @@ func (s *invoiceService) ProcessDraftInvoice(ctx context.Context, id string, pay
 	// Sync to HubSpot if HubSpot connection is enabled (async via Temporal)
 	s.triggerHubSpotInvoiceSyncWorkflow(ctx, inv.ID, inv.CustomerID)
 
+	// Sync to Chargebee if Chargebee connection is enabled
+	if err := s.syncInvoiceToChargebeeIfEnabled(ctx, inv); err != nil {
+		// Log error but don't fail the entire process
+		s.Logger.Errorw("failed to sync invoice to Chargebee",
+			"error", err,
+			"invoice_id", inv.ID)
+	}
+
 	// try to process payment for the invoice based on behavior and log any errors
 	// Pass the subscription object to avoid extra DB call
 	// Error handling logic is properly handled in attemptPaymentForSubscriptionInvoice
@@ -918,6 +927,59 @@ func (s *invoiceService) syncInvoiceToRazorpayIfEnabled(ctx context.Context, inv
 				"payment_url", syncResponse.ShortURL)
 		}
 	}
+
+	return nil
+}
+
+// syncInvoiceToChargebeeIfEnabled syncs the invoice to Chargebee if Chargebee connection is enabled
+func (s *invoiceService) syncInvoiceToChargebeeIfEnabled(ctx context.Context, inv *invoice.Invoice) error {
+	// Check if Chargebee connection exists
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderChargebee)
+	if err != nil || conn == nil {
+		s.Logger.Debugw("Chargebee connection not available, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"error", err)
+		return nil // Not an error, just skip sync
+	}
+
+	// Check if invoice sync is enabled for this connection
+	if !conn.IsInvoiceOutboundEnabled() {
+		s.Logger.Debugw("invoice sync disabled for Chargebee connection, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"connection_id", conn.ID)
+		return nil // Not an error, just skip sync
+	}
+
+	// Get Chargebee integration
+	chargebeeIntegration, err := s.IntegrationFactory.GetChargebeeIntegration(ctx)
+	if err != nil {
+		s.Logger.Errorw("failed to get Chargebee integration, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"error", err)
+		return nil // Don't fail the entire process, just skip invoice sync
+	}
+
+	s.Logger.Infow("syncing invoice to Chargebee",
+		"invoice_id", inv.ID,
+		"customer_id", inv.CustomerID)
+
+	// Create sync request
+	syncRequest := chargebee.ChargebeeInvoiceSyncRequest{
+		InvoiceID: inv.ID,
+	}
+
+	// Perform the sync
+	syncResponse, err := chargebeeIntegration.InvoiceSvc.SyncInvoiceToChargebee(ctx, syncRequest)
+	if err != nil {
+		return err
+	}
+
+	s.Logger.Infow("successfully synced invoice to Chargebee",
+		"invoice_id", inv.ID,
+		"chargebee_invoice_id", syncResponse.ChargebeeInvoiceID,
+		"status", syncResponse.Status,
+		"total", syncResponse.Total,
+		"amount_due", syncResponse.AmountDue)
 
 	return nil
 }
@@ -1176,6 +1238,31 @@ func (s *invoiceService) ReconcilePaymentStatus(ctx context.Context, id string, 
 
 	if err := s.InvoiceRepo.Update(ctx, inv); err != nil {
 		return err
+	}
+
+	// Check if this invoice is for a purchased credit (has wallet_transaction_id in metadata)
+	// If so, complete the wallet transaction to credit the wallet
+	if inv.Metadata != nil {
+		if walletTransactionID, ok := inv.Metadata["wallet_transaction_id"]; ok && walletTransactionID != "" {
+			// Only complete the transaction if payment is fully succeeded
+			if status == types.PaymentStatusSucceeded || status == types.PaymentStatusOverpaid {
+				walletService := NewWalletService(s.ServiceParams)
+				if err := walletService.CompletePurchasedCreditTransactionWithRetry(ctx, walletTransactionID); err != nil {
+					s.Logger.Errorw("failed to complete purchased credit transaction",
+						"error", err,
+						"invoice_id", inv.ID,
+						"wallet_transaction_id", walletTransactionID,
+					)
+					// Don't fail the payment, but log the error
+					// The transaction can be manually completed later
+				} else {
+					s.Logger.Infow("successfully completed purchased credit transaction",
+						"invoice_id", inv.ID,
+						"wallet_transaction_id", walletTransactionID,
+					)
+				}
+			}
+		}
 	}
 
 	// Publish webhook events

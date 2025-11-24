@@ -7,11 +7,15 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/connection"
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
+	"github.com/flexprice/flexprice/internal/domain/feature"
 	"github.com/flexprice/flexprice/internal/domain/invoice"
+	"github.com/flexprice/flexprice/internal/domain/meter"
 	"github.com/flexprice/flexprice/internal/domain/payment"
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
 	ierr "github.com/flexprice/flexprice/internal/errors"
+	"github.com/flexprice/flexprice/internal/integration/chargebee"
+	chargebeewebhook "github.com/flexprice/flexprice/internal/integration/chargebee/webhook"
 	"github.com/flexprice/flexprice/internal/integration/hubspot"
 	hubspotwebhook "github.com/flexprice/flexprice/internal/integration/hubspot/webhook"
 	"github.com/flexprice/flexprice/internal/integration/razorpay"
@@ -35,6 +39,8 @@ type Factory struct {
 	paymentRepo                  payment.Repository
 	priceRepo                    price.Repository
 	entityIntegrationMappingRepo entityintegrationmapping.Repository
+	meterRepo                    meter.Repository
+	featureRepo                  feature.Repository
 	encryptionService            security.EncryptionService
 
 	// Storage clients (cached for reuse)
@@ -52,6 +58,8 @@ func NewFactory(
 	paymentRepo payment.Repository,
 	priceRepo price.Repository,
 	entityIntegrationMappingRepo entityintegrationmapping.Repository,
+	meterRepo meter.Repository,
+	featureRepo feature.Repository,
 	encryptionService security.EncryptionService,
 ) *Factory {
 	return &Factory{
@@ -64,6 +72,8 @@ func NewFactory(
 		paymentRepo:                  paymentRepo,
 		priceRepo:                    priceRepo,
 		entityIntegrationMappingRepo: entityIntegrationMappingRepo,
+		meterRepo:                    meterRepo,
+		featureRepo:                  featureRepo,
 		encryptionService:            encryptionService,
 	}
 }
@@ -239,6 +249,79 @@ func (f *Factory) GetRazorpayIntegration(ctx context.Context) (*RazorpayIntegrat
 	}, nil
 }
 
+// GetChargebeeIntegration returns a complete Chargebee integration setup
+func (f *Factory) GetChargebeeIntegration(ctx context.Context) (*ChargebeeIntegration, error) {
+	// Create Chargebee client
+	chargebeeClient := chargebee.NewClient(
+		f.connectionRepo,
+		f.encryptionService,
+		f.logger,
+	)
+
+	// Create item family service
+	itemFamilySvc := chargebee.NewItemFamilyService(chargebee.ItemFamilyServiceParams{
+		Client: chargebeeClient,
+		Logger: f.logger,
+	})
+
+	// Create item service
+	itemSvc := chargebee.NewItemService(chargebee.ItemServiceParams{
+		Client: chargebeeClient,
+		Logger: f.logger,
+	})
+
+	// Create item price service
+	itemPriceSvc := chargebee.NewItemPriceService(chargebee.ItemPriceServiceParams{
+		Client: chargebeeClient,
+		Logger: f.logger,
+	})
+
+	// Create customer service
+	customerSvc := chargebee.NewCustomerService(chargebee.CustomerServiceParams{
+		Client:                       chargebeeClient,
+		CustomerRepo:                 f.customerRepo,
+		EntityIntegrationMappingRepo: f.entityIntegrationMappingRepo,
+		Logger:                       f.logger,
+	})
+
+	// Create invoice service
+	invoiceSvc := chargebee.NewInvoiceService(chargebee.InvoiceServiceParams{
+		Client:                       chargebeeClient,
+		CustomerSvc:                  customerSvc,
+		InvoiceRepo:                  f.invoiceRepo,
+		PaymentRepo:                  f.paymentRepo,
+		EntityIntegrationMappingRepo: f.entityIntegrationMappingRepo,
+		Logger:                       f.logger,
+	})
+
+	// Create plan sync service
+	planSyncSvc := chargebee.NewPlanSyncService(chargebee.PlanSyncServiceParams{
+		Client:                       chargebeeClient,
+		EntityIntegrationMappingRepo: f.entityIntegrationMappingRepo,
+		MeterRepo:                    f.meterRepo,
+		FeatureRepo:                  f.featureRepo,
+		Logger:                       f.logger,
+	})
+
+	// Create webhook handler
+	webhookHandler := chargebeewebhook.NewHandler(
+		chargebeeClient,
+		invoiceSvc.(*chargebee.InvoiceService),
+		f.logger,
+	)
+
+	return &ChargebeeIntegration{
+		Client:         chargebeeClient,
+		ItemFamilySvc:  itemFamilySvc,
+		ItemSvc:        itemSvc,
+		ItemPriceSvc:   itemPriceSvc,
+		CustomerSvc:    customerSvc,
+		InvoiceSvc:     invoiceSvc,
+		PlanSyncSvc:    planSyncSvc,
+		WebhookHandler: webhookHandler,
+	}, nil
+}
+
 // GetIntegrationByProvider returns the appropriate integration for the given provider type
 func (f *Factory) GetIntegrationByProvider(ctx context.Context, providerType types.SecretProvider) (interface{}, error) {
 	switch providerType {
@@ -248,6 +331,8 @@ func (f *Factory) GetIntegrationByProvider(ctx context.Context, providerType typ
 		return f.GetHubSpotIntegration(ctx)
 	case types.SecretProviderRazorpay:
 		return f.GetRazorpayIntegration(ctx)
+	case types.SecretProviderChargebee:
+		return f.GetChargebeeIntegration(ctx)
 	default:
 		return nil, ierr.NewError("unsupported integration provider").
 			WithHint("Provider type is not supported").
@@ -264,6 +349,7 @@ func (f *Factory) GetSupportedProviders() []types.SecretProvider {
 		types.SecretProviderStripe,
 		types.SecretProviderHubSpot,
 		types.SecretProviderRazorpay,
+		types.SecretProviderChargebee,
 	}
 }
 
@@ -303,6 +389,18 @@ type RazorpayIntegration struct {
 	PaymentSvc     *razorpay.PaymentService
 	InvoiceSyncSvc *razorpay.InvoiceSyncService
 	WebhookHandler *razorpaywebhook.Handler
+}
+
+// ChargebeeIntegration contains all Chargebee integration services
+type ChargebeeIntegration struct {
+	Client         chargebee.ChargebeeClient
+	ItemFamilySvc  chargebee.ChargebeeItemFamilyService
+	ItemSvc        chargebee.ChargebeeItemService
+	ItemPriceSvc   chargebee.ChargebeeItemPriceService
+	CustomerSvc    chargebee.ChargebeeCustomerService
+	InvoiceSvc     chargebee.ChargebeeInvoiceService
+	PlanSyncSvc    chargebee.ChargebeePlanSyncService
+	WebhookHandler *chargebeewebhook.Handler
 }
 
 // IntegrationProvider defines the interface for all integration providers

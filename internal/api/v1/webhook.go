@@ -9,6 +9,7 @@ import (
 
 	"github.com/flexprice/flexprice/internal/config"
 	"github.com/flexprice/flexprice/internal/integration"
+	chargebeewebhook "github.com/flexprice/flexprice/internal/integration/chargebee/webhook"
 	razorpaywebhook "github.com/flexprice/flexprice/internal/integration/razorpay/webhook"
 	"github.com/flexprice/flexprice/internal/integration/stripe/webhook"
 	"github.com/flexprice/flexprice/internal/interfaces"
@@ -511,4 +512,143 @@ func (h *WebhookHandler) HandleRazorpayWebhook(c *gin.Context) {
 		"environment_id", environmentID,
 		"event_id", eventID,
 		"event_type", event.Event)
+}
+
+// @Summary Handle Chargebee webhook events
+// @Description Process incoming Chargebee webhook events for payment status updates
+// @Tags Webhooks
+// @Accept json
+// @Produce json
+// @Param tenant_id path string true "Tenant ID"
+// @Param environment_id path string true "Environment ID"
+// @Param Authorization header string false "Basic Auth credentials"
+// @Success 200 {object} map[string]interface{} "Webhook processed successfully"
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 400 {object} map[string]interface{} "Bad request"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /webhooks/chargebee/{tenant_id}/{environment_id} [post]
+func (h *WebhookHandler) HandleChargebeeWebhook(c *gin.Context) {
+	// Always return 200 OK to Chargebee to prevent retries
+	// We log errors internally but don't expose them to Chargebee
+	defer func() {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Webhook received",
+		})
+	}()
+
+	tenantID := c.Param("tenant_id")
+	environmentID := c.Param("environment_id")
+
+	if tenantID == "" || environmentID == "" {
+		h.logger.Errorw("missing tenant_id or environment_id in webhook URL",
+			"tenant_id", tenantID,
+			"environment_id", environmentID)
+		return
+	}
+
+	// Read the raw request body
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		h.logger.Errorw("failed to read request body", "error", err)
+		return
+	}
+
+	// Set context with tenant and environment IDs
+	ctx := types.SetTenantID(c.Request.Context(), tenantID)
+	ctx = types.SetEnvironmentID(ctx, environmentID)
+	c.Request = c.Request.WithContext(ctx)
+
+	// Get Chargebee integration
+	chargebeeIntegration, err := h.integrationFactory.GetChargebeeIntegration(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get Chargebee integration", "error", err)
+		return
+	}
+
+	// Verify Basic Authentication (Chargebee v2 security - OPTIONAL)
+	// Only verify if credentials are configured in connection settings
+	username, password, hasAuth := c.Request.BasicAuth()
+
+	// Get connection to check if webhook auth is configured
+	conn, err := chargebeeIntegration.Client.GetConnection(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get Chargebee connection", "error", err)
+		return
+	}
+
+	// Check if webhook auth is configured in FlexPrice
+	hasWebhookAuthConfigured := conn.EncryptedSecretData.Chargebee != nil &&
+		conn.EncryptedSecretData.Chargebee.WebhookUsername != "" &&
+		conn.EncryptedSecretData.Chargebee.WebhookPassword != ""
+
+	// Case 1: Auth configured in FlexPrice but webhook request has no auth
+	if hasWebhookAuthConfigured && !hasAuth {
+		h.logger.Errorw("webhook auth is configured but request has no Basic Auth credentials",
+			"remote_addr", c.ClientIP(),
+			"tenant_id", tenantID,
+			"environment_id", environmentID)
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
+	// Case 2: Auth NOT configured in FlexPrice but webhook request has auth
+	if !hasWebhookAuthConfigured && hasAuth {
+		h.logger.Errorw("webhook request has Basic Auth but no credentials configured in FlexPrice",
+			"remote_addr", c.ClientIP(),
+			"tenant_id", tenantID,
+			"environment_id", environmentID,
+			"note", "Configure webhook_username and webhook_password in connection settings")
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	} else if hasWebhookAuthConfigured && hasAuth {
+		// Case 3: Both sides have auth - verify it
+		err = chargebeeIntegration.Client.VerifyWebhookBasicAuth(ctx, username, password)
+		if err != nil {
+			h.logger.Errorw("Chargebee webhook basic auth verification failed",
+				"error", err,
+				"remote_addr", c.ClientIP())
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		h.logger.Debugw("Chargebee webhook basic auth verified",
+			"remote_addr", c.ClientIP())
+	} else {
+		// Case 4: Neither side has auth - allow but warn
+		h.logger.Infow("Chargebee webhook processing without authentication",
+			"remote_addr", c.ClientIP(),
+			"tenant_id", tenantID,
+			"environment_id", environmentID,
+			"note", "Consider configuring Basic Auth for security")
+	}
+
+	// Parse webhook event
+	var event chargebeewebhook.ChargebeeWebhookEvent
+	if err := json.Unmarshal(body, &event); err != nil {
+		h.logger.Errorw("failed to parse Chargebee webhook event",
+			"error", err,
+			"environment_id", environmentID)
+		return
+	}
+
+	// Log webhook processing (without sensitive data)
+	h.logger.Infow("processing Chargebee webhook",
+		"environment_id", environmentID,
+		"event_id", event.ID,
+		"event_type", event.EventType,
+		"occurred_at", event.OccurredAt)
+
+	// Handle the event
+	err = chargebeeIntegration.WebhookHandler.HandleWebhookEvent(ctx, &event, environmentID)
+	if err != nil {
+		h.logger.Errorw("error processing Chargebee webhook event",
+			"error", err,
+			"event_id", event.ID,
+			"event_type", event.EventType)
+		return
+	}
+
+	h.logger.Infow("successfully processed Chargebee webhook",
+		"environment_id", environmentID,
+		"event_id", event.ID,
+		"event_type", event.EventType)
 }

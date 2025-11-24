@@ -544,6 +544,21 @@ func (s *billingService) CalculateUsageCharges(
 	return usageCharges, totalUsageCost, nil
 }
 
+// calculateRemainingCommitment calculates the remaining commitment amount
+// that needs to be charged as a true-up
+func (s *billingService) calculateRemainingCommitment(
+	usage *dto.GetUsageBySubscriptionResponse,
+	commitmentAmount decimal.Decimal,
+) decimal.Decimal {
+	if usage == nil {
+		return decimal.Zero
+	}
+
+	commitmentUtilized := decimal.NewFromFloat(usage.CommitmentUtilized)
+	remainingCommitment := commitmentAmount.Sub(commitmentUtilized)
+	return decimal.Max(remainingCommitment, decimal.Zero)
+}
+
 func (s *billingService) CalculateUsageChargesForPreview(
 	ctx context.Context,
 	sub *subscription.Subscription,
@@ -647,6 +662,7 @@ func (s *billingService) CalculateUsageChargesForPreview(
 			matchingEntitlement, entitlementOk := entitlementsByMeterID[item.MeterID]
 
 			// Handle bucketed max meters first - this should always be checked regardless of entitlements
+			// But skip overage charges as they already have the correct amount with overage factor applied
 			if meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
 				// Get usage with bucketed values
 				usageRequest := &events.FeatureUsageParams{
@@ -844,7 +860,9 @@ func (s *billingService) CalculateUsageChargesForPreview(
 					matchingCharge.Amount = 0
 				}
 			} else if !meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
-				// For non-bucketed meters without entitlements, calculate cost normally
+				// For non-bucketed meters without entitlements (but not overage charges),
+				// calculate cost normally. Overage charges already have the correct amount
+				// calculated by GetFeatureUsageBySubscription with the overage factor applied.
 				adjustedAmount := priceService.CalculateCost(ctx, matchingCharge.Price, quantityForCalculation)
 				matchingCharge.Amount = price.FormatAmountToFloat64WithPrecision(adjustedAmount, matchingCharge.Price.Currency)
 			}
@@ -1069,9 +1087,7 @@ func (s *billingService) PrepareSubscriptionInvoiceRequest(
 		// Combine both sets of line items
 		combinedLineItems := append(arrearLineItems, advanceLineItems...)
 		if len(combinedLineItems) == 0 {
-			return nil, ierr.NewError("no charges to invoice").
-				WithHint("All charges have already been invoiced").
-				Mark(ierr.ErrAlreadyExists)
+			return zeroAmountInvoice, nil
 		}
 
 		// For current period arrear charges
@@ -1871,7 +1887,8 @@ func (s *billingService) GetCustomerEntitlements(ctx context.Context, customerID
 	}
 
 	// 1. Get active subscriptions for the customer
-	subscriptions, err := s.SubRepo.ListByCustomerID(ctx, customerID)
+	subscriptionService := NewSubscriptionService(s.ServiceParams)
+	subscriptions, err := subscriptionService.ListByCustomerID(ctx, customerID)
 	if err != nil {
 		return nil, err
 	}
@@ -1891,9 +1908,6 @@ func (s *billingService) GetCustomerEntitlements(ctx context.Context, customerID
 	if len(subscriptions) == 0 {
 		return resp, nil
 	}
-
-	// Initialize subscription service to get entitlements
-	subscriptionService := NewSubscriptionService(s.ServiceParams)
 
 	// Collect all entitlements from all subscriptions
 	allEntitlements := make([]*dto.EntitlementResponse, 0)
