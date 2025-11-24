@@ -2388,7 +2388,7 @@ func (s *featureUsageTrackingService) GetHuggingFaceBillingData(ctx context.Cont
 				"price_id", record.PriceID,
 			)
 			responseData = append(responseData, dto.EventCostInfo{
-				RequestID:     record.ID,
+				EventID:       record.ID,
 				CostInNanoUSD: decimal.Zero,
 			})
 			continue
@@ -2399,7 +2399,7 @@ func (s *featureUsageTrackingService) GetHuggingFaceBillingData(ctx context.Cont
 		costInNanoUSD := cost.Mul(nanoUSDMultiplier)
 
 		responseData = append(responseData, dto.EventCostInfo{
-			RequestID:     record.ID,
+			EventID:       record.ID,
 			CostInNanoUSD: costInNanoUSD,
 		})
 	}

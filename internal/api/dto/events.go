@@ -353,7 +353,7 @@ type GetHuggingFaceBillingDataRequest struct {
 }
 
 type EventCostInfo struct {
-	RequestID     string          `json:"requestId"`
+	EventID       string          `json:"requestId"`
 	CostInNanoUSD decimal.Decimal `json:"costNanoUsd"`
 }
 
