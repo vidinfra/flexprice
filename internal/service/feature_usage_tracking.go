@@ -53,8 +53,8 @@ type FeatureUsageTrackingService interface {
 	// Reprocess events for a specific customer or with other filters
 	ReprocessEvents(ctx context.Context, params *events.ReprocessEventsParams) error
 
-	// Get HuggingFace Inferece
-	GetHuggingFaceInferece(ctx context.Context, req *dto.GetHuggingFaceInferenceRequest) (*dto.GetHuggingFaceInfereceResponse, error)
+	// Get HuggingFace Inference
+	GetHuggingFaceInference(ctx context.Context, req *dto.GetHuggingFaceInferenceRequest) (*dto.GetHuggingFaceInferenceResponse, error)
 }
 
 type featureUsageTrackingService struct {
@@ -2320,9 +2320,9 @@ func (s *featureUsageTrackingService) mergeAnalyticsData(aggregated *AnalyticsDa
 	}
 }
 
-func (s *featureUsageTrackingService) GetHuggingFaceInferece(ctx context.Context, params *dto.GetHuggingFaceInferenceRequest) (*dto.GetHuggingFaceInfereceResponse, error) {
-	response := &dto.GetHuggingFaceInfereceResponse{
-		Data: make(map[string]*dto.EventCostInfo),
+func (s *featureUsageTrackingService) GetHuggingFaceInference(ctx context.Context, params *dto.GetHuggingFaceInferenceRequest) (*dto.GetHuggingFaceInferenceResponse, error) {
+	response := &dto.GetHuggingFaceInferenceResponse{
+		Data: make(map[string]*dto.EventCostInfo, len(params.EventIDs)),
 	}
 
 	if len(params.EventIDs) == 0 {
@@ -2335,58 +2335,53 @@ func (s *featureUsageTrackingService) GetHuggingFaceInferece(ctx context.Context
 		return nil, err
 	}
 
-	// Group by event ID (an event can have multiple feature_usage records if it matches multiple prices/meters)
-	usageByEventID := make(map[string][]*events.FeatureUsage)
+	// Group by event ID and collect unique price/feature IDs in one pass
+	usageByEventID := make(map[string][]*events.FeatureUsage, len(params.EventIDs))
+	priceIDSet := make(map[string]bool)
+	featureIDSet := make(map[string]bool)
+
 	for _, record := range featureUsageRecords {
 		usageByEventID[record.ID] = append(usageByEventID[record.ID], record)
-	}
 
-	// Collect unique price IDs to fetch prices in bulk
-	priceIDs := make([]string, 0)
-	priceIDSet := make(map[string]bool)
-	for _, records := range usageByEventID {
-		for _, record := range records {
-			if record.PriceID != "" && !priceIDSet[record.PriceID] {
-				priceIDs = append(priceIDs, record.PriceID)
-				priceIDSet[record.PriceID] = true
-			}
+		if record.PriceID != "" {
+			priceIDSet[record.PriceID] = true
+		}
+		if record.FeatureID != "" {
+			featureIDSet[record.FeatureID] = true
 		}
 	}
 
 	// Fetch all prices in bulk
-	priceMap := make(map[string]*price.Price)
-	if len(priceIDs) > 0 {
+	priceMap := make(map[string]*price.Price, len(priceIDSet))
+	if len(priceIDSet) > 0 {
+		priceIDs := make([]string, 0, len(priceIDSet))
+		for id := range priceIDSet {
+			priceIDs = append(priceIDs, id)
+		}
+
 		priceFilter := types.NewNoLimitPriceFilter().
 			WithPriceIDs(priceIDs).
-			WithStatus(types.StatusPublished)
+			WithStatus(types.StatusPublished).
+			WithAllowExpiredPrices(true)
 		prices, err := s.PriceRepo.List(ctx, priceFilter)
 		if err != nil {
-			s.Logger.Warnw("failed to fetch prices",
-				"error", err,
-				"price_count", len(priceIDs),
-			)
-		} else {
-			for _, p := range prices {
-				priceMap[p.ID] = p
-			}
+			return nil, ierr.WithError(err).
+				WithHint("Failed to fetch prices").
+				Mark(ierr.ErrDatabase)
 		}
-	}
-
-	// Collect unique feature IDs to fetch features in bulk
-	featureIDs := make([]string, 0)
-	featureIDSet := make(map[string]bool)
-	for _, records := range usageByEventID {
-		for _, record := range records {
-			if record.FeatureID != "" && !featureIDSet[record.FeatureID] {
-				featureIDs = append(featureIDs, record.FeatureID)
-				featureIDSet[record.FeatureID] = true
-			}
+		for _, p := range prices {
+			priceMap[p.ID] = p
 		}
 	}
 
 	// Fetch all features in bulk
-	featureMap := make(map[string]*feature.Feature)
-	if len(featureIDs) > 0 {
+	featureMap := make(map[string]*feature.Feature, len(featureIDSet))
+	if len(featureIDSet) > 0 {
+		featureIDs := make([]string, 0, len(featureIDSet))
+		for id := range featureIDSet {
+			featureIDs = append(featureIDs, id)
+		}
+
 		featureFilter := types.NewNoLimitFeatureFilter()
 		featureFilter.FeatureIDs = featureIDs
 		features, err := s.FeatureRepo.List(ctx, featureFilter)
@@ -2452,18 +2447,14 @@ func (s *featureUsageTrackingService) calculateCostFromFeatureUsage(
 			continue
 		}
 
-		// Calculate cost using the quantity from feature_usage (already processed)
-		// Note: qty_total is already the processed quantity, we need to account for sign
-		quantity := record.QtyTotal.Mul(decimal.NewFromInt(int64(record.Sign)))
-
 		// Calculate cost
-		cost := priceService.CalculateCost(ctx, price, quantity)
+		cost := priceService.CalculateCost(ctx, price, record.QtyTotal)
 		totalCost = totalCost.Add(cost)
 
 		// Store metadata from first record
 		if selectedPrice == nil {
 			selectedPrice = price
-			costInfo.Quantity = quantity
+			costInfo.Quantity = record.QtyTotal
 			costInfo.PriceID = record.PriceID
 			costInfo.MeterID = record.MeterID
 			costInfo.FeatureID = record.FeatureID

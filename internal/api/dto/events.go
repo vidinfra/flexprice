@@ -365,6 +365,6 @@ type EventCostInfo struct {
 	Error          string          `json:"error,omitempty"`
 }
 
-type GetHuggingFaceInfereceResponse struct {
+type GetHuggingFaceInferenceResponse struct {
 	Data map[string]*EventCostInfo `json:"data"`
 }
