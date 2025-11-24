@@ -541,54 +541,6 @@ func (s *billingService) CalculateUsageCharges(
 		}
 	}
 
-	// Add commitment true-up line item if there's remaining commitment
-	commitmentAmount := lo.FromPtr(sub.CommitmentAmount)
-	overageFactor := lo.FromPtr(sub.OverageFactor)
-	hasCommitment := commitmentAmount.GreaterThan(decimal.Zero) && overageFactor.GreaterThan(decimal.NewFromInt(1))
-
-	if hasCommitment && usage != nil {
-		remainingCommitment := s.calculateRemainingCommitment(usage, commitmentAmount)
-
-		if remainingCommitment.GreaterThan(decimal.Zero) {
-			commitmentUtilized := commitmentAmount.Sub(remainingCommitment)
-			// Get plan display name from line items
-			planDisplayName := ""
-			for _, item := range sub.LineItems {
-				if item.PlanDisplayName != "" {
-					planDisplayName = item.PlanDisplayName
-					break
-				}
-			}
-			trueUpLineItem := dto.CreateInvoiceLineItemRequest{
-				EntityID:        lo.ToPtr(sub.PlanID),
-				EntityType:      lo.ToPtr(string(types.SubscriptionLineItemEntityTypePlan)),
-				PriceType:       lo.ToPtr(string(types.PRICE_TYPE_FIXED)),
-				PlanDisplayName: lo.ToPtr(planDisplayName),
-				DisplayName:     lo.ToPtr(fmt.Sprintf("%s True Up", planDisplayName)), // Plan display name with true up suffix
-				Amount:          remainingCommitment,
-				Quantity:        decimal.NewFromInt(1),
-				PeriodStart:     &periodStart,
-				PeriodEnd:       &periodEnd,
-				PriceID:         lo.ToPtr(types.GenerateUUIDWithPrefix(types.UUID_PREFIX_PRICE)),
-				Metadata: types.Metadata{
-					"is_commitment_trueup": "true",
-					"description":          "Remaining commitment amount for billing period",
-					"commitment_amount":    commitmentAmount.String(),
-					"commitment_utilized":  commitmentUtilized.String(),
-				},
-			}
-
-			usageCharges = append(usageCharges, trueUpLineItem)
-			totalUsageCost = totalUsageCost.Add(remainingCommitment)
-
-			s.Logger.Infow("added commitment true-up line item",
-				"subscription_id", sub.ID,
-				"remaining_commitment", remainingCommitment.String(),
-				"commitment_amount", commitmentAmount.String(),
-				"commitment_utilized", commitmentUtilized.String())
-		}
-	}
-
 	return usageCharges, totalUsageCost, nil
 }
 
@@ -985,53 +937,6 @@ func (s *billingService) CalculateUsageChargesForPreview(
 				PeriodEnd:        lo.ToPtr(item.GetPeriodEnd(periodEnd)),
 				Metadata:         metadata,
 			})
-		}
-	}
-
-	// Add commitment true-up line item if there's remaining commitment
-	commitmentAmount := lo.FromPtr(sub.CommitmentAmount)
-	overageFactor := lo.FromPtr(sub.OverageFactor)
-	hasCommitment := commitmentAmount.GreaterThan(decimal.Zero) && overageFactor.GreaterThan(decimal.NewFromInt(1))
-
-	if hasCommitment && usage != nil {
-		remainingCommitment := s.calculateRemainingCommitment(usage, commitmentAmount)
-
-		if remainingCommitment.GreaterThan(decimal.Zero) {
-			planDisplayName := ""
-			for _, item := range sub.LineItems {
-				if item.PlanDisplayName != "" {
-					planDisplayName = item.PlanDisplayName
-					break
-				}
-			}
-			commitmentUtilized := commitmentAmount.Sub(remainingCommitment)
-			trueUpLineItem := dto.CreateInvoiceLineItemRequest{
-				EntityID:        lo.ToPtr(sub.PlanID),
-				EntityType:      lo.ToPtr(string(types.SubscriptionLineItemEntityTypePlan)),
-				PriceType:       lo.ToPtr(string(types.PRICE_TYPE_FIXED)),
-				PlanDisplayName: lo.ToPtr(planDisplayName),
-				DisplayName:     lo.ToPtr(fmt.Sprintf("%s True Up", planDisplayName)), // Plan display name with true up suffix
-				Amount:          remainingCommitment,
-				Quantity:        decimal.NewFromInt(1),
-				PeriodStart:     &periodStart,
-				PeriodEnd:       &periodEnd,
-				PriceID:         lo.ToPtr(types.GenerateUUIDWithPrefix(types.UUID_PREFIX_PRICE)),
-				Metadata: types.Metadata{
-					"is_commitment_trueup": "true",
-					"description":          "Remaining commitment amount for billing period",
-					"commitment_amount":    commitmentAmount.String(),
-					"commitment_utilized":  commitmentUtilized.String(),
-				},
-			}
-
-			usageCharges = append(usageCharges, trueUpLineItem)
-			totalUsageCost = totalUsageCost.Add(remainingCommitment)
-
-			s.Logger.Infow("added commitment true-up line item for preview",
-				"subscription_id", sub.ID,
-				"remaining_commitment", remainingCommitment.String(),
-				"commitment_amount", commitmentAmount.String(),
-				"commitment_utilized", commitmentUtilized.String())
 		}
 	}
 
