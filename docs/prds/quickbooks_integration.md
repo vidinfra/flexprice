@@ -1514,6 +1514,7 @@ The architecture should support:
 ---
 
 ## Base Framework Establishment Approach
+
 ```
 If Quickbook connection is active
     - Plan created in Flexprice
@@ -1525,12 +1526,21 @@ If Quickbook connection is active
               - Item Description: {price_id}
               - Item type: Service
               - Flexprice Income account: {Flexprice's Income account: name, value}
+          - Map in entity_integration_mapping table for provider: Quickbooks
+            - EntityID: {price_id}
+            - EntityType: "price"
+            - ProviderType: "quickbooks"
+            - ProviderEntityID: {Quickbooks' item id}
+            - Metadata:
+              - {
+                  "synced_at": "2025-11-25T09:50:21Z",
+                  "quickbooks_item_name": {item_name}
+                }
     
     - Sync Invoice
         - Invoice Created
         - if Invoice sync is enabled 
-            - check if customer exists in entity_integration_mapping table for provider: Quickbooks
-                - if yes, get Quickbooks customer id
+            - check if customer exists in entity_integration_mapping table for provider: Quickbooks with entity type: "customer"
                 - if no, create customer in Quickbook
                     - Customer.DisplayName
                     - Customer.PrimaryEmailAddr.Address
@@ -1539,6 +1549,22 @@ If Quickbook connection is active
                     - Customer.BillAddr.City
                     - Customer.BillAddr.Country
                     - Customer.BillAddr.PostalCode
+                - Map in entity_integration_mapping table for provider: Quickbooks
+                      - EntityID: {customer_id}
+                      - EntityType: "customer"
+                      - ProviderType: "quickbooks"
+                      - ProviderEntityID: {Quickbooks' customer id}
+                      - Metadata:
+                        - {
+                            "synced_at": "2025-11-25T09:50:21Z",
+                            "quickbooks_customer_display_name": {customer_display_name}
+                            "quickbooks_customer_primary_email_addr_address": {customer_primary_email_addr_address}
+                            "quickbooks_customer_bill_addr_line1": {customer_bill_addr_line1}
+                            "quickbooks_customer_bill_addr_line2": {customer_bill_addr_line2}
+                            "quickbooks_customer_bill_addr_city": {customer_bill_addr_city}
+                            "quickbooks_customer_bill_addr_country": {customer_bill_addr_country}
+                            "quickbooks_customer_bill_addr_postal_code": {customer_bill_addr_postal_code}
+                        }
 
             - Get customer id
 
@@ -1547,7 +1573,7 @@ If Quickbook connection is active
                   - Line:
                     - for each flexprice's invoice line item 
                         - Get price id
-                        - fetch the item id from the entity_integration_mapping table for provider: Quickbooks
+                        - fetch the item id from the entity_integration_mapping table for provider: Quickbooks with entity type: "price"
                         - Get item name: item_name and value: item_id
                         - DetailType: SalesItemLineDetail
                         - Amount: {flexprice's invoice line item amount}
@@ -1555,7 +1581,7 @@ If Quickbook connection is active
                         - Description: {flexprice's invoice line item display name}
                         - SalesItemLineDetail:
                             - ItemRef:
-                                - name: {item_name}
+                                - name: {item_name} //optional
                                 - value: {item_id}
                   - Metadata:
                     - Flexprice_invoice_id: {flexprice's invoice id}
