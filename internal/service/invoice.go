@@ -1290,6 +1290,17 @@ func (s *invoiceService) CreateSubscriptionInvoice(ctx context.Context, req *dto
 		return nil, nil, err
 	}
 
+	// Reject invoice creation for draft subscriptions
+	if subscription.SubscriptionStatus == types.SubscriptionStatusDraft {
+		return nil, nil, ierr.NewError("cannot create invoice for draft subscription").
+			WithHint("Draft subscriptions must be activated before invoice creation. Use the activate endpoint to activate the subscription first.").
+			WithReportableDetails(map[string]interface{}{
+				"subscription_id":     req.SubscriptionID,
+				"subscription_status": subscription.SubscriptionStatus,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
 	// Prepare invoice request using billing service
 	invoiceReq, err := billingService.PrepareSubscriptionInvoiceRequest(ctx,
 		subscription,
