@@ -17,6 +17,7 @@
 14. [Security Considerations](#security-considerations)
 15. [Performance and Scalability](#performance-and-scalability)
 16. [Future Enhancements](#future-enhancements)
+17. [Base Framework Establishment Approach](#)
 
 ---
 
@@ -1496,9 +1497,10 @@ func (f *Factory) GetQuickBooksIntegration(ctx context.Context) (*QuickBooksInte
 - **Webhook Support**: Receive real-time notifications from QuickBooks ([blogs.intuit.com](https://blogs.intuit.com/2018/09/10/quickbooks-online-api-best-practices/))
   - Subscribe to entity change events (Invoice, Customer, Payment)
   - Reduce polling needs and improve efficiency
-- **Change Data Capture (CDC) API**: Track entity changes efficiently ([blogs.intuit.com](https://blogs.intuit.com/2018/09/10/quickbooks-online-api-best-practices/))
-  - Fetch entities changed since timestamp
-  - Enable bidirectional sync capabilities
+- **Sync Plan for all provider**
+- **Move to Temporal**
+- **payment 2-way sync**
+- **manual sync**
 
 ### Extensibility Points
 
@@ -1510,6 +1512,57 @@ The architecture should support:
 - Plugin system for custom transformations
 
 ---
+
+## Base Framework Establishment Approach
+```
+If Quickbook connection is active
+    - Plan created in Flexprice
+      - Get Price ids & associated meter names (if charge not recurring)
+      - Create Item in Quickbook for each price
+          - Get Flexprice's Income account
+          - Create Item
+              - Item Name: {plan name}-{meter name}
+              - Item Description: {price_id}
+              - Item type: Service
+              - Flexprice Income account: {Flexprice's Income account: name, value}
+    
+    - Sync Invoice
+        - Invoice Created
+        - if Invoice sync is enabled 
+            - check if customer exists in entity_integration_mapping table for provider: Quickbooks
+                - if yes, get Quickbooks customer id
+                - if no, create customer in Quickbook
+                    - Customer.DisplayName
+                    - Customer.PrimaryEmailAddr.Address
+                    - Customer.BillAddr.Line1
+                    - Customer.BillAddr.Line2
+                    - Customer.BillAddr.City
+                    - Customer.BillAddr.Country
+                    - Customer.BillAddr.PostalCode
+
+            - Get customer id
+
+            - create inv in Quickbook
+                - CustomerRef: value: {Quickbooks' customer id}
+                  - Line:
+                    - for each flexprice's invoice line item 
+                        - Get price id
+                        - fetch the item id from the entity_integration_mapping table for provider: Quickbooks
+                        - Get item name: item_name and value: item_id
+                        - DetailType: SalesItemLineDetail
+                        - Amount: {flexprice's invoice line item amount}
+                        - UnitPrice: {flexprice's invoice line item price unit amount}
+                        - Description: {flexprice's invoice line item display name}
+                        - SalesItemLineDetail:
+                            - ItemRef:
+                                - name: {item_name}
+                                - value: {item_id}
+                  - Metadata:
+                    - Flexprice_invoice_id: {flexprice's invoice id}
+                    
+```
+
+
 
 ## Appendix
 
@@ -1559,7 +1612,9 @@ The architecture should support:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0 | 2024-01-XX | Engineering Team | Initial PRD creation |
+| 1.0 | 2025-11-24 | Tsage | Initial PRD creation |
+| 1.1 | 2025-11-25 | Tsage | Define Workflow |
+
 
 ---
 
