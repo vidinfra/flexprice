@@ -172,12 +172,11 @@ type CreateSubscriptionRequest struct {
 	BillingAnchor *time.Time `json:"-"`
 
 	// Workflow
-	Workflow           *types.TemporalWorkflowType `json:"-"`
-	SubscriptionStatus types.SubscriptionStatus    `json:"-,omitempty"`
+	Workflow *types.TemporalWorkflowType `json:"-"`
 
-	// DraftSubscription indicates if this subscription should be created as a draft
-	// Draft subscriptions skip invoice creation and payment processing
-	DraftSubscription bool `json:"draft_subscription,omitempty"`
+	// SubscriptionStatus determines the initial status of the subscription
+	// If set to "draft", the subscription will be created as a draft (skips invoice creation and payment processing)
+	SubscriptionStatus types.SubscriptionStatus `json:"subscription_status,omitempty"`
 }
 
 // AddAddonRequest is used by body-based endpoint /subscriptions/addon
@@ -469,7 +468,7 @@ func (r *CreateSubscriptionRequest) Validate() error {
 	}
 
 	// Validate draft subscription constraints
-	if r.DraftSubscription {
+	if r.SubscriptionStatus == types.SubscriptionStatusDraft {
 		if len(r.Phases) > 0 {
 			return ierr.NewError("phases are not allowed for draft subscriptions").
 				WithHint("Draft subscriptions cannot have phases").

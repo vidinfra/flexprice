@@ -762,10 +762,8 @@ func (c *Client) CreateQuote(ctx context.Context, req *QuoteCreateRequest) (*Quo
 				responseBody = string(resp.Body)
 			}
 			c.logger.Errorw("HubSpot API error creating quote",
-				"status_code", httpErr.StatusCode,
 				"url", url,
-				"request_body", string(reqBody),
-				"response_body", responseBody)
+				"status_code", httpErr.StatusCode)
 			return nil, ierr.NewError("failed to create quote in HubSpot").
 				WithHint(fmt.Sprintf("HubSpot API returned status %d: %s", httpErr.StatusCode, responseBody)).
 				Mark(ierr.ErrHTTPClient)

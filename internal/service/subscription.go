@@ -273,11 +273,6 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		sub.SubscriptionStatus = req.SubscriptionStatus
 	}
 
-	// Set draft status if this is a draft subscription
-	if req.DraftSubscription {
-		sub.SubscriptionStatus = types.SubscriptionStatusDraft
-	}
-
 	invoiceService := NewInvoiceService(s.ServiceParams)
 	var invoice *dto.InvoiceResponse
 	var updatedSub *subscription.Subscription
@@ -360,7 +355,7 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 
 		// Create invoice for the subscription (in case it has advance charges)
 		// Skip invoice creation for draft subscriptions
-		if !req.DraftSubscription {
+		if req.SubscriptionStatus != types.SubscriptionStatusDraft {
 			paymentParams := dto.NewPaymentParametersFromSubscription(sub.CollectionMethod, sub.PaymentBehavior, sub.GatewayPaymentMethodID)
 			// Apply backward compatibility normalization
 			paymentParams = paymentParams.NormalizePaymentParameters()
@@ -398,7 +393,7 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 
 	// Handle subscription phases if provided
 	// Skip phases for draft subscriptions
-	if !req.DraftSubscription && len(phases) > 0 {
+	if req.SubscriptionStatus != types.SubscriptionStatusDraft && len(phases) > 0 {
 		err = s.handleSubscriptionPhases(ctx, sub, phases, req.Phases, plan, validPrices)
 		if err != nil {
 			return nil, err
@@ -415,14 +410,14 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 
 	// Sync subscription to HubSpot deal (async via Temporal - no goroutine needed)
 	// For draft subscriptions, sync to quote instead of deal
-	if req.DraftSubscription {
+	if req.SubscriptionStatus == types.SubscriptionStatusDraft {
 		s.triggerHubSpotQuoteSyncWorkflow(ctx, sub.ID, customer.ID)
 	} else {
 		s.triggerHubSpotDealSyncWorkflow(ctx, sub.ID, customer.ID)
 	}
 
 	// Publish appropriate webhook event
-	if req.DraftSubscription {
+	if req.SubscriptionStatus == types.SubscriptionStatusDraft {
 		s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionDraftCreated, sub.ID)
 	} else {
 		s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionCreated, sub.ID)
@@ -2175,7 +2170,7 @@ func (s *subscriptionService) isDraftSubscription(sub *subscription.Subscription
 func (s *subscriptionService) validateNotDraftSubscription(sub *subscription.Subscription, operation string) error {
 	if s.isDraftSubscription(sub) {
 		return ierr.NewError("cannot perform operation on draft subscription").
-			WithHint(fmt.Sprintf("Draft subscriptions must be activated before %s. Use the activate endpoint to activate the subscription first.", operation)).
+			WithHint(fmt.Sprintf("Draft subscriptions must be activated before %s.", operation)).
 			WithReportableDetails(map[string]interface{}{
 				"subscription_id":     sub.ID,
 				"subscription_status": sub.SubscriptionStatus,
