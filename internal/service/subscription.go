@@ -369,7 +369,7 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 				PeriodStart:    sub.CurrentPeriodStart,
 				PeriodEnd:      sub.CurrentPeriodEnd,
 				ReferencePoint: types.ReferencePointPeriodStart,
-			}, paymentParams, types.InvoiceFlowSubscriptionCreation)
+			}, paymentParams, types.InvoiceFlowSubscriptionCreation, false)
 			if err != nil {
 				return err
 			}
@@ -518,7 +518,7 @@ func (s *subscriptionService) ActivateDraftSubscription(ctx context.Context, sub
 			PeriodStart:    sub.CurrentPeriodStart,
 			PeriodEnd:      sub.CurrentPeriodEnd,
 			ReferencePoint: types.ReferencePointPeriodStart,
-		}, paymentParams, types.InvoiceFlowSubscriptionCreation)
+		}, paymentParams, types.InvoiceFlowSubscriptionCreation, true) // Pass true for draft activation
 		if err != nil {
 			return err
 		}
@@ -530,7 +530,7 @@ func (s *subscriptionService) ActivateDraftSubscription(ctx context.Context, sub
 
 		// if the subscription is created with incomplete status, but it doesn't create an invoice, we need to mark it as active
 		// This applies regardless of collection method - if there's no invoice to pay, the subscription should be active
-		if sub.SubscriptionStatus == types.SubscriptionStatusIncomplete && (invoice == nil || invoice.PaymentStatus == types.PaymentStatusSucceeded) {
+		if (sub.SubscriptionStatus == types.SubscriptionStatusIncomplete || sub.SubscriptionStatus == types.SubscriptionStatusDraft) && (invoice == nil || invoice.PaymentStatus == types.PaymentStatusSucceeded) {
 			sub.SubscriptionStatus = types.SubscriptionStatusActive
 			err = s.SubRepo.Update(ctx, sub)
 			if err != nil {
@@ -1424,7 +1424,7 @@ func (s *subscriptionService) CancelSubscription(
 				PeriodStart:    subscription.CurrentPeriodStart,
 				PeriodEnd:      effectiveDate,
 				ReferencePoint: types.ReferencePointCancel,
-			}, paymentParams, types.InvoiceFlowCancel)
+			}, paymentParams, types.InvoiceFlowCancel, false)
 			if err != nil {
 				return err
 			}
@@ -2387,7 +2387,7 @@ func (s *subscriptionService) processSubscriptionPeriod(ctx context.Context, sub
 				PeriodStart:    period.start,
 				PeriodEnd:      period.end,
 				ReferencePoint: types.ReferencePointPeriodEnd,
-			}, paymentParams, types.InvoiceFlowRenewal)
+			}, paymentParams, types.InvoiceFlowRenewal, false)
 			if err != nil {
 				return err
 			}

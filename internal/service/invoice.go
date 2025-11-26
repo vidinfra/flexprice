@@ -37,7 +37,7 @@ type InvoiceService interface {
 	VoidInvoice(ctx context.Context, id string, req dto.InvoiceVoidRequest) error
 	ProcessDraftInvoice(ctx context.Context, id string, paymentParams *dto.PaymentParameters, sub *subscription.Subscription, flowType types.InvoiceFlowType) error
 	UpdatePaymentStatus(ctx context.Context, id string, status types.PaymentStatus, amount *decimal.Decimal) error
-	CreateSubscriptionInvoice(ctx context.Context, req *dto.CreateSubscriptionInvoiceRequest, paymentParams *dto.PaymentParameters, flowType types.InvoiceFlowType) (*dto.InvoiceResponse, *subscription.Subscription, error)
+	CreateSubscriptionInvoice(ctx context.Context, req *dto.CreateSubscriptionInvoiceRequest, paymentParams *dto.PaymentParameters, flowType types.InvoiceFlowType, isDraftSubscription bool) (*dto.InvoiceResponse, *subscription.Subscription, error)
 	GetPreviewInvoice(ctx context.Context, req dto.GetPreviewInvoiceRequest) (*dto.InvoiceResponse, error)
 	GetCustomerInvoiceSummary(ctx context.Context, customerID string, currency string) (*dto.CustomerInvoiceSummary, error)
 	GetUnpaidInvoicesToBePaid(ctx context.Context, customerID string, currency string) ([]*dto.InvoiceResponse, decimal.Decimal, error)
@@ -1271,7 +1271,7 @@ func (s *invoiceService) ReconcilePaymentStatus(ctx context.Context, id string, 
 	return nil
 }
 
-func (s *invoiceService) CreateSubscriptionInvoice(ctx context.Context, req *dto.CreateSubscriptionInvoiceRequest, paymentParams *dto.PaymentParameters, flowType types.InvoiceFlowType) (*dto.InvoiceResponse, *subscription.Subscription, error) {
+func (s *invoiceService) CreateSubscriptionInvoice(ctx context.Context, req *dto.CreateSubscriptionInvoiceRequest, paymentParams *dto.PaymentParameters, flowType types.InvoiceFlowType, isDraftSubscription bool) (*dto.InvoiceResponse, *subscription.Subscription, error) {
 	s.Logger.Infow("creating subscription invoice",
 		"subscription_id", req.SubscriptionID,
 		"period_start", req.PeriodStart,
@@ -1290,8 +1290,8 @@ func (s *invoiceService) CreateSubscriptionInvoice(ctx context.Context, req *dto
 		return nil, nil, err
 	}
 
-	// Reject invoice creation for draft subscriptions
-	if subscription.SubscriptionStatus == types.SubscriptionStatusDraft {
+	// Reject invoice creation for draft subscriptions (unless isDraftSubscription is true)
+	if !isDraftSubscription && subscription.SubscriptionStatus == types.SubscriptionStatusDraft {
 		return nil, nil, ierr.NewError("cannot create invoice for draft subscription").
 			WithHint("Draft subscriptions must be activated before invoice creation. Use the activate endpoint to activate the subscription first.").
 			WithReportableDetails(map[string]interface{}{
