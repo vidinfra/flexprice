@@ -145,6 +145,29 @@ func (s *planService) CreatePlan(ctx context.Context, req dto.CreatePlanRequest)
 		return nil, err
 	}
 
+	// Sync to QuickBooks if QuickBooks connection is active (no plan.outbound check needed)
+	// Get prices that were created for this plan
+	if len(req.Prices) > 0 {
+		priceService := NewPriceService(s.ServiceParams)
+		pricesResponse, err := priceService.GetPricesByPlanID(ctx, dto.GetPricesByPlanRequest{
+			PlanID:       plan.ID,
+			AllowExpired: false,
+		})
+		if err == nil && len(pricesResponse.Items) > 0 {
+			// Convert to domain prices
+			prices := make([]*domainPrice.Price, len(pricesResponse.Items))
+			for i, priceResp := range pricesResponse.Items {
+				prices[i] = priceResp.Price
+			}
+			if err := s.syncPlanToQuickBooksIfEnabled(ctx, plan, prices); err != nil {
+				s.Logger.Errorw("failed to sync plan to QuickBooks",
+					"error", err,
+					"plan_id", plan.ID)
+				// Don't fail plan creation if sync fails
+			}
+		}
+	}
+
 	response := &dto.CreatePlanResponse{Plan: plan}
 
 	return response, nil
@@ -956,4 +979,41 @@ func (s *planService) SyncSubscriptionWithPlanPrices(params *dto.SubscriptionSyn
 	}
 
 	return result
+}
+
+// syncPlanToQuickBooksIfEnabled syncs the plan and its prices to QuickBooks if QuickBooks connection is active
+// Note: We do NOT check plan.outbound - if QuickBooks connection exists, we always sync
+func (s *planService) syncPlanToQuickBooksIfEnabled(ctx context.Context, plan *plan.Plan, prices []*domainPrice.Price) error {
+	// Check if QuickBooks connection exists
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderQuickBooks)
+	if err != nil || conn == nil {
+		s.Logger.Debugw("QuickBooks connection not available, skipping plan sync",
+			"plan_id", plan.ID,
+			"error", err)
+		return nil // Not an error, just skip sync
+	}
+
+	// Get QuickBooks integration
+	qbIntegration, err := s.IntegrationFactory.GetQuickBooksIntegration(ctx)
+	if err != nil {
+		s.Logger.Errorw("failed to get QuickBooks integration, skipping plan sync",
+			"plan_id", plan.ID,
+			"error", err)
+		return nil // Don't fail the entire process, just skip plan sync
+	}
+
+	s.Logger.Infow("syncing plan to QuickBooks",
+		"plan_id", plan.ID,
+		"plan_name", plan.Name)
+
+	err = qbIntegration.ItemSyncSvc.SyncPlanToQuickBooks(ctx, plan, prices)
+	if err != nil {
+		return err
+	}
+
+	s.Logger.Infow("successfully synced plan to QuickBooks",
+		"plan_id", plan.ID,
+		"plan_name", plan.Name)
+
+	return nil
 }

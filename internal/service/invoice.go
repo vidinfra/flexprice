@@ -16,6 +16,7 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/idempotency"
 	"github.com/flexprice/flexprice/internal/integration/chargebee"
+	"github.com/flexprice/flexprice/internal/integration/quickbooks"
 	"github.com/flexprice/flexprice/internal/integration/razorpay"
 	"github.com/flexprice/flexprice/internal/integration/stripe"
 	"github.com/flexprice/flexprice/internal/interfaces"
@@ -638,6 +639,15 @@ func (s *invoiceService) performFinalizeInvoiceActions(ctx context.Context, inv 
 	}
 
 	s.publishInternalWebhookEvent(ctx, types.WebhookEventInvoiceUpdateFinalized, inv.ID)
+
+	// Sync to QuickBooks if QuickBooks connection is enabled
+	if err := s.syncInvoiceToQuickBooksIfEnabled(ctx, inv); err != nil {
+		// Log error but don't fail the entire process
+		s.Logger.Errorw("failed to sync invoice to QuickBooks",
+			"error", err,
+			"invoice_id", inv.ID)
+	}
+
 	return nil
 }
 
@@ -763,6 +773,9 @@ func (s *invoiceService) ProcessDraftInvoice(ctx context.Context, id string, pay
 			"error", err,
 			"invoice_id", inv.ID)
 	}
+
+	// Note: QuickBooks sync is already handled in performFinalizeInvoiceActions
+	// No need to sync again here to avoid duplicates
 
 	// try to process payment for the invoice based on behavior and log any errors
 	// Pass the subscription object to avoid extra DB call
@@ -980,6 +993,57 @@ func (s *invoiceService) syncInvoiceToChargebeeIfEnabled(ctx context.Context, in
 		"status", syncResponse.Status,
 		"total", syncResponse.Total,
 		"amount_due", syncResponse.AmountDue)
+
+	return nil
+}
+
+// syncInvoiceToQuickBooksIfEnabled syncs the invoice to QuickBooks if QuickBooks connection is enabled
+func (s *invoiceService) syncInvoiceToQuickBooksIfEnabled(ctx context.Context, inv *invoice.Invoice) error {
+	// Check if QuickBooks connection exists
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderQuickBooks)
+	if err != nil || conn == nil {
+		s.Logger.Debugw("QuickBooks connection not available, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"error", err)
+		return nil // Not an error, just skip sync
+	}
+
+	// Check if invoice sync is enabled for this connection
+	if !conn.IsInvoiceOutboundEnabled() {
+		s.Logger.Debugw("invoice sync disabled for QuickBooks connection, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"connection_id", conn.ID)
+		return nil // Not an error, just skip sync
+	}
+
+	// Get QuickBooks integration
+	qbIntegration, err := s.IntegrationFactory.GetQuickBooksIntegration(ctx)
+	if err != nil {
+		s.Logger.Errorw("failed to get QuickBooks integration, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"error", err)
+		return nil // Don't fail the entire process, just skip invoice sync
+	}
+
+	s.Logger.Infow("syncing invoice to QuickBooks",
+		"invoice_id", inv.ID,
+		"customer_id", inv.CustomerID)
+
+	// Create sync request
+	syncRequest := quickbooks.QuickBooksInvoiceSyncRequest{
+		InvoiceID: inv.ID,
+	}
+
+	// Perform the sync
+	syncResponse, err := qbIntegration.InvoiceSvc.SyncInvoiceToQuickBooks(ctx, syncRequest)
+	if err != nil {
+		return err
+	}
+
+	s.Logger.Infow("successfully synced invoice to QuickBooks",
+		"invoice_id", inv.ID,
+		"quickbooks_invoice_id", syncResponse.QuickBooksInvoiceID,
+		"status", syncResponse.Status)
 
 	return nil
 }

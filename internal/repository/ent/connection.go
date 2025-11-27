@@ -275,6 +275,22 @@ func convertConnectionMetadataToMap(encryptedSecretData types.ConnectionMetadata
 			}
 			return result
 		}
+	case types.SecretProviderQuickBooks:
+		if encryptedSecretData.QuickBooks != nil {
+			result := map[string]interface{}{
+				"client_id":     encryptedSecretData.QuickBooks.ClientID,
+				"client_secret": encryptedSecretData.QuickBooks.ClientSecret,
+				"access_token":  encryptedSecretData.QuickBooks.AccessToken,
+				"refresh_token": encryptedSecretData.QuickBooks.RefreshToken,
+				"realm_id":      encryptedSecretData.QuickBooks.RealmID,
+				"environment":   encryptedSecretData.QuickBooks.Environment,
+			}
+			// Add token_expires_at if present
+			if encryptedSecretData.QuickBooks.TokenExpiresAt > 0 {
+				result["token_expires_at"] = encryptedSecretData.QuickBooks.TokenExpiresAt
+			}
+			return result
+		}
 	default:
 		// For other providers or unknown types, use generic format
 		if encryptedSecretData.Generic != nil {
@@ -321,12 +337,16 @@ func (r *connectionRepository) Update(ctx context.Context, c *domainConnection.C
 	})
 	defer FinishSpan(span)
 
+	// Convert structured encrypted secret data to map format for database storage
+	encryptedSecretDataMap := convertConnectionMetadataToMap(c.EncryptedSecretData, c.ProviderType)
+
 	connection, err := client.Connection.UpdateOneID(c.ID).
 		Where(
 			connection.TenantID(c.TenantID),
 			connection.EnvironmentID(c.EnvironmentID),
 		).
 		SetName(c.Name).
+		SetEncryptedSecretData(encryptedSecretDataMap).
 		SetMetadata(c.Metadata).
 		SetSyncConfig(c.SyncConfig).
 		SetUpdatedAt(c.UpdatedAt).
@@ -353,7 +373,9 @@ func (r *connectionRepository) Update(ctx context.Context, c *domainConnection.C
 	SetSpanSuccess(span)
 	*c = *domainConnection.FromEnt(connection)
 
-	// Update cache
+	// Invalidate cache to ensure fresh data on next read
+	r.DeleteCache(ctx, c)
+	// Update cache with new data
 	r.SetCache(ctx, c)
 
 	return nil

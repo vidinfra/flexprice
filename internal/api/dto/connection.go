@@ -142,6 +142,35 @@ func convertFlatMetadataToStructured(flatMetadata map[string]interface{}, provid
 			Chargebee: chargebeeMetadata,
 		}
 
+	case types.SecretProviderQuickBooks:
+		qbMetadata := &types.QuickBooksConnectionMetadata{}
+
+		if clientID, ok := flatMetadata["client_id"].(string); ok {
+			qbMetadata.ClientID = clientID
+		}
+		if clientSecret, ok := flatMetadata["client_secret"].(string); ok {
+			qbMetadata.ClientSecret = clientSecret
+		}
+		if accessToken, ok := flatMetadata["access_token"].(string); ok {
+			qbMetadata.AccessToken = accessToken
+		}
+		if refreshToken, ok := flatMetadata["refresh_token"].(string); ok {
+			qbMetadata.RefreshToken = refreshToken
+		}
+		if realmID, ok := flatMetadata["realm_id"].(string); ok {
+			qbMetadata.RealmID = realmID
+		}
+		if tokenExpiresAt, ok := flatMetadata["token_expires_at"].(float64); ok {
+			qbMetadata.TokenExpiresAt = int64(tokenExpiresAt)
+		}
+		if environment, ok := flatMetadata["environment"].(string); ok {
+			qbMetadata.Environment = environment
+		}
+
+		return types.ConnectionMetadata{
+			QuickBooks: qbMetadata,
+		}
+
 	default:
 		// For other providers or unknown types, use generic format
 		return types.ConnectionMetadata{

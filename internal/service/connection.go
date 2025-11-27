@@ -175,6 +175,40 @@ func (s *connectionService) encryptMetadata(encryptedSecretData types.Connection
 			}
 		}
 
+	case types.SecretProviderQuickBooks:
+		if encryptedSecretData.QuickBooks == nil {
+			s.Logger.Warnw("QuickBooks metadata is nil, cannot encrypt", "provider_type", providerType)
+			return types.ConnectionMetadata{}, ierr.NewError("QuickBooks metadata is required").
+				WithHint("QuickBooks connection requires encrypted_secret_data with client_id, client_secret, access_token, refresh_token, realm_id, and environment").
+				Mark(ierr.ErrValidation)
+		}
+		encryptedClientID, err := s.encryptionService.Encrypt(encryptedSecretData.QuickBooks.ClientID)
+		if err != nil {
+			return types.ConnectionMetadata{}, err
+		}
+		encryptedClientSecret, err := s.encryptionService.Encrypt(encryptedSecretData.QuickBooks.ClientSecret)
+		if err != nil {
+			return types.ConnectionMetadata{}, err
+		}
+		encryptedAccessToken, err := s.encryptionService.Encrypt(encryptedSecretData.QuickBooks.AccessToken)
+		if err != nil {
+			return types.ConnectionMetadata{}, err
+		}
+		encryptedRefreshToken, err := s.encryptionService.Encrypt(encryptedSecretData.QuickBooks.RefreshToken)
+		if err != nil {
+			return types.ConnectionMetadata{}, err
+		}
+
+		encryptedMetadata.QuickBooks = &types.QuickBooksConnectionMetadata{
+			ClientID:       encryptedClientID,
+			ClientSecret:   encryptedClientSecret,
+			AccessToken:    encryptedAccessToken,
+			RefreshToken:   encryptedRefreshToken,
+			RealmID:        encryptedSecretData.QuickBooks.RealmID, // Not encrypted
+			Environment:    encryptedSecretData.QuickBooks.Environment,
+			TokenExpiresAt: encryptedSecretData.QuickBooks.TokenExpiresAt,
+		}
+
 	default:
 		// For other providers or unknown types, use generic format
 		if encryptedSecretData.Generic != nil {
@@ -260,6 +294,11 @@ func (s *connectionService) CreateConnection(ctx context.Context, req dto.Create
 	conn.UpdatedBy = types.GetUserID(ctx)
 
 	// Encrypt metadata
+	s.Logger.Debugw("encrypting metadata",
+		"provider_type", conn.ProviderType,
+		"has_quickbooks", conn.EncryptedSecretData.QuickBooks != nil,
+		"has_stripe", conn.EncryptedSecretData.Stripe != nil,
+		"has_chargebee", conn.EncryptedSecretData.Chargebee != nil)
 	encryptedMetadata, err := s.encryptMetadata(conn.EncryptedSecretData, conn.ProviderType)
 	if err != nil {
 		s.Logger.Errorw("failed to encrypt metadata", "error", err)

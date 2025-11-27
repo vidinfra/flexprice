@@ -146,6 +146,29 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		return types.ConnectionMetadata{
 			Chargebee: chargebeeMetadata,
 		}
+	case types.SecretProviderQuickBooks:
+		qbMetadata := &types.QuickBooksConnectionMetadata{}
+		if clientID, ok := metadata["client_id"].(string); ok {
+			qbMetadata.ClientID = clientID
+		}
+		if clientSecret, ok := metadata["client_secret"].(string); ok {
+			qbMetadata.ClientSecret = clientSecret
+		}
+		if accessToken, ok := metadata["access_token"].(string); ok {
+			qbMetadata.AccessToken = accessToken
+		}
+		if refreshToken, ok := metadata["refresh_token"].(string); ok {
+			qbMetadata.RefreshToken = refreshToken
+		}
+		if realmID, ok := metadata["realm_id"].(string); ok {
+			qbMetadata.RealmID = realmID
+		}
+		if environment, ok := metadata["environment"].(string); ok {
+			qbMetadata.Environment = environment
+		}
+		return types.ConnectionMetadata{
+			QuickBooks: qbMetadata,
+		}
 	default:
 		// For other providers or unknown types, use generic format
 		return types.ConnectionMetadata{

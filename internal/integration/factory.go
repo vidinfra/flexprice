@@ -18,6 +18,7 @@ import (
 	chargebeewebhook "github.com/flexprice/flexprice/internal/integration/chargebee/webhook"
 	"github.com/flexprice/flexprice/internal/integration/hubspot"
 	hubspotwebhook "github.com/flexprice/flexprice/internal/integration/hubspot/webhook"
+	"github.com/flexprice/flexprice/internal/integration/quickbooks"
 	"github.com/flexprice/flexprice/internal/integration/razorpay"
 	razorpaywebhook "github.com/flexprice/flexprice/internal/integration/razorpay/webhook"
 	"github.com/flexprice/flexprice/internal/integration/s3"
@@ -332,6 +333,49 @@ func (f *Factory) GetChargebeeIntegration(ctx context.Context) (*ChargebeeIntegr
 	}, nil
 }
 
+// GetQuickBooksIntegration returns a complete QuickBooks integration setup
+func (f *Factory) GetQuickBooksIntegration(ctx context.Context) (*QuickBooksIntegration, error) {
+	// Create QuickBooks client
+	qbClient := quickbooks.NewClient(
+		f.connectionRepo,
+		f.encryptionService,
+		f.logger,
+	)
+
+	// Create customer service
+	customerSvc := quickbooks.NewCustomerService(quickbooks.CustomerServiceParams{
+		Client:                       qbClient,
+		CustomerRepo:                 f.customerRepo,
+		EntityIntegrationMappingRepo: f.entityIntegrationMappingRepo,
+		Logger:                       f.logger,
+	})
+
+	// Create item sync service
+	itemSyncSvc := quickbooks.NewItemSyncService(quickbooks.ItemSyncServiceParams{
+		Client:                       qbClient,
+		EntityIntegrationMappingRepo: f.entityIntegrationMappingRepo,
+		MeterRepo:                    f.meterRepo,
+		Logger:                       f.logger,
+	})
+
+	// Create invoice service
+	invoiceSvc := quickbooks.NewInvoiceService(quickbooks.InvoiceServiceParams{
+		Client:                       qbClient,
+		CustomerSvc:                  customerSvc,
+		CustomerRepo:                 f.customerRepo,
+		InvoiceRepo:                  f.invoiceRepo,
+		EntityIntegrationMappingRepo: f.entityIntegrationMappingRepo,
+		Logger:                       f.logger,
+	})
+
+	return &QuickBooksIntegration{
+		Client:      qbClient,
+		CustomerSvc: customerSvc,
+		ItemSyncSvc: itemSyncSvc,
+		InvoiceSvc:  invoiceSvc,
+	}, nil
+}
+
 // GetIntegrationByProvider returns the appropriate integration for the given provider type
 func (f *Factory) GetIntegrationByProvider(ctx context.Context, providerType types.SecretProvider) (interface{}, error) {
 	switch providerType {
@@ -343,6 +387,8 @@ func (f *Factory) GetIntegrationByProvider(ctx context.Context, providerType typ
 		return f.GetRazorpayIntegration(ctx)
 	case types.SecretProviderChargebee:
 		return f.GetChargebeeIntegration(ctx)
+	case types.SecretProviderQuickBooks:
+		return f.GetQuickBooksIntegration(ctx)
 	default:
 		return nil, ierr.NewError("unsupported integration provider").
 			WithHint("Provider type is not supported").
@@ -360,6 +406,7 @@ func (f *Factory) GetSupportedProviders() []types.SecretProvider {
 		types.SecretProviderHubSpot,
 		types.SecretProviderRazorpay,
 		types.SecretProviderChargebee,
+		types.SecretProviderQuickBooks,
 	}
 }
 
@@ -412,6 +459,14 @@ type ChargebeeIntegration struct {
 	InvoiceSvc     chargebee.ChargebeeInvoiceService
 	PlanSyncSvc    chargebee.ChargebeePlanSyncService
 	WebhookHandler *chargebeewebhook.Handler
+}
+
+// QuickBooksIntegration contains all QuickBooks integration services
+type QuickBooksIntegration struct {
+	Client      quickbooks.QuickBooksClient
+	CustomerSvc quickbooks.QuickBooksCustomerService
+	ItemSyncSvc quickbooks.QuickBooksItemSyncService
+	InvoiceSvc  quickbooks.QuickBooksInvoiceService
 }
 
 // IntegrationProvider defines the interface for all integration providers
