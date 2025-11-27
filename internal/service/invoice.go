@@ -1002,9 +1002,17 @@ func (s *invoiceService) syncInvoiceToQuickBooksIfEnabled(ctx context.Context, i
 	// Check if QuickBooks connection exists
 	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderQuickBooks)
 	if err != nil || conn == nil {
+		// If connection doesn't exist (not found), this is expected - just skip sync
+		if err != nil && !ierr.IsNotFound(err) {
+			// Actual error occurred (not just missing connection)
+			s.Logger.Errorw("failed to check QuickBooks connection, skipping invoice sync",
+				"invoice_id", inv.ID,
+				"error", err)
+			return nil // Don't fail invoice creation, just skip sync
+		}
+		// Connection not found - this is expected, log at debug level
 		s.Logger.Debugw("QuickBooks connection not available, skipping invoice sync",
-			"invoice_id", inv.ID,
-			"error", err)
+			"invoice_id", inv.ID)
 		return nil // Not an error, just skip sync
 	}
 
