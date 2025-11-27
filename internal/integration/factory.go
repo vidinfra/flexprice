@@ -520,6 +520,21 @@ func (p *RazorpayProvider) IsAvailable(ctx context.Context) bool {
 	return p.integration.Client.HasRazorpayConnection(ctx)
 }
 
+// QuickBooksProvider implements IntegrationProvider for QuickBooks
+type QuickBooksProvider struct {
+	integration *QuickBooksIntegration
+}
+
+// GetProviderType returns the provider type
+func (p *QuickBooksProvider) GetProviderType() types.SecretProvider {
+	return types.SecretProviderQuickBooks
+}
+
+// IsAvailable checks if QuickBooks integration is available
+func (p *QuickBooksProvider) IsAvailable(ctx context.Context) bool {
+	return p.integration.Client.HasQuickBooksConnection(ctx)
+}
+
 // GetAvailableProviders returns all available providers for the current environment
 func (f *Factory) GetAvailableProviders(ctx context.Context) ([]IntegrationProvider, error) {
 	var providers []IntegrationProvider
@@ -548,6 +563,15 @@ func (f *Factory) GetAvailableProviders(ctx context.Context) ([]IntegrationProvi
 		razorpayProvider := &RazorpayProvider{integration: razorpayIntegration}
 		if razorpayProvider.IsAvailable(ctx) {
 			providers = append(providers, razorpayProvider)
+		}
+	}
+
+	// Check QuickBooks
+	quickbooksIntegration, err := f.GetQuickBooksIntegration(ctx)
+	if err == nil {
+		quickbooksProvider := &QuickBooksProvider{integration: quickbooksIntegration}
+		if quickbooksProvider.IsAvailable(ctx) {
+			providers = append(providers, quickbooksProvider)
 		}
 	}
 

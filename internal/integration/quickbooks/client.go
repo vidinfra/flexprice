@@ -455,8 +455,10 @@ func (c *Client) CreateCustomer(ctx context.Context, req *CustomerCreateRequest)
 }
 
 // QueryCustomerByEmail queries a customer by email
+// QuickBooks Query API requires backslash escaping for single quotes (\'), not SQL double quotes (”)
 func (c *Client) QueryCustomerByEmail(ctx context.Context, email string) (*CustomerResponse, error) {
-	escapedEmail := strings.ReplaceAll(email, "'", "''")
+	// QuickBooks requires backslash escaping for single quotes in query strings
+	escapedEmail := strings.ReplaceAll(email, "'", "\\'")
 	query := fmt.Sprintf("SELECT * FROM Customer WHERE PrimaryEmailAddr = '%s'", escapedEmail)
 
 	body, err := c.queryEntities(ctx, "Customer", query)
@@ -652,8 +654,14 @@ func (c *Client) RefreshAccessToken(ctx context.Context) error {
 	}
 	defer resp.Body.Close()
 
+	// Read response body once before status check to avoid consuming the stream
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ierr.NewError("failed to read token response").
+			Mark(ierr.ErrSystem)
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
 		responseBody := string(body)
 
 		if strings.Contains(responseBody, "invalid_grant") ||
@@ -680,12 +688,7 @@ func (c *Client) RefreshAccessToken(ctx context.Context) error {
 		RefreshTokenExpiresIn int    `json:"refresh_token_expires_in"` // seconds
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return ierr.NewError("failed to read token response").
-			Mark(ierr.ErrSystem)
-	}
-
+	// Body was already read above, use it here
 	if err := json.Unmarshal(body, &tokenResponse); err != nil {
 		return ierr.NewError("failed to parse token response").
 			WithHint(fmt.Sprintf("Response: %s", string(body))).
@@ -779,7 +782,8 @@ func (c *Client) makeRequestWithRetry(ctx context.Context, method, endpoint stri
 			// Retry the request
 			return c.makeRequestWithRetry(ctx, method, endpoint, body, retryCount+1)
 		}
-		return resp, err
+		// Return nil response when there's an error to prevent use of invalid response
+		return nil, err
 	}
 
 	// Check if response indicates token expiration

@@ -51,6 +51,14 @@ func (s *ItemSyncService) SyncPlanToQuickBooks(ctx context.Context, plan *plan.P
 		"plan_name", plan.Name,
 		"prices_count", len(prices))
 
+	// Nothing to sync if no prices
+	if len(prices) == 0 {
+		s.Logger.Infow("no prices to sync for plan",
+			"plan_id", plan.ID,
+			"plan_name", plan.Name)
+		return nil
+	}
+
 	// Track recurring charge count for item naming
 	// Recurring charges (FIXED without meter) get names like "PlanName-Recurring-1", "PlanName-Recurring-2", etc.
 	recurringCount := 0
@@ -154,7 +162,7 @@ func (s *ItemSyncService) SyncPriceToQuickBooks(ctx context.Context, priceItem *
 	if err == nil && existingItem != nil && existingItem.ID != "" {
 		// Create mapping for existing item instead of creating duplicate
 		if err := s.createItemMapping(ctx, priceItem.ID, existingItem.ID, existingItem.Name, plan.EnvironmentID, plan.TenantID); err != nil {
-			s.Logger.Warnw("failed to create item mapping",
+			s.Logger.Debugw("failed to create item mapping",
 				"error", err,
 				"price_id", priceItem.ID)
 		}
@@ -265,10 +273,14 @@ func (s *ItemSyncService) createItemMapping(
 }
 
 // sanitizeItemName removes special characters that QuickBooks doesn't allow in Item Name.
-// QuickBooks requires unique item names and rejects names with quotes.
+// QuickBooks explicitly disallows: tab, newline, colon (:), and double-quote (").
+// QuickBooks accepts single quotes ('), so we don't remove them.
 // This ensures item creation doesn't fail due to invalid characters.
 func (s *ItemSyncService) sanitizeItemName(name string) string {
-	sanitized := strings.ReplaceAll(name, "'", "")
-	sanitized = strings.ReplaceAll(sanitized, "\"", "")
+	sanitized := strings.ReplaceAll(name, ":", "")      // Remove colons (explicitly disallowed)
+	sanitized = strings.ReplaceAll(sanitized, "\"", "") // Remove double quotes (explicitly disallowed)
+	sanitized = strings.ReplaceAll(sanitized, "\t", "") // Remove tabs (explicitly disallowed)
+	sanitized = strings.ReplaceAll(sanitized, "\n", "") // Remove newlines (explicitly disallowed)
+	sanitized = strings.ReplaceAll(sanitized, "\r", "") // Remove carriage returns
 	return strings.TrimSpace(sanitized)
 }

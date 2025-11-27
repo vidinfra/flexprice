@@ -162,11 +162,15 @@ func (s *InvoiceService) SyncInvoiceToQuickBooks(
 
 	// Create entity mapping to track invoice sync relationship
 	// This prevents duplicate syncs and enables future invoice updates
+	// If mapping fails, invoice exists in QuickBooks but isn't tracked, leading to duplicates on retry
 	if err := s.createInvoiceMapping(ctx, req.InvoiceID, quickBooksInvoice.ID, flexInvoice.EnvironmentID, flexInvoice.TenantID); err != nil {
-		s.Logger.Errorw("failed to create invoice mapping",
-			"error", err,
-			"invoice_id", req.InvoiceID,
-			"quickbooks_invoice_id", quickBooksInvoice.ID)
+		return nil, ierr.WithError(err).
+			WithHint("Invoice created in QuickBooks but mapping failed - manual intervention required to prevent duplicates").
+			WithReportableDetails(map[string]interface{}{
+				"quickbooks_invoice_id": quickBooksInvoice.ID,
+				"invoice_id":            req.InvoiceID,
+			}).
+			Mark(ierr.ErrDatabase)
 	}
 
 	return &QuickBooksInvoiceSyncResponse{
@@ -310,7 +314,9 @@ func (s *InvoiceService) getExistingQuickBooksMapping(ctx context.Context, invoi
 
 	mappings, err := s.EntityIntegrationMappingRepo.List(ctx, filter)
 	if err != nil {
-		return nil, err
+		return nil, ierr.WithError(err).
+			WithHint("Failed to check existing invoice mapping").
+			Mark(ierr.ErrDatabase)
 	}
 
 	if len(mappings) == 0 {
@@ -323,7 +329,7 @@ func (s *InvoiceService) getExistingQuickBooksMapping(ctx context.Context, invoi
 
 // createInvoiceMapping creates an entity integration mapping for the invoice.
 // Stores the relationship between Flexprice invoice and QuickBooks invoice.
-// Metadata includes synced_at timestamp and Flexprice_invoice_id for reference.
+// Metadata includes synced_at timestamp and flexprice_invoice_id for reference.
 func (s *InvoiceService) createInvoiceMapping(ctx context.Context, invoiceID, quickBooksInvoiceID, environmentID, tenantID string) error {
 	baseModel := types.GetDefaultBaseModel(ctx)
 	baseModel.TenantID = tenantID
@@ -338,7 +344,7 @@ func (s *InvoiceService) createInvoiceMapping(ctx context.Context, invoiceID, qu
 		BaseModel:        baseModel,
 		Metadata: map[string]interface{}{
 			"synced_at":            time.Now().UTC().Format(time.RFC3339),
-			"Flexprice_invoice_id": invoiceID,
+			"flexprice_invoice_id": invoiceID,
 		},
 	}
 

@@ -225,6 +225,8 @@ func (s *CustomerService) SyncCustomerToQuickBooks(ctx context.Context, flexpric
 			"customer_id", flexpriceCustomer.ID,
 			"quickbooks_customer_id", customerResp.ID,
 			"error", err)
+		// Note: Customer was created in QuickBooks but mapping failed.
+		// The name-based lookup in SyncCustomerToQuickBooks (line ~156) should prevent duplicates on retry.
 	}
 
 	return customerResp, nil
@@ -240,6 +242,9 @@ func (s *CustomerService) createCustomerMapping(
 	quickBooksCustomer *CustomerResponse,
 ) error {
 	if s.EntityIntegrationMappingRepo == nil {
+		s.Logger.Warnw("EntityIntegrationMappingRepo is nil, skipping mapping creation",
+			"flexprice_customer_id", flexPriceCustomerID,
+			"quickbooks_customer_id", quickBooksCustomerID)
 		return nil
 	}
 

@@ -166,6 +166,12 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		if environment, ok := metadata["environment"].(string); ok {
 			qbMetadata.Environment = environment
 		}
+		// Handle token_expires_at - may be float64 from JSON or int64
+		if expiresAt, ok := metadata["token_expires_at"].(float64); ok {
+			qbMetadata.TokenExpiresAt = int64(expiresAt)
+		} else if expiresAt, ok := metadata["token_expires_at"].(int64); ok {
+			qbMetadata.TokenExpiresAt = expiresAt
+		}
 		return types.ConnectionMetadata{
 			QuickBooks: qbMetadata,
 		}
