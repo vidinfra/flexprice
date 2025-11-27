@@ -987,9 +987,17 @@ func (s *planService) syncPlanToQuickBooksIfEnabled(ctx context.Context, plan *p
 	// Check if QuickBooks connection exists
 	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderQuickBooks)
 	if err != nil || conn == nil {
+		// If connection doesn't exist (not found), this is expected - just skip sync
+		if err != nil && !ierr.IsNotFound(err) {
+			// Actual error occurred (not just missing connection)
+			s.Logger.Errorw("failed to check QuickBooks connection, skipping plan sync",
+				"plan_id", plan.ID,
+				"error", err)
+			return nil // Don't fail plan creation, just skip sync
+		}
+		// Connection not found - this is expected, log at debug level
 		s.Logger.Debugw("QuickBooks connection not available, skipping plan sync",
-			"plan_id", plan.ID,
-			"error", err)
+			"plan_id", plan.ID)
 		return nil // Not an error, just skip sync
 	}
 
