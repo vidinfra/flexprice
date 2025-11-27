@@ -2,7 +2,6 @@ package quickbooks
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	customerDomain "github.com/flexprice/flexprice/internal/domain/customer"
@@ -119,7 +118,7 @@ func (s *CustomerService) GetOrCreateQuickBooksCustomer(ctx context.Context, fle
 // and creates a mapping for it to avoid duplicate creation attempts.
 func (s *CustomerService) SyncCustomerToQuickBooks(ctx context.Context, flexpriceCustomer *customerDomain.Customer) (*CustomerResponse, error) {
 	// Sanitize customer name as per QuickBooks' conventions.
-	displayName := s.sanitizeCustomerName(flexpriceCustomer.Name)
+	displayName := sanitizeForQuickBooks(flexpriceCustomer.Name)
 	if displayName == "" {
 		return nil, ierr.NewError("customer name is required").
 			WithHint("DisplayName is required for QuickBooks customer").
@@ -293,11 +292,3 @@ func (s *CustomerService) createCustomerMapping(
 	return s.EntityIntegrationMappingRepo.Create(ctx, mapping)
 }
 
-// sanitizeCustomerName removes special characters that QuickBooks doesn't allow in DisplayName.
-// QuickBooks API rejects customer names with quotes, so we remove them to prevent API errors.
-// This ensures customer creation doesn't fail due to invalid characters in the name.
-func (s *CustomerService) sanitizeCustomerName(name string) string {
-	sanitized := strings.ReplaceAll(name, "'", "")
-	sanitized = strings.ReplaceAll(sanitized, "\"", "")
-	return strings.TrimSpace(sanitized)
-}

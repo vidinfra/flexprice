@@ -3,7 +3,6 @@ package quickbooks
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/flexprice/flexprice/internal/domain/entityintegrationmapping"
@@ -154,7 +153,7 @@ func (s *ItemSyncService) SyncPriceToQuickBooks(ctx context.Context, priceItem *
 		itemName = fmt.Sprintf("%s-Recurring-%d", plan.Name, recurringCount)
 	}
 	// Sanitize name - remove quotes and special characters that QuickBooks doesn't allow
-	itemName = s.sanitizeItemName(itemName)
+	itemName = sanitizeForQuickBooks(itemName)
 
 	// Check if item with same name already exists in QuickBooks
 	// This handles cases where item was created manually or in a previous sync
@@ -301,17 +300,4 @@ func (s *ItemSyncService) getIncomeAccountID(ctx context.Context) string {
 	s.Logger.Debugw("no custom income account ID configured, using default",
 		"default_account_id", defaultIncomeAccountID)
 	return defaultIncomeAccountID
-}
-
-// sanitizeItemName removes special characters that QuickBooks doesn't allow in Item Name.
-// QuickBooks explicitly disallows: tab, newline, colon (:), and double-quote (").
-// QuickBooks accepts single quotes ('), so we don't remove them.
-// This ensures item creation doesn't fail due to invalid characters.
-func (s *ItemSyncService) sanitizeItemName(name string) string {
-	sanitized := strings.ReplaceAll(name, ":", "")      // Remove colons (explicitly disallowed)
-	sanitized = strings.ReplaceAll(sanitized, "\"", "") // Remove double quotes (explicitly disallowed)
-	sanitized = strings.ReplaceAll(sanitized, "\t", "") // Remove tabs (explicitly disallowed)
-	sanitized = strings.ReplaceAll(sanitized, "\n", "") // Remove newlines (explicitly disallowed)
-	sanitized = strings.ReplaceAll(sanitized, "\r", "") // Remove carriage returns
-	return strings.TrimSpace(sanitized)
 }

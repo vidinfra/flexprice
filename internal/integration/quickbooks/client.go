@@ -51,6 +51,29 @@ type Client struct {
 	minorVersion      string
 }
 
+// sanitizeForQuickBooksQuery escapes a string for use in QuickBooks Query API.
+// QuickBooks Query API requires backslash escaping for single quotes: ' -> \'
+// This is used consistently across all query functions (QueryCustomerByEmail, QueryCustomerByName, QueryItemByName).
+func sanitizeForQuickBooksQuery(value string) string {
+	// QuickBooks Query API requires backslash escaping for single quotes
+	return strings.ReplaceAll(value, "'", "\\'")
+}
+
+// sanitizeForQuickBooks removes special characters that QuickBooks doesn't allow in names/fields.
+// QuickBooks explicitly disallows: tab, newline, colon (:), and double-quote (").
+// QuickBooks accepts single quotes ('), so we don't remove them (they're escaped in queries).
+// This ensures item/customer creation doesn't fail due to invalid characters.
+// Used for: Item Names, Customer DisplayNames, and other QuickBooks entity names.
+// This is a unified sanitization method used across all QuickBooks integrations.
+func sanitizeForQuickBooks(name string) string {
+	sanitized := strings.ReplaceAll(name, ":", "")      // Remove colons (explicitly disallowed)
+	sanitized = strings.ReplaceAll(sanitized, "\"", "") // Remove double quotes (explicitly disallowed)
+	sanitized = strings.ReplaceAll(sanitized, "\t", "") // Remove tabs (explicitly disallowed)
+	sanitized = strings.ReplaceAll(sanitized, "\n", "") // Remove newlines (explicitly disallowed)
+	sanitized = strings.ReplaceAll(sanitized, "\r", "") // Remove carriage returns
+	return strings.TrimSpace(sanitized)
+}
+
 // QuickBooksConfig holds decrypted QuickBooks configuration
 type QuickBooksConfig struct {
 	ClientID       string
@@ -455,10 +478,10 @@ func (c *Client) CreateCustomer(ctx context.Context, req *CustomerCreateRequest)
 }
 
 // QueryCustomerByEmail queries a customer by email
-// QuickBooks Query API requires backslash escaping for single quotes (\'), not SQL double quotes (”)
+// Note: QuickBooks Query API requires backslash escaping for single quotes (e.g., \' )
 func (c *Client) QueryCustomerByEmail(ctx context.Context, email string) (*CustomerResponse, error) {
-	// QuickBooks requires backslash escaping for single quotes in query strings
-	escapedEmail := strings.ReplaceAll(email, "'", "\\'")
+	// Escape single quotes with backslash as required by QuickBooks Query API
+	escapedEmail := sanitizeForQuickBooksQuery(email)
 	query := fmt.Sprintf("SELECT * FROM Customer WHERE PrimaryEmailAddr = '%s'", escapedEmail)
 
 	body, err := c.queryEntities(ctx, "Customer", query)
@@ -479,8 +502,9 @@ func (c *Client) QueryCustomerByEmail(ctx context.Context, email string) (*Custo
 }
 
 // QueryCustomerByName queries a customer by display name
+// Note: QuickBooks Query API requires backslash escaping for single quotes (e.g., \' )
 func (c *Client) QueryCustomerByName(ctx context.Context, name string) (*CustomerResponse, error) {
-	escapedName := strings.ReplaceAll(name, "'", "''")
+	escapedName := sanitizeForQuickBooksQuery(name)
 	query := fmt.Sprintf("SELECT * FROM Customer WHERE DisplayName = '%s'", escapedName)
 
 	body, err := c.queryEntities(ctx, "Customer", query)
@@ -547,8 +571,9 @@ func (c *Client) CreateItem(ctx context.Context, req *ItemCreateRequest) (*ItemR
 }
 
 // QueryItemByName queries an item by name
+// Note: QuickBooks Query API requires backslash escaping for single quotes (e.g., \' )
 func (c *Client) QueryItemByName(ctx context.Context, name string) (*ItemResponse, error) {
-	escapedName := strings.ReplaceAll(name, "'", "''")
+	escapedName := sanitizeForQuickBooksQuery(name)
 	query := fmt.Sprintf("SELECT * FROM Item WHERE Name = '%s' AND Type = 'Service' AND Active = true", escapedName)
 
 	body, err := c.queryEntities(ctx, "Item", query)
