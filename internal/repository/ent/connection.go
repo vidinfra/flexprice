@@ -289,6 +289,10 @@ func convertConnectionMetadataToMap(encryptedSecretData types.ConnectionMetadata
 			if encryptedSecretData.QuickBooks.TokenExpiresAt > 0 {
 				result["token_expires_at"] = encryptedSecretData.QuickBooks.TokenExpiresAt
 			}
+			// Add income_account_id if present (optional)
+			if encryptedSecretData.QuickBooks.IncomeAccountID != "" {
+				result["income_account_id"] = encryptedSecretData.QuickBooks.IncomeAccountID
+			}
 			return result
 		}
 	default:

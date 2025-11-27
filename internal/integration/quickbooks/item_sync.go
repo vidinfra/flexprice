@@ -130,7 +130,7 @@ func (s *ItemSyncService) SyncPlanToQuickBooks(ctx context.Context, plan *plan.P
 // - Item Name: {plan name}-{meter name} for usage charges, or {plan name}-Recurring-{count} for recurring charges
 // - Item Description: {price_id} (as per requirements)
 // - Item Type: "Service"
-// - Income Account: Hardcoded to ID "79" (as per requirements)
+// - Income Account: Uses income_account_id from connection metadata if configured, otherwise defaults to "79"
 // If item already exists (by name or mapping), creates mapping instead of creating duplicate.
 func (s *ItemSyncService) SyncPriceToQuickBooks(ctx context.Context, priceItem *price.Price, plan *plan.Plan, meterItem *meter.Meter, recurringCount int) error {
 	// Check if item is already synced via entity mapping
@@ -169,15 +169,17 @@ func (s *ItemSyncService) SyncPriceToQuickBooks(ctx context.Context, priceItem *
 		return nil
 	}
 
+	// Get income account ID from connection metadata or use default "79"
+	incomeAccountID := s.getIncomeAccountID(ctx)
+
 	// Create new item in QuickBooks
-	// Income account ID "79" is hardcoded as per requirements
 	createReq := &ItemCreateRequest{
 		Name:        itemName,
 		Type:        "Service",
 		Description: priceItem.ID, // Item Description: {price_id} as per requirements
 		Active:      true,
 		IncomeAccountRef: &AccountRef{
-			Value: "79", // Hardcoded income account ID as per requirements
+			Value: incomeAccountID,
 		},
 	}
 
@@ -270,6 +272,35 @@ func (s *ItemSyncService) createItemMapping(
 	}
 
 	return s.EntityIntegrationMappingRepo.Create(ctx, mapping)
+}
+
+// getIncomeAccountID retrieves the income account ID from connection metadata or returns default "79".
+// This allows companies to configure their own income account ID while maintaining a sensible default.
+func (s *ItemSyncService) getIncomeAccountID(ctx context.Context) string {
+	const defaultIncomeAccountID = "79" // Default income account ID for Service items
+
+	// Try to get connection to check for custom income account ID
+	conn, err := s.Client.GetConnection(ctx)
+	if err != nil {
+		// If connection not found or error, use default
+		s.Logger.Debugw("could not get QuickBooks connection, using default income account ID",
+			"default_account_id", defaultIncomeAccountID)
+		return defaultIncomeAccountID
+	}
+
+	// Check if connection has custom income account ID in metadata
+	if conn.EncryptedSecretData.QuickBooks != nil {
+		if incomeAccountID := conn.EncryptedSecretData.QuickBooks.IncomeAccountID; incomeAccountID != "" {
+			s.Logger.Debugw("using custom income account ID from connection metadata",
+				"income_account_id", incomeAccountID)
+			return incomeAccountID
+		}
+	}
+
+	// No custom account ID configured, use default
+	s.Logger.Debugw("no custom income account ID configured, using default",
+		"default_account_id", defaultIncomeAccountID)
+	return defaultIncomeAccountID
 }
 
 // sanitizeItemName removes special characters that QuickBooks doesn't allow in Item Name.

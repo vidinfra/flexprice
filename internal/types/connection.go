@@ -135,13 +135,14 @@ func (c *ChargebeeConnectionMetadata) Validate() error {
 
 // QuickBooksConnectionMetadata represents QuickBooks-specific connection metadata
 type QuickBooksConnectionMetadata struct {
-	ClientID      string `json:"client_id"`       // OAuth Client ID (encrypted)
-	ClientSecret  string `json:"client_secret"`   // OAuth Client Secret (encrypted)
-	AccessToken   string `json:"access_token"`    // OAuth Access Token (encrypted)
-	RefreshToken  string `json:"refresh_token"`   // OAuth Refresh Token (encrypted)
-	RealmID       string `json:"realm_id"`        // QuickBooks Company ID (not encrypted)
-	Environment   string `json:"environment"`     // "sandbox" or "production"
-	TokenExpiresAt int64 `json:"token_expires_at"` // Token expiration timestamp
+	ClientID        string `json:"client_id"`                   // OAuth Client ID (encrypted)
+	ClientSecret    string `json:"client_secret"`               // OAuth Client Secret (encrypted)
+	AccessToken     string `json:"access_token"`                // OAuth Access Token (encrypted)
+	RefreshToken    string `json:"refresh_token"`               // OAuth Refresh Token (encrypted)
+	RealmID         string `json:"realm_id"`                    // QuickBooks Company ID (not encrypted)
+	Environment     string `json:"environment"`                 // "sandbox" or "production"
+	TokenExpiresAt  int64  `json:"token_expires_at"`            // Token expiration timestamp
+	IncomeAccountID string `json:"income_account_id,omitempty"` // QuickBooks Income Account ID (optional, defaults to "79")
 }
 
 // Validate validates the QuickBooks connection metadata
@@ -222,7 +223,7 @@ func (g *GenericConnectionMetadata) Validate() error {
 // ConnectionMetadata represents structured connection metadata
 type ConnectionMetadata struct {
 	Stripe     *StripeConnectionMetadata     `json:"stripe,omitempty"`
-	S3         *S3ConnectionMetadata          `json:"s3,omitempty"`
+	S3         *S3ConnectionMetadata         `json:"s3,omitempty"`
 	HubSpot    *HubSpotConnectionMetadata    `json:"hubspot,omitempty"`
 	Razorpay   *RazorpayConnectionMetadata   `json:"razorpay,omitempty"`
 	Chargebee  *ChargebeeConnectionMetadata  `json:"chargebee,omitempty"`

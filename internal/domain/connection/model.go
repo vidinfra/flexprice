@@ -172,6 +172,10 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		} else if expiresAt, ok := metadata["token_expires_at"].(int64); ok {
 			qbMetadata.TokenExpiresAt = expiresAt
 		}
+		// Handle income_account_id (optional)
+		if incomeAccountID, ok := metadata["income_account_id"].(string); ok {
+			qbMetadata.IncomeAccountID = incomeAccountID
+		}
 		return types.ConnectionMetadata{
 			QuickBooks: qbMetadata,
 		}

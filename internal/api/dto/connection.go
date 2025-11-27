@@ -166,6 +166,10 @@ func convertFlatMetadataToStructured(flatMetadata map[string]interface{}, provid
 		if environment, ok := flatMetadata["environment"].(string); ok {
 			qbMetadata.Environment = environment
 		}
+		// Handle income_account_id (optional)
+		if incomeAccountID, ok := flatMetadata["income_account_id"].(string); ok {
+			qbMetadata.IncomeAccountID = incomeAccountID
+		}
 
 		return types.ConnectionMetadata{
 			QuickBooks: qbMetadata,

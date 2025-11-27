@@ -200,13 +200,14 @@ func (s *connectionService) encryptMetadata(encryptedSecretData types.Connection
 		}
 
 		encryptedMetadata.QuickBooks = &types.QuickBooksConnectionMetadata{
-			ClientID:       encryptedClientID,
-			ClientSecret:   encryptedClientSecret,
-			AccessToken:    encryptedAccessToken,
-			RefreshToken:   encryptedRefreshToken,
-			RealmID:        encryptedSecretData.QuickBooks.RealmID, // Not encrypted
-			Environment:    encryptedSecretData.QuickBooks.Environment,
-			TokenExpiresAt: encryptedSecretData.QuickBooks.TokenExpiresAt,
+			ClientID:        encryptedClientID,
+			ClientSecret:    encryptedClientSecret,
+			AccessToken:     encryptedAccessToken,
+			RefreshToken:    encryptedRefreshToken,
+			RealmID:         encryptedSecretData.QuickBooks.RealmID, // Not encrypted
+			Environment:     encryptedSecretData.QuickBooks.Environment,
+			TokenExpiresAt:  encryptedSecretData.QuickBooks.TokenExpiresAt,
+			IncomeAccountID: encryptedSecretData.QuickBooks.IncomeAccountID, // Not encrypted - account ID is not sensitive
 		}
 
 	default:
