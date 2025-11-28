@@ -640,12 +640,13 @@ func (s *invoiceService) performFinalizeInvoiceActions(ctx context.Context, inv 
 
 	s.publishInternalWebhookEvent(ctx, types.WebhookEventInvoiceUpdateFinalized, inv.ID)
 
-	// Sync to QuickBooks if QuickBooks connection is enabled
+	// Sync to QuickBooks if enabled
 	if err := s.syncInvoiceToQuickBooksIfEnabled(ctx, inv); err != nil {
-		// Log error but don't fail the entire process
 		s.Logger.Errorw("failed to sync invoice to QuickBooks",
-			"error", err,
-			"invoice_id", inv.ID)
+			"invoice_id", inv.ID,
+			"error", err)
+		// Return error - mapping failure means invoice is orphaned in QuickBooks
+		return err
 	}
 
 	return nil
@@ -1016,12 +1017,11 @@ func (s *invoiceService) syncInvoiceToQuickBooksIfEnabled(ctx context.Context, i
 		return nil // Not an error, just skip sync
 	}
 
-	// Check if invoice sync is enabled for this connection
+	// Check if invoice sync is enabled - only proceed if outbound is true
 	if !conn.IsInvoiceOutboundEnabled() {
-		s.Logger.Debugw("invoice sync disabled for QuickBooks connection, skipping invoice sync",
-			"invoice_id", inv.ID,
-			"connection_id", conn.ID)
-		return nil // Not an error, just skip sync
+		s.Logger.Debugw("invoice sync disabled, skipping",
+			"invoice_id", inv.ID)
+		return nil
 	}
 
 	// Get QuickBooks integration

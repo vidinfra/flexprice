@@ -153,19 +153,32 @@ func (s *InvoiceService) SyncInvoiceToQuickBooks(
 			Mark(ierr.ErrInternal)
 	}
 
-	s.Logger.Infow("successfully created invoice in QuickBooks",
+	s.Logger.Infow("created invoice in QuickBooks",
 		"invoice_id", req.InvoiceID,
-		"quickbooks_invoice_id", quickBooksInvoice.ID,
-		"total", quickBooksInvoice.TotalAmt,
-		"currency", flexInvoice.Currency,
-		"line_items_count", len(lineItems))
+		"quickbooks_invoice_id", quickBooksInvoice.ID)
 
-	// Create entity mapping to track invoice sync relationship
-	// This prevents duplicate syncs and enables future invoice updates
-	// If mapping fails, invoice exists in QuickBooks but isn't tracked, leading to duplicates on retry
-	if err := s.createInvoiceMapping(ctx, req.InvoiceID, quickBooksInvoice.ID, flexInvoice.EnvironmentID, flexInvoice.TenantID); err != nil {
-		return nil, ierr.WithError(err).
-			WithHint("Invoice created in QuickBooks but mapping failed - manual intervention required to prevent duplicates").
+	// Create mapping - retry once if it fails
+	const maxMappingRetries = 5
+	var mappingErr error
+	for attempt := 0; attempt < maxMappingRetries; attempt++ {
+		if attempt > 0 {
+			s.Logger.Warnw("retrying invoice mapping creation",
+				"invoice_id", req.InvoiceID,
+				"attempt", attempt+1)
+		}
+		mappingErr = s.createInvoiceMapping(ctx, req.InvoiceID, quickBooksInvoice.ID, flexInvoice.EnvironmentID, flexInvoice.TenantID)
+		if mappingErr == nil {
+			break
+		}
+	}
+
+	if mappingErr != nil {
+		s.Logger.Errorw("failed to create invoice mapping after retry",
+			"invoice_id", req.InvoiceID,
+			"quickbooks_invoice_id", quickBooksInvoice.ID,
+			"error", mappingErr)
+		return nil, ierr.WithError(mappingErr).
+			WithHint("Invoice created in QuickBooks but mapping failed - invoice is orphaned").
 			WithReportableDetails(map[string]interface{}{
 				"quickbooks_invoice_id": quickBooksInvoice.ID,
 				"invoice_id":            req.InvoiceID,
