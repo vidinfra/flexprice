@@ -1686,6 +1686,7 @@ func (s *InvoiceServiceSuite) TestCreateSubscriptionInvoiceWithInvoicingCustomer
 		req,
 		nil,
 		types.InvoiceFlowManual,
+		false,
 	)
 
 	// Verify invoice was created with invoicing customer ID
@@ -1746,6 +1747,7 @@ func (s *InvoiceServiceSuite) TestCreateSubscriptionInvoiceWithoutInvoicingCusto
 		req,
 		nil,
 		types.InvoiceFlowManual,
+		false,
 	)
 
 	// Verify invoice was created with subscription customer ID (fallback)
