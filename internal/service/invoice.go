@@ -640,15 +640,6 @@ func (s *invoiceService) performFinalizeInvoiceActions(ctx context.Context, inv 
 
 	s.publishInternalWebhookEvent(ctx, types.WebhookEventInvoiceUpdateFinalized, inv.ID)
 
-	// Sync to QuickBooks if enabled
-	if err := s.syncInvoiceToQuickBooksIfEnabled(ctx, inv); err != nil {
-		s.Logger.Errorw("failed to sync invoice to QuickBooks",
-			"invoice_id", inv.ID,
-			"error", err)
-		// Return error - mapping failure means invoice is orphaned in QuickBooks
-		return err
-	}
-
 	return nil
 }
 
@@ -775,8 +766,13 @@ func (s *invoiceService) ProcessDraftInvoice(ctx context.Context, id string, pay
 			"invoice_id", inv.ID)
 	}
 
-	// Note: QuickBooks sync is already handled in performFinalizeInvoiceActions
-	// No need to sync again here to avoid duplicates
+	// Sync to QuickBooks if QuickBooks connection is enabled
+	if err := s.syncInvoiceToQuickBooksIfEnabled(ctx, inv); err != nil {
+		// Log error but don't fail the entire process
+		s.Logger.Errorw("failed to sync invoice to QuickBooks",
+			"error", err,
+			"invoice_id", inv.ID)
+	}
 
 	// try to process payment for the invoice based on behavior and log any errors
 	// Pass the subscription object to avoid extra DB call

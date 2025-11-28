@@ -40,13 +40,11 @@ func NewInvoiceService(params InvoiceServiceParams) QuickBooksInvoiceService {
 }
 
 // SyncInvoiceToQuickBooks syncs a Flexprice invoice to QuickBooks.
-// This method implements the invoice sync workflow:
-// 1. Validates QuickBooks connection is active
-// 2. Checks if invoice is already synced to avoid duplicates
-// 3. Ensures customer exists in QuickBooks (creates if needed)
-// 4. Builds line items by mapping Flexprice prices to QuickBooks items
-// 5. Creates invoice in QuickBooks with customer reference and line items
-// 6. Creates entity mapping to track the sync relationship
+// Simple workflow:
+// 1. Check if invoice mapping already exists - if yes, return it
+// 2. Get or create customer in QuickBooks
+// 3. Create invoice in QuickBooks
+// 4. Create mapping
 func (s *InvoiceService) SyncInvoiceToQuickBooks(
 	ctx context.Context,
 	req QuickBooksInvoiceSyncRequest,
@@ -54,14 +52,12 @@ func (s *InvoiceService) SyncInvoiceToQuickBooks(
 	s.Logger.Infow("starting QuickBooks invoice sync",
 		"invoice_id", req.InvoiceID)
 
-	// Validate QuickBooks connection is configured and active
 	if !s.Client.HasQuickBooksConnection(ctx) {
 		return nil, ierr.NewError("QuickBooks connection not available").
 			WithHint("QuickBooks integration must be configured for invoice sync").
 			Mark(ierr.ErrNotFound)
 	}
 
-	// Get Flexprice invoice from database
 	flexInvoice, err := s.InvoiceRepo.Get(ctx, req.InvoiceID)
 	if err != nil {
 		return nil, ierr.WithError(err).
@@ -69,13 +65,12 @@ func (s *InvoiceService) SyncInvoiceToQuickBooks(
 			Mark(ierr.ErrDatabase)
 	}
 
-	// Check if invoice is already synced to prevent duplicate creation
+	// Step 1: Check if mapping exists
 	existingMapping, err := s.getExistingQuickBooksMapping(ctx, req.InvoiceID)
 	if err != nil && !ierr.IsNotFound(err) {
 		return nil, err
 	}
 
-	// Return existing mapping if invoice was already synced
 	if existingMapping != nil {
 		s.Logger.Infow("invoice already synced to QuickBooks",
 			"invoice_id", req.InvoiceID,
@@ -88,7 +83,7 @@ func (s *InvoiceService) SyncInvoiceToQuickBooks(
 		}, nil
 	}
 
-	// Get Flexprice customer - required for QuickBooks customer reference
+	// Step 2: Get or create customer
 	flexpriceCustomer, err := s.CustomerRepo.Get(ctx, flexInvoice.CustomerID)
 	if err != nil {
 		return nil, ierr.WithError(err).
@@ -96,8 +91,6 @@ func (s *InvoiceService) SyncInvoiceToQuickBooks(
 			Mark(ierr.ErrDatabase)
 	}
 
-	// Ensure customer exists in QuickBooks - creates if not exists, returns ID if exists
-	// This method handles customer lookup by email and mapping creation
 	quickBooksCustomerID, err := s.CustomerSvc.GetOrCreateQuickBooksCustomer(ctx, flexpriceCustomer)
 	if err != nil {
 		return nil, ierr.WithError(err).
@@ -105,40 +98,18 @@ func (s *InvoiceService) SyncInvoiceToQuickBooks(
 			Mark(ierr.ErrInternal)
 	}
 
-	// Build line items by mapping Flexprice invoice line items to QuickBooks items
-	// Each line item must reference a QuickBooks item (created from plan prices)
+	// Step 3: Build line items and create invoice
 	lineItems, err := s.buildLineItems(ctx, flexInvoice)
 	if err != nil {
 		return nil, err
 	}
 
-	// QuickBooks requires at least one line item for invoice creation
 	if len(lineItems) == 0 {
 		return nil, ierr.NewError("invoice has no line items").
 			WithHint("Cannot create QuickBooks invoice without line items").
 			Mark(ierr.ErrValidation)
 	}
 
-	// Double-check for existing mapping right before creating invoice to prevent race conditions
-	// This ensures that even if two requests pass the initial check, only one will create the invoice
-	existingMapping, err = s.getExistingQuickBooksMapping(ctx, req.InvoiceID)
-	if err != nil && !ierr.IsNotFound(err) {
-		return nil, err
-	}
-
-	if existingMapping != nil {
-		s.Logger.Infow("invoice already synced to QuickBooks (double-check before creation)",
-			"invoice_id", req.InvoiceID,
-			"quickbooks_invoice_id", existingMapping.ProviderEntityID)
-		return &QuickBooksInvoiceSyncResponse{
-			QuickBooksInvoiceID: existingMapping.ProviderEntityID,
-			Status:              "Pending",
-			Total:               flexInvoice.Total,
-			Currency:            flexInvoice.Currency,
-		}, nil
-	}
-
-	// Create invoice in QuickBooks with customer reference and line items
 	invoiceReq := &InvoiceCreateRequest{
 		CustomerRef: AccountRef{
 			Value: quickBooksCustomerID,
@@ -157,34 +128,20 @@ func (s *InvoiceService) SyncInvoiceToQuickBooks(
 		"invoice_id", req.InvoiceID,
 		"quickbooks_invoice_id", quickBooksInvoice.ID)
 
-	// Create mapping - retry once if it fails
-	const maxMappingRetries = 5
-	var mappingErr error
-	for attempt := 0; attempt < maxMappingRetries; attempt++ {
-		if attempt > 0 {
-			s.Logger.Warnw("retrying invoice mapping creation",
-				"invoice_id", req.InvoiceID,
-				"attempt", attempt+1)
-		}
-		mappingErr = s.createInvoiceMapping(ctx, req.InvoiceID, quickBooksInvoice.ID, flexInvoice.EnvironmentID, flexInvoice.TenantID)
-		if mappingErr == nil {
-			break
-		}
-	}
-
-	if mappingErr != nil {
-		s.Logger.Errorw("failed to create invoice mapping after retry",
+	// Step 4: Create mapping
+	if err := s.createInvoiceMapping(ctx, req.InvoiceID, quickBooksInvoice.ID, flexInvoice.EnvironmentID, flexInvoice.TenantID); err != nil {
+		s.Logger.Errorw("failed to create invoice mapping",
 			"invoice_id", req.InvoiceID,
 			"quickbooks_invoice_id", quickBooksInvoice.ID,
-			"error", mappingErr)
-		return nil, ierr.WithError(mappingErr).
-			WithHint("Invoice created in QuickBooks but mapping failed - invoice is orphaned").
-			WithReportableDetails(map[string]interface{}{
-				"quickbooks_invoice_id": quickBooksInvoice.ID,
-				"invoice_id":            req.InvoiceID,
-			}).
+			"error", err)
+		return nil, ierr.WithError(err).
+			WithHint("Invoice created in QuickBooks but mapping failed").
 			Mark(ierr.ErrDatabase)
 	}
+
+	s.Logger.Infow("successfully synced invoice to QuickBooks",
+		"invoice_id", req.InvoiceID,
+		"quickbooks_invoice_id", quickBooksInvoice.ID)
 
 	return &QuickBooksInvoiceSyncResponse{
 		QuickBooksInvoiceID: quickBooksInvoice.ID,
