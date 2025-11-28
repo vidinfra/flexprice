@@ -39,6 +39,8 @@ type QuickBooksClient interface {
 	CreateInvoice(ctx context.Context, req *InvoiceCreateRequest) (*InvoiceResponse, error)
 
 	// Token management
+	ExchangeAuthCodeForTokens(ctx context.Context) error
+	EnsureValidAccessToken(ctx context.Context) error
 	RefreshAccessToken(ctx context.Context) error
 }
 
@@ -76,13 +78,14 @@ func sanitizeForQuickBooks(name string) string {
 
 // QuickBooksConfig holds decrypted QuickBooks configuration
 type QuickBooksConfig struct {
-	ClientID       string
-	ClientSecret   string
-	AccessToken    string
-	RefreshToken   string
-	RealmID        string
-	Environment    string // "sandbox" or "production"
-	TokenExpiresAt int64
+	ClientID     string
+	ClientSecret string
+	AccessToken  string
+	RefreshToken string
+	RealmID      string
+	Environment  string // "sandbox" or "production"
+	AuthCode     string // Temporary, for initial token exchange
+	RedirectURI  string // Temporary, for initial token exchange
 }
 
 // NewClient creates a new QuickBooks client
@@ -169,6 +172,10 @@ func (c *Client) GetDecryptedQuickBooksConfig(conn *connection.Connection) (*Qui
 		qbConfig.RefreshToken = refreshToken
 	}
 
+	if authCode, exists := decryptedMetadata["auth_code"]; exists {
+		qbConfig.AuthCode = authCode
+	}
+
 	// RealmID is not encrypted - it's the QuickBooks Company ID
 	if realmID, exists := decryptedMetadata["realm_id"]; exists {
 		qbConfig.RealmID = realmID
@@ -179,6 +186,10 @@ func (c *Client) GetDecryptedQuickBooksConfig(conn *connection.Connection) (*Qui
 		qbConfig.Environment = environment
 	} else {
 		qbConfig.Environment = "production"
+	}
+
+	if redirectURI, exists := decryptedMetadata["redirect_uri"]; exists {
+		qbConfig.RedirectURI = redirectURI
 	}
 
 	return qbConfig, nil
@@ -202,24 +213,40 @@ func (c *Client) decryptConnectionMetadata(conn *connection.Connection) (types.M
 			return nil, ierr.NewError("failed to decrypt client_secret").Mark(ierr.ErrInternal)
 		}
 
-		accessToken, err := c.encryptionService.Decrypt(conn.EncryptedSecretData.QuickBooks.AccessToken)
-		if err != nil {
-			return nil, ierr.NewError("failed to decrypt access_token").Mark(ierr.ErrInternal)
-		}
-
-		refreshToken, err := c.encryptionService.Decrypt(conn.EncryptedSecretData.QuickBooks.RefreshToken)
-		if err != nil {
-			return nil, ierr.NewError("failed to decrypt refresh_token").Mark(ierr.ErrInternal)
-		}
-
 		decryptedMetadata := types.Metadata{
-			"client_id":        clientID,
-			"client_secret":    clientSecret,
-			"access_token":     accessToken,
-			"refresh_token":    refreshToken,
-			"realm_id":         conn.EncryptedSecretData.QuickBooks.RealmID, // Not encrypted
-			"environment":      conn.EncryptedSecretData.QuickBooks.Environment,
-			"token_expires_at": fmt.Sprintf("%d", conn.EncryptedSecretData.QuickBooks.TokenExpiresAt),
+			"client_id":     clientID,
+			"client_secret": clientSecret,
+			"realm_id":      conn.EncryptedSecretData.QuickBooks.RealmID, // Not encrypted
+			"environment":   conn.EncryptedSecretData.QuickBooks.Environment,
+		}
+
+		// Decrypt optional fields only if they exist
+		if conn.EncryptedSecretData.QuickBooks.AccessToken != "" {
+			accessToken, err := c.encryptionService.Decrypt(conn.EncryptedSecretData.QuickBooks.AccessToken)
+			if err != nil {
+				return nil, ierr.NewError("failed to decrypt access_token").Mark(ierr.ErrInternal)
+			}
+			decryptedMetadata["access_token"] = accessToken
+		}
+
+		if conn.EncryptedSecretData.QuickBooks.RefreshToken != "" {
+			refreshToken, err := c.encryptionService.Decrypt(conn.EncryptedSecretData.QuickBooks.RefreshToken)
+			if err != nil {
+				return nil, ierr.NewError("failed to decrypt refresh_token").Mark(ierr.ErrInternal)
+			}
+			decryptedMetadata["refresh_token"] = refreshToken
+		}
+
+		if conn.EncryptedSecretData.QuickBooks.AuthCode != "" {
+			authCode, err := c.encryptionService.Decrypt(conn.EncryptedSecretData.QuickBooks.AuthCode)
+			if err != nil {
+				return nil, ierr.NewError("failed to decrypt auth_code").Mark(ierr.ErrInternal)
+			}
+			decryptedMetadata["auth_code"] = authCode
+		}
+
+		if conn.EncryptedSecretData.QuickBooks.RedirectURI != "" {
+			decryptedMetadata["redirect_uri"] = conn.EncryptedSecretData.QuickBooks.RedirectURI // Not encrypted
 		}
 
 		return decryptedMetadata, nil
@@ -416,6 +443,11 @@ func (c *Client) queryEntitiesWithRetry(ctx context.Context, entityType, query s
 
 // CreateCustomer creates a customer in QuickBooks
 func (c *Client) CreateCustomer(ctx context.Context, req *CustomerCreateRequest) (*CustomerResponse, error) {
+	// Ensure valid access token before making API call
+	if err := c.EnsureValidAccessToken(ctx); err != nil {
+		return nil, err
+	}
+
 	payload := map[string]interface{}{
 		"DisplayName": req.DisplayName,
 	}
@@ -480,6 +512,11 @@ func (c *Client) CreateCustomer(ctx context.Context, req *CustomerCreateRequest)
 // QueryCustomerByEmail queries a customer by email
 // Note: QuickBooks Query API requires backslash escaping for single quotes (e.g., \' )
 func (c *Client) QueryCustomerByEmail(ctx context.Context, email string) (*CustomerResponse, error) {
+	// Ensure valid access token before making API call
+	if err := c.EnsureValidAccessToken(ctx); err != nil {
+		return nil, err
+	}
+
 	// Escape single quotes with backslash as required by QuickBooks Query API
 	escapedEmail := sanitizeForQuickBooksQuery(email)
 	query := fmt.Sprintf("SELECT * FROM Customer WHERE PrimaryEmailAddr = '%s'", escapedEmail)
@@ -504,6 +541,11 @@ func (c *Client) QueryCustomerByEmail(ctx context.Context, email string) (*Custo
 // QueryCustomerByName queries a customer by display name
 // Note: QuickBooks Query API requires backslash escaping for single quotes (e.g., \' )
 func (c *Client) QueryCustomerByName(ctx context.Context, name string) (*CustomerResponse, error) {
+	// Ensure valid access token before making API call
+	if err := c.EnsureValidAccessToken(ctx); err != nil {
+		return nil, err
+	}
+
 	escapedName := sanitizeForQuickBooksQuery(name)
 	query := fmt.Sprintf("SELECT * FROM Customer WHERE DisplayName = '%s'", escapedName)
 
@@ -526,6 +568,11 @@ func (c *Client) QueryCustomerByName(ctx context.Context, name string) (*Custome
 
 // CreateItem creates an item in QuickBooks
 func (c *Client) CreateItem(ctx context.Context, req *ItemCreateRequest) (*ItemResponse, error) {
+	// Ensure valid access token before making API call
+	if err := c.EnsureValidAccessToken(ctx); err != nil {
+		return nil, err
+	}
+
 	incomeAccountRef := map[string]string{
 		"value": req.IncomeAccountRef.Value,
 	}
@@ -573,6 +620,11 @@ func (c *Client) CreateItem(ctx context.Context, req *ItemCreateRequest) (*ItemR
 // QueryItemByName queries an item by name
 // Note: QuickBooks Query API requires backslash escaping for single quotes (e.g., \' )
 func (c *Client) QueryItemByName(ctx context.Context, name string) (*ItemResponse, error) {
+	// Ensure valid access token before making API call
+	if err := c.EnsureValidAccessToken(ctx); err != nil {
+		return nil, err
+	}
+
 	escapedName := sanitizeForQuickBooksQuery(name)
 	query := fmt.Sprintf("SELECT * FROM Item WHERE Name = '%s' AND Type = 'Service' AND Active = true", escapedName)
 
@@ -595,6 +647,11 @@ func (c *Client) QueryItemByName(ctx context.Context, name string) (*ItemRespons
 
 // CreateInvoice creates an invoice in QuickBooks
 func (c *Client) CreateInvoice(ctx context.Context, req *InvoiceCreateRequest) (*InvoiceResponse, error) {
+	// Ensure valid access token before making API call
+	if err := c.EnsureValidAccessToken(ctx); err != nil {
+		return nil, err
+	}
+
 	payload := map[string]interface{}{
 		"CustomerRef": map[string]string{
 			"value": req.CustomerRef.Value,
@@ -628,12 +685,197 @@ func (c *Client) CreateInvoice(ctx context.Context, req *InvoiceCreateRequest) (
 	return &result.Invoice, nil
 }
 
+// ExchangeAuthCodeForTokens exchanges an authorization code for access and refresh tokens.
+// This is called during initial connection setup OR when user re-authenticates after refresh token expiry:
+// 1. Exchanges auth_code (from OAuth redirect) for access_token and refresh_token
+// 2. Encrypts tokens before saving
+// 3. Updates connection in database with encrypted tokens and clears auth_code
+func (c *Client) ExchangeAuthCodeForTokens(ctx context.Context) error {
+	conn, err := c.GetConnection(ctx)
+	if err != nil {
+		return err
+	}
+
+	qbConfig, err := c.GetDecryptedQuickBooksConfig(conn)
+	if err != nil {
+		return err
+	}
+
+	// Check if auth_code is available
+	if qbConfig.AuthCode == "" {
+		return ierr.NewError("auth_code not available").
+			WithHint("QuickBooks authorization code is required for initial token exchange").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Check if redirect_uri is available
+	if qbConfig.RedirectURI == "" {
+		return ierr.NewError("redirect_uri not available").
+			WithHint("Redirect URI is required for authorization code exchange").
+			Mark(ierr.ErrValidation)
+	}
+
+	c.logger.Debugw("exchanging auth code for tokens",
+		"realm_id", qbConfig.RealmID,
+		"environment", qbConfig.Environment)
+
+	// QuickBooks OAuth token endpoint
+	tokenURL := "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
+
+	// Prepare form data for OAuth 2.0 authorization code grant
+	data := url.Values{}
+	data.Set("grant_type", "authorization_code")
+	data.Set("code", qbConfig.AuthCode)
+	data.Set("redirect_uri", qbConfig.RedirectURI)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return ierr.NewError("failed to create token exchange request").
+			Mark(ierr.ErrSystem)
+	}
+
+	// OAuth 2.0 requires Basic Auth with client_id:client_secret
+	auth := fmt.Sprintf("%s:%s", qbConfig.ClientID, qbConfig.ClientSecret)
+	req.Header.Set("Authorization", fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(auth))))
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return ierr.NewError("failed to exchange auth code").
+			WithHint("Network error connecting to QuickBooks OAuth endpoint").
+			Mark(ierr.ErrSystem)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ierr.NewError("failed to read token response").
+			Mark(ierr.ErrSystem)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		responseBody := string(body)
+
+		if strings.Contains(responseBody, "invalid_grant") || strings.Contains(responseBody, "invalid authorization code") {
+			return ierr.NewError("QuickBooks authorization code is invalid or expired").
+				WithHint("The authorization code may have already been used or has expired. Please re-authenticate with QuickBooks.").
+				WithReportableDetails(map[string]interface{}{
+					"status_code": resp.StatusCode,
+				}).
+				Mark(ierr.ErrHTTPClient)
+		}
+
+		return ierr.NewError("failed to exchange auth code").
+			WithHint(fmt.Sprintf("QuickBooks OAuth returned status %d", resp.StatusCode)).
+			Mark(ierr.ErrHTTPClient)
+	}
+
+	var tokenResponse struct {
+		AccessToken           string `json:"access_token"`
+		RefreshToken          string `json:"refresh_token"`
+		ExpiresIn             int    `json:"expires_in"`                 // seconds
+		RefreshTokenExpiresIn int    `json:"x_refresh_token_expires_in"` // seconds
+	}
+
+	if err := json.Unmarshal(body, &tokenResponse); err != nil {
+		return ierr.NewError("failed to parse token response").
+			WithHint("Failed to parse QuickBooks OAuth token response").
+			Mark(ierr.ErrSystem)
+	}
+
+	c.logger.Debugw("successfully exchanged auth code for tokens",
+		"realm_id", qbConfig.RealmID)
+
+	// Encrypt tokens before saving
+	encryptedAccessToken, err := c.encryptionService.Encrypt(tokenResponse.AccessToken)
+	if err != nil {
+		return ierr.NewError("failed to encrypt access token").
+			Mark(ierr.ErrInternal)
+	}
+
+	encryptedRefreshToken, err := c.encryptionService.Encrypt(tokenResponse.RefreshToken)
+	if err != nil {
+		return ierr.NewError("failed to encrypt refresh token").
+			Mark(ierr.ErrInternal)
+	}
+
+	// Update connection with tokens and clear auth_code
+	conn.EncryptedSecretData.QuickBooks.AccessToken = encryptedAccessToken
+	conn.EncryptedSecretData.QuickBooks.RefreshToken = encryptedRefreshToken
+	conn.EncryptedSecretData.QuickBooks.AuthCode = ""    // Clear auth code after successful exchange
+	conn.EncryptedSecretData.QuickBooks.RedirectURI = "" // Clear redirect URI
+
+	conn.UpdatedAt = time.Now()
+	conn.UpdatedBy = types.GetUserID(ctx)
+
+	if err := c.connectionRepo.Update(ctx, conn); err != nil {
+		c.logger.Errorw("failed to update connection with tokens",
+			"connection_id", conn.ID,
+			"error", err)
+		return ierr.NewError("failed to update connection with tokens").
+			Mark(ierr.ErrDatabase)
+	}
+
+	c.logger.Debugw("successfully updated connection with initial tokens",
+		"connection_id", conn.ID)
+
+	return nil
+}
+
+// EnsureValidAccessToken ensures that a valid access token is available.
+// This method should be called before every API operation:
+// 1. If no access token exists, tries to refresh using refresh_token
+// 2. If access token exists, uses it (no proactive expiration check - relies on reactive refresh on 3200 error)
+// This is the main entry point for token management before API calls.
+func (c *Client) EnsureValidAccessToken(ctx context.Context) error {
+	conn, err := c.GetConnection(ctx)
+	if err != nil {
+		return err
+	}
+
+	qbConfig, err := c.GetDecryptedQuickBooksConfig(conn)
+	if err != nil {
+		return err
+	}
+
+	// If no access token, try to get one
+	if qbConfig.AccessToken == "" {
+		c.logger.Debugw("no access token found, attempting to obtain one",
+			"realm_id", qbConfig.RealmID)
+
+		// If auth_code is present, exchange it for tokens
+		if qbConfig.AuthCode != "" {
+			c.logger.Debugw("auth_code found, exchanging for tokens",
+				"realm_id", qbConfig.RealmID)
+			return c.ExchangeAuthCodeForTokens(ctx)
+		}
+
+		// If refresh_token is present, refresh access token
+		if qbConfig.RefreshToken != "" {
+			c.logger.Debugw("refresh_token found, refreshing access token",
+				"realm_id", qbConfig.RealmID)
+			return c.RefreshAccessToken(ctx)
+		}
+
+		// No way to obtain an access token
+		return ierr.NewError("no access token available and no way to obtain one").
+			WithHint("Please provide either an authorization code or ensure refresh token is available").
+			Mark(ierr.ErrValidation)
+	}
+
+	// Access token exists - rely on reactive refresh (on 3200 error)
+	// No proactive expiration check
+	return nil
+}
+
 // RefreshAccessToken refreshes the QuickBooks access token using the refresh token.
 // This method implements OAuth 2.0 token refresh flow:
 // 1. Uses refresh_token to get new access_token and refresh_token from QuickBooks OAuth endpoint
 // 2. Encrypts new tokens before saving
-// 3. Updates connection in database with new encrypted tokens and expiration time
-// This is called automatically when API calls detect token expiration (error code 3200).
+// 3. Updates connection in database with new encrypted tokens
+// 4. Clears auth_code if present
+// This is called automatically when API calls detect token expiration (error code 3200) or by EnsureValidAccessToken.
 func (c *Client) RefreshAccessToken(ctx context.Context) error {
 	conn, err := c.GetConnection(ctx)
 	if err != nil {
@@ -692,17 +934,20 @@ func (c *Client) RefreshAccessToken(ctx context.Context) error {
 		if strings.Contains(responseBody, "invalid_grant") ||
 			strings.Contains(responseBody, "invalid refresh token") ||
 			strings.Contains(responseBody, "Incorrect or invalid refresh token") {
-			return ierr.NewError("QuickBooks refresh token is invalid or expired").
-				WithHint("The QuickBooks refresh token stored in your connection is invalid or expired. Please re-authenticate with QuickBooks and update your connection with new tokens.").
+
+			return ierr.NewError("QuickBooks refresh token expired - re-authentication required").
+				WithHint("The QuickBooks refresh token has expired. User must re-authenticate with QuickBooks to continue.").
 				WithReportableDetails(map[string]interface{}{
-					"status_code": resp.StatusCode,
-					"response":    responseBody,
+					"status_code":         resp.StatusCode,
+					"error_type":          "refresh_token_expired",
+					"requires_reauth":     true,
+					"oauth_action_needed": "redirect_user_to_quickbooks_oauth",
 				}).
 				Mark(ierr.ErrHTTPClient)
 		}
 
 		return ierr.NewError("failed to refresh token").
-			WithHint(fmt.Sprintf("QuickBooks OAuth returned status %d: %s", resp.StatusCode, responseBody)).
+			WithHint(fmt.Sprintf("QuickBooks OAuth returned status %d", resp.StatusCode)).
 			Mark(ierr.ErrHTTPClient)
 	}
 
@@ -720,8 +965,8 @@ func (c *Client) RefreshAccessToken(ctx context.Context) error {
 			Mark(ierr.ErrSystem)
 	}
 
-	// Calculate new expiration time from expires_in (seconds)
-	newExpiresAt := time.Now().Add(time.Duration(tokenResponse.ExpiresIn) * time.Second).Unix()
+	c.logger.Debugw("successfully refreshed access token",
+		"realm_id", qbConfig.RealmID)
 
 	// Encrypt new tokens before saving to database
 	// All sensitive OAuth tokens must be encrypted at rest
@@ -737,10 +982,10 @@ func (c *Client) RefreshAccessToken(ctx context.Context) error {
 			Mark(ierr.ErrInternal)
 	}
 
-	// Update connection with new encrypted tokens and expiration time
+	// Update connection with new encrypted tokens
 	conn.EncryptedSecretData.QuickBooks.AccessToken = encryptedAccessToken
 	conn.EncryptedSecretData.QuickBooks.RefreshToken = encryptedRefreshToken
-	conn.EncryptedSecretData.QuickBooks.TokenExpiresAt = newExpiresAt
+	conn.EncryptedSecretData.QuickBooks.AuthCode = "" // Clear auth code if present
 
 	conn.UpdatedAt = time.Now()
 	conn.UpdatedBy = types.GetUserID(ctx)
@@ -753,7 +998,7 @@ func (c *Client) RefreshAccessToken(ctx context.Context) error {
 			Mark(ierr.ErrDatabase)
 	}
 
-	c.logger.Infow("successfully updated connection with new tokens",
+	c.logger.Debugw("successfully updated connection with new tokens",
 		"connection_id", conn.ID)
 
 	return nil

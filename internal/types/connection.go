@@ -135,13 +135,21 @@ func (c *ChargebeeConnectionMetadata) Validate() error {
 
 // QuickBooksConnectionMetadata represents QuickBooks-specific connection metadata
 type QuickBooksConnectionMetadata struct {
-	ClientID        string `json:"client_id"`                   // OAuth Client ID (encrypted)
-	ClientSecret    string `json:"client_secret"`               // OAuth Client Secret (encrypted)
-	AccessToken     string `json:"access_token"`                // OAuth Access Token (encrypted)
-	RefreshToken    string `json:"refresh_token"`               // OAuth Refresh Token (encrypted)
-	RealmID         string `json:"realm_id"`                    // QuickBooks Company ID (not encrypted)
-	Environment     string `json:"environment"`                 // "sandbox" or "production"
-	TokenExpiresAt  int64  `json:"token_expires_at"`            // Token expiration timestamp
+	// Required for initial connection setup
+	ClientID     string `json:"client_id"`     // OAuth Client ID (encrypted)
+	ClientSecret string `json:"client_secret"` // OAuth Client Secret (encrypted)
+	RealmID      string `json:"realm_id"`      // QuickBooks Company ID (not encrypted)
+	Environment  string `json:"environment"`   // "sandbox" or "production"
+	
+	// Optional - for initial setup via auth code (will be cleared after token exchange)
+	AuthCode    string `json:"auth_code,omitempty"`    // OAuth Authorization Code (temporary, encrypted)
+	RedirectURI string `json:"redirect_uri,omitempty"` // OAuth Redirect URI (temporary)
+	
+	// Managed internally - set after auth code exchange or token refresh
+	AccessToken  string `json:"access_token,omitempty"`  // OAuth Access Token (encrypted)
+	RefreshToken string `json:"refresh_token,omitempty"` // OAuth Refresh Token (encrypted)
+	
+	// Optional configuration
 	IncomeAccountID string `json:"income_account_id,omitempty"` // QuickBooks Income Account ID (optional, defaults to "79")
 }
 
@@ -157,16 +165,6 @@ func (q *QuickBooksConnectionMetadata) Validate() error {
 			WithHint("QuickBooks OAuth client secret is required").
 			Mark(ierr.ErrValidation)
 	}
-	if q.AccessToken == "" {
-		return ierr.NewError("access_token is required").
-			WithHint("QuickBooks OAuth access token is required").
-			Mark(ierr.ErrValidation)
-	}
-	if q.RefreshToken == "" {
-		return ierr.NewError("refresh_token is required").
-			WithHint("QuickBooks OAuth refresh token is required").
-			Mark(ierr.ErrValidation)
-	}
 	if q.RealmID == "" {
 		return ierr.NewError("realm_id is required").
 			WithHint("QuickBooks Company ID (realm ID) is required").
@@ -177,6 +175,8 @@ func (q *QuickBooksConnectionMetadata) Validate() error {
 			WithHint("QuickBooks environment must be either 'sandbox' or 'production'").
 			Mark(ierr.ErrValidation)
 	}
+	// Note: AccessToken and RefreshToken are not required during validation
+	// They will be generated internally via auth code exchange or token refresh
 	return nil
 }
 

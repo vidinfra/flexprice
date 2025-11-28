@@ -145,28 +145,36 @@ func convertFlatMetadataToStructured(flatMetadata map[string]interface{}, provid
 	case types.SecretProviderQuickBooks:
 		qbMetadata := &types.QuickBooksConnectionMetadata{}
 
+		// Required fields
 		if clientID, ok := flatMetadata["client_id"].(string); ok {
 			qbMetadata.ClientID = clientID
 		}
 		if clientSecret, ok := flatMetadata["client_secret"].(string); ok {
 			qbMetadata.ClientSecret = clientSecret
 		}
+		if realmID, ok := flatMetadata["realm_id"].(string); ok {
+			qbMetadata.RealmID = realmID
+		}
+		if environment, ok := flatMetadata["environment"].(string); ok {
+			qbMetadata.Environment = environment
+		}
+
+		// Required for initial token exchange (captured from OAuth redirect)
+		if authCode, ok := flatMetadata["auth_code"].(string); ok {
+			qbMetadata.AuthCode = authCode
+		}
+		if redirectURI, ok := flatMetadata["redirect_uri"].(string); ok {
+			qbMetadata.RedirectURI = redirectURI
+		}
+
 		if accessToken, ok := flatMetadata["access_token"].(string); ok {
 			qbMetadata.AccessToken = accessToken
 		}
 		if refreshToken, ok := flatMetadata["refresh_token"].(string); ok {
 			qbMetadata.RefreshToken = refreshToken
 		}
-		if realmID, ok := flatMetadata["realm_id"].(string); ok {
-			qbMetadata.RealmID = realmID
-		}
-		if tokenExpiresAt, ok := flatMetadata["token_expires_at"].(float64); ok {
-			qbMetadata.TokenExpiresAt = int64(tokenExpiresAt)
-		}
-		if environment, ok := flatMetadata["environment"].(string); ok {
-			qbMetadata.Environment = environment
-		}
-		// Handle income_account_id (optional)
+
+		// Optional config
 		if incomeAccountID, ok := flatMetadata["income_account_id"].(string); ok {
 			qbMetadata.IncomeAccountID = incomeAccountID
 		}

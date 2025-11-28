@@ -179,9 +179,10 @@ func (s *connectionService) encryptMetadata(encryptedSecretData types.Connection
 		if encryptedSecretData.QuickBooks == nil {
 			s.Logger.Warnw("QuickBooks metadata is nil, cannot encrypt", "provider_type", providerType)
 			return types.ConnectionMetadata{}, ierr.NewError("QuickBooks metadata is required").
-				WithHint("QuickBooks connection requires encrypted_secret_data with client_id, client_secret, access_token, refresh_token, realm_id, and environment").
+				WithHint("QuickBooks connection requires encrypted_secret_data with client_id, client_secret, realm_id, and environment").
 				Mark(ierr.ErrValidation)
 		}
+		// Encrypt client credentials
 		encryptedClientID, err := s.encryptionService.Encrypt(encryptedSecretData.QuickBooks.ClientID)
 		if err != nil {
 			return types.ConnectionMetadata{}, err
@@ -190,24 +191,41 @@ func (s *connectionService) encryptMetadata(encryptedSecretData types.Connection
 		if err != nil {
 			return types.ConnectionMetadata{}, err
 		}
-		encryptedAccessToken, err := s.encryptionService.Encrypt(encryptedSecretData.QuickBooks.AccessToken)
-		if err != nil {
-			return types.ConnectionMetadata{}, err
+
+		// Encrypt optional auth_code if provided (for initial setup)
+		var encryptedAuthCode string
+		if encryptedSecretData.QuickBooks.AuthCode != "" {
+			encryptedAuthCode, err = s.encryptionService.Encrypt(encryptedSecretData.QuickBooks.AuthCode)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
 		}
-		encryptedRefreshToken, err := s.encryptionService.Encrypt(encryptedSecretData.QuickBooks.RefreshToken)
-		if err != nil {
-			return types.ConnectionMetadata{}, err
+
+		// Encrypt tokens if already present (for connection updates or manual token provision)
+		var encryptedAccessToken, encryptedRefreshToken string
+		if encryptedSecretData.QuickBooks.AccessToken != "" {
+			encryptedAccessToken, err = s.encryptionService.Encrypt(encryptedSecretData.QuickBooks.AccessToken)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+		}
+		if encryptedSecretData.QuickBooks.RefreshToken != "" {
+			encryptedRefreshToken, err = s.encryptionService.Encrypt(encryptedSecretData.QuickBooks.RefreshToken)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
 		}
 
 		encryptedMetadata.QuickBooks = &types.QuickBooksConnectionMetadata{
 			ClientID:        encryptedClientID,
 			ClientSecret:    encryptedClientSecret,
+			AuthCode:        encryptedAuthCode,
+			RedirectURI:     encryptedSecretData.QuickBooks.RedirectURI,
 			AccessToken:     encryptedAccessToken,
 			RefreshToken:    encryptedRefreshToken,
-			RealmID:         encryptedSecretData.QuickBooks.RealmID, // Not encrypted
+			RealmID:         encryptedSecretData.QuickBooks.RealmID,
 			Environment:     encryptedSecretData.QuickBooks.Environment,
-			TokenExpiresAt:  encryptedSecretData.QuickBooks.TokenExpiresAt,
-			IncomeAccountID: encryptedSecretData.QuickBooks.IncomeAccountID, // Not encrypted - account ID is not sensitive
+			IncomeAccountID: encryptedSecretData.QuickBooks.IncomeAccountID,
 		}
 
 	default:

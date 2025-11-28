@@ -280,16 +280,21 @@ func convertConnectionMetadataToMap(encryptedSecretData types.ConnectionMetadata
 			result := map[string]interface{}{
 				"client_id":     encryptedSecretData.QuickBooks.ClientID,
 				"client_secret": encryptedSecretData.QuickBooks.ClientSecret,
-				"access_token":  encryptedSecretData.QuickBooks.AccessToken,
-				"refresh_token": encryptedSecretData.QuickBooks.RefreshToken,
 				"realm_id":      encryptedSecretData.QuickBooks.RealmID,
 				"environment":   encryptedSecretData.QuickBooks.Environment,
 			}
-			// Add token_expires_at if present
-			if encryptedSecretData.QuickBooks.TokenExpiresAt > 0 {
-				result["token_expires_at"] = encryptedSecretData.QuickBooks.TokenExpiresAt
+			if encryptedSecretData.QuickBooks.AuthCode != "" {
+				result["auth_code"] = encryptedSecretData.QuickBooks.AuthCode
 			}
-			// Add income_account_id if present (optional)
+			if encryptedSecretData.QuickBooks.RedirectURI != "" {
+				result["redirect_uri"] = encryptedSecretData.QuickBooks.RedirectURI
+			}
+			if encryptedSecretData.QuickBooks.AccessToken != "" {
+				result["access_token"] = encryptedSecretData.QuickBooks.AccessToken
+			}
+			if encryptedSecretData.QuickBooks.RefreshToken != "" {
+				result["refresh_token"] = encryptedSecretData.QuickBooks.RefreshToken
+			}
 			if encryptedSecretData.QuickBooks.IncomeAccountID != "" {
 				result["income_account_id"] = encryptedSecretData.QuickBooks.IncomeAccountID
 			}

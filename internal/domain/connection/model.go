@@ -154,25 +154,24 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		if clientSecret, ok := metadata["client_secret"].(string); ok {
 			qbMetadata.ClientSecret = clientSecret
 		}
-		if accessToken, ok := metadata["access_token"].(string); ok {
-			qbMetadata.AccessToken = accessToken
-		}
-		if refreshToken, ok := metadata["refresh_token"].(string); ok {
-			qbMetadata.RefreshToken = refreshToken
-		}
 		if realmID, ok := metadata["realm_id"].(string); ok {
 			qbMetadata.RealmID = realmID
 		}
 		if environment, ok := metadata["environment"].(string); ok {
 			qbMetadata.Environment = environment
 		}
-		// Handle token_expires_at - may be float64 from JSON or int64
-		if expiresAt, ok := metadata["token_expires_at"].(float64); ok {
-			qbMetadata.TokenExpiresAt = int64(expiresAt)
-		} else if expiresAt, ok := metadata["token_expires_at"].(int64); ok {
-			qbMetadata.TokenExpiresAt = expiresAt
+		if authCode, ok := metadata["auth_code"].(string); ok {
+			qbMetadata.AuthCode = authCode
 		}
-		// Handle income_account_id (optional)
+		if redirectURI, ok := metadata["redirect_uri"].(string); ok {
+			qbMetadata.RedirectURI = redirectURI
+		}
+		if accessToken, ok := metadata["access_token"].(string); ok {
+			qbMetadata.AccessToken = accessToken
+		}
+		if refreshToken, ok := metadata["refresh_token"].(string); ok {
+			qbMetadata.RefreshToken = refreshToken
+		}
 		if incomeAccountID, ok := metadata["income_account_id"].(string); ok {
 			qbMetadata.IncomeAccountID = incomeAccountID
 		}
