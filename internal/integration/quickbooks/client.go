@@ -78,14 +78,15 @@ func sanitizeForQuickBooks(name string) string {
 
 // QuickBooksConfig holds decrypted QuickBooks configuration
 type QuickBooksConfig struct {
-	ClientID     string
-	ClientSecret string
-	AccessToken  string
-	RefreshToken string
-	RealmID      string
-	Environment  string // "sandbox" or "production"
-	AuthCode     string // Temporary, for initial token exchange
-	RedirectURI  string // Temporary, for initial token exchange
+	ClientID        string
+	ClientSecret    string
+	AccessToken     string
+	RefreshToken    string
+	RealmID         string
+	Environment     string // "sandbox" or "production"
+	AuthCode        string // Temporary, for initial token exchange
+	RedirectURI     string // Temporary, for initial token exchange
+	IncomeAccountID string // Optional: Custom income account ID for items (defaults to "79")
 }
 
 // NewClient creates a new QuickBooks client
@@ -192,6 +193,10 @@ func (c *Client) GetDecryptedQuickBooksConfig(conn *connection.Connection) (*Qui
 		qbConfig.RedirectURI = redirectURI
 	}
 
+	if incomeAccountID, exists := decryptedMetadata["income_account_id"]; exists {
+		qbConfig.IncomeAccountID = incomeAccountID
+	}
+
 	return qbConfig, nil
 }
 
@@ -247,6 +252,10 @@ func (c *Client) decryptConnectionMetadata(conn *connection.Connection) (types.M
 
 		if conn.EncryptedSecretData.QuickBooks.RedirectURI != "" {
 			decryptedMetadata["redirect_uri"] = conn.EncryptedSecretData.QuickBooks.RedirectURI // Not encrypted
+		}
+
+		if conn.EncryptedSecretData.QuickBooks.IncomeAccountID != "" {
+			decryptedMetadata["income_account_id"] = conn.EncryptedSecretData.QuickBooks.IncomeAccountID // Not encrypted
 		}
 
 		return decryptedMetadata, nil
@@ -590,6 +599,10 @@ func (c *Client) CreateItem(ctx context.Context, req *ItemCreateRequest) (*ItemR
 	if req.Description != "" {
 		payload["Description"] = req.Description
 	}
+
+	c.logger.Debugw("sending QuickBooks Item create request",
+		"item_name", req.Name,
+		"income_account_id", req.IncomeAccountRef.Value)
 
 	resp, err := c.makeRequestWithRetry(ctx, "POST", "item", payload, 0)
 	if err != nil {

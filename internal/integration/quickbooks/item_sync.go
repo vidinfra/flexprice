@@ -127,7 +127,8 @@ func (s *ItemSyncService) SyncPriceToQuickBooks(ctx context.Context, plan *plan.
 	s.Logger.Infow("created item in QuickBooks",
 		"price_id", priceToSync.ID,
 		"quickbooks_item_id", itemResp.ID,
-		"item_name", itemResp.Name)
+		"item_name", itemResp.Name,
+		"income_account_id", incomeAccountID)
 
 	// Create mapping
 	if err := s.createItemMapping(ctx, priceToSync.ID, itemResp.ID, itemResp.Name, plan.EnvironmentID, plan.TenantID); err != nil {
@@ -211,29 +212,34 @@ func (s *ItemSyncService) createItemMapping(
 
 // getIncomeAccountID retrieves the income account ID from connection metadata or returns default "79".
 // This allows companies to configure their own income account ID while maintaining a sensible default.
+// The default "79" is the standard Service Income account in QuickBooks Sandbox.
 func (s *ItemSyncService) getIncomeAccountID(ctx context.Context) string {
-	const defaultIncomeAccountID = "79" // Default income account ID for Service items
+	const defaultIncomeAccountID = "79"
 
 	// Try to get connection to check for custom income account ID
 	conn, err := s.Client.GetConnection(ctx)
 	if err != nil {
 		// If connection not found or error, use default
 		s.Logger.Debugw("could not get QuickBooks connection, using default income account ID",
-			"default_account_id", defaultIncomeAccountID)
+			"default_account_id", defaultIncomeAccountID,
+			"error", err)
 		return defaultIncomeAccountID
 	}
 
 	// Check if connection has custom income account ID in metadata
 	if conn.EncryptedSecretData.QuickBooks != nil {
 		if incomeAccountID := conn.EncryptedSecretData.QuickBooks.IncomeAccountID; incomeAccountID != "" {
-			s.Logger.Debugw("using custom income account ID from connection metadata",
-				"income_account_id", incomeAccountID)
+			s.Logger.Debugw("using custom income account ID from connection",
+				"income_account_id", incomeAccountID,
+				"connection_id", conn.ID)
 			return incomeAccountID
 		}
 	}
 
 	// No custom account ID configured, use default
-	s.Logger.Debugw("no custom income account ID configured, using default",
-		"default_account_id", defaultIncomeAccountID)
+	s.Logger.Debugw("no custom income account ID configured, using default Service Revenue account",
+		"default_account_id", defaultIncomeAccountID,
+		"connection_id", conn.ID,
+		"hint", "Set 'income_account_id' in connection metadata to use a different account")
 	return defaultIncomeAccountID
 }
