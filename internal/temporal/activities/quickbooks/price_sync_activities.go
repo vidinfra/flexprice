@@ -49,7 +49,6 @@ type SyncPriceToQuickBooksInput struct {
 type SyncPriceToQuickBooksOutput struct {
 	Success          bool   `json:"success"`
 	QuickBooksItemID string `json:"quickbooks_item_id,omitempty"`
-	Error            string `json:"error,omitempty"`
 }
 
 // SyncPriceToQuickBooks syncs a single price to QuickBooks
@@ -79,10 +78,14 @@ func (a *QuickBooksPriceSyncActivities) SyncPriceToQuickBooks(ctx context.Contex
 		if ierr.IsNotFound(err) {
 			a.logger.Debugw("QuickBooks connection not configured",
 				"price_id", input.PriceID)
-			return &SyncPriceToQuickBooksOutput{
-				Success: false,
-				Error:   "QuickBooks connection not configured",
-			}, nil
+			// Return error - sync failed because connection doesn't exist
+			return nil, ierr.NewError("QuickBooks connection not configured").
+				WithHint("QuickBooks connection must be configured before syncing prices").
+				WithReportableDetails(map[string]interface{}{
+					"price_id": input.PriceID,
+					"plan_id":  input.PlanID,
+				}).
+				Mark(ierr.ErrNotFound)
 		}
 		return nil, ierr.WithError(err).
 			WithHint("Failed to get QuickBooks integration").
@@ -117,10 +120,14 @@ func (a *QuickBooksPriceSyncActivities) SyncPriceToQuickBooks(ctx context.Contex
 			"price_id", input.PriceID,
 			"plan_id", input.PlanID,
 			"error", err)
-		return &SyncPriceToQuickBooksOutput{
-			Success: false,
-			Error:   err.Error(),
-		}, nil
+		// Return the actual error so Temporal marks the workflow as FAILED
+		return nil, ierr.WithError(err).
+			WithHint("Failed to sync price to QuickBooks").
+			WithReportableDetails(map[string]interface{}{
+				"price_id": input.PriceID,
+				"plan_id":  input.PlanID,
+			}).
+			Mark(ierr.ErrInternal)
 	}
 
 	a.logger.Infow("price synced to QuickBooks successfully",

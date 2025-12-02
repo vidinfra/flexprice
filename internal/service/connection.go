@@ -332,6 +332,31 @@ func (s *connectionService) CreateConnection(ctx context.Context, req dto.Create
 	}
 
 	s.Logger.Infow("connection created successfully", "connection_id", conn.ID)
+
+	// For QuickBooks connections with auth_code, exchange it immediately for tokens
+	// OAuth 2.0 auth codes expire quickly (typically 10 minutes), so we must exchange them ASAP
+	if conn.ProviderType == types.SecretProviderQuickBooks && s.IntegrationFactory != nil {
+		qbIntegration, err := s.IntegrationFactory.GetQuickBooksIntegration(ctx)
+		if err != nil {
+			s.Logger.Errorw("failed to get QuickBooks integration after connection creation",
+				"connection_id", conn.ID,
+				"error", err)
+			// Don't fail connection creation, but log the error
+		} else {
+			// Try to ensure valid access token (will exchange auth_code if present)
+			if err := qbIntegration.Client.EnsureValidAccessToken(ctx); err != nil {
+				s.Logger.Errorw("failed to exchange QuickBooks auth code for tokens",
+					"connection_id", conn.ID,
+					"error", err)
+				// Don't fail connection creation, but log the error
+				// User will need to re-authenticate
+			} else {
+				s.Logger.Infow("successfully exchanged QuickBooks auth code for tokens",
+					"connection_id", conn.ID)
+			}
+		}
+	}
+
 	return dto.ToConnectionResponse(conn), nil
 }
 
