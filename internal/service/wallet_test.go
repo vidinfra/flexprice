@@ -791,9 +791,11 @@ func (s *WalletServiceSuite) TestGetWalletBalance() {
 			name:     "Success - Active wallet with matching currency",
 			walletID: s.testData.wallet.ID,
 			// Usage includes both storage (315 * 0.1 = 31.5) and API calls tiers (assessed across subscriptions)
-			// Given test data, current period usage totals to 123 and real-time balance becomes 1000 - 123 = 877
-			expectedRealTimeBalance: decimal.NewFromInt(877), // 1000 - 123
-			expectedCurrentUsage:    decimal.NewFromInt(123), // Aggregated usage from billing service
+			// Given test data, current period usage totals to 123
+			// Unpaid invoices total 250 (inv_1: 100 + inv_2: 150)
+			// Total pending charges: 123 + 250 = 373, real-time balance: 1000 - 373 = 627
+			expectedRealTimeBalance: decimal.NewFromInt(627), // 1000 - 123 - 250
+			expectedCurrentUsage:    decimal.NewFromInt(373), // 123 (usage) + 250 (unpaid invoices)
 		},
 		{
 			name:          "Error - Invalid wallet ID",
@@ -1807,10 +1809,10 @@ func (s *WalletServiceSuite) TestGetWalletBalanceWithEntitlements() {
 				_, err := s.GetStores().EntitlementRepo.Create(s.GetContext(), entitlement)
 				s.NoError(err)
 			},
-			// Entitlements created in this test do not eliminate all usage across meters in the
-			// current setup; align expectation with computed usage (78) and resulting balance 922
-			expectedRealTimeBalance: decimal.NewFromInt(922), // 1000 - 78
-			expectedCurrentUsage:    decimal.NewFromInt(78),  // Usage after entitlement adjustments
+			// current setup; align expectation with computed usage (78) plus unpaid invoices (250)
+			// Total pending charges: 78 + 250 = 328, real-time balance: 1000 - 328 = 672
+			expectedRealTimeBalance: decimal.NewFromInt(672), // 1000 - 78 - 250
+			expectedCurrentUsage:    decimal.NewFromInt(328), // 78 (usage) + 250 (unpaid invoices)
 			wantErr:                 false,
 		},
 		{
@@ -1831,8 +1833,9 @@ func (s *WalletServiceSuite) TestGetWalletBalanceWithEntitlements() {
 				_, err := s.GetStores().EntitlementRepo.Create(s.GetContext(), entitlement)
 				s.NoError(err)
 			},
-			expectedRealTimeBalance: decimal.NewFromInt(922), // 1000 - 78
-			expectedCurrentUsage:    decimal.NewFromInt(78),
+			// Total pending charges: 78 + 250 = 328, real-time balance: 1000 - 328 = 672
+			expectedRealTimeBalance: decimal.NewFromInt(672), // 1000 - 78 - 250
+			expectedCurrentUsage:    decimal.NewFromInt(328), // 78 (usage) + 250 (unpaid invoices)
 			wantErr:                 false,
 		},
 		{
