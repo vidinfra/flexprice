@@ -52,6 +52,7 @@ type Handlers struct {
 	ScheduledTask            *v1.ScheduledTaskHandler
 	AlertLogsHandler         *v1.AlertLogsHandler
 	RBAC                     *v1.RBACHandler
+	OAuth                    *v1.OAuthHandler
 
 	// Portal handlers
 	Onboarding *v1.OnboardingHandler
@@ -556,6 +557,13 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 	{
 		rbac.GET("/roles", handlers.RBAC.ListRoles)
 		rbac.GET("/roles/:id", handlers.RBAC.GetRole)
+	}
+
+	// OAuth routes
+	oauth := v1Private.Group("/oauth")
+	{
+		oauth.POST("/init", handlers.OAuth.InitiateOAuth)
+		oauth.POST("/complete", handlers.OAuth.CompleteOAuth)
 	}
 
 	return router
