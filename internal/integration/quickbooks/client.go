@@ -359,7 +359,7 @@ func (c *Client) parseErrorResponse(resp *http.Response) error {
 	}
 
 	return ierr.NewError("QuickBooks API error").
-		WithHint(fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))).
+		WithHint(fmt.Sprintf("QuickBooks API returned HTTP %d. Check your QuickBooks configuration.", resp.StatusCode)).
 		Mark(ierr.ErrHTTPClient)
 }
 
@@ -1031,7 +1031,7 @@ func (c *Client) RefreshAccessToken(ctx context.Context) error {
 	// Body was already read above, use it here
 	if err := json.Unmarshal(body, &tokenResponse); err != nil {
 		return ierr.NewError("failed to parse token response").
-			WithHint(fmt.Sprintf("Response: %s", string(body))).
+			WithHint("QuickBooks returned an invalid token format. Please reconnect your QuickBooks account.").
 			Mark(ierr.ErrSystem)
 	}
 
@@ -1155,7 +1155,7 @@ func (c *Client) makeRequestWithRetry(ctx context.Context, method, endpoint stri
 		// Return error if not token expiration or retry limit reached
 		if err == nil {
 			err = ierr.NewError("QuickBooks API error").
-				WithHint(fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))).
+				WithHint(fmt.Sprintf("QuickBooks API returned HTTP %d", resp.StatusCode)).
 				Mark(ierr.ErrHTTPClient)
 		}
 		return nil, err
