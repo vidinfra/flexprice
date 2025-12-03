@@ -33,6 +33,7 @@ type QuickBooksClient interface {
 
 	// Item API wrappers
 	CreateItem(ctx context.Context, req *ItemCreateRequest) (*ItemResponse, error)
+	GetItem(ctx context.Context, itemID string) (*ItemResponse, error)
 	QueryItemByName(ctx context.Context, name string) (*ItemResponse, error)
 
 	// Invoice API wrappers
@@ -600,9 +601,19 @@ func (c *Client) CreateItem(ctx context.Context, req *ItemCreateRequest) (*ItemR
 		payload["Description"] = req.Description
 	}
 
-	c.logger.Debugw("sending QuickBooks Item create request",
+	if req.UnitPrice != nil {
+		// Send UnitPrice as string to preserve decimal precision
+		// QuickBooks API accepts numeric strings and will parse them without precision loss
+		unitPriceStr := req.UnitPrice.String()
+		payload["UnitPrice"] = unitPriceStr
+		c.logger.Infow("setting UnitPrice in payload",
+			"unit_price", unitPriceStr)
+	}
+
+	c.logger.Infow("creating QuickBooks item",
 		"item_name", req.Name,
-		"income_account_id", req.IncomeAccountRef.Value)
+		"income_account_id", req.IncomeAccountRef.Value,
+		"unit_price", req.UnitPrice)
 
 	resp, err := c.makeRequestWithRetry(ctx, "POST", "item", payload, 0)
 	if err != nil {
@@ -624,6 +635,40 @@ func (c *Client) CreateItem(ctx context.Context, req *ItemCreateRequest) (*ItemR
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, ierr.NewError("failed to parse QuickBooks response").
+			Mark(ierr.ErrSystem)
+	}
+
+	return &result.Item, nil
+}
+
+// GetItem retrieves an item by ID from QuickBooks
+func (c *Client) GetItem(ctx context.Context, itemID string) (*ItemResponse, error) {
+	// Ensure valid access token before making API call
+	if err := c.EnsureValidAccessToken(ctx); err != nil {
+		return nil, err
+	}
+
+	endpoint := fmt.Sprintf("item/%s", itemID)
+	resp, err := c.makeRequestWithRetry(ctx, "GET", endpoint, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseErrorResponse(resp)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, ierr.NewError("failed to read response").Mark(ierr.ErrSystem)
+	}
+
+	var result struct {
+		Item ItemResponse `json:"Item"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, ierr.NewError("failed to parse QuickBooks item response").
 			Mark(ierr.ErrSystem)
 	}
 
@@ -665,12 +710,55 @@ func (c *Client) CreateInvoice(ctx context.Context, req *InvoiceCreateRequest) (
 		return nil, err
 	}
 
+	// Build line items: Qty = 1, Amount as STRING for full precision
+	lineItems := make([]map[string]interface{}, len(req.Line))
+	for i, line := range req.Line {
+		// Get the amount as string for full precision
+		amountStr := line.Amount.String()
+
+		lineItem := map[string]interface{}{
+			"Amount":     amountStr, // STRING to preserve precision
+			"DetailType": line.DetailType,
+		}
+
+		if line.Description != "" {
+			lineItem["Description"] = line.Description
+		}
+
+		if line.SalesItemLineDetail != nil {
+			salesDetail := map[string]interface{}{
+				"ItemRef": map[string]string{
+					"value": line.SalesItemLineDetail.ItemRef.Value,
+				},
+				"Qty": 1, // Always 1
+			}
+
+			if line.SalesItemLineDetail.ItemRef.Name != "" {
+				salesDetail["ItemRef"].(map[string]string)["name"] = line.SalesItemLineDetail.ItemRef.Name
+			}
+
+			lineItem["SalesItemLineDetail"] = salesDetail
+		}
+
+		lineItems[i] = lineItem
+	}
+
 	payload := map[string]interface{}{
 		"CustomerRef": map[string]string{
 			"value": req.CustomerRef.Value,
 		},
-		"Line": req.Line,
+		"Line": lineItems,
 	}
+
+	// Add due date if provided
+	if req.DueDate != nil {
+		payload["DueDate"] = *req.DueDate
+	}
+
+	c.logger.Debugw("sending QuickBooks Invoice create request",
+		"customer_ref", req.CustomerRef.Value,
+		"line_items_count", len(req.Line),
+		"due_date", req.DueDate)
 
 	resp, err := c.makeRequestWithRetry(ctx, "POST", "invoice", payload, 0)
 	if err != nil {

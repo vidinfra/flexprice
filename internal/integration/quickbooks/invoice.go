@@ -117,6 +117,12 @@ func (s *InvoiceService) SyncInvoiceToQuickBooks(
 		Line: lineItems,
 	}
 
+	// Set due date if available (format: YYYY-MM-DD)
+	if flexInvoice.DueDate != nil {
+		dueDateStr := flexInvoice.DueDate.Format("2006-01-02")
+		invoiceReq.DueDate = &dueDateStr
+	}
+
 	quickBooksInvoice, err := s.Client.CreateInvoice(ctx, invoiceReq)
 	if err != nil {
 		return nil, ierr.WithError(err).
@@ -187,12 +193,7 @@ func (s *InvoiceService) buildLineItems(ctx context.Context, flexInvoice *invoic
 			continue
 		}
 
-		// Build QuickBooks line item per requirements:
-		// - DetailType: "SalesItemLineDetail" (required for item-based line items)
-		// - Amount: Flexprice invoice line item amount
-		// - UnitPrice: Flexprice invoice line item price unit amount
-		// - Description: Flexprice invoice line item display name
-		// - SalesItemLineDetail.ItemRef: QuickBooks item reference (value required, name optional)
+		// Send Amount only (no UnitPrice, no Rate) - QuickBooks will display Amount directly
 		lineItem := InvoiceLineItem{
 			Amount:     item.Amount,
 			DetailType: "SalesItemLineDetail",
@@ -213,12 +214,13 @@ func (s *InvoiceService) buildLineItems(ctx context.Context, flexInvoice *invoic
 			lineItem.Description = *item.DisplayName
 		}
 
-		// UnitPrice is the per-unit price from Flexprice
-		// This is separate from Amount which is the total (unit price * quantity)
-		if item.PriceUnitAmount != nil && !item.PriceUnitAmount.IsZero() {
-			unitPrice := *item.PriceUnitAmount
-			lineItem.SalesItemLineDetail.UnitPrice = &unitPrice
-		}
+		s.Logger.Debugw("built QuickBooks invoice line item",
+			"invoice_id", flexInvoice.ID,
+			"line_item_id", item.ID,
+			"price_id", *item.PriceID,
+			"qb_item_id", quickBooksItemID,
+			"item_name", itemName,
+			"amount", item.Amount.String())
 
 		lineItems = append(lineItems, lineItem)
 	}

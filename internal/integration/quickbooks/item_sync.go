@@ -12,6 +12,7 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/shopspring/decimal"
 )
 
 // QuickBooksItemSyncService defines the interface for QuickBooks item synchronization
@@ -115,6 +116,46 @@ func (s *ItemSyncService) SyncPriceToQuickBooks(ctx context.Context, plan *plan.
 		IncomeAccountRef: &AccountRef{
 			Value: incomeAccountID,
 		},
+	}
+
+	// Set unit price based on price type:
+	// - For usage-based prices: use PriceUnitAmount (per-unit rate)
+	// - For recurring prices: use Amount (fixed recurring amount)
+	// - For tiered prices: use first tier's unit amount
+	var unitPrice decimal.Decimal
+
+	s.Logger.Infow("determining unit price for QuickBooks item",
+		"price_id", priceToSync.ID,
+		"price_type", priceToSync.Type,
+		"billing_model", priceToSync.BillingModel)
+
+	if priceToSync.Type == types.PRICE_TYPE_USAGE {
+		// Usage-based: use per-unit price
+		if !priceToSync.PriceUnitAmount.IsZero() {
+			unitPrice = priceToSync.PriceUnitAmount
+			s.Logger.Infow("using PriceUnitAmount for usage-based price", "unit_price", unitPrice)
+		} else if !priceToSync.Amount.IsZero() {
+			// Fallback to Amount if PriceUnitAmount is not set
+			unitPrice = priceToSync.Amount
+			s.Logger.Infow("using Amount as fallback for usage-based price", "unit_price", unitPrice)
+		}
+	} else if priceToSync.BillingModel == types.BILLING_MODEL_TIERED && len(priceToSync.Tiers) > 0 {
+		// Tiered pricing: use first tier's unit amount as default
+		unitPrice = priceToSync.Tiers[0].UnitAmount
+		s.Logger.Infow("using first tier unit amount for tiered price", "unit_price", unitPrice)
+	} else {
+		// Recurring/flat fee: use the fixed amount
+		unitPrice = priceToSync.Amount
+		s.Logger.Infow("using Amount for recurring/flat-fee price", "unit_price", unitPrice)
+	}
+
+	if !unitPrice.IsZero() {
+		itemReq.UnitPrice = &unitPrice
+		s.Logger.Infow("set UnitPrice on ItemCreateRequest", "unit_price", unitPrice)
+	} else {
+		s.Logger.Warnw("unit price is zero, not setting UnitPrice on ItemCreateRequest",
+			"price_id", priceToSync.ID,
+			"price_type", priceToSync.Type)
 	}
 
 	itemResp, err := s.Client.CreateItem(ctx, itemReq)

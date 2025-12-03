@@ -41,11 +41,12 @@ type CustomerResponse struct {
 
 // ItemCreateRequest represents the request to create an item
 type ItemCreateRequest struct {
-	Name             string      `json:"Name"`
-	Type             string      `json:"Type"` // "Service"
-	Description      string      `json:"Description,omitempty"`
-	Active           bool        `json:"Active,omitempty"`
-	IncomeAccountRef *AccountRef `json:"IncomeAccountRef"`
+	Name             string           `json:"Name"`
+	Type             string           `json:"Type"` // "Service"
+	Description      string           `json:"Description,omitempty"`
+	Active           bool             `json:"Active,omitempty"`
+	IncomeAccountRef *AccountRef      `json:"IncomeAccountRef"`
+	UnitPrice        *decimal.Decimal `json:"UnitPrice,omitempty"` // Default sales price/rate for the item
 }
 
 // AccountRef represents a reference to an account
@@ -56,13 +57,14 @@ type AccountRef struct {
 
 // ItemResponse represents an item response from QuickBooks
 type ItemResponse struct {
-	ID               string      `json:"Id"`
-	SyncToken        string      `json:"SyncToken,omitempty"`
-	Name             string      `json:"Name"`
-	Type             string      `json:"Type"`
-	Description      string      `json:"Description,omitempty"`
-	Active           bool        `json:"Active,omitempty"`
-	IncomeAccountRef *AccountRef `json:"IncomeAccountRef,omitempty"`
+	ID               string           `json:"Id"`
+	SyncToken        string           `json:"SyncToken,omitempty"`
+	Name             string           `json:"Name"`
+	Type             string           `json:"Type"`
+	Description      string           `json:"Description,omitempty"`
+	Active           bool             `json:"Active,omitempty"`
+	UnitPrice        *decimal.Decimal `json:"UnitPrice,omitempty"` // Default sales price/rate
+	IncomeAccountRef *AccountRef      `json:"IncomeAccountRef,omitempty"`
 	MetaData         struct {
 		CreateTime      string `json:"CreateTime,omitempty"`
 		LastUpdatedTime string `json:"LastUpdatedTime,omitempty"`
@@ -73,6 +75,7 @@ type ItemResponse struct {
 type InvoiceCreateRequest struct {
 	CustomerRef AccountRef        `json:"CustomerRef"`
 	Line        []InvoiceLineItem `json:"Line"`
+	DueDate     *string           `json:"DueDate,omitempty"` // Format: YYYY-MM-DD
 }
 
 // InvoiceLineItem represents a line item in invoice request
