@@ -4,6 +4,14 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+// QuickBooksItemType represents the type of item in QuickBooks
+type QuickBooksItemType string
+
+const (
+	// ItemTypeService represents a service item in QuickBooks
+	ItemTypeService QuickBooksItemType = "Service"
+)
+
 // CustomerCreateRequest represents the request to create a customer
 type CustomerCreateRequest struct {
 	DisplayName      string        `json:"DisplayName"`
@@ -130,7 +138,6 @@ type QuickBooksInvoiceSyncRequest struct {
 // QuickBooksInvoiceSyncResponse represents the response from syncing an invoice to QuickBooks
 type QuickBooksInvoiceSyncResponse struct {
 	QuickBooksInvoiceID string          `json:"quickbooks_invoice_id"`
-	Status              string          `json:"status"`
 	Total               decimal.Decimal `json:"total"`
 	Currency            string          `json:"currency"`
 }

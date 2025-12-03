@@ -54,29 +54,6 @@ type Client struct {
 	minorVersion      string
 }
 
-// sanitizeForQuickBooksQuery escapes a string for use in QuickBooks Query API.
-// QuickBooks Query API requires backslash escaping for single quotes: ' -> \'
-// This is used consistently across all query functions (QueryCustomerByEmail, QueryCustomerByName, QueryItemByName).
-func sanitizeForQuickBooksQuery(value string) string {
-	// QuickBooks Query API requires backslash escaping for single quotes
-	return strings.ReplaceAll(value, "'", "\\'")
-}
-
-// sanitizeForQuickBooks removes special characters that QuickBooks doesn't allow in names/fields.
-// QuickBooks explicitly disallows: tab, newline, colon (:), and double-quote (").
-// QuickBooks accepts single quotes ('), so we don't remove them (they're escaped in queries).
-// This ensures item/customer creation doesn't fail due to invalid characters.
-// Used for: Item Names, Customer DisplayNames, and other QuickBooks entity names.
-// This is a unified sanitization method used across all QuickBooks integrations.
-func sanitizeForQuickBooks(name string) string {
-	sanitized := strings.ReplaceAll(name, ":", "")      // Remove colons (explicitly disallowed)
-	sanitized = strings.ReplaceAll(sanitized, "\"", "") // Remove double quotes (explicitly disallowed)
-	sanitized = strings.ReplaceAll(sanitized, "\t", "") // Remove tabs (explicitly disallowed)
-	sanitized = strings.ReplaceAll(sanitized, "\n", "") // Remove newlines (explicitly disallowed)
-	sanitized = strings.ReplaceAll(sanitized, "\r", "") // Remove carriage returns
-	return strings.TrimSpace(sanitized)
-}
-
 // QuickBooksConfig holds decrypted QuickBooks configuration
 type QuickBooksConfig struct {
 	ClientID        string
@@ -386,11 +363,6 @@ func (c *Client) parseErrorResponse(resp *http.Response) error {
 		Mark(ierr.ErrHTTPClient)
 }
 
-// queryEntities performs a QuickBooks query with automatic token refresh
-func (c *Client) queryEntities(ctx context.Context, entityType, query string) ([]byte, error) {
-	return c.queryEntitiesWithRetry(ctx, entityType, query, 0)
-}
-
 // queryEntitiesWithRetry performs a QuickBooks query with retry on token expiration
 func (c *Client) queryEntitiesWithRetry(ctx context.Context, entityType, query string, retryCount int) ([]byte, error) {
 	const maxRetries = 1
@@ -528,10 +500,9 @@ func (c *Client) QueryCustomerByEmail(ctx context.Context, email string) (*Custo
 	}
 
 	// Escape single quotes with backslash as required by QuickBooks Query API
-	escapedEmail := sanitizeForQuickBooksQuery(email)
-	query := fmt.Sprintf("SELECT * FROM Customer WHERE PrimaryEmailAddr = '%s'", escapedEmail)
+	query := fmt.Sprintf("SELECT * FROM Customer WHERE PrimaryEmailAddr = '%s'", email)
 
-	body, err := c.queryEntities(ctx, "Customer", query)
+	body, err := c.queryEntitiesWithRetry(ctx, "Customer", query, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -556,10 +527,9 @@ func (c *Client) QueryCustomerByName(ctx context.Context, name string) (*Custome
 		return nil, err
 	}
 
-	escapedName := sanitizeForQuickBooksQuery(name)
-	query := fmt.Sprintf("SELECT * FROM Customer WHERE DisplayName = '%s'", escapedName)
+	query := fmt.Sprintf("SELECT * FROM Customer WHERE DisplayName = '%s'", name)
 
-	body, err := c.queryEntities(ctx, "Customer", query)
+	body, err := c.queryEntitiesWithRetry(ctx, "Customer", query, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -683,10 +653,9 @@ func (c *Client) QueryItemByName(ctx context.Context, name string) (*ItemRespons
 		return nil, err
 	}
 
-	escapedName := sanitizeForQuickBooksQuery(name)
-	query := fmt.Sprintf("SELECT * FROM Item WHERE Name = '%s' AND Type = 'Service' AND Active = true", escapedName)
+	query := fmt.Sprintf("SELECT * FROM Item WHERE Name = '%s' AND Type = 'Service' AND Active = true", name)
 
-	body, err := c.queryEntities(ctx, "Item", query)
+	body, err := c.queryEntitiesWithRetry(ctx, "Item", query, 0)
 	if err != nil {
 		return nil, err
 	}

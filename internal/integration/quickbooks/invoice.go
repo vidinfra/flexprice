@@ -49,14 +49,8 @@ func (s *InvoiceService) SyncInvoiceToQuickBooks(
 	ctx context.Context,
 	req QuickBooksInvoiceSyncRequest,
 ) (*QuickBooksInvoiceSyncResponse, error) {
-	s.Logger.Infow("starting QuickBooks invoice sync",
+	s.Logger.Debugw("starting QuickBooks invoice sync",
 		"invoice_id", req.InvoiceID)
-
-	if !s.Client.HasQuickBooksConnection(ctx) {
-		return nil, ierr.NewError("QuickBooks connection not available").
-			WithHint("QuickBooks integration must be configured for invoice sync").
-			Mark(ierr.ErrNotFound)
-	}
 
 	flexInvoice, err := s.InvoiceRepo.Get(ctx, req.InvoiceID)
 	if err != nil {
@@ -77,7 +71,6 @@ func (s *InvoiceService) SyncInvoiceToQuickBooks(
 			"quickbooks_invoice_id", existingMapping.ProviderEntityID)
 		return &QuickBooksInvoiceSyncResponse{
 			QuickBooksInvoiceID: existingMapping.ProviderEntityID,
-			Status:              "Pending",
 			Total:               flexInvoice.Total,
 			Currency:            flexInvoice.Currency,
 		}, nil
@@ -151,7 +144,6 @@ func (s *InvoiceService) SyncInvoiceToQuickBooks(
 
 	return &QuickBooksInvoiceSyncResponse{
 		QuickBooksInvoiceID: quickBooksInvoice.ID,
-		Status:              "Pending",
 		Total:               quickBooksInvoice.TotalAmt,
 		Currency:            flexInvoice.Currency,
 	}, nil

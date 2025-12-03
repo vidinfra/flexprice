@@ -1478,16 +1478,6 @@ func (s *priceService) syncPriceToChargebeeIfEnabled(ctx context.Context, priceI
 // This is a non-blocking operation that offloads the sync to Temporal, preventing blocking and duplicate entity mappings.
 // All QuickBooks syncs go through Temporal for reliability, retries, and proper async handling.
 func (s *priceService) syncPriceToQuickBooksIfEnabled(ctx context.Context, priceID, planID string) {
-	// Recover from any panics to ensure one price failure doesn't break others
-	defer func() {
-		if r := recover(); r != nil {
-			s.Logger.Errorw("panic during QuickBooks Temporal sync",
-				"price_id", priceID,
-				"plan_id", planID,
-				"panic", r)
-		}
-	}()
-
 	// Get global Temporal service
 	temporalSvc := temporalService.GetGlobalTemporalService()
 	if temporalSvc == nil {

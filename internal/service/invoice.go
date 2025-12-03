@@ -1046,8 +1046,7 @@ func (s *invoiceService) syncInvoiceToQuickBooksIfEnabled(ctx context.Context, i
 
 	s.Logger.Infow("successfully synced invoice to QuickBooks",
 		"invoice_id", inv.ID,
-		"quickbooks_invoice_id", syncResponse.QuickBooksInvoiceID,
-		"status", syncResponse.Status)
+		"quickbooks_invoice_id", syncResponse.QuickBooksInvoiceID)
 
 	return nil
 }

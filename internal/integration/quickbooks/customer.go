@@ -117,8 +117,7 @@ func (s *CustomerService) GetOrCreateQuickBooksCustomer(ctx context.Context, fle
 // If customer creation fails (e.g., name already exists), attempts to find existing customer by name
 // and creates a mapping for it to avoid duplicate creation attempts.
 func (s *CustomerService) SyncCustomerToQuickBooks(ctx context.Context, flexpriceCustomer *customerDomain.Customer) (*CustomerResponse, error) {
-	// Sanitize customer name as per QuickBooks' conventions.
-	displayName := sanitizeForQuickBooks(flexpriceCustomer.Name)
+	displayName := flexpriceCustomer.Name
 	if displayName == "" {
 		return nil, ierr.NewError("customer name is required").
 			WithHint("DisplayName is required for QuickBooks customer").

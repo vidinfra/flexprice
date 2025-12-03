@@ -86,8 +86,6 @@ func (s *ItemSyncService) SyncPriceToQuickBooks(ctx context.Context, plan *plan.
 		// Using price_id ensures each recurring price gets a truly unique item name
 		itemName = fmt.Sprintf("%s-Recurring-%s", plan.Name, priceToSync.ID)
 	}
-	// Sanitize name - remove quotes and special characters that QuickBooks doesn't allow
-	itemName = sanitizeForQuickBooks(itemName)
 
 	// Check if item already exists by name (avoid duplicates)
 	existingItem, err := s.Client.QueryItemByName(ctx, itemName)
@@ -110,7 +108,7 @@ func (s *ItemSyncService) SyncPriceToQuickBooks(ctx context.Context, plan *plan.
 	// Create new item in QuickBooks
 	itemReq := &ItemCreateRequest{
 		Name:        itemName,
-		Type:        "Service",
+		Type:        string(ItemTypeService),
 		Description: priceToSync.ID, // Store price ID as description for reference
 		Active:      true,
 		IncomeAccountRef: &AccountRef{
