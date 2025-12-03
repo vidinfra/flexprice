@@ -541,7 +541,70 @@ func (s *billingService) CalculateUsageCharges(
 		}
 	}
 
+	// Add commitment true-up line item if there's remaining commitment
+	commitmentAmount := lo.FromPtr(sub.CommitmentAmount)
+	overageFactor := lo.FromPtr(sub.OverageFactor)
+	hasCommitment := commitmentAmount.GreaterThan(decimal.Zero) && overageFactor.GreaterThan(decimal.NewFromInt(1))
+
+	if hasCommitment {
+		// If there's overage, commitment is fully utilized, so no true-up needed
+		if !usage.HasOverage && sub.EnableTrueUp {
+			remainingCommitment := s.calculateRemainingCommitment(usage, commitmentAmount)
+
+			if remainingCommitment.GreaterThan(decimal.Zero) {
+				// Get plan display name from line items
+				planDisplayName := ""
+				for _, item := range sub.LineItems {
+					if item.PlanDisplayName != "" {
+						planDisplayName = item.PlanDisplayName
+						break
+					}
+				}
+				// Round remaining commitment to currency precision (2 decimal places for most currencies)
+				precision := types.GetCurrencyPrecision(sub.Currency)
+				roundedRemainingCommitment := remainingCommitment.Round(precision)
+				commitmentUtilized := commitmentAmount.Sub(roundedRemainingCommitment)
+				trueUpLineItem := dto.CreateInvoiceLineItemRequest{
+					EntityID:        lo.ToPtr(sub.PlanID),
+					EntityType:      lo.ToPtr(string(types.SubscriptionLineItemEntityTypePlan)),
+					PriceType:       lo.ToPtr(string(types.PRICE_TYPE_FIXED)),
+					PlanDisplayName: lo.ToPtr(planDisplayName),
+					DisplayName:     lo.ToPtr(fmt.Sprintf("%s True Up", planDisplayName)), // Plan display name with true up suffix
+					Amount:          roundedRemainingCommitment,
+					Quantity:        decimal.NewFromInt(1),
+					PeriodStart:     &periodStart,
+					PeriodEnd:       &periodEnd,
+					PriceID:         lo.ToPtr(types.GenerateUUIDWithPrefix(types.UUID_PREFIX_PRICE)),
+					Metadata: types.Metadata{
+						"is_commitment_trueup": "true",
+						"description":          "Remaining commitment amount for billing period",
+						"commitment_amount":    commitmentAmount.String(),
+						"commitment_utilized":  commitmentUtilized.String(),
+					},
+				}
+
+				usageCharges = append(usageCharges, trueUpLineItem)
+				totalUsageCost = totalUsageCost.Add(roundedRemainingCommitment)
+			}
+		}
+	}
+
 	return usageCharges, totalUsageCost, nil
+}
+
+// calculateRemainingCommitment calculates the remaining commitment amount
+// that needs to be charged as a true-up
+func (s *billingService) calculateRemainingCommitment(
+	usage *dto.GetUsageBySubscriptionResponse,
+	commitmentAmount decimal.Decimal,
+) decimal.Decimal {
+	if usage == nil {
+		return decimal.Zero
+	}
+
+	commitmentUtilized := decimal.NewFromFloat(usage.CommitmentUtilized)
+	remainingCommitment := commitmentAmount.Sub(commitmentUtilized)
+	return decimal.Max(remainingCommitment, decimal.Zero)
 }
 
 func (s *billingService) CalculateUsageChargesForPreview(
@@ -647,6 +710,7 @@ func (s *billingService) CalculateUsageChargesForPreview(
 			matchingEntitlement, entitlementOk := entitlementsByMeterID[item.MeterID]
 
 			// Handle bucketed max meters first - this should always be checked regardless of entitlements
+			// But skip overage charges as they already have the correct amount with overage factor applied
 			if meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
 				// Get usage with bucketed values
 				usageRequest := &events.FeatureUsageParams{
@@ -843,8 +907,10 @@ func (s *billingService) CalculateUsageChargesForPreview(
 					quantityForCalculation = decimal.Zero
 					matchingCharge.Amount = 0
 				}
-			} else if !meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
-				// For non-bucketed meters without entitlements, calculate cost normally
+			} else if !matchingCharge.IsOverage && !meter.IsBucketedMaxMeter() && matchingCharge.Price != nil {
+				// For non-bucketed meters without entitlements (but not overage charges),
+				// calculate cost normally. Overage charges already have the correct amount
+				// calculated by GetFeatureUsageBySubscription with the overage factor applied.
 				adjustedAmount := priceService.CalculateCost(ctx, matchingCharge.Price, quantityForCalculation)
 				matchingCharge.Amount = price.FormatAmountToFloat64WithPrecision(adjustedAmount, matchingCharge.Price.Currency)
 			}
@@ -919,6 +985,53 @@ func (s *billingService) CalculateUsageChargesForPreview(
 				PeriodEnd:        lo.ToPtr(item.GetPeriodEnd(periodEnd)),
 				Metadata:         metadata,
 			})
+		}
+	}
+
+	// Add commitment true-up line item if there's remaining commitment
+	commitmentAmount := lo.FromPtr(sub.CommitmentAmount)
+	overageFactor := lo.FromPtr(sub.OverageFactor)
+	hasCommitment := commitmentAmount.GreaterThan(decimal.Zero) && overageFactor.GreaterThan(decimal.NewFromInt(1))
+
+	if hasCommitment {
+		// If there's overage, commitment is fully utilized, so no true-up needed
+		if !usage.HasOverage && sub.EnableTrueUp {
+			remainingCommitment := s.calculateRemainingCommitment(usage, commitmentAmount)
+
+			if remainingCommitment.GreaterThan(decimal.Zero) {
+				planDisplayName := ""
+				for _, item := range sub.LineItems {
+					if item.PlanDisplayName != "" {
+						planDisplayName = item.PlanDisplayName
+						break
+					}
+				}
+				// Round remaining commitment to currency precision (2 decimal places for most currencies)
+				precision := types.GetCurrencyPrecision(sub.Currency)
+				roundedRemainingCommitment := remainingCommitment.Round(precision)
+				commitmentUtilized := commitmentAmount.Sub(roundedRemainingCommitment)
+				trueUpLineItem := dto.CreateInvoiceLineItemRequest{
+					EntityID:        lo.ToPtr(sub.PlanID),
+					EntityType:      lo.ToPtr(string(types.SubscriptionLineItemEntityTypePlan)),
+					PriceType:       lo.ToPtr(string(types.PRICE_TYPE_FIXED)),
+					PlanDisplayName: lo.ToPtr(planDisplayName),
+					DisplayName:     lo.ToPtr(fmt.Sprintf("%s True Up", planDisplayName)), // Plan display name with true up suffix
+					Amount:          roundedRemainingCommitment,
+					Quantity:        decimal.NewFromInt(1),
+					PeriodStart:     &periodStart,
+					PeriodEnd:       &periodEnd,
+					PriceID:         lo.ToPtr(types.GenerateUUIDWithPrefix(types.UUID_PREFIX_PRICE)),
+					Metadata: types.Metadata{
+						"is_commitment_trueup": "true",
+						"description":          "Remaining commitment amount for billing period",
+						"commitment_amount":    commitmentAmount.String(),
+						"commitment_utilized":  commitmentUtilized.String(),
+					},
+				}
+
+				usageCharges = append(usageCharges, trueUpLineItem)
+				totalUsageCost = totalUsageCost.Add(roundedRemainingCommitment)
+			}
 		}
 	}
 
@@ -1069,9 +1182,7 @@ func (s *billingService) PrepareSubscriptionInvoiceRequest(
 		// Combine both sets of line items
 		combinedLineItems := append(arrearLineItems, advanceLineItems...)
 		if len(combinedLineItems) == 0 {
-			return nil, ierr.NewError("no charges to invoice").
-				WithHint("All charges have already been invoiced").
-				Mark(ierr.ErrAlreadyExists)
+			return zeroAmountInvoice, nil
 		}
 
 		// For current period arrear charges
@@ -1547,18 +1658,21 @@ func (s *billingService) CreateInvoiceRequestForCharges(
 	}
 	// Resolve tax rates for invoice level (invoice-level only per scope)
 	// Prepare minimal request for tax resolution using subscription context
+	// Use invoicing customer ID if available, otherwise fallback to subscription customer ID
+	invoicingCustomerID := sub.GetInvoicingCustomerID()
 	taxService := NewTaxService(s.ServiceParams)
 	taxPrepareReq := dto.CreateInvoiceRequest{
 		SubscriptionID: lo.ToPtr(sub.ID),
-		CustomerID:     sub.CustomerID,
+		CustomerID:     invoicingCustomerID,
 	}
 	preparedTaxRates, err := taxService.PrepareTaxRatesForInvoice(ctx, taxPrepareReq)
 	if err != nil {
 		return nil, err
 	}
 	// Create invoice request
+	// Use invoicing customer ID if available, otherwise fallback to subscription customer ID
 	req := &dto.CreateInvoiceRequest{
-		CustomerID:       sub.CustomerID,
+		CustomerID:       invoicingCustomerID,
 		SubscriptionID:   lo.ToPtr(sub.ID),
 		InvoiceType:      types.InvoiceTypeSubscription,
 		InvoiceStatus:    lo.ToPtr(types.InvoiceStatusDraft),
