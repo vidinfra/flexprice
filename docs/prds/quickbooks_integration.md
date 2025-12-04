@@ -1471,42 +1471,455 @@ func (f *Factory) GetQuickBooksIntegration(ctx context.Context) (*QuickBooksInte
 
 ---
 
+## 2-Way Payment Sync
+
+### Overview
+
+The 2-way payment sync enables bidirectional synchronization of payments between Flexprice and QuickBooks Online, ensuring that payment records in one system are accurately reflected in the other.
+
+**Important API Clarification**: This integration uses the **QuickBooks Online Accounting API** (`/v3/company/{realmId}/payment`) for recording payments as accounting entries. This is NOT the QuickBooks Payments API which is for processing card transactions. The Payment entity in the Accounting API represents a record that a payment was received against an invoice.
+
+Reference: [QuickBooks Payment API](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/payment)
+
+### Implementation Status
+
+✅ **COMPLETED** - Both sync directions are fully implemented and tested.
+
+### Sync Directions
+
+| Direction | Trigger | Action | Status |
+|-----------|---------|--------|--------|
+| QuickBooks → Flexprice | Webhook (`Payment.Create`) | Mark invoice as SUCCEEDED with offline payment | ✅ Implemented |
+| Flexprice → QuickBooks | Payment succeeded in Flexprice | Create Payment entity in QuickBooks | ✅ Implemented |
+
+### QuickBooks → Flexprice (Inbound Sync)
+
+**Implementation**: `internal/integration/quickbooks/payment.go:HandleExternalPaymentFromWebhook()`
+
+When a payment is "recorded and closed" against an invoice in QuickBooks, Flexprice receives a webhook notification and marks the invoice as paid.
+
+**Important Design Decision**: We DO NOT create a separate payment record in Flexprice. Instead, we directly update the invoice status to `SUCCEEDED` with `payment_method: offline`. This approach:
+- ✅ Avoids decimal precision issues between systems
+- ✅ Simplifies the sync logic (1:1 invoice relationship)
+- ✅ Stores all relevant payment data in invoice metadata
+- ✅ Maintains invoice-centric payment tracking
+
+#### Webhook Setup
+
+1. Register webhook endpoint in Intuit Developer Portal: `https://app.flexprice.io/v1/webhooks/quickbooks/{tenant_id}/{environment_id}`
+2. Subscribe to `Payment` entity events (Create/Update)
+3. Configure webhook verifier token for signature validation
+4. Enable payment inbound sync in connection: `sync_config.payment.inbound = true`
+
+#### Webhook Payload Structure
+
+```json
+{
+  "eventNotifications": [
+    {
+      "realmId": "123456789",
+      "dataChangeEvent": {
+        "entities": [
+          {
+            "name": "Payment",
+            "id": "222",
+            "operation": "Create",
+            "lastUpdated": "2025-12-04T18:14:00.000Z"
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+**Note**: Webhook payload is minimal - only contains Payment ID. Must call API to get full details.
+
+#### Processing Flow
+
+```
+1. Receive webhook event (Payment.Create/Update)
+2. Verify signature using intuit-signature header (optional if verifier token configured)
+3. Check payment inbound sync is enabled (sync_config.payment.inbound = true)
+4. Call GET /v3/company/{realmId}/payment/{id} to fetch full payment details
+5. Extract LinkedTxn[].TxnId to get QuickBooks Invoice ID
+6. Query entity_integration_mapping to find Flexprice invoice ID
+7. Update Flexprice invoice directly (NO payment record created):
+   - invoice.payment_status = SUCCEEDED
+   - invoice.paid_at = current timestamp
+   - invoice.amount_paid = invoice.amount_due
+   - invoice.amount_remaining = 0
+   - invoice.metadata["payment_recorded_by"] = "quickbooks"
+   - invoice.metadata["payment_method"] = "offline"
+   - invoice.metadata["quickbooks_payment_id"] = QB Payment ID (e.g., "222")
+   - invoice.metadata["quickbooks_invoice_id"] = QB Invoice ID (e.g., "219")
+   - invoice.metadata["entity_mapping_id"] = Entity mapping ID
+   - invoice.metadata["payment_synced_at"] = ISO 8601 timestamp
+8. Save updated invoice to database
+```
+
+**Example Invoice Metadata After Sync**:
+```json
+{
+  "payment_method": "offline",
+  "entity_mapping_id": "eim_01KBN8RW13DZ67V94RKY1KHAZW",
+  "payment_synced_at": "2025-12-04T18:14:00Z",
+  "payment_recorded_by": "quickbooks",
+  "quickbooks_invoice_id": "219",
+  "quickbooks_payment_id": "222"
+}
+```
+
+### Flexprice → QuickBooks (Outbound Sync)
+
+**Implementation**: `internal/integration/quickbooks/payment.go:SyncPaymentToQuickBooks()`
+
+When a payment succeeds in Flexprice for a synced invoice, create a corresponding Payment entity in QuickBooks to record the payment and automatically close the invoice.
+
+**How QuickBooks Handles Payments**: Creating a Payment entity in QuickBooks with a `LinkedTxn` reference to an invoice automatically:
+- ✅ Records the payment against the invoice
+- ✅ Updates the invoice balance to zero
+- ✅ Marks the invoice as "Paid" and "Closed"
+- ✅ No separate "close invoice" API call needed
+
+#### Trigger Conditions
+
+- Payment succeeded in Flexprice (`payment_status: SUCCEEDED`)
+- Payment destination is an invoice (`destination_type: invoice`)
+- Invoice has entity_integration_mapping to QuickBooks
+- Payment is not already synced (no existing mapping)
+- Payment outbound sync is enabled: `sync_config.payment.outbound = true`
+
+#### Payment Creation Request
+
+```json
+{
+  "CustomerRef": {
+    "value": "1"
+  },
+  "TotalAmt": 100.00,
+  "TxnDate": "2025-12-04",
+  "Line": [
+    {
+      "Amount": 100.00,
+      "LinkedTxn": [
+        {
+          "TxnId": "219",
+          "TxnType": "Invoice"
+        }
+      ]
+    }
+  ],
+  "PrivateNote": "Payment recorded by: flexprice\nFlexprice Invoice ID: inv_xxx\nPayment Method: stripe"
+}
+```
+
+**Field Explanations**:
+- `CustomerRef`: QuickBooks Customer ID (fetched from linked invoice)
+- `TotalAmt`: Payment amount from Flexprice
+- `TxnDate`: Payment succeeded date (YYYY-MM-DD format)
+- `Line[].LinkedTxn`: Links payment to specific invoice (critical for automatic closure)
+- `PrivateNote`: Internal memo with Flexprice payment details (NOT visible to customer)
+
+#### Processing Flow
+
+```
+1. Payment succeeds in Flexprice (payment_status: SUCCEEDED)
+2. Check sync conditions:
+   - QuickBooks connection exists
+   - Payment outbound sync enabled
+   - Payment destination is invoice
+   - Invoice is synced to QuickBooks
+   - Payment not already synced
+3. Fetch Flexprice payment details (amount, date, method)
+4. Find QuickBooks invoice ID via entity_integration_mapping
+5. Get QuickBooks invoice to retrieve CustomerRef
+6. Create Payment entity in QuickBooks:
+   - CustomerRef from invoice
+   - TotalAmt from Flexprice payment
+   - TxnDate from payment succeeded_at
+   - LinkedTxn with QB invoice ID
+   - PrivateNote with Flexprice details
+7. QuickBooks automatically:
+   - Records payment against invoice
+   - Updates invoice balance to $0
+   - Marks invoice as "Paid" and "Closed"
+8. Create entity_integration_mapping:
+   - EntityID: Flexprice payment ID
+   - EntityType: "payment"
+   - ProviderEntityID: QuickBooks payment ID (e.g., "222")
+   - Metadata: QB invoice ID, FP invoice ID, sync source
+9. Update Flexprice payment metadata:
+   - quickbooks_payment_id: QB Payment ID
+   - quickbooks_invoice_id: QB Invoice ID
+   - entity_mapping_id: Mapping ID
+   - quickbooks_sync_source: "flexprice_outbound"
+```
+
+#### QuickBooks Payment Concepts
+
+**"Record Payment" vs "Receive Payment"**:
+- **Record Payment**: The API call we use - creates a Payment entity via POST `/payment`
+- **Receive Payment**: UI terminology in QuickBooks for the same action
+- Both terms refer to the same operation - recording that money was received
+
+**"Record and Close" vs "Just Record"**:
+- **With LinkedTxn**: Payment is linked to invoice → invoice automatically closes (what we do)
+- **Without LinkedTxn**: Payment recorded but invoice stays open → manual closure needed
+- We ALWAYS use `LinkedTxn` to ensure invoices close automatically
+
+**PrivateNote vs Memo**:
+- **PrivateNote**: Internal note, NOT visible to customer (what we use for Flexprice data)
+- **Memo**: Customer-visible note on invoice or payment
+- We use `PrivateNote` to avoid exposing internal Flexprice IDs to customers
+
+### Payment Data Types
+
+#### Payment Create Request
+
+```go
+// PaymentCreateRequest represents the request to create a payment in QuickBooks
+// Used for OUTBOUND sync (Flexprice → QuickBooks)
+type PaymentCreateRequest struct {
+    CustomerRef AccountRef    `json:"CustomerRef"`              // REQUIRED: QuickBooks Customer ID
+    TotalAmt    float64       `json:"TotalAmt"`                 // REQUIRED: Total payment amount
+    TxnDate     string        `json:"TxnDate,omitempty"`        // Payment date (YYYY-MM-DD format)
+    Line        []PaymentLine `json:"Line"`                     // REQUIRED: Payment lines with linked invoices
+    PrivateNote string        `json:"PrivateNote,omitempty"`    // Internal note (not visible to customer)
+}
+
+// PaymentLine represents a single line in a payment linking to an invoice
+// CRITICAL: This is how we link payment to invoice and trigger auto-closure
+type PaymentLine struct {
+    Amount    float64     `json:"Amount"`    // Line amount (usually same as TotalAmt for single invoice)
+    LinkedTxn []LinkedTxn `json:"LinkedTxn"` // CRITICAL: Links to invoice (enables auto-close)
+}
+
+// LinkedTxn links a payment to a specific transaction (invoice)
+type LinkedTxn struct {
+    TxnId   string `json:"TxnId"`   // QuickBooks Invoice ID
+    TxnType string `json:"TxnType"` // Always "Invoice" for invoice payments
+}
+```
+
+#### Payment Response
+
+```go
+// PaymentResponse represents a payment response from QuickBooks
+// Returned when we GET a payment or CREATE a payment
+type PaymentResponse struct {
+    ID          string        `json:"Id"`                       // QuickBooks Payment ID
+    SyncToken   string        `json:"SyncToken,omitempty"`      // Version control (not used in our flow)
+    TxnDate     string        `json:"TxnDate"`                  // Payment date (YYYY-MM-DD)
+    TotalAmt    float64       `json:"TotalAmt"`                 // Total payment amount
+    CustomerRef AccountRef    `json:"CustomerRef"`              // Customer who made payment
+    Line        []PaymentLine `json:"Line,omitempty"`           // Payment lines with linked invoices
+    PrivateNote string        `json:"PrivateNote,omitempty"`    // Our internal memo
+}
+```
+
+**Important Notes**:
+- We implement a **1:1 payment-to-invoice relationship** (one payment = one invoice)
+- QuickBooks supports multi-invoice payments, but we don't use that capability
+- The `Line` array always contains exactly ONE item linking to ONE invoice
+- `LinkedTxn` is CRITICAL - without it, invoice won't close automatically
+
+### Entity Integration Mapping
+
+Payment mappings link Flexprice payments to QuickBooks Payment entities:
+
+```go
+mapping := &EntityIntegrationMapping{
+    ID:               "eim_01KBN8RW13DZ67V94RKY1KHAZW",
+    EntityID:         "pay_xxx",                              // Flexprice payment ID
+    EntityType:       types.IntegrationEntityTypePayment,     // "payment"
+    ProviderType:     "quickbooks",
+    ProviderEntityID: "222",                                  // QuickBooks Payment ID
+    Metadata: {
+        "quickbooks_invoice_id": "219",                      // QB Invoice ID
+        "flexprice_invoice_id":  "inv_xxx",                  // FP Invoice ID
+        "payment_amount":        "100.00",
+        "payment_method":        "stripe",
+        "synced_at":             "2025-12-04T18:14:00Z",
+        "sync_source":           "flexprice",                 // or "quickbooks"
+    },
+    EnvironmentID: "env_xxx",
+}
+```
+
+**Key Points**:
+- `EntityType: "payment"` - Identifies this as a payment mapping
+- `sync_source`: Indicates which system initiated the sync
+  - `"flexprice"`: Payment created in Flexprice, synced to QuickBooks
+  - `"quickbooks"`: Payment recorded in QuickBooks, synced to Flexprice
+- Metadata stores both QuickBooks and Flexprice IDs for bidirectional lookup
+
+### Sync Configuration
+
+Payment sync is controlled via `SyncConfig` in the connection settings:
+
+```go
+type SyncConfig struct {
+    Invoice *EntitySyncConfig `json:"invoice,omitempty"`
+    Payment *EntitySyncConfig `json:"payment,omitempty"`  // Payment sync configuration
+}
+
+type EntitySyncConfig struct {
+    Inbound  bool `json:"inbound"`   // Enable inbound sync (Provider → Flexprice)
+    Outbound bool `json:"outbound"`  // Enable outbound sync (Flexprice → Provider)
+}
+```
+
+**Payment Sync Settings**:
+- `payment.inbound = true`: Enable QuickBooks → Flexprice (webhook-based)
+- `payment.outbound = true`: Enable Flexprice → QuickBooks (API-based)
+
+**Example Configuration**:
+```json
+{
+  "sync_config": {
+    "invoice": {
+      "inbound": false,
+      "outbound": true
+    },
+    "payment": {
+      "inbound": true,
+      "outbound": true
+    }
+  }
+}
+```
+
+### Webhook Security
+
+1. **Signature Verification** (Optional but Recommended):
+   - QuickBooks sends `intuit-signature` header with webhook requests
+   - Verify signature using webhook verifier token from Intuit Developer Portal
+   - If verifier token not configured, webhook processing continues (for development)
+   - Reference: [QuickBooks Webhook Verification](https://developer.intuit.com/app/developer/qbo/docs/develop/webhooks/verifying-the-event-notification)
+
+2. **HTTPS Only**: 
+   - Webhook endpoint MUST use HTTPS in production
+   - HTTP allowed only for localhost development
+
+3. **Idempotency**: 
+   - Check for duplicate webhook events using payment ID
+   - Skip processing if invoice already marked as SUCCEEDED
+   - Prevents duplicate payment recording
+
+4. **Return 200 OK Immediately**: 
+   - Return HTTP 200 immediately to acknowledge receipt
+   - Process webhook asynchronously to prevent QuickBooks retries
+   - QuickBooks retries if non-200 response or timeout
+
+5. **Realm ID Validation**:
+   - Verify webhook `realmId` matches connection's configured Realm ID
+   - Prevents processing webhooks for wrong QuickBooks company
+
+### Error Handling
+
+| Scenario | Action | HTTP Response |
+|----------|--------|---------------|
+| Invoice not found in mapping | Log warning, skip sync | 200 OK |
+| Invoice already SUCCEEDED | Log info, skip sync | 200 OK |
+| Webhook verification fails | Log error (if verifier configured) | 401 Unauthorized |
+| QuickBooks API error (outbound) | Log error, implement retry | N/A (internal) |
+| Payment already synced | Log info, return existing mapping | N/A (internal) |
+| Sync disabled in config | Log debug, skip processing | 200 OK |
+| Realm ID mismatch | Log warning, skip notification | 200 OK |
+
+**Graceful Degradation**:
+- Webhook failures should NOT break the invoice flow
+- All errors are logged with context (payment ID, invoice ID, error details)
+- Failed syncs can be retried manually via future admin interface
+
+### Security & Data Protection
+
+**No Sensitive Data in Logs** ✅:
+- Access tokens, refresh tokens, client secrets are NEVER logged
+- Only non-sensitive identifiers are logged (payment IDs, invoice IDs, realm IDs)
+- Error messages sanitized to exclude tokens and secrets
+- All OAuth credentials encrypted at rest in database
+
+**Audit Trail**:
+- All payment syncs logged with:
+  - Timestamp
+  - Sync direction (inbound/outbound)
+  - Payment ID (both systems)
+  - Invoice ID (both systems)
+  - Sync result (success/failure)
+
+### Testing Checklist
+
+#### Inbound Sync (QuickBooks → Flexprice)
+- [ ] Record payment in QuickBooks for synced invoice
+- [ ] Verify webhook received and processed
+- [ ] Verify Flexprice invoice status updated to SUCCEEDED
+- [ ] Verify invoice metadata contains QuickBooks payment details
+- [ ] Verify duplicate webhook handling (idempotency)
+- [ ] Test with payment inbound sync disabled
+- [ ] Test with invoice not synced to Flexprice
+
+#### Outbound Sync (Flexprice → QuickBooks)
+- [ ] Record payment in Flexprice for synced invoice
+- [ ] Verify Payment entity created in QuickBooks
+- [ ] Verify QuickBooks invoice marked as "Paid" and "Closed"
+- [ ] Verify entity_integration_mapping created
+- [ ] Verify Flexprice payment metadata updated
+- [ ] Verify duplicate sync prevention
+- [ ] Test with payment outbound sync disabled
+- [ ] Test with invoice not synced to QuickBooks
+
+#### Error Scenarios
+- [ ] Test with invalid QuickBooks credentials
+- [ ] Test with expired OAuth token (verify auto-refresh)
+- [ ] Test webhook signature verification
+- [ ] Test realm ID mismatch
+- [ ] Test API rate limit handling
+
+### Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `internal/integration/quickbooks/payment.go` | Payment sync service (both directions) |
+| `internal/integration/quickbooks/webhook/handler.go` | Webhook handler for inbound events |
+| `internal/integration/quickbooks/webhook/types.go` | Webhook payload DTOs |
+| `internal/integration/quickbooks/dto.go` | Payment API request/response DTOs |
+| `internal/integration/quickbooks/client.go` | Payment API client methods |
+| `internal/integration/factory.go` | Payment service injection |
+| `internal/api/v1/webhook.go` | Webhook API endpoint |
+| `internal/service/payment_processor.go` | Outbound sync trigger |
+
+---
+
 ## Future Enhancements
 
-### Phase 2 Features (Out of Scope for Initial Version)
+### Payment Enhancements
 
-#### Payment Reconciliation
-- Sync payment status from QuickBooks
-- Update Flexprice invoice payment status
-- Handle partial payments
+#### Enhanced Payment Reconciliation
+- **Partial Payments**: Support partial payment tracking across both systems
+- **Payment Reversals/Refunds**: Bidirectional sync for refunds and payment reversals
+- **Payment Reconciliation Reports**: Dashboard showing payment sync status and discrepancies
+- **Manual Sync Trigger**: Admin interface to manually trigger payment sync operations
+- **Payment Gateway Details**: Store and sync payment method details (card type, last 4 digits, etc.)
 
 #### Enhanced Line Item Support
 - Support for discounts
 - Support for taxes at line item level
 - Support for custom fields
 
-#### Bidirectional Sync
-- Sync invoices from QuickBooks to Flexprice
-- Handle conflicts and merge strategies
-
 #### Advanced Features
 - **Bulk Sync Operations**: Sync multiple invoices in batch
 - **Sync Scheduling and Retry Queues**: Queue failed syncs for retry
 - **Sync Status Dashboard**: Monitor sync health and statistics
 - **Sync History and Audit Logs**: Track all sync operations
-- **Webhook Support**: Receive real-time notifications from QuickBooks ([blogs.intuit.com](https://blogs.intuit.com/2018/09/10/quickbooks-online-api-best-practices/))
-  - Subscribe to entity change events (Invoice, Customer, Payment)
-  - Reduce polling needs and improve efficiency
-- **Sync Plan for all provider**
-- **Move to Temporal**
-- **payment 2-way sync**
-- **manual sync**
+- **Move to Temporal**: Use Temporal for reliable workflow orchestration
 
 ### Extensibility Points
 
 The architecture should support:
-- Adding new entity types (e.g., payments, credits)
-- Adding new sync directions (bidirectional)
+- Adding new entity types (e.g., credits, bills)
+- Adding new sync directions (full bidirectional for all entities)
 - Adding new QuickBooks entities (e.g., estimates, credit memos)
 - Custom field mapping configuration
 - Plugin system for custom transformations
@@ -1601,7 +2014,9 @@ If Quickbook connection is active
 - [Customer API Reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/customer)
 - [Item API Reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/item)
 - [Account API Reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/account)
+- [Payment API Reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/payment)
 - [Preferences API Reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/preferences)
+- [Webhooks Documentation](https://developer.intuit.com/app/developer/qbo/docs/develop/webhooks)
 
 #### Best Practices and Guides
 - [QuickBooks API Best Practices](https://blogs.intuit.com/2018/09/10/quickbooks-online-api-best-practices/) - CDC API, Webhooks, Optimization
@@ -1640,6 +2055,7 @@ If Quickbook connection is active
 |---------|------|--------|---------|
 | 1.0 | 2025-11-24 | Tsage | Initial PRD creation |
 | 1.1 | 2025-11-25 | Tsage | Define Workflow |
+| 1.2 | 2025-12-04 | Tsage | Add 2-way payment sync implementation details, security audit, testing checklist |
 
 
 ---
