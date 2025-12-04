@@ -892,6 +892,24 @@ func (p *paymentProcessor) handleIncompleteSubscriptionPayment(ctx context.Conte
 
 // syncPaymentToQuickBooks syncs a successful payment to QuickBooks if outbound sync is enabled
 func (p *paymentProcessor) syncPaymentToQuickBooks(ctx context.Context, paymentObj *payment.Payment, invoice *invoice.Invoice) error {
+	// Defensive nil checks
+	if paymentObj == nil {
+		p.Logger.Warnw("skipping QuickBooks sync: payment is nil")
+		return nil
+	}
+	if invoice == nil {
+		p.Logger.Warnw("skipping QuickBooks sync: invoice is nil",
+			"payment_id", paymentObj.ID)
+		return nil
+	}
+
+	// Check if IntegrationFactory is available
+	if p.IntegrationFactory == nil {
+		p.Logger.Debugw("skipping QuickBooks sync: IntegrationFactory not available",
+			"payment_id", paymentObj.ID)
+		return nil
+	}
+
 	// Get the QuickBooks connection for this environment
 	conn, err := p.ConnectionRepo.GetByProvider(ctx, types.SecretProviderQuickBooks)
 	if err != nil {
