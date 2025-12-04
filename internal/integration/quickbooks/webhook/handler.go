@@ -60,11 +60,11 @@ func (h *Handler) VerifyWebhookSignature(ctx context.Context, payload []byte, si
 	}
 
 	if verifierToken == "" {
-		h.logger.Warnw("webhook verifier token not configured, skipping signature verification",
+		h.logger.Errorw("webhook verifier token not configured - SECURITY RISK",
 			"connection_id", conn.ID)
-		// For now, allow requests without verification if token not configured
-		// In production, this should be required
-		return nil
+		return ierr.NewError("webhook verifier token not configured").
+			WithHint("Configure webhook_verifier_token in connection metadata").
+			Mark(ierr.ErrPermissionDenied)
 	}
 
 	// Compute HMAC-SHA256

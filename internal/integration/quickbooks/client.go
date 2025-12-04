@@ -587,9 +587,13 @@ func (c *Client) CreateItem(ctx context.Context, req *ItemCreateRequest) (*ItemR
 			"unit_price", unitPriceStr)
 	}
 
+	incomeAccountID := ""
+	if req.IncomeAccountRef != nil {
+		incomeAccountID = req.IncomeAccountRef.Value
+	}
 	c.logger.Infow("creating QuickBooks item",
 		"item_name", req.Name,
-		"income_account_id", req.IncomeAccountRef.Value,
+		"income_account_id", incomeAccountID,
 		"unit_price", req.UnitPrice)
 
 	resp, err := c.makeRequestWithRetry(ctx, "POST", "item", payload, 0)
