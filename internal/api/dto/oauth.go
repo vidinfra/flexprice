@@ -72,7 +72,7 @@ type CompleteOAuthRequest struct {
 	SessionID string              `json:"session_id" binding:"required"` // Session ID from initiate OAuth
 	Code      string              `json:"code" binding:"required"`       // OAuth authorization code from the provider
 	State     string              `json:"state" binding:"required"`      // CSRF state token
-	RealmID   string              `json:"realm_id" binding:"required"`   // QuickBooks realm ID (required for QuickBooks)
+	RealmID   string              `json:"realm_id"`                      // QuickBooks realm ID (required for QuickBooks, validated in Validate())
 }
 
 // Validate validates the OAuth complete request with provider-specific rules

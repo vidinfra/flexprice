@@ -553,10 +553,12 @@ func (c *Client) CreateItem(ctx context.Context, req *ItemCreateRequest) (*ItemR
 		return nil, err
 	}
 
-	incomeAccountRef := map[string]string{
-		"value": req.IncomeAccountRef.Value,
+	incomeAccountRef := make(map[string]string)
+
+	if req.IncomeAccountRef != nil && req.IncomeAccountRef.Value != "" {
+		incomeAccountRef["value"] = req.IncomeAccountRef.Value
 	}
-	if req.IncomeAccountRef.Name != "" {
+	if req.IncomeAccountRef != nil && req.IncomeAccountRef.Name != "" {
 		incomeAccountRef["name"] = req.IncomeAccountRef.Name
 	}
 
