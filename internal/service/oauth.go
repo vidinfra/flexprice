@@ -330,9 +330,23 @@ func (s *oauthService) GetOAuthSession(ctx context.Context, sessionID string) (*
 			syncConfig = sc
 		} else if scMap, ok := syncConfigValue.(map[string]interface{}); ok {
 			syncConfig = &types.SyncConfig{}
+
+			// Parse invoice sync config
 			if invoiceMap, ok := scMap["invoice"].(map[string]interface{}); ok {
+				inbound, _ := invoiceMap["inbound"].(bool)
 				outbound, _ := invoiceMap["outbound"].(bool)
 				syncConfig.Invoice = &types.EntitySyncConfig{
+					Inbound:  inbound,
+					Outbound: outbound,
+				}
+			}
+
+			// Parse payment sync config
+			if paymentMap, ok := scMap["payment"].(map[string]interface{}); ok {
+				inbound, _ := paymentMap["inbound"].(bool)
+				outbound, _ := paymentMap["outbound"].(bool)
+				syncConfig.Payment = &types.EntitySyncConfig{
+					Inbound:  inbound,
 					Outbound: outbound,
 				}
 			}
