@@ -279,3 +279,15 @@ func (c *Connection) IsQuoteOutboundEnabled() bool {
 	config := c.GetSyncConfig()
 	return config.Quote != nil && config.Quote.Outbound
 }
+
+// IsPaymentInboundEnabled checks if payment inbound sync is enabled (e.g., QuickBooks -> Flexprice)
+func (c *Connection) IsPaymentInboundEnabled() bool {
+	config := c.GetSyncConfig()
+	return config.Payment != nil && config.Payment.Inbound
+}
+
+// IsPaymentOutboundEnabled checks if payment outbound sync is enabled (e.g., Flexprice -> QuickBooks)
+func (c *Connection) IsPaymentOutboundEnabled() bool {
+	config := c.GetSyncConfig()
+	return config.Payment != nil && config.Payment.Outbound
+}

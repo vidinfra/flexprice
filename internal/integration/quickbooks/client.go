@@ -38,6 +38,11 @@ type QuickBooksClient interface {
 
 	// Invoice API wrappers
 	CreateInvoice(ctx context.Context, req *InvoiceCreateRequest) (*InvoiceResponse, error)
+	GetInvoice(ctx context.Context, invoiceID string) (*InvoiceResponse, error)
+
+	// Payment API wrappers
+	CreatePayment(ctx context.Context, req *PaymentCreateRequest) (*PaymentResponse, error)
+	GetPayment(ctx context.Context, paymentID string) (*PaymentResponse, error)
 
 	// Token management
 	ExchangeAuthCodeForTokens(ctx context.Context) error
@@ -755,6 +760,156 @@ func (c *Client) CreateInvoice(ctx context.Context, req *InvoiceCreateRequest) (
 	}
 
 	return &result.Invoice, nil
+}
+
+// GetInvoice retrieves an invoice by ID from QuickBooks
+func (c *Client) GetInvoice(ctx context.Context, invoiceID string) (*InvoiceResponse, error) {
+	// Ensure valid access token before making API call
+	if err := c.EnsureValidAccessToken(ctx); err != nil {
+		return nil, err
+	}
+
+	c.logger.Debugw("fetching QuickBooks invoice",
+		"invoice_id", invoiceID)
+
+	endpoint := fmt.Sprintf("invoice/%s", invoiceID)
+	resp, err := c.makeRequestWithRetry(ctx, "GET", endpoint, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseErrorResponse(resp)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, ierr.NewError("failed to read response").Mark(ierr.ErrSystem)
+	}
+
+	var result struct {
+		Invoice InvoiceResponse `json:"Invoice"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, ierr.NewError("failed to parse QuickBooks response").
+			Mark(ierr.ErrSystem)
+	}
+
+	return &result.Invoice, nil
+}
+
+// CreatePayment creates a payment record in QuickBooks (accounting entry, not payment processing)
+// This records that a payment was received against one or more invoices
+func (c *Client) CreatePayment(ctx context.Context, req *PaymentCreateRequest) (*PaymentResponse, error) {
+	// Ensure valid access token before making API call
+	if err := c.EnsureValidAccessToken(ctx); err != nil {
+		return nil, err
+	}
+
+	// Build payment line items with LinkedTxn references to invoices
+	lineItems := make([]map[string]interface{}, len(req.Line))
+	for i, line := range req.Line {
+		linkedTxns := make([]map[string]string, len(line.LinkedTxn))
+		for j, txn := range line.LinkedTxn {
+			linkedTxns[j] = map[string]string{
+				"TxnId":   txn.TxnId,
+				"TxnType": txn.TxnType,
+			}
+		}
+
+		lineItems[i] = map[string]interface{}{
+			"Amount":    line.Amount,
+			"LinkedTxn": linkedTxns,
+		}
+	}
+
+	payload := map[string]interface{}{
+		"CustomerRef": map[string]string{
+			"value": req.CustomerRef.Value,
+		},
+		"TotalAmt": req.TotalAmt,
+		"Line":     lineItems,
+	}
+
+	// Add optional fields
+	if req.TxnDate != "" {
+		payload["TxnDate"] = req.TxnDate
+	}
+	if req.PrivateNote != "" {
+		payload["PrivateNote"] = req.PrivateNote
+	}
+
+	c.logger.Debugw("sending QuickBooks Payment create request",
+		"customer_ref", req.CustomerRef.Value,
+		"total_amt", req.TotalAmt,
+		"line_items_count", len(req.Line))
+
+	resp, err := c.makeRequestWithRetry(ctx, "POST", "payment", payload, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, c.parseErrorResponse(resp)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, ierr.NewError("failed to read response").Mark(ierr.ErrSystem)
+	}
+
+	var result struct {
+		Payment PaymentResponse `json:"Payment"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, ierr.NewError("failed to parse QuickBooks response").
+			Mark(ierr.ErrSystem)
+	}
+
+	c.logger.Infow("successfully created QuickBooks payment",
+		"payment_id", result.Payment.ID,
+		"total_amt", result.Payment.TotalAmt)
+
+	return &result.Payment, nil
+}
+
+// GetPayment retrieves a payment by ID from QuickBooks
+func (c *Client) GetPayment(ctx context.Context, paymentID string) (*PaymentResponse, error) {
+	// Ensure valid access token before making API call
+	if err := c.EnsureValidAccessToken(ctx); err != nil {
+		return nil, err
+	}
+
+	c.logger.Debugw("fetching QuickBooks payment",
+		"payment_id", paymentID)
+
+	endpoint := fmt.Sprintf("payment/%s", paymentID)
+	resp, err := c.makeRequestWithRetry(ctx, "GET", endpoint, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseErrorResponse(resp)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, ierr.NewError("failed to read response").Mark(ierr.ErrSystem)
+	}
+
+	var result struct {
+		Payment PaymentResponse `json:"Payment"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, ierr.NewError("failed to parse QuickBooks response").
+			Mark(ierr.ErrSystem)
+	}
+
+	return &result.Payment, nil
 }
 
 // ExchangeAuthCodeForTokens exchanges an authorization code for access and refresh tokens.

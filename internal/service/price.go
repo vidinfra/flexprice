@@ -1484,7 +1484,7 @@ func (s *priceService) syncPriceToQuickBooksIfEnabled(ctx context.Context, price
 		s.Logger.Debugw("Temporal service not available, skipping QuickBooks sync",
 			"price_id", priceID)
 		return
-	}
+		}
 
 	// Check if QuickBooks integration is available
 	if s.IntegrationFactory == nil {
@@ -1528,8 +1528,8 @@ func (s *priceService) syncPriceToQuickBooksIfEnabled(ctx context.Context, price
 	}
 
 	s.Logger.Debugw("QuickBooks sync workflow started",
-		"price_id", priceID,
-		"plan_id", planID,
+			"price_id", priceID,
+			"plan_id", planID,
 		"workflow_id", workflowRun.GetID(),
 		"run_id", workflowRun.GetRunID())
 }

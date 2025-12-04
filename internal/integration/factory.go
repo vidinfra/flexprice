@@ -19,6 +19,7 @@ import (
 	"github.com/flexprice/flexprice/internal/integration/hubspot"
 	hubspotwebhook "github.com/flexprice/flexprice/internal/integration/hubspot/webhook"
 	"github.com/flexprice/flexprice/internal/integration/quickbooks"
+	quickbookswebhook "github.com/flexprice/flexprice/internal/integration/quickbooks/webhook"
 	"github.com/flexprice/flexprice/internal/integration/razorpay"
 	razorpaywebhook "github.com/flexprice/flexprice/internal/integration/razorpay/webhook"
 	"github.com/flexprice/flexprice/internal/integration/s3"
@@ -368,11 +369,29 @@ func (f *Factory) GetQuickBooksIntegration(ctx context.Context) (*QuickBooksInte
 		Logger:                       f.logger,
 	})
 
+	// Create payment service
+	paymentSvc := quickbooks.NewPaymentService(quickbooks.PaymentServiceParams{
+		Client:                       qbClient,
+		InvoiceRepo:                  f.invoiceRepo,
+		EntityIntegrationMappingRepo: f.entityIntegrationMappingRepo,
+		Logger:                       f.logger,
+	})
+
+	// Create webhook handler
+	webhookHandler := quickbookswebhook.NewHandler(
+		qbClient,
+		paymentSvc,
+		f.connectionRepo,
+		f.logger,
+	)
+
 	return &QuickBooksIntegration{
-		Client:      qbClient,
-		CustomerSvc: customerSvc,
-		ItemSyncSvc: itemSyncSvc,
-		InvoiceSvc:  invoiceSvc,
+		Client:         qbClient,
+		CustomerSvc:    customerSvc,
+		ItemSyncSvc:    itemSyncSvc,
+		InvoiceSvc:     invoiceSvc,
+		PaymentSvc:     paymentSvc,
+		WebhookHandler: webhookHandler,
 	}, nil
 }
 
@@ -463,10 +482,12 @@ type ChargebeeIntegration struct {
 
 // QuickBooksIntegration contains all QuickBooks integration services
 type QuickBooksIntegration struct {
-	Client      quickbooks.QuickBooksClient
-	CustomerSvc quickbooks.QuickBooksCustomerService
-	ItemSyncSvc quickbooks.QuickBooksItemSyncService
-	InvoiceSvc  quickbooks.QuickBooksInvoiceService
+	Client         quickbooks.QuickBooksClient
+	CustomerSvc    quickbooks.QuickBooksCustomerService
+	ItemSyncSvc    quickbooks.QuickBooksItemSyncService
+	InvoiceSvc     quickbooks.QuickBooksInvoiceService
+	PaymentSvc     quickbooks.QuickBooksPaymentService
+	WebhookHandler *quickbookswebhook.Handler
 }
 
 // IntegrationProvider defines the interface for all integration providers
