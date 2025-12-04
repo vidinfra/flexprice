@@ -434,6 +434,7 @@ func (s *InvoiceServiceSuite) TestCreateSubscriptionInvoice() {
 				req,
 				nil,
 				types.InvoiceFlowManual,
+				false,
 			)
 
 			if tt.wantErr {
@@ -1686,6 +1687,7 @@ func (s *InvoiceServiceSuite) TestCreateSubscriptionInvoiceWithInvoicingCustomer
 		req,
 		nil,
 		types.InvoiceFlowManual,
+		false,
 	)
 
 	// Verify invoice was created with invoicing customer ID
@@ -1746,6 +1748,7 @@ func (s *InvoiceServiceSuite) TestCreateSubscriptionInvoiceWithoutInvoicingCusto
 		req,
 		nil,
 		types.InvoiceFlowManual,
+		false,
 	)
 
 	// Verify invoice was created with subscription customer ID (fallback)
