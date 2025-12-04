@@ -629,8 +629,17 @@ func (s *eventService) GetMonitoringData(ctx context.Context, req *dto.GetMonito
 	// Create Kafka monitoring service
 	kafkaMonitoring := kafka.NewMonitoringService(s.config, s.logger)
 
-	// Get total event count
-	totalEventCount := s.eventRepo.GetTotalEventCount(ctx, req.StartTime, req.EndTime)
+	// Get total event count with optional windowed time-series data
+	eventCountResult, err := s.eventRepo.GetTotalEventCount(ctx, req.StartTime, req.EndTime, req.WindowSize)
+	if err != nil {
+		s.logger.Warnw("failed to get total event count",
+			"error", err,
+			"start_time", req.StartTime,
+			"end_time", req.EndTime,
+			"window_size", req.WindowSize)
+		// Continue with zero count on error
+		eventCountResult = &events.EventCountResult{TotalCount: 0, Points: []events.EventCountPoint{}}
+	}
 
 	// Get tenant and environment from context
 	// Note: Consumer groups might be tenant/environment specific in production
@@ -673,11 +682,21 @@ func (s *eventService) GetMonitoringData(ctx context.Context, req *dto.GetMonito
 		eventPostProcessingLag = &kafka.ConsumerLag{TotalLag: 0}
 	}
 
+	// Convert domain event count points to DTO points
+	var dtoPoints []dto.EventCountPoint
+	for _, point := range eventCountResult.Points {
+		dtoPoints = append(dtoPoints, dto.EventCountPoint{
+			Timestamp:  point.Timestamp,
+			EventCount: point.EventCount,
+		})
+	}
+
 	// Build response
 	response := &dto.GetMonitoringDataResponse{
-		TotalCount:        totalEventCount,
+		TotalCount:        eventCountResult.TotalCount,
 		ConsumptionLag:    eventConsumptionLag.TotalLag,
 		PostProcessingLag: eventPostProcessingLag.TotalLag,
+		Points:            dtoPoints,
 	}
 
 	return response, nil
