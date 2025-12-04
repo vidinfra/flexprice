@@ -166,6 +166,9 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		if redirectURI, ok := metadata["redirect_uri"].(string); ok {
 			qbMetadata.RedirectURI = redirectURI
 		}
+		if oauthSessionData, ok := metadata["oauth_session_data"].(string); ok {
+			qbMetadata.OAuthSessionData = oauthSessionData
+		}
 		if accessToken, ok := metadata["access_token"].(string); ok {
 			qbMetadata.AccessToken = accessToken
 		}

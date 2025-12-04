@@ -283,6 +283,9 @@ func convertConnectionMetadataToMap(encryptedSecretData types.ConnectionMetadata
 				"realm_id":      encryptedSecretData.QuickBooks.RealmID,
 				"environment":   encryptedSecretData.QuickBooks.Environment,
 			}
+			if encryptedSecretData.QuickBooks.OAuthSessionData != "" {
+				result["oauth_session_data"] = encryptedSecretData.QuickBooks.OAuthSessionData
+			}
 			if encryptedSecretData.QuickBooks.AuthCode != "" {
 				result["auth_code"] = encryptedSecretData.QuickBooks.AuthCode
 			}

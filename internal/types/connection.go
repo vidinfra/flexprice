@@ -140,17 +140,20 @@ type QuickBooksConnectionMetadata struct {
 	ClientSecret string `json:"client_secret"` // OAuth Client Secret (encrypted)
 	RealmID      string `json:"realm_id"`      // QuickBooks Company ID (not encrypted)
 	Environment  string `json:"environment"`   // "sandbox" or "production"
-	
+
 	// Optional - for initial setup via auth code (will be cleared after token exchange)
 	AuthCode    string `json:"auth_code,omitempty"`    // OAuth Authorization Code (temporary, encrypted)
 	RedirectURI string `json:"redirect_uri,omitempty"` // OAuth Redirect URI (temporary)
-	
+
 	// Managed internally - set after auth code exchange or token refresh
 	AccessToken  string `json:"access_token,omitempty"`  // OAuth Access Token (encrypted)
 	RefreshToken string `json:"refresh_token,omitempty"` // OAuth Refresh Token (encrypted)
-	
+
 	// Optional configuration
 	IncomeAccountID string `json:"income_account_id,omitempty"` // QuickBooks Income Account ID (optional, defaults to "79")
+
+	// Temporary OAuth session data (only used during OAuth flow, cleared after completion)
+	OAuthSessionData string `json:"oauth_session_data,omitempty"` // Encrypted JSON containing session_id, csrf_state, credentials, etc.
 }
 
 // Validate validates the QuickBooks connection metadata
