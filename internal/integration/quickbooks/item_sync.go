@@ -16,8 +16,7 @@ import (
 
 // QuickBooksItemSyncService defines the interface for QuickBooks item synchronization
 type QuickBooksItemSyncService interface {
-	SyncPlanToQuickBooks(ctx context.Context, plan *plan.Plan, prices []*price.Price) error
-	SyncPriceToQuickBooks(ctx context.Context, price *price.Price, plan *plan.Plan, meter *meter.Meter, recurringCount int) error
+	SyncPriceToQuickBooks(ctx context.Context, plan *plan.Plan, priceToSync *price.Price) error
 }
 
 // ItemSyncServiceParams holds dependencies for ItemSyncService
@@ -40,173 +39,110 @@ func NewItemSyncService(params ItemSyncServiceParams) QuickBooksItemSyncService 
 	}
 }
 
-// SyncPlanToQuickBooks syncs a Flexprice plan and its prices to QuickBooks items.
-// Each price in the plan becomes a Service Item in QuickBooks.
-// The method tracks recurring charge count to generate unique item names for recurring charges.
-// All prices are synced (both usage-based and fixed/recurring) as per requirements.
-func (s *ItemSyncService) SyncPlanToQuickBooks(ctx context.Context, plan *plan.Plan, prices []*price.Price) error {
-	s.Logger.Infow("syncing plan to QuickBooks",
+// SyncPriceToQuickBooks syncs a single Flexprice price to QuickBooks as a Service Item.
+// This method is called when a price is created/updated.
+// Item naming logic:
+// - Usage charge (with meter): "{plan_name}-{meter_name}"
+// - Recurring charge (without meter): "{plan_name}-Recurring"
+func (s *ItemSyncService) SyncPriceToQuickBooks(ctx context.Context, plan *plan.Plan, priceToSync *price.Price) error {
+	s.Logger.Infow("syncing price to QuickBooks",
+		"price_id", priceToSync.ID,
 		"plan_id", plan.ID,
-		"plan_name", plan.Name,
-		"prices_count", len(prices))
+		"plan_name", plan.Name)
 
-	// Nothing to sync if no prices
-	if len(prices) == 0 {
-		s.Logger.Infow("no prices to sync for plan",
-			"plan_id", plan.ID,
-			"plan_name", plan.Name)
-		return nil
-	}
-
-	// Track recurring charge count for item naming
-	// Recurring charges (FIXED without meter) get names like "PlanName-Recurring-1", "PlanName-Recurring-2", etc.
-	recurringCount := 0
-	successCount := 0
-
-	for _, priceItem := range prices {
-		// Get meter if price has meter ID - used for usage-based charges
-		var meterItem *meter.Meter
-		if priceItem.MeterID != "" {
-			var err error
-			meterItem, err = s.MeterRepo.GetMeter(ctx, priceItem.MeterID)
-			if err != nil {
-				// Log warning but continue - meter name is used for item naming but not critical
-				s.Logger.Warnw("failed to find meter for price, continuing without meter name",
-					"price_id", priceItem.ID,
-					"meter_id", priceItem.MeterID,
-					"error", err)
-			}
-		}
-
-		// Determine if this is a recurring charge (FIXED price without meter)
-		// Recurring charges need unique names, so we track the count
-		isRecurring := priceItem.Type == types.PRICE_TYPE_FIXED && meterItem == nil
-		if isRecurring {
-			recurringCount++
-		}
-
-		// Sync each price as a QuickBooks item
-		// Continue with other prices even if one fails to allow partial sync
-		if err := s.SyncPriceToQuickBooks(ctx, priceItem, plan, meterItem, recurringCount); err != nil {
-			s.Logger.Errorw("failed to sync price to QuickBooks",
-				"price_id", priceItem.ID,
-				"plan_id", plan.ID,
-				"error", err)
-			continue
-		}
-		successCount++
-	}
-
-	// Log sync results - only say "successfully" if at least one price was synced
-	if successCount > 0 {
-		s.Logger.Infow("successfully synced plan to QuickBooks",
-			"plan_id", plan.ID,
-			"plan_name", plan.Name,
-			"total_prices", len(prices),
-			"successfully_synced", successCount)
-	} else {
-		s.Logger.Errorw("failed to sync plan to QuickBooks - all prices failed",
-			"plan_id", plan.ID,
-			"plan_name", plan.Name,
-			"total_prices", len(prices),
-			"successfully_synced", successCount)
-		return ierr.NewError("failed to sync any prices to QuickBooks").
-			WithHint("All prices failed to sync. Check QuickBooks connection and token validity.").
-			WithReportableDetails(map[string]interface{}{
-				"plan_id":       plan.ID,
-				"plan_name":     plan.Name,
-				"total_prices":  len(prices),
-				"success_count": successCount,
-			}).
-			Mark(ierr.ErrInternal)
-	}
-
-	return nil
-}
-
-// SyncPriceToQuickBooks syncs a Flexprice price to QuickBooks item.
-// Creates a Service Item in QuickBooks with:
-// - Item Name: {plan name}-{meter name} for usage charges, or {plan name}-Recurring-{count} for recurring charges
-// - Item Description: {price_id} (as per requirements)
-// - Item Type: "Service"
-// - Income Account: Uses income_account_id from connection metadata if configured, otherwise defaults to "79"
-// If item already exists (by name or mapping), creates mapping instead of creating duplicate.
-func (s *ItemSyncService) SyncPriceToQuickBooks(ctx context.Context, priceItem *price.Price, plan *plan.Plan, meterItem *meter.Meter, recurringCount int) error {
-	// Check if item is already synced via entity mapping
-	existingItemID, err := s.getQuickBooksItemID(ctx, priceItem.ID)
+	// Check if price is already synced
+	existingItemID, err := s.getQuickBooksItemID(ctx, priceToSync.ID)
 	if err == nil && existingItemID != "" {
+		s.Logger.Infow("price already synced to QuickBooks",
+			"price_id", priceToSync.ID,
+			"quickbooks_item_id", existingItemID)
 		return nil
 	}
 
-	// If error is not "not found", it's a database/infrastructure error - return it
 	if err != nil && !ierr.IsNotFound(err) {
 		return err
 	}
 
-	// Build item name based on charge type:
-	// - Usage charge (with meter): {plan name}-{meter name}
-	// - Recurring charge (without meter): {plan name}-Recurring-{count}
+	// Get meter if price has meter ID - used for item naming
+	var meterItem *meter.Meter
+	if priceToSync.MeterID != "" {
+		meterItem, err = s.MeterRepo.GetMeter(ctx, priceToSync.MeterID)
+		if err != nil {
+			s.Logger.Warnw("failed to find meter for price, continuing without meter name",
+				"price_id", priceToSync.ID,
+				"meter_id", priceToSync.MeterID,
+				"error", err)
+		}
+	}
+
+	// Build item name based on whether it's usage-based (with meter) or recurring (without meter)
 	var itemName string
 	if meterItem != nil && meterItem.Name != "" {
+		// Usage-based price: {plan name}-{meter name}
 		itemName = fmt.Sprintf("%s-%s", plan.Name, meterItem.Name)
 	} else {
-		itemName = fmt.Sprintf("%s-Recurring-%d", plan.Name, recurringCount)
+		// Recurring price: {plan name}-Recurring-{price_id}
+		// Using price_id ensures each recurring price gets a truly unique item name
+		itemName = fmt.Sprintf("%s-Recurring-%s", plan.Name, priceToSync.ID)
 	}
 	// Sanitize name - remove quotes and special characters that QuickBooks doesn't allow
 	itemName = sanitizeForQuickBooks(itemName)
 
-	// Check if item with same name already exists in QuickBooks
-	// This handles cases where item was created manually or in a previous sync
+	// Check if item already exists by name (avoid duplicates)
 	existingItem, err := s.Client.QueryItemByName(ctx, itemName)
 	if err == nil && existingItem != nil && existingItem.ID != "" {
-		// Create mapping for existing item instead of creating duplicate
-		if err := s.createItemMapping(ctx, priceItem.ID, existingItem.ID, existingItem.Name, plan.EnvironmentID, plan.TenantID); err != nil {
+		s.Logger.Infow("found existing item in QuickBooks by name",
+			"item_name", itemName,
+			"quickbooks_item_id", existingItem.ID)
+		// Create mapping for existing item
+		if err := s.createItemMapping(ctx, priceToSync.ID, existingItem.ID, existingItem.Name, plan.EnvironmentID, plan.TenantID); err != nil {
 			s.Logger.Debugw("failed to create item mapping",
 				"error", err,
-				"price_id", priceItem.ID)
+				"price_id", priceToSync.ID)
 		}
 		return nil
 	}
 
-	// Get income account ID from connection metadata or use default "79"
+	// Get income account ID (configurable or default to "79")
 	incomeAccountID := s.getIncomeAccountID(ctx)
 
 	// Create new item in QuickBooks
-	createReq := &ItemCreateRequest{
+	itemReq := &ItemCreateRequest{
 		Name:        itemName,
 		Type:        "Service",
-		Description: priceItem.ID, // Item Description: {price_id} as per requirements
+		Description: priceToSync.ID, // Store price ID as description for reference
 		Active:      true,
 		IncomeAccountRef: &AccountRef{
 			Value: incomeAccountID,
 		},
 	}
 
-	itemResp, err := s.Client.CreateItem(ctx, createReq)
+	itemResp, err := s.Client.CreateItem(ctx, itemReq)
 	if err != nil {
-		return ierr.NewError("failed to create item in QuickBooks").
-			WithReportableDetails(map[string]interface{}{
-				"error":    err.Error(),
-				"price_id": priceItem.ID,
-			}).
-			WithHint("Check QuickBooks API credentials and item data").
-			Mark(ierr.ErrValidation)
+		return ierr.WithError(err).
+			WithHint("Failed to create item in QuickBooks").
+			Mark(ierr.ErrInternal)
 	}
 
-	s.Logger.Infow("successfully created item in QuickBooks",
-		"plan_id", plan.ID,
-		"price_id", priceItem.ID,
+	s.Logger.Infow("created item in QuickBooks",
+		"price_id", priceToSync.ID,
 		"quickbooks_item_id", itemResp.ID,
 		"item_name", itemResp.Name)
 
-	// Create entity mapping
-	if err := s.createItemMapping(ctx, priceItem.ID, itemResp.ID, itemResp.Name, plan.EnvironmentID, plan.TenantID); err != nil {
+	// Create mapping
+	if err := s.createItemMapping(ctx, priceToSync.ID, itemResp.ID, itemResp.Name, plan.EnvironmentID, plan.TenantID); err != nil {
 		s.Logger.Errorw("failed to create item mapping",
 			"error", err,
-			"price_id", priceItem.ID,
+			"price_id", priceToSync.ID,
 			"quickbooks_item_id", itemResp.ID)
-		// Don't fail the entire operation, just log the error
+		return ierr.WithError(err).
+			WithHint("Item created in QuickBooks but mapping failed").
+			Mark(ierr.ErrDatabase)
 	}
+
+	s.Logger.Infow("successfully synced price to QuickBooks",
+		"price_id", priceToSync.ID,
+		"quickbooks_item_id", itemResp.ID)
 
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/subscription"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/interfaces"
+	temporalService "github.com/flexprice/flexprice/internal/temporal/service"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/samber/lo"
 )
@@ -40,6 +41,7 @@ func (s *planService) CreatePlan(ctx context.Context, req dto.CreatePlanRequest)
 	plan := req.ToPlan(ctx)
 
 	// Start a transaction to create plan, prices, and entitlements
+	var createdPrices []*domainPrice.Price // Track prices created for post-transaction sync
 	err := s.DB.WithTx(ctx, func(ctx context.Context) error {
 		// 1. Create the plan
 		if err := s.PlanRepo.Create(ctx, plan); err != nil {
@@ -90,6 +92,9 @@ func (s *planService) CreatePlan(ctx context.Context, req dto.CreatePlanRequest)
 			if err := s.PriceRepo.CreateBulk(ctx, prices); err != nil {
 				return err
 			}
+
+			// Store prices for post-transaction sync
+			createdPrices = prices
 		}
 
 		// 3. Create entitlements in bulk if present
@@ -145,25 +150,44 @@ func (s *planService) CreatePlan(ctx context.Context, req dto.CreatePlanRequest)
 		return nil, err
 	}
 
-	// Sync to QuickBooks if QuickBooks connection is active (no plan.outbound check needed)
-	// Get prices that were created for this plan
-	if len(req.Prices) > 0 {
-		priceService := NewPriceService(s.ServiceParams)
-		pricesResponse, err := priceService.GetPricesByPlanID(ctx, dto.GetPricesByPlanRequest{
-			PlanID:       plan.ID,
-			AllowExpired: false,
-		})
-		if err == nil && len(pricesResponse.Items) > 0 {
-			// Convert to domain prices
-			prices := make([]*domainPrice.Price, len(pricesResponse.Items))
-			for i, priceResp := range pricesResponse.Items {
-				prices[i] = priceResp.Price
-			}
-			if err := s.syncPlanToQuickBooksIfEnabled(ctx, plan, prices); err != nil {
-				s.Logger.Errorw("failed to sync plan to QuickBooks",
-					"error", err,
-					"plan_id", plan.ID)
-				// Don't fail plan creation if sync fails
+	// Sync prices to QuickBooks via Temporal if QuickBooks connection is active
+	// This is done after the transaction to ensure all data is committed
+	if len(createdPrices) > 0 {
+		if s.IntegrationFactory != nil {
+			_, err := s.IntegrationFactory.GetQuickBooksIntegration(ctx)
+			if err == nil {
+				temporalSvc := temporalService.GetGlobalTemporalService()
+				if temporalSvc != nil {
+					for _, price := range createdPrices {
+						if price.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
+							workflowInput := map[string]interface{}{
+								"price_id": price.ID,
+								"plan_id":  price.EntityID,
+							}
+
+							workflowRun, syncErr := temporalSvc.ExecuteWorkflow(
+								ctx,
+								types.TemporalQuickBooksPriceSyncWorkflow,
+								workflowInput,
+							)
+							if syncErr != nil {
+								s.Logger.Errorw("failed to start QuickBooks sync workflow",
+									"price_id", price.ID,
+									"plan_id", price.EntityID,
+									"error", syncErr)
+							} else {
+								s.Logger.Debugw("QuickBooks sync workflow started",
+									"price_id", price.ID,
+									"plan_id", price.EntityID,
+									"workflow_id", workflowRun.GetID())
+							}
+						}
+					}
+				}
+			} else if !ierr.IsNotFound(err) {
+				s.Logger.Errorw("failed to get QuickBooks integration",
+					"plan_id", plan.ID,
+					"error", err)
 			}
 		}
 	}
@@ -397,6 +421,7 @@ func (s *planService) UpdatePlan(ctx context.Context, id string, req dto.UpdateP
 	}
 
 	// Start a transaction for updating plan, prices, and entitlements
+	var newlyCreatedPrices []*domainPrice.Price // Track new prices for post-transaction sync
 	err = s.DB.WithTx(ctx, func(ctx context.Context) error {
 		// 1. Update the plan
 		if err := s.PlanRepo.Update(ctx, plan); err != nil {
@@ -487,6 +512,8 @@ func (s *planService) UpdatePlan(ctx context.Context, id string, req dto.UpdateP
 				if err := s.PriceRepo.CreateBulk(ctx, bulkCreatePrices); err != nil {
 					return err
 				}
+				// Store for post-transaction sync
+				newlyCreatedPrices = bulkCreatePrices
 			}
 		}
 
@@ -612,6 +639,46 @@ func (s *planService) UpdatePlan(ctx context.Context, id string, req dto.UpdateP
 
 	if err != nil {
 		return nil, err
+	}
+
+	// Sync newly created prices to QuickBooks if QuickBooks connection is active
+	if len(newlyCreatedPrices) > 0 {
+		// Early return if integration factory is not available
+		if s.IntegrationFactory != nil {
+			// Get QuickBooks integration - if this fails, connection doesn't exist
+			quickbooksIntegration, err := s.IntegrationFactory.GetQuickBooksIntegration(ctx)
+			if err == nil && quickbooksIntegration != nil {
+				// Get the plan for sync
+				planForSync, planErr := s.PlanRepo.Get(ctx, plan.ID)
+				if planErr == nil {
+					// Sync each price individually
+					for _, price := range newlyCreatedPrices {
+						if price.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
+							// Sync to QuickBooks - errors are logged but don't fail plan update
+							if syncErr := quickbooksIntegration.ItemSyncSvc.SyncPriceToQuickBooks(ctx, planForSync, price); syncErr != nil {
+								s.Logger.Errorw("failed to sync price to QuickBooks",
+									"price_id", price.ID,
+									"plan_id", price.EntityID,
+									"error", syncErr)
+							} else {
+								s.Logger.Infow("successfully synced price to QuickBooks",
+									"price_id", price.ID,
+									"plan_id", price.EntityID)
+							}
+						}
+					}
+				} else {
+					s.Logger.Errorw("failed to get plan for QuickBooks sync",
+						"plan_id", plan.ID,
+						"error", planErr)
+				}
+			} else if err != nil && !ierr.IsNotFound(err) {
+				// Log actual errors (not just missing connection)
+				s.Logger.Errorw("failed to get QuickBooks integration, skipping price sync",
+					"plan_id", plan.ID,
+					"error", err)
+			}
+		}
 	}
 
 	return s.GetPlan(ctx, id)
@@ -979,49 +1046,4 @@ func (s *planService) SyncSubscriptionWithPlanPrices(params *dto.SubscriptionSyn
 	}
 
 	return result
-}
-
-// syncPlanToQuickBooksIfEnabled syncs the plan and its prices to QuickBooks if QuickBooks connection is active
-// Note: We do NOT check plan.outbound - if QuickBooks connection exists, we always sync
-func (s *planService) syncPlanToQuickBooksIfEnabled(ctx context.Context, plan *plan.Plan, prices []*domainPrice.Price) error {
-	// Check if QuickBooks connection exists
-	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderQuickBooks)
-	if err != nil || conn == nil {
-		// If connection doesn't exist (not found), this is expected - just skip sync
-		if err != nil && !ierr.IsNotFound(err) {
-			// Actual error occurred (not just missing connection)
-			s.Logger.Errorw("failed to check QuickBooks connection, skipping plan sync",
-				"plan_id", plan.ID,
-				"error", err)
-			return nil // Don't fail plan creation, just skip sync
-		}
-		// Connection not found - this is expected, log at debug level
-		s.Logger.Debugw("QuickBooks connection not available, skipping plan sync",
-			"plan_id", plan.ID)
-		return nil // Not an error, just skip sync
-	}
-
-	// Get QuickBooks integration
-	qbIntegration, err := s.IntegrationFactory.GetQuickBooksIntegration(ctx)
-	if err != nil {
-		s.Logger.Errorw("failed to get QuickBooks integration, skipping plan sync",
-			"plan_id", plan.ID,
-			"error", err)
-		return nil // Don't fail the entire process, just skip plan sync
-	}
-
-	s.Logger.Infow("syncing plan to QuickBooks",
-		"plan_id", plan.ID,
-		"plan_name", plan.Name)
-
-	err = qbIntegration.ItemSyncSvc.SyncPlanToQuickBooks(ctx, plan, prices)
-	if err != nil {
-		return err
-	}
-
-	s.Logger.Infow("successfully synced plan to QuickBooks",
-		"plan_id", plan.ID,
-		"plan_name", plan.Name)
-
-	return nil
 }
