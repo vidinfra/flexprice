@@ -223,6 +223,7 @@ func main() {
 			service.NewAlertLogsService,
 			service.NewGroupService,
 			service.NewScheduledTaskService,
+			service.NewWalletPaymentService,
 		),
 	)
 

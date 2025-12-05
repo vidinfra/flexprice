@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -18,28 +17,41 @@ import (
 	"github.com/flexprice/flexprice/internal/types"
 )
 
-// FeatureUsageTrackingService handles feature usage tracking operations for metered events
+const (
+	// Event sources for tracking where alerts originated
+	EventSourceWalletCredit    = "wallet_credit"
+	EventSourceWalletDebit     = "wallet_debit"
+	EventSourceManualDebit     = "manual_debit"
+	EventSourceCreditPurchase  = "credit_purchase"
+	EventSourceCreditExpiry    = "credit_expiry"
+	EventSourceWalletTerminate = "wallet_terminate"
+	EventSourceCron            = "cron"
+	EventSourceAPI             = "api"
+)
+
+// WalletBalanceAlertService handles wallet balance alert operations via Kafka
 type WalletBalanceAlertService interface {
-	// Publish an event for wallet alerts
+	// PublishEvent publishes a wallet balance alert event to Kafka
 	PublishEvent(ctx context.Context, event *wallet.WalletBalanceAlertEvent) error
 
-	// Register Handler for this
+	// RegisterHandler registers the Kafka consumer handler
 	RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration)
 }
 
 type walletBalanceAlertService struct {
 	ServiceParams
-	pubSub pubsub.PubSub // Regular PubSub for normal processing
+	pubSub pubsub.PubSub
 }
 
 // NewWalletAlertsService creates a new wallet alerts service
-func NewWalletAlertsService(
+func NewWalletBalanceAlertService(
 	params ServiceParams,
 ) WalletBalanceAlertService {
-	ev := &walletBalanceAlertService{
+	svc := &walletBalanceAlertService{
 		ServiceParams: params,
 	}
 
+	// Initialize Kafka PubSub with dedicated consumer group
 	pubSub, err := kafka.NewPubSubFromConfig(
 		params.Config,
 		params.Logger,
@@ -47,73 +59,122 @@ func NewWalletAlertsService(
 	)
 
 	if err != nil {
-		params.Logger.Fatalw("failed to create pubsub", "error", err)
+		params.Logger.Fatalw("failed to create pubsub for wallet alerts",
+			"error", err,
+			"consumer_group", params.Config.WalletAlerts.ConsumerGroup,
+		)
 		return nil
 	}
-	ev.pubSub = pubSub
+	svc.pubSub = pubSub
 
-	return ev
+	params.Logger.Infow("wallet alerts service initialized",
+		"topic", params.Config.WalletAlerts.Topic,
+		"consumer_group", params.Config.WalletAlerts.ConsumerGroup,
+		"rate_limit", params.Config.WalletAlerts.RateLimit,
+	)
+
+	return svc
 }
 
-// PublishEvent publishes an event to the feature usage tracking topic
+// PublishEvent publishes a wallet balance alert event to Kafka
 func (s *walletBalanceAlertService) PublishEvent(ctx context.Context, event *wallet.WalletBalanceAlertEvent) error {
-	// Create message payload
-	payload, err := json.Marshal(event)
+
+	err := event.Validate()
 	if err != nil {
 		return ierr.WithError(err).
-			WithHint("Failed to marshal event for feature usage tracking").
+			WithHint("Invalid wallet balance alert event").
+			WithReportableDetails(map[string]interface{}{
+				"event_id":       event.ID,
+				"customer_id":    event.CustomerID,
+				"tenant_id":      event.TenantID,
+				"environment_id": event.EnvironmentID,
+			}).
 			Mark(ierr.ErrValidation)
 	}
 
-	// Create a deterministic partition key based on tenant_id and external_customer_id
-	// This ensures all events for the same customer go to the same partition
-	partitionKey := event.TenantID
-	if event.CustomerID != "" {
-		partitionKey = fmt.Sprintf("%s:%s", event.TenantID, event.CustomerID)
+	// Ensure event has ID and timestamp
+	if event.ID == "" {
+		event.ID = types.GenerateUUIDWithPrefix(types.UUID_PREFIX_WALLET_ALERT)
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now().UTC()
 	}
 
-	uuid := types.GenerateUUID()
-	// Make UUID truly unique by adding nanosecond precision timestamp and random bytes
-	uniqueID := fmt.Sprintf("%s-%d-%d", uuid, time.Now().UnixNano(), rand.Int63())
+	// Marshal event payload
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return ierr.WithError(err).
+			WithHint("Failed to marshal wallet balance alert event").
+			WithReportableDetails(map[string]interface{}{
+				"event_id":       event.ID,
+				"customer_id":    event.CustomerID,
+				"tenant_id":      event.TenantID,
+				"environment_id": event.EnvironmentID,
+			}).
+			Mark(ierr.ErrValidation)
+	}
 
-	// Use the partition key as the message ID to ensure consistent partitioning
-	msg := message.NewMessage(uniqueID, payload)
+	// Create deterministic partition key for consistent routing
+	// Events for the same customer always go to the same partition
+	partitionKey := s.createPartitionKey(event)
 
-	// Set metadata for additional context
-	msg.Metadata.Set("tenant_id", event.TenantID)
-	msg.Metadata.Set("environment_id", event.EnvironmentID)
-	msg.Metadata.Set("partition_key", partitionKey)
+	// Create Watermill message with unique ID
+	msg := message.NewMessage(event.ID, payload)
 
-	pubSub := s.pubSub
+	// Get topic from config
 	topic := s.Config.WalletAlerts.Topic
 
-	if pubSub == nil {
-		return ierr.NewError("pubsub not initialized").
-			WithHint("Please check the config").
+	// Validate PubSub is initialized
+	if s.pubSub == nil {
+		return ierr.NewError("pubsub not initialized for wallet alerts").
+			WithHint("Kafka PubSub failed to initialize during service creation").
+			WithReportableDetails(map[string]interface{}{
+				"topic":          topic,
+				"consumer_group": s.Config.WalletAlerts.ConsumerGroup,
+			}).
 			Mark(ierr.ErrSystem)
 	}
 
-	s.Logger.Debugw("publishing event for wallet balance alert",
-		"event_id", uuid,
+	s.Logger.Infow("publishing wallet balance alert event",
+		"event_id", event.ID,
+		"customer_id", event.CustomerID,
+		"tenant_id", event.TenantID,
+		"environment_id", event.EnvironmentID,
+		"wallet_id", event.WalletID,
 		"partition_key", partitionKey,
 		"topic", topic,
+		"source", event.Source,
+		"force_calculate", event.ForceCalculateBalance,
 	)
 
-	// Publish to wallet balance alert topic using the PubSub (Kafka)
-	if err := pubSub.Publish(ctx, topic, msg); err != nil {
+	// Publish to Kafka
+	if err := s.pubSub.Publish(ctx, topic, msg); err != nil {
 		return ierr.WithError(err).
-			WithHint("Failed to publish event for wallet balance alert").
+			WithHint("Failed to publish wallet balance alert event to Kafka").
+			WithReportableDetails(map[string]interface{}{
+				"event_id":       event.ID,
+				"customer_id":    event.CustomerID,
+				"tenant_id":      event.TenantID,
+				"environment_id": event.EnvironmentID,
+				"topic":          topic,
+			}).
 			Mark(ierr.ErrSystem)
 	}
+
+	s.Logger.Debugw("wallet balance alert event published successfully",
+		"event_id", event.ID,
+		"customer_id", event.CustomerID,
+	)
+
 	return nil
 }
 
-// RegisterHandler registers a handler for the wallet balance alert topic with rate limiting
+// RegisterHandler registers a Kafka consumer handler with rate limiting
 func (s *walletBalanceAlertService) RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration) {
-	// Add throttle middleware to this specific handler
+	// Add throttle middleware for rate limiting
 	throttle := middleware.NewThrottle(cfg.WalletAlerts.RateLimit, time.Second)
 
-	// Add the handler
+	// Register the handler
 	router.AddNoPublishHandler(
 		"wallet_balance_alert_handler",
 		cfg.WalletAlerts.Topic,
@@ -122,80 +183,89 @@ func (s *walletBalanceAlertService) RegisterHandler(router *pubsubRouter.Router,
 		throttle.Middleware,
 	)
 
-	s.Logger.Infow("registered event wallet balance alert handler",
+	s.Logger.Infow("registered wallet balance alert handler",
+		"handler_name", "wallet_balance_alert_handler",
 		"topic", cfg.WalletAlerts.Topic,
+		"consumer_group", cfg.WalletAlerts.ConsumerGroup,
 		"rate_limit", cfg.WalletAlerts.RateLimit,
 	)
-
 }
 
-// Process a single event message for wallet balance alert
+// processMessage processes a single Kafka message for wallet balance alerts
 func (s *walletBalanceAlertService) processMessage(msg *message.Message) error {
-	// Extract tenant ID from message metadata
-	partitionKey := msg.Metadata.Get("partition_key")
-	tenantID := msg.Metadata.Get("tenant_id")
-	environmentID := msg.Metadata.Get("environment_id")
+	startTime := time.Now()
 
-	s.Logger.Debugw("processing event from message queue",
-		"message_uuid", msg.UUID,
-		"partition_key", partitionKey,
-		"tenant_id", tenantID,
-		"environment_id", environmentID,
-	)
-
-	// Create a background context with tenant ID
-	ctx := context.Background()
-	if tenantID != "" {
-		ctx = context.WithValue(ctx, types.CtxTenantID, tenantID)
-	}
-
-	if environmentID != "" {
-		ctx = context.WithValue(ctx, types.CtxEnvironmentID, environmentID)
-	}
-
-	// Unmarshal the event
 	var event wallet.WalletBalanceAlertEvent
 	if err := json.Unmarshal(msg.Payload, &event); err != nil {
-		s.Logger.Errorw("failed to unmarshal event for wallet balance alert",
+		s.Logger.Errorw("failed to unmarshal wallet balance alert event",
 			"error", err,
 			"message_uuid", msg.UUID,
+			"payload_size", len(msg.Payload),
 		)
-		return nil // Don't retry on unmarshal errors
+		return nil
 	}
+	s.Logger.Infow("processing wallet balance alert message",
+		"message_uuid", msg.UUID,
+		"tenant_id", event.TenantID,
+		"environment_id", event.EnvironmentID,
+		"customer_id", event.CustomerID,
+		"event_source", event.Source,
+		"published_at", event.Timestamp,
+	)
 
-	// validate tenant id
-	if event.TenantID != tenantID {
-		s.Logger.Errorw("invalid tenant id",
-			"expected", tenantID,
-			"actual", event.TenantID,
-			"message_uuid", msg.UUID,
-		)
-		return nil // Don't retry on invalid tenant id
+	// Create context with tenant and environment IDs
+	ctx := context.Background()
+	if event.TenantID != "" {
+		ctx = context.WithValue(ctx, types.CtxTenantID, event.TenantID)
+	}
+	if event.EnvironmentID != "" {
+		ctx = context.WithValue(ctx, types.CtxEnvironmentID, event.EnvironmentID)
 	}
 
 	// Process the event
 	if err := s.processEvent(ctx, event); err != nil {
-		s.Logger.Errorw("failed to process event for wallet balance alert",
+		processingDuration := time.Since(startTime)
+		s.Logger.Errorw("failed to process wallet balance alert event",
 			"error", err,
+			"event_id", event.ID,
 			"customer_id", event.CustomerID,
 			"tenant_id", event.TenantID,
 			"environment_id", event.EnvironmentID,
+			"wallet_id", event.WalletID,
+			"source", event.Source,
+			"processing_duration_ms", processingDuration.Milliseconds(),
 		)
-		return err // Return error for retry
+		// Return error to trigger retry with backoff
+		return err
 	}
 
-	s.Logger.Infow("event for wallet balance alert processed successfully",
+	processingDuration := time.Since(startTime)
+	s.Logger.Infow("wallet balance alert event processed successfully",
+		"event_id", event.ID,
 		"customer_id", event.CustomerID,
 		"tenant_id", event.TenantID,
 		"environment_id", event.EnvironmentID,
+		"wallet_id", event.WalletID,
+		"source", event.Source,
+		"processing_duration_ms", processingDuration.Milliseconds(),
 	)
 
 	return nil
 }
 
-// Process a single event for feature usage tracking
+// processEvent delegates to the wallet service to check balance alerts
 func (s *walletBalanceAlertService) processEvent(ctx context.Context, event wallet.WalletBalanceAlertEvent) error {
+	// Create wallet service instance
 	walletService := NewWalletService(s.ServiceParams)
 
+	// Delegate to wallet service for actual processing
 	return walletService.CheckWalletBalanceAlert(ctx, &event)
+}
+
+// createPartitionKey creates a deterministic partition key for Kafka
+// This ensures all events for the same customer go to the same partition
+func (s *walletBalanceAlertService) createPartitionKey(event *wallet.WalletBalanceAlertEvent) string {
+	// Use tenant:environment:customer as partition key
+	// This balances load while ensuring consistency per customer
+	return fmt.Sprintf("%s:%s:%s", event.TenantID, event.EnvironmentID, event.CustomerID)
 }
