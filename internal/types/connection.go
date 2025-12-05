@@ -149,6 +149,9 @@ type QuickBooksConnectionMetadata struct {
 	AccessToken  string `json:"access_token,omitempty"`  // OAuth Access Token (encrypted)
 	RefreshToken string `json:"refresh_token,omitempty"` // OAuth Refresh Token (encrypted)
 
+	// Webhook security
+	WebhookVerifierToken string `json:"webhook_verifier_token,omitempty"` // QuickBooks webhook verifier token (encrypted)
+
 	// Optional configuration
 	IncomeAccountID string `json:"income_account_id,omitempty"` // QuickBooks Income Account ID (optional, defaults to "79")
 

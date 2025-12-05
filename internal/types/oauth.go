@@ -11,7 +11,14 @@ const (
 	// Common OAuth credentials
 	OAuthCredentialClientID     = "client_id"
 	OAuthCredentialClientSecret = "client_secret"
-	OAuthCredentialAPIKey       = "api_key" // For future providers
+
+	// OAuth tokens (managed by backend after auth code exchange)
+	OAuthCredentialAccessToken  = "access_token"
+	OAuthCredentialRefreshToken = "refresh_token"
+	OAuthCredentialAuthCode     = "auth_code" // Temporary during OAuth flow
+
+	// Webhook security
+	OAuthCredentialWebhookVerifierToken = "webhook_verifier_token"
 
 	// QuickBooks-specific credentials
 	// (Currently QuickBooks uses client_id and client_secret, which are common)

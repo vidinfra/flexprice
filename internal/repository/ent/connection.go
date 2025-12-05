@@ -301,6 +301,9 @@ func convertConnectionMetadataToMap(encryptedSecretData types.ConnectionMetadata
 			if encryptedSecretData.QuickBooks.IncomeAccountID != "" {
 				result["income_account_id"] = encryptedSecretData.QuickBooks.IncomeAccountID
 			}
+			if encryptedSecretData.QuickBooks.WebhookVerifierToken != "" {
+				result["webhook_verifier_token"] = encryptedSecretData.QuickBooks.WebhookVerifierToken
+			}
 			return result
 		}
 	default:

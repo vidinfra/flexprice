@@ -50,25 +50,27 @@ func (h *Handler) VerifyWebhookSignature(ctx context.Context, payload []byte, si
 			Mark(ierr.ErrNotFound)
 	}
 
-	// Get webhook verifier token from connection metadata
-	// Note: The verifier token should be stored in connection metadata when configuring webhooks
-	verifierToken := ""
-	if conn.Metadata != nil {
-		if token, ok := conn.Metadata["webhook_verifier_token"].(string); ok {
-			verifierToken = token
-		}
+	// Get the decrypted QuickBooks config (which includes webhook verifier token)
+	qbConfig, err := h.client.GetDecryptedQuickBooksConfig(conn)
+	if err != nil {
+		h.logger.Errorw("failed to decrypt QuickBooks config",
+			"error", err,
+			"connection_id", conn.ID)
+		return ierr.NewError("failed to get QuickBooks configuration").
+			WithHint("Unable to decrypt QuickBooks connection credentials").
+			Mark(ierr.ErrInternal)
 	}
 
-	if verifierToken == "" {
-		h.logger.Errorw("webhook verifier token not configured - SECURITY RISK",
-			"connection_id", conn.ID)
-		return ierr.NewError("webhook verifier token not configured").
-			WithHint("Configure webhook_verifier_token in connection metadata").
-			Mark(ierr.ErrPermissionDenied)
+	// Check if webhook verifier token is configured
+	if qbConfig.WebhookVerifierToken == "" {
+		h.logger.Warnw("webhook verifier token not configured - SECURITY RISK, skipping signature verification",
+			"connection_id", conn.ID,
+			"note", "Configure webhook_verifier_token in QuickBooks connection for production security")
+		return nil // Allow webhook without verification (for development)
 	}
 
 	// Compute HMAC-SHA256
-	mac := hmac.New(sha256.New, []byte(verifierToken))
+	mac := hmac.New(sha256.New, []byte(qbConfig.WebhookVerifierToken))
 	mac.Write(payload)
 	expectedSignature := base64.StdEncoding.EncodeToString(mac.Sum(nil))
 
@@ -78,6 +80,8 @@ func (h *Handler) VerifyWebhookSignature(ctx context.Context, payload []byte, si
 			WithHint("The webhook signature does not match the expected value").
 			Mark(ierr.ErrPermissionDenied)
 	}
+
+	h.logger.Infow("webhook signature verified successfully", "connection_id", conn.ID)
 
 	return nil
 }

@@ -2,7 +2,6 @@ package quickbooks
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
@@ -12,15 +11,13 @@ import (
 	"github.com/flexprice/flexprice/internal/interfaces"
 	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
 // QuickBooksPaymentService defines the interface for QuickBooks payment operations
 type QuickBooksPaymentService interface {
-	// SyncPaymentToQuickBooks syncs a Flexprice payment to QuickBooks
-	SyncPaymentToQuickBooks(ctx context.Context, paymentID string, paymentService interfaces.PaymentService, invoiceService interfaces.InvoiceService) error
-
-	// HandleExternalPaymentFromWebhook processes a QuickBooks payment webhook
+	// HandleExternalPaymentFromWebhook processes a QuickBooks payment webhook (INBOUND ONLY)
 	HandleExternalPaymentFromWebhook(ctx context.Context, qbPaymentID string, paymentService interfaces.PaymentService, invoiceService interfaces.InvoiceService) error
 }
 
@@ -50,173 +47,6 @@ func NewPaymentService(params PaymentServiceParams) QuickBooksPaymentService {
 	}
 }
 
-// SyncPaymentToQuickBooks syncs a Flexprice payment to QuickBooks (OUTBOUND SYNC)
-//
-// FLOW: Flexprice → QuickBooks
-// TRIGGER: When an invoice is paid in Flexprice (via Stripe, Razorpay, etc.)
-//
-// WHAT IT DOES:
-// 1. Gets the payment details from Flexprice
-// 2. Finds the linked QuickBooks invoice via entity mapping
-// 3. Creates a Payment entity in QuickBooks
-// 4. QuickBooks automatically marks the invoice as PAID and CLOSED
-// 5. Stores the payment mapping (Flexprice payment ID ↔ QuickBooks payment ID)
-// 6. Updates Flexprice payment metadata with QuickBooks details
-//
-// IMPORTANT: Creating a Payment in QuickBooks automatically closes the invoice!
-func (s *PaymentService) SyncPaymentToQuickBooks(ctx context.Context, paymentID string, paymentService interfaces.PaymentService, invoiceService interfaces.InvoiceService) error {
-	s.logger.Debugw("syncing payment to QuickBooks",
-		"payment_id", paymentID)
-
-	// Get the payment
-	paymentResp, err := paymentService.GetPayment(ctx, paymentID)
-	if err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to get payment for QuickBooks sync").
-			Mark(ierr.ErrNotFound)
-	}
-
-	// Only sync invoice payments
-	if paymentResp.DestinationType != types.PaymentDestinationTypeInvoice {
-		s.logger.Debugw("skipping non-invoice payment for QuickBooks sync",
-			"payment_id", paymentID,
-			"destination_type", paymentResp.DestinationType)
-		return nil
-	}
-
-	// Check if payment is already synced
-	existingMapping, err := s.findMappingByEntityAndProvider(ctx, paymentID, types.IntegrationEntityTypePayment)
-	if err != nil && !ierr.IsNotFound(err) {
-		return ierr.WithError(err).
-			WithHint("Failed to check existing payment mapping").
-			Mark(ierr.ErrDatabase)
-	}
-	if existingMapping != nil {
-		s.logger.Debugw("payment already synced to QuickBooks",
-			"payment_id", paymentID,
-			"quickbooks_payment_id", existingMapping.ProviderEntityID)
-		return nil
-	}
-
-	// Find QuickBooks invoice mapping
-	invoiceMapping, err := s.findMappingByEntityAndProvider(ctx, paymentResp.DestinationID, types.IntegrationEntityTypeInvoice)
-	if err != nil {
-		if ierr.IsNotFound(err) {
-			s.logger.Debugw("invoice not synced to QuickBooks, skipping payment sync",
-				"payment_id", paymentID,
-				"invoice_id", paymentResp.DestinationID)
-			return nil
-		}
-		return ierr.WithError(err).
-			WithHint("Failed to get invoice mapping for QuickBooks").
-			Mark(ierr.ErrDatabase)
-	}
-
-	qbInvoiceID := invoiceMapping.ProviderEntityID
-
-	// Get the QuickBooks invoice to get customer reference
-	qbInvoice, err := s.client.GetInvoice(ctx, qbInvoiceID)
-	if err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to get QuickBooks invoice for payment").
-			Mark(ierr.ErrHTTPClient)
-	}
-
-	// Create payment in QuickBooks
-	paymentAmount, _ := paymentResp.Amount.Float64()
-	txnDate := time.Now().Format("2006-01-02")
-	if paymentResp.SucceededAt != nil {
-		txnDate = paymentResp.SucceededAt.Format("2006-01-02")
-	}
-
-	createReq := &PaymentCreateRequest{
-		CustomerRef: AccountRef{
-			Value: qbInvoice.CustomerRef.Value,
-		},
-		TotalAmt: paymentAmount,
-		TxnDate:  txnDate,
-		Line: []PaymentLine{
-			{
-				Amount: paymentAmount,
-				LinkedTxn: []LinkedTxn{
-					{
-						TxnId:   qbInvoiceID,
-						TxnType: "Invoice",
-					},
-				},
-			},
-		},
-		PrivateNote: fmt.Sprintf("Payment recorded by: flexprice\nFlexprice Invoice ID: %s\nPayment Method: %s", paymentResp.DestinationID, paymentResp.PaymentMethodType),
-	}
-
-	qbPayment, err := s.client.CreatePayment(ctx, createReq)
-	if err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to create payment in QuickBooks").
-			Mark(ierr.ErrHTTPClient)
-	}
-
-	// Create entity integration mapping for the payment
-	mapping := &entityintegrationmapping.EntityIntegrationMapping{
-		ID:               types.GenerateUUIDWithPrefix(types.UUID_PREFIX_ENTITY_INTEGRATION_MAPPING),
-		EntityID:         paymentID,
-		EntityType:       types.IntegrationEntityTypePayment,
-		ProviderType:     string(types.SecretProviderQuickBooks),
-		ProviderEntityID: qbPayment.ID,
-		Metadata: map[string]interface{}{
-			"quickbooks_invoice_id": qbInvoiceID,
-			"flexprice_invoice_id":  paymentResp.DestinationID,
-			"payment_amount":        paymentResp.Amount.String(),
-			"payment_method":        string(paymentResp.PaymentMethodType),
-			"synced_at":             time.Now().UTC().Format(time.RFC3339),
-			"sync_source":           "flexprice",
-		},
-		EnvironmentID: types.GetEnvironmentID(ctx),
-		BaseModel:     types.GetDefaultBaseModel(ctx),
-	}
-
-	if err := s.entityIntegrationMappingRepo.Create(ctx, mapping); err != nil {
-		s.logger.Errorw("failed to create payment mapping, payment was created in QuickBooks",
-			"error", err,
-			"payment_id", paymentID,
-			"quickbooks_payment_id", qbPayment.ID)
-		// Don't return error since payment was created successfully
-	}
-
-	// Update payment metadata with QuickBooks information
-	currentMetadata := paymentResp.Metadata
-	if currentMetadata == nil {
-		currentMetadata = make(map[string]string)
-	}
-
-	// Store QuickBooks sync information in payment metadata
-	currentMetadata["quickbooks_payment_id"] = qbPayment.ID
-	currentMetadata["quickbooks_invoice_id"] = qbInvoiceID
-	currentMetadata["entity_mapping_id"] = mapping.ID
-	currentMetadata["quickbooks_sync_source"] = "flexprice_outbound"
-
-	// Update payment with metadata
-	updateReq := &dto.UpdatePaymentRequest{
-		Metadata: &currentMetadata,
-	}
-
-	if _, err := paymentService.UpdatePayment(ctx, paymentID, *updateReq); err != nil {
-		s.logger.Errorw("failed to update payment metadata with QuickBooks info",
-			"error", err,
-			"payment_id", paymentID,
-			"quickbooks_payment_id", qbPayment.ID)
-		// Don't return error since payment was created successfully in QuickBooks
-	}
-
-	s.logger.Infow("successfully synced payment to QuickBooks",
-		"payment_id", paymentID,
-		"quickbooks_payment_id", qbPayment.ID,
-		"quickbooks_invoice_id", qbInvoiceID,
-		"amount", paymentAmount)
-
-	return nil
-}
-
 // HandleExternalPaymentFromWebhook processes a QuickBooks payment webhook (INBOUND SYNC)
 //
 // FLOW: QuickBooks → Flexprice
@@ -226,16 +56,15 @@ func (s *PaymentService) SyncPaymentToQuickBooks(ctx context.Context, paymentID 
 // 1. Receives webhook notification (minimal data: just payment ID)
 // 2. Calls QuickBooks API to get full payment details (amount, linked invoice, date)
 // 3. Finds the Flexprice invoice via entity mapping
-// 4. Marks the Flexprice invoice as SUCCEEDED (no payment record created!)
-// 5. Updates invoice metadata with QuickBooks payment details
+// 4. Creates a payment record in Flexprice with QuickBooks details in metadata
+// 5. Uses ReconcilePaymentStatus() to update invoice (supports partial payments!)
 //
-// IMPORTANT: We DON'T create a payment record in Flexprice, just mark invoice as paid!
-// WHY: Simpler, avoids precision issues, invoice has all needed info (amount, date, status)
+// IMPORTANT: Now creates payment records, supports partial payments!
 func (s *PaymentService) HandleExternalPaymentFromWebhook(ctx context.Context, qbPaymentID string, paymentService interfaces.PaymentService, invoiceService interfaces.InvoiceService) error {
-	s.logger.Infow("processing QuickBooks payment webhook - simple approach",
+	s.logger.Infow("processing QuickBooks payment webhook",
 		"quickbooks_payment_id", qbPaymentID)
 
-	// Fetch payment details from QuickBooks to get the linked invoice
+	// Fetch payment details from QuickBooks to get the linked invoice and amount
 	qbPayment, err := s.client.GetPayment(ctx, qbPaymentID)
 	if err != nil {
 		s.logger.Errorw("failed to get payment from QuickBooks",
@@ -246,10 +75,12 @@ func (s *PaymentService) HandleExternalPaymentFromWebhook(ctx context.Context, q
 
 	// Find invoice references in payment lines
 	var qbInvoiceID string
+	var paymentAmount float64
 	for _, line := range qbPayment.Line {
 		for _, txn := range line.LinkedTxn {
 			if txn.TxnType == "Invoice" {
 				qbInvoiceID = txn.TxnId
+				paymentAmount = line.Amount // Get actual payment amount
 				break
 			}
 		}
@@ -281,52 +112,196 @@ func (s *PaymentService) HandleExternalPaymentFromWebhook(ctx context.Context, q
 
 	flexpriceInvoiceID := invoiceMapping.EntityID
 
-	// Get the invoice
-	invoice, err := s.invoiceRepo.Get(ctx, flexpriceInvoiceID)
-	if err != nil {
-		s.logger.Errorw("failed to get Flexprice invoice",
-			"error", err,
-			"invoice_id", flexpriceInvoiceID)
-		return nil
-	}
+	s.logger.Infow("found Flexprice invoice for QuickBooks payment",
+		"flexprice_invoice_id", flexpriceInvoiceID,
+		"quickbooks_invoice_id", qbInvoiceID,
+		"quickbooks_payment_id", qbPaymentID,
+		"payment_amount", paymentAmount)
 
-	// Check if already succeeded
-	if invoice.PaymentStatus == types.PaymentStatusSucceeded {
-		s.logger.Infow("invoice already succeeded, skipping",
-			"invoice_id", flexpriceInvoiceID,
+	// Create external payment record
+	err = s.createExternalPaymentRecord(ctx, qbPayment, qbInvoiceID, invoiceMapping.ID, flexpriceInvoiceID, paymentService, invoiceService)
+	if err != nil {
+		s.logger.Errorw("failed to create external payment record",
+			"error", err,
 			"quickbooks_payment_id", qbPaymentID)
 		return nil
 	}
 
-	// Update invoice to succeeded with offline payment method
-	now := time.Now().UTC()
-	invoice.PaymentStatus = types.PaymentStatusSucceeded
-	invoice.PaidAt = &now
-	invoice.AmountPaid = invoice.AmountDue
-	invoice.AmountRemaining = decimal.Zero
-
-	// Add QuickBooks sync details to invoice metadata
-	if invoice.Metadata == nil {
-		invoice.Metadata = make(types.Metadata)
-	}
-	invoice.Metadata["payment_recorded_by"] = "quickbooks"
-	invoice.Metadata["payment_method"] = "offline"
-	invoice.Metadata["quickbooks_payment_id"] = qbPaymentID
-	invoice.Metadata["quickbooks_invoice_id"] = qbInvoiceID
-	invoice.Metadata["entity_mapping_id"] = invoiceMapping.ID
-	invoice.Metadata["payment_synced_at"] = now.Format(time.RFC3339)
-
-	if err := s.invoiceRepo.Update(ctx, invoice); err != nil {
-		s.logger.Errorw("failed to update invoice status",
+	// Reconcile invoice with external payment (supports partial payments!)
+	amount := decimal.NewFromFloat(paymentAmount)
+	err = s.reconcileInvoiceWithExternalPayment(ctx, flexpriceInvoiceID, amount, invoiceService)
+	if err != nil {
+		s.logger.Errorw("failed to reconcile invoice with external payment",
 			"error", err,
-			"invoice_id", flexpriceInvoiceID)
+			"invoice_id", flexpriceInvoiceID,
+			"payment_amount", amount)
 		return nil
 	}
 
-	s.logger.Infow("successfully marked Flexprice invoice as paid from QuickBooks",
+	s.logger.Infow("successfully processed QuickBooks payment webhook",
 		"quickbooks_payment_id", qbPaymentID,
 		"quickbooks_invoice_id", qbInvoiceID,
-		"flexprice_invoice_id", flexpriceInvoiceID)
+		"flexprice_invoice_id", flexpriceInvoiceID,
+		"payment_amount", amount)
+
+	return nil
+}
+
+// createExternalPaymentRecord creates a payment record in Flexprice for external QuickBooks payment
+func (s *PaymentService) createExternalPaymentRecord(ctx context.Context, qbPayment *PaymentResponse, qbInvoiceID, entityMappingID, invoiceID string, paymentService interfaces.PaymentService, invoiceService interfaces.InvoiceService) error {
+	// Check if payment already exists (idempotency) - use filter approach
+	filter := types.NewNoLimitPaymentFilter()
+	filter.GatewayPaymentID = &qbPayment.ID
+	listResp, err := paymentService.ListPayments(ctx, filter)
+	if err == nil && listResp != nil && len(listResp.Items) > 0 {
+		s.logger.Infow("payment already exists, skipping creation",
+			"payment_id", listResp.Items[0].ID,
+			"quickbooks_payment_id", qbPayment.ID)
+		return nil
+	}
+
+	// Extract actual payment amount from payment lines
+	var paymentAmount float64
+	for _, line := range qbPayment.Line {
+		paymentAmount += line.Amount
+	}
+
+	amount := decimal.NewFromFloat(paymentAmount)
+
+	// Get invoice to get currency
+	invoiceResp, err := invoiceService.GetInvoice(ctx, invoiceID)
+	if err != nil {
+		s.logger.Errorw("failed to get invoice for payment creation",
+			"error", err,
+			"invoice_id", invoiceID)
+		return err
+	}
+
+	s.logger.Infow("creating external payment record for QuickBooks payment",
+		"quickbooks_payment_id", qbPayment.ID,
+		"invoice_id", invoiceID,
+		"amount", amount,
+		"currency", invoiceResp.Currency)
+
+	// Create payment with QuickBooks details in metadata
+	// Use "razorpay" gateway since we don't have "offline" - it's for external payments
+	gatewayType := types.PaymentGatewayTypeRazorpay
+	methodType := types.PaymentMethodTypeOffline
+
+	createReq := &dto.CreatePaymentRequest{
+		DestinationType:   types.PaymentDestinationTypeInvoice,
+		DestinationID:     invoiceID,
+		Amount:            amount,
+		Currency:          invoiceResp.Currency,
+		PaymentGateway:    &gatewayType,
+		PaymentMethodType: methodType,
+		ProcessPayment:    false, // Don't process - already succeeded in QuickBooks
+		Metadata: types.Metadata{
+			"payment_source":          "quickbooks_external",
+			"quickbooks_payment_id":   qbPayment.ID,
+			"quickbooks_invoice_id":   qbInvoiceID,
+			"entity_mapping_id":       entityMappingID,
+			"webhook_event_id":        qbPayment.ID, // For idempotency
+			"quickbooks_payment_date": qbPayment.TxnDate,
+		},
+	}
+
+	// Add customer ref if available
+	if qbPayment.CustomerRef.Value != "" {
+		createReq.Metadata["quickbooks_customer_id"] = qbPayment.CustomerRef.Value
+	}
+
+	// Add private note if available
+	if qbPayment.PrivateNote != "" {
+		createReq.Metadata["quickbooks_note"] = qbPayment.PrivateNote
+	}
+
+	paymentResp, err := paymentService.CreatePayment(ctx, createReq)
+	if err != nil {
+		s.logger.Errorw("failed to create external payment record",
+			"error", err,
+			"quickbooks_payment_id", qbPayment.ID,
+			"invoice_id", invoiceID)
+		return err
+	}
+
+	// Update payment to succeeded status with QuickBooks details
+	now := time.Now().UTC()
+	updateReq := dto.UpdatePaymentRequest{
+		PaymentStatus:    lo.ToPtr(string(types.PaymentStatusSucceeded)),
+		GatewayPaymentID: lo.ToPtr(qbPayment.ID),
+		PaymentGateway:   lo.ToPtr(string(types.PaymentGatewayTypeRazorpay)),
+		SucceededAt:      &now,
+	}
+
+	_, err = paymentService.UpdatePayment(ctx, paymentResp.ID, updateReq)
+	if err != nil {
+		s.logger.Errorw("failed to update external payment status",
+			"error", err,
+			"payment_id", paymentResp.ID,
+			"quickbooks_payment_id", qbPayment.ID)
+		return err
+	}
+
+	s.logger.Infow("successfully created external payment record",
+		"payment_id", paymentResp.ID,
+		"quickbooks_payment_id", qbPayment.ID,
+		"invoice_id", invoiceID,
+		"amount", amount)
+
+	return nil
+}
+
+// reconcileInvoiceWithExternalPayment reconciles an invoice with an external QuickBooks payment
+// It supports partial payments!
+func (s *PaymentService) reconcileInvoiceWithExternalPayment(ctx context.Context, invoiceID string, paymentAmount decimal.Decimal, invoiceService interfaces.InvoiceService) error {
+	// Get invoice to calculate new payment status
+	invoiceResp, err := invoiceService.GetInvoice(ctx, invoiceID)
+	if err != nil {
+		s.logger.Errorw("failed to get invoice for external payment reconciliation",
+			"error", err,
+			"invoice_id", invoiceID)
+		return err
+	}
+
+	// Calculate new amounts
+	newAmountPaid := invoiceResp.AmountPaid.Add(paymentAmount)
+	newAmountRemaining := invoiceResp.AmountDue.Sub(newAmountPaid)
+
+	// Determine payment status (SUPPORTS PARTIAL PAYMENTS!)
+	var newPaymentStatus types.PaymentStatus
+	if newAmountRemaining.IsZero() {
+		newPaymentStatus = types.PaymentStatusSucceeded // Fully paid
+	} else if newAmountRemaining.IsNegative() {
+		newPaymentStatus = types.PaymentStatusOverpaid // Overpaid
+	} else {
+		newPaymentStatus = types.PaymentStatusPending // Partial payment
+	}
+
+	s.logger.Infow("calculated payment status for external QuickBooks payment",
+		"invoice_id", invoiceID,
+		"payment_amount", paymentAmount,
+		"current_amount_paid", invoiceResp.AmountPaid,
+		"new_amount_paid", newAmountPaid,
+		"amount_due", invoiceResp.AmountDue,
+		"new_amount_remaining", newAmountRemaining,
+		"new_payment_status", newPaymentStatus)
+
+	// Use ReconcilePaymentStatus
+	err = invoiceService.ReconcilePaymentStatus(ctx, invoiceID, newPaymentStatus, &paymentAmount)
+	if err != nil {
+		s.logger.Errorw("failed to update invoice payment status",
+			"error", err,
+			"invoice_id", invoiceID,
+			"payment_amount", paymentAmount,
+			"payment_status", newPaymentStatus)
+		return err
+	}
+
+	s.logger.Infow("successfully reconciled invoice with external QuickBooks payment",
+		"invoice_id", invoiceID,
+		"payment_amount", paymentAmount,
+		"payment_status", newPaymentStatus)
 
 	return nil
 }

@@ -195,18 +195,20 @@ func convertFlatMetadataToStructured(flatMetadata map[string]interface{}, provid
 
 // UpdateConnectionRequest represents the request to update a connection
 type UpdateConnectionRequest struct {
-	Name       string                 `json:"name,omitempty" validate:"omitempty,max=255"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
-	SyncConfig *types.SyncConfig      `json:"sync_config,omitempty" validate:"omitempty,dive"`
+	Name                string                     `json:"name,omitempty" validate:"omitempty,max=255"`
+	Metadata            map[string]interface{}     `json:"metadata,omitempty"`
+	SyncConfig          *types.SyncConfig          `json:"sync_config,omitempty" validate:"omitempty,dive"`
+	EncryptedSecretData *types.ConnectionMetadata  `json:"encrypted_secret_data,omitempty"` // For updating webhook tokens, etc.
 }
 
 // UnmarshalJSON custom unmarshaling to handle flat metadata structure
 func (req *UpdateConnectionRequest) UnmarshalJSON(data []byte) error {
 	// First, unmarshal to a temporary struct to get the raw data
 	var temp struct {
-		Name       string                 `json:"name"`
-		Metadata   map[string]interface{} `json:"metadata,omitempty"`
-		SyncConfig *types.SyncConfig      `json:"sync_config,omitempty"`
+		Name                string                    `json:"name"`
+		Metadata            map[string]interface{}    `json:"metadata,omitempty"`
+		SyncConfig          *types.SyncConfig         `json:"sync_config,omitempty"`
+		EncryptedSecretData *types.ConnectionMetadata `json:"encrypted_secret_data,omitempty"`
 	}
 
 	if err := json.Unmarshal(data, &temp); err != nil {
@@ -217,6 +219,7 @@ func (req *UpdateConnectionRequest) UnmarshalJSON(data []byte) error {
 	req.Name = temp.Name
 	req.Metadata = temp.Metadata
 	req.SyncConfig = temp.SyncConfig
+	req.EncryptedSecretData = temp.EncryptedSecretData
 
 	return nil
 }

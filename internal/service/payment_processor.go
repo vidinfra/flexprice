@@ -637,15 +637,6 @@ func (p *paymentProcessor) handleInvoicePostProcessing(ctx context.Context, paym
 			"error", err)
 	}
 
-	// Sync payment to QuickBooks if outbound sync is enabled
-	if err := p.syncPaymentToQuickBooks(ctx, paymentObj, invoice); err != nil {
-		p.Logger.Errorw("failed to sync payment to QuickBooks",
-			"error", err,
-			"payment_id", paymentObj.ID,
-			"invoice_id", invoice.ID)
-		// Don't fail the payment processing, just log the error
-	}
-
 	return nil
 }
 
@@ -886,81 +877,6 @@ func (p *paymentProcessor) handleIncompleteSubscriptionPayment(ctx context.Conte
 	p.Logger.Infow("successfully activated subscription after first invoice payment",
 		"invoice_id", invoice.ID,
 		"subscription_id", *invoice.SubscriptionID)
-
-	return nil
-}
-
-// syncPaymentToQuickBooks syncs a successful payment to QuickBooks if outbound sync is enabled
-func (p *paymentProcessor) syncPaymentToQuickBooks(ctx context.Context, paymentObj *payment.Payment, invoice *invoice.Invoice) error {
-	// Defensive nil checks
-	if paymentObj == nil {
-		p.Logger.Warnw("skipping QuickBooks sync: payment is nil")
-		return nil
-	}
-	if invoice == nil {
-		p.Logger.Warnw("skipping QuickBooks sync: invoice is nil",
-			"payment_id", paymentObj.ID)
-		return nil
-	}
-
-	// Check if IntegrationFactory is available
-	if p.IntegrationFactory == nil {
-		p.Logger.Debugw("skipping QuickBooks sync: IntegrationFactory not available",
-			"payment_id", paymentObj.ID)
-		return nil
-	}
-
-	// Get the QuickBooks connection for this environment
-	conn, err := p.ConnectionRepo.GetByProvider(ctx, types.SecretProviderQuickBooks)
-	if err != nil {
-		// No QuickBooks connection found, skip sync
-		if ierr.IsNotFound(err) {
-			return nil
-		}
-		return err
-	}
-
-	// Check if payment outbound sync is enabled
-	if !conn.IsPaymentOutboundEnabled() {
-		p.Logger.Debugw("payment outbound sync disabled, skipping QuickBooks sync",
-			"connection_id", conn.ID,
-			"payment_id", paymentObj.ID)
-		return nil
-	}
-
-	p.Logger.Debugw("processing payment outbound sync to QuickBooks",
-		"payment_id", paymentObj.ID,
-		"invoice_id", invoice.ID,
-		"connection_id", conn.ID,
-		"amount", paymentObj.Amount.String())
-
-	// Get QuickBooks integration
-	qbIntegration, err := p.IntegrationFactory.GetQuickBooksIntegration(ctx)
-	if err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to get QuickBooks integration").
-			Mark(ierr.ErrSystem)
-	}
-
-	// Get payment and invoice services
-	paymentService := NewPaymentService(p.ServiceParams)
-	invoiceService := NewInvoiceService(p.ServiceParams)
-
-	// Sync payment to QuickBooks
-	err = qbIntegration.PaymentSvc.SyncPaymentToQuickBooks(ctx, paymentObj.ID, paymentService, invoiceService)
-	if err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to sync payment to QuickBooks").
-			WithReportableDetails(map[string]interface{}{
-				"payment_id": paymentObj.ID,
-				"invoice_id": invoice.ID,
-			}).
-			Mark(ierr.ErrSystem)
-	}
-
-	p.Logger.Infow("successfully synced payment to QuickBooks",
-		"payment_id", paymentObj.ID,
-		"invoice_id", invoice.ID)
 
 	return nil
 }

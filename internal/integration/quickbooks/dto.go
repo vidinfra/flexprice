@@ -155,16 +155,6 @@ type QueryResponse struct {
 	} `json:"QueryResponse"`
 }
 
-// PaymentCreateRequest represents the request to create a payment in QuickBooks
-// This creates an accounting record that payment was received against an invoice
-type PaymentCreateRequest struct {
-	CustomerRef AccountRef    `json:"CustomerRef"`           // REQUIRED: Customer who made the payment
-	TotalAmt    float64       `json:"TotalAmt"`              // REQUIRED: Total payment amount
-	TxnDate     string        `json:"TxnDate,omitempty"`     // OPTIONAL: Payment date (YYYY-MM-DD), defaults to today
-	Line        []PaymentLine `json:"Line"`                  // REQUIRED: Invoice to apply this payment to (1:1 relationship)
-	PrivateNote string        `json:"PrivateNote,omitempty"` // OPTIONAL: Internal memo (not visible to customer)
-}
-
 // PaymentLine represents a line item in a payment linking to an invoice
 // We always link to exactly ONE invoice (1:1 relationship)
 type PaymentLine struct {
@@ -188,16 +178,4 @@ type PaymentResponse struct {
 	CustomerRef AccountRef    `json:"CustomerRef"`           // Customer who made payment
 	Line        []PaymentLine `json:"Line,omitempty"`        // CRITICAL: Contains which invoices were paid
 	PrivateNote string        `json:"PrivateNote,omitempty"` // Our memo: "Payment recorded by: flexprice"
-}
-
-// QuickBooksPaymentSyncRequest represents a request to sync a payment to QuickBooks
-type QuickBooksPaymentSyncRequest struct {
-	PaymentID string `json:"payment_id" validate:"required"`
-}
-
-// QuickBooksPaymentSyncResponse represents the response from syncing a payment to QuickBooks
-type QuickBooksPaymentSyncResponse struct {
-	QuickBooksPaymentID string  `json:"quickbooks_payment_id"`
-	QuickBooksInvoiceID string  `json:"quickbooks_invoice_id"`
-	Amount              float64 `json:"amount"`
 }

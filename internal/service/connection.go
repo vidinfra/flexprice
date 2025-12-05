@@ -216,16 +216,26 @@ func (s *connectionService) encryptMetadata(encryptedSecretData types.Connection
 			}
 		}
 
+		// Encrypt webhook verifier token if provided (optional, for webhook security)
+		var encryptedWebhookVerifierToken string
+		if encryptedSecretData.QuickBooks.WebhookVerifierToken != "" {
+			encryptedWebhookVerifierToken, err = s.encryptionService.Encrypt(encryptedSecretData.QuickBooks.WebhookVerifierToken)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+		}
+
 		encryptedMetadata.QuickBooks = &types.QuickBooksConnectionMetadata{
-			ClientID:        encryptedClientID,
-			ClientSecret:    encryptedClientSecret,
-			AuthCode:        encryptedAuthCode,
-			RedirectURI:     encryptedSecretData.QuickBooks.RedirectURI,
-			AccessToken:     encryptedAccessToken,
-			RefreshToken:    encryptedRefreshToken,
-			RealmID:         encryptedSecretData.QuickBooks.RealmID,
-			Environment:     encryptedSecretData.QuickBooks.Environment,
-			IncomeAccountID: encryptedSecretData.QuickBooks.IncomeAccountID,
+			ClientID:             encryptedClientID,
+			ClientSecret:         encryptedClientSecret,
+			AuthCode:             encryptedAuthCode,
+			RedirectURI:          encryptedSecretData.QuickBooks.RedirectURI,
+			AccessToken:          encryptedAccessToken,
+			RefreshToken:         encryptedRefreshToken,
+			RealmID:              encryptedSecretData.QuickBooks.RealmID,
+			Environment:          encryptedSecretData.QuickBooks.Environment,
+			IncomeAccountID:      encryptedSecretData.QuickBooks.IncomeAccountID,
+			WebhookVerifierToken: encryptedWebhookVerifierToken,
 		}
 
 	default:
@@ -423,6 +433,32 @@ func (s *connectionService) UpdateConnection(ctx context.Context, id string, req
 	if req.SyncConfig != nil {
 		conn.SyncConfig = req.SyncConfig
 	}
+
+	// Update encrypted_secret_data if provided (e.g., webhook_verifier_token)
+	// Only process if there's actual provider-specific data (not just an empty wrapper struct)
+	if req.EncryptedSecretData != nil && req.EncryptedSecretData.QuickBooks != nil {
+		// Encrypt and merge the new secret data with existing data
+		encryptedMetadata, err := s.encryptMetadata(*req.EncryptedSecretData, conn.ProviderType)
+		if err != nil {
+			s.Logger.Errorw("failed to encrypt connection metadata during update", "error", err, "connection_id", id)
+			return nil, err
+		}
+
+		// Merge with existing encrypted_secret_data for QuickBooks
+		// This ensures we don't overwrite existing tokens (access_token, refresh_token, etc.)
+		if conn.ProviderType == types.SecretProviderQuickBooks {
+			existingData := conn.EncryptedSecretData
+			if existingData.QuickBooks == nil {
+				existingData.QuickBooks = &types.QuickBooksConnectionMetadata{}
+			}
+			if encryptedMetadata.QuickBooks != nil && encryptedMetadata.QuickBooks.WebhookVerifierToken != "" {
+				// Only update webhook_verifier_token, don't overwrite access_token, refresh_token, etc.
+				existingData.QuickBooks.WebhookVerifierToken = encryptedMetadata.QuickBooks.WebhookVerifierToken
+			}
+			conn.EncryptedSecretData = existingData
+		}
+	}
+
 	conn.UpdatedAt = time.Now()
 	conn.UpdatedBy = types.GetUserID(ctx)
 

@@ -91,6 +91,19 @@ func (s *oauthService) StoreOAuthSession(ctx context.Context, session *types.OAu
 
 	// CRITICAL: Encrypt all credentials before storing
 	encryptedCredentials := make(map[string]string)
+
+	// DEBUG: Log what credentials we received
+	s.logger.Debugw("storing OAuth session credentials",
+		"session_id", session.SessionID,
+		"credentials_count", len(session.Credentials),
+		"credentials_keys", func() []string {
+			keys := make([]string, 0, len(session.Credentials))
+			for k := range session.Credentials {
+				keys = append(keys, k)
+			}
+			return keys
+		}())
+
 	for key, value := range session.Credentials {
 		encrypted, err := s.encryptionService.Encrypt(value)
 		if err != nil {
@@ -518,6 +531,7 @@ func (s *oauthService) ExchangeCodeForConnection(
 		// Build and encrypt QuickBooks connection metadata
 		clientID := session.GetCredential(types.OAuthCredentialClientID)
 		clientSecret := session.GetCredential(types.OAuthCredentialClientSecret)
+		webhookToken := session.GetCredential(types.OAuthCredentialWebhookVerifierToken) // Extract from credentials, not metadata
 		environment := session.GetMetadata(types.OAuthMetadataEnvironment)
 		redirectURI := session.GetMetadata(types.OAuthMetadataRedirectURI)
 		incomeAccountID := session.GetMetadata(types.OAuthMetadataIncomeAccountID)
@@ -544,16 +558,28 @@ func (s *oauthService) ExchangeCodeForConnection(
 				Mark(ierr.ErrInternal)
 		}
 
+		// Encrypt webhook_verifier_token if provided in credentials (following Chargebee pattern)
+		var encryptedWebhookToken string
+		if webhookToken != "" {
+			encryptedWebhookToken, err = s.encryptionService.Encrypt(webhookToken)
+			if err != nil {
+				return "", ierr.WithError(err).
+					WithHint("Failed to encrypt webhook verifier token").
+					Mark(ierr.ErrInternal)
+			}
+		}
+
 		// Update connection with encrypted credentials (replace OAuth session data)
 		conn.EncryptedSecretData = types.ConnectionMetadata{
 			QuickBooks: &types.QuickBooksConnectionMetadata{
-				ClientID:        encryptedClientID,
-				ClientSecret:    encryptedClientSecret,
-				RealmID:         realmID,
-				Environment:     environment,
-				AuthCode:        encryptedAuthCode,
-				RedirectURI:     redirectURI,
-				IncomeAccountID: incomeAccountID,
+				ClientID:             encryptedClientID,
+				ClientSecret:         encryptedClientSecret,
+				RealmID:              realmID,
+				Environment:          environment,
+				AuthCode:             encryptedAuthCode,
+				RedirectURI:          redirectURI,
+				IncomeAccountID:      incomeAccountID,
+				WebhookVerifierToken: encryptedWebhookToken, // Include webhook token if provided
 			},
 		}
 

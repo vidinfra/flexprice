@@ -178,6 +178,9 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		if incomeAccountID, ok := metadata["income_account_id"].(string); ok {
 			qbMetadata.IncomeAccountID = incomeAccountID
 		}
+		if webhookVerifierToken, ok := metadata["webhook_verifier_token"].(string); ok {
+			qbMetadata.WebhookVerifierToken = webhookVerifierToken
+		}
 		return types.ConnectionMetadata{
 			QuickBooks: qbMetadata,
 		}

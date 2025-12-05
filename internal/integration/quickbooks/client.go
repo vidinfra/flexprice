@@ -40,8 +40,7 @@ type QuickBooksClient interface {
 	CreateInvoice(ctx context.Context, req *InvoiceCreateRequest) (*InvoiceResponse, error)
 	GetInvoice(ctx context.Context, invoiceID string) (*InvoiceResponse, error)
 
-	// Payment API wrappers
-	CreatePayment(ctx context.Context, req *PaymentCreateRequest) (*PaymentResponse, error)
+	// Payment API wrappers (inbound only)
 	GetPayment(ctx context.Context, paymentID string) (*PaymentResponse, error)
 
 	// Token management
@@ -61,15 +60,16 @@ type Client struct {
 
 // QuickBooksConfig holds decrypted QuickBooks configuration
 type QuickBooksConfig struct {
-	ClientID        string
-	ClientSecret    string
-	AccessToken     string
-	RefreshToken    string
-	RealmID         string
-	Environment     string // "sandbox" or "production"
-	AuthCode        string // Temporary, for initial token exchange
-	RedirectURI     string // Temporary, for initial token exchange
-	IncomeAccountID string // Optional: Custom income account ID for items (defaults to "79")
+	ClientID             string
+	ClientSecret         string
+	AccessToken          string
+	RefreshToken         string
+	RealmID              string
+	Environment          string // "sandbox" or "production"
+	AuthCode             string // Temporary, for initial token exchange
+	RedirectURI          string // Temporary, for initial token exchange
+	IncomeAccountID      string // Optional: Custom income account ID for items (defaults to "79")
+	WebhookVerifierToken string // Optional: Webhook verifier token from QuickBooks for webhook signature verification
 }
 
 // NewClient creates a new QuickBooks client
@@ -140,44 +140,48 @@ func (c *Client) GetDecryptedQuickBooksConfig(conn *connection.Connection) (*Qui
 
 	qbConfig := &QuickBooksConfig{}
 
-	if clientID, exists := decryptedMetadata["client_id"]; exists {
+	if clientID, exists := decryptedMetadata[types.OAuthCredentialClientID]; exists {
 		qbConfig.ClientID = clientID
 	}
 
-	if clientSecret, exists := decryptedMetadata["client_secret"]; exists {
+	if clientSecret, exists := decryptedMetadata[types.OAuthCredentialClientSecret]; exists {
 		qbConfig.ClientSecret = clientSecret
 	}
 
-	if accessToken, exists := decryptedMetadata["access_token"]; exists {
+	if accessToken, exists := decryptedMetadata[types.OAuthCredentialAccessToken]; exists {
 		qbConfig.AccessToken = accessToken
 	}
 
-	if refreshToken, exists := decryptedMetadata["refresh_token"]; exists {
+	if refreshToken, exists := decryptedMetadata[types.OAuthCredentialRefreshToken]; exists {
 		qbConfig.RefreshToken = refreshToken
 	}
 
-	if authCode, exists := decryptedMetadata["auth_code"]; exists {
+	if authCode, exists := decryptedMetadata[types.OAuthCredentialAuthCode]; exists {
 		qbConfig.AuthCode = authCode
 	}
 
 	// RealmID is not encrypted - it's the QuickBooks Company ID
-	if realmID, exists := decryptedMetadata["realm_id"]; exists {
+	if realmID, exists := decryptedMetadata[types.OAuthMetadataRealmID]; exists {
 		qbConfig.RealmID = realmID
 	}
 
 	// Environment defaults to "production" if not specified
-	if environment, exists := decryptedMetadata["environment"]; exists {
+	if environment, exists := decryptedMetadata[types.OAuthMetadataEnvironment]; exists {
 		qbConfig.Environment = environment
 	} else {
-		qbConfig.Environment = "production"
+		qbConfig.Environment = types.OAuthEnvironmentProduction
 	}
 
-	if redirectURI, exists := decryptedMetadata["redirect_uri"]; exists {
+	if redirectURI, exists := decryptedMetadata[types.OAuthMetadataRedirectURI]; exists {
 		qbConfig.RedirectURI = redirectURI
 	}
 
-	if incomeAccountID, exists := decryptedMetadata["income_account_id"]; exists {
+	if incomeAccountID, exists := decryptedMetadata[types.OAuthMetadataIncomeAccountID]; exists {
 		qbConfig.IncomeAccountID = incomeAccountID
+	}
+
+	if webhookVerifierToken, exists := decryptedMetadata[types.OAuthCredentialWebhookVerifierToken]; exists {
+		qbConfig.WebhookVerifierToken = webhookVerifierToken
 	}
 
 	return qbConfig, nil
@@ -202,10 +206,10 @@ func (c *Client) decryptConnectionMetadata(conn *connection.Connection) (types.M
 		}
 
 		decryptedMetadata := types.Metadata{
-			"client_id":     clientID,
-			"client_secret": clientSecret,
-			"realm_id":      conn.EncryptedSecretData.QuickBooks.RealmID, // Not encrypted
-			"environment":   conn.EncryptedSecretData.QuickBooks.Environment,
+			types.OAuthCredentialClientID:     clientID,
+			types.OAuthCredentialClientSecret: clientSecret,
+			types.OAuthMetadataRealmID:        conn.EncryptedSecretData.QuickBooks.RealmID, // Not encrypted
+			types.OAuthMetadataEnvironment:    conn.EncryptedSecretData.QuickBooks.Environment,
 		}
 
 		// Decrypt optional fields only if they exist
@@ -214,7 +218,7 @@ func (c *Client) decryptConnectionMetadata(conn *connection.Connection) (types.M
 			if err != nil {
 				return nil, ierr.NewError("failed to decrypt access_token").Mark(ierr.ErrInternal)
 			}
-			decryptedMetadata["access_token"] = accessToken
+			decryptedMetadata[types.OAuthCredentialAccessToken] = accessToken
 		}
 
 		if conn.EncryptedSecretData.QuickBooks.RefreshToken != "" {
@@ -222,7 +226,7 @@ func (c *Client) decryptConnectionMetadata(conn *connection.Connection) (types.M
 			if err != nil {
 				return nil, ierr.NewError("failed to decrypt refresh_token").Mark(ierr.ErrInternal)
 			}
-			decryptedMetadata["refresh_token"] = refreshToken
+			decryptedMetadata[types.OAuthCredentialRefreshToken] = refreshToken
 		}
 
 		if conn.EncryptedSecretData.QuickBooks.AuthCode != "" {
@@ -230,15 +234,26 @@ func (c *Client) decryptConnectionMetadata(conn *connection.Connection) (types.M
 			if err != nil {
 				return nil, ierr.NewError("failed to decrypt auth_code").Mark(ierr.ErrInternal)
 			}
-			decryptedMetadata["auth_code"] = authCode
+			decryptedMetadata[types.OAuthCredentialAuthCode] = authCode
 		}
 
 		if conn.EncryptedSecretData.QuickBooks.RedirectURI != "" {
-			decryptedMetadata["redirect_uri"] = conn.EncryptedSecretData.QuickBooks.RedirectURI // Not encrypted
+			decryptedMetadata[types.OAuthMetadataRedirectURI] = conn.EncryptedSecretData.QuickBooks.RedirectURI // Not encrypted
 		}
 
 		if conn.EncryptedSecretData.QuickBooks.IncomeAccountID != "" {
-			decryptedMetadata["income_account_id"] = conn.EncryptedSecretData.QuickBooks.IncomeAccountID // Not encrypted
+			decryptedMetadata[types.OAuthMetadataIncomeAccountID] = conn.EncryptedSecretData.QuickBooks.IncomeAccountID // Not encrypted
+		}
+
+		// Decrypt webhook verifier token if present
+		if conn.EncryptedSecretData.QuickBooks.WebhookVerifierToken != "" {
+			webhookVerifierToken, err := c.encryptionService.Decrypt(conn.EncryptedSecretData.QuickBooks.WebhookVerifierToken)
+			if err != nil {
+				c.logger.Warnw("failed to decrypt webhook verifier token", "connection_id", conn.ID, "error", err)
+				// Don't fail - webhook verifier token is optional
+			} else {
+				decryptedMetadata[types.OAuthCredentialWebhookVerifierToken] = webhookVerifierToken
+			}
 		}
 
 		return decryptedMetadata, nil
@@ -801,82 +816,6 @@ func (c *Client) GetInvoice(ctx context.Context, invoiceID string) (*InvoiceResp
 	}
 
 	return &result.Invoice, nil
-}
-
-// CreatePayment creates a payment record in QuickBooks (accounting entry, not payment processing)
-// This records that a payment was received against one or more invoices
-func (c *Client) CreatePayment(ctx context.Context, req *PaymentCreateRequest) (*PaymentResponse, error) {
-	// Ensure valid access token before making API call
-	if err := c.EnsureValidAccessToken(ctx); err != nil {
-		return nil, err
-	}
-
-	// Build payment line items with LinkedTxn references to invoices
-	lineItems := make([]map[string]interface{}, len(req.Line))
-	for i, line := range req.Line {
-		linkedTxns := make([]map[string]string, len(line.LinkedTxn))
-		for j, txn := range line.LinkedTxn {
-			linkedTxns[j] = map[string]string{
-				"TxnId":   txn.TxnId,
-				"TxnType": txn.TxnType,
-			}
-		}
-
-		lineItems[i] = map[string]interface{}{
-			"Amount":    line.Amount,
-			"LinkedTxn": linkedTxns,
-		}
-	}
-
-	payload := map[string]interface{}{
-		"CustomerRef": map[string]string{
-			"value": req.CustomerRef.Value,
-		},
-		"TotalAmt": req.TotalAmt,
-		"Line":     lineItems,
-	}
-
-	// Add optional fields
-	if req.TxnDate != "" {
-		payload["TxnDate"] = req.TxnDate
-	}
-	if req.PrivateNote != "" {
-		payload["PrivateNote"] = req.PrivateNote
-	}
-
-	c.logger.Debugw("sending QuickBooks Payment create request",
-		"customer_ref", req.CustomerRef.Value,
-		"total_amt", req.TotalAmt,
-		"line_items_count", len(req.Line))
-
-	resp, err := c.makeRequestWithRetry(ctx, "POST", "payment", payload, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return nil, c.parseErrorResponse(resp)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, ierr.NewError("failed to read response").Mark(ierr.ErrSystem)
-	}
-
-	var result struct {
-		Payment PaymentResponse `json:"Payment"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, ierr.NewError("failed to parse QuickBooks response").
-			Mark(ierr.ErrSystem)
-	}
-
-	c.logger.Infow("successfully created QuickBooks payment",
-		"payment_id", result.Payment.ID,
-		"total_amt", result.Payment.TotalAmt)
-
-	return &result.Payment, nil
 }
 
 // GetPayment retrieves a payment by ID from QuickBooks
