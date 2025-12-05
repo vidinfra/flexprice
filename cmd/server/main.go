@@ -224,6 +224,7 @@ func main() {
 			service.NewGroupService,
 			service.NewScheduledTaskService,
 			service.NewWalletPaymentService,
+			service.NewWalletBalanceAlertService,
 		),
 	)
 
