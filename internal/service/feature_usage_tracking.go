@@ -24,6 +24,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/plan"
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
+	"github.com/flexprice/flexprice/internal/domain/wallet"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/pubsub"
 	"github.com/flexprice/flexprice/internal/pubsub/kafka"
@@ -317,6 +318,25 @@ func (s *featureUsageTrackingService) processEvent(ctx context.Context, event *e
 	if len(featureUsage) > 0 {
 		if err := s.featureUsageRepo.BulkInsertProcessedEvents(ctx, featureUsage); err != nil {
 			return err
+		}
+
+		walletBalanceAlertSvc := NewWalletBalanceAlertService(s.ServiceParams)
+		for _, fu := range featureUsage {
+
+			event := &wallet.WalletBalanceAlertEvent{
+				CustomerID:            fu.CustomerID,
+				ForceCalculateBalance: false,
+				TenantID:              fu.TenantID,
+				EnvironmentID:         fu.EnvironmentID,
+			}
+			if err := walletBalanceAlertSvc.PublishEvent(ctx, event); err != nil {
+				continue
+			}
+
+			s.Logger.Infow("wallet balance alert event published successfully",
+				"event_id", event.ID,
+				"customer_id", event.CustomerID,
+			)
 		}
 	}
 
