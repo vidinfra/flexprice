@@ -55,22 +55,22 @@ func NewWalletBalanceAlertService(
 	pubSub, err := kafka.NewPubSubFromConfig(
 		params.Config,
 		params.Logger,
-		params.Config.WalletAlerts.ConsumerGroup,
+		params.Config.WalletBalanceAlert.ConsumerGroup,
 	)
 
 	if err != nil {
 		params.Logger.Fatalw("failed to create pubsub for wallet alerts",
 			"error", err,
-			"consumer_group", params.Config.WalletAlerts.ConsumerGroup,
+			"consumer_group", params.Config.WalletBalanceAlert.ConsumerGroup,
 		)
 		return nil
 	}
 	svc.pubSub = pubSub
 
 	params.Logger.Infow("wallet alerts service initialized",
-		"topic", params.Config.WalletAlerts.Topic,
-		"consumer_group", params.Config.WalletAlerts.ConsumerGroup,
-		"rate_limit", params.Config.WalletAlerts.RateLimit,
+		"topic", params.Config.WalletBalanceAlert.Topic,
+		"consumer_group", params.Config.WalletBalanceAlert.ConsumerGroup,
+		"rate_limit", params.Config.WalletBalanceAlert.RateLimit,
 	)
 
 	return svc
@@ -118,11 +118,16 @@ func (s *walletBalanceAlertService) PublishEvent(ctx context.Context, event *wal
 	// Events for the same customer always go to the same partition
 	partitionKey := s.createPartitionKey(event)
 
-	// Create Watermill message with unique ID
+	// Set metadata for additional context
 	msg := message.NewMessage(event.ID, payload)
 
+	// Set metadata for additional context
+	msg.Metadata.Set("tenant_id", event.TenantID)
+	msg.Metadata.Set("environment_id", event.EnvironmentID)
+	msg.Metadata.Set("partition_key", partitionKey)
+
 	// Get topic from config
-	topic := s.Config.WalletAlerts.Topic
+	topic := s.Config.WalletBalanceAlert.Topic
 
 	// Validate PubSub is initialized
 	if s.pubSub == nil {
@@ -130,7 +135,7 @@ func (s *walletBalanceAlertService) PublishEvent(ctx context.Context, event *wal
 			WithHint("Kafka PubSub failed to initialize during service creation").
 			WithReportableDetails(map[string]interface{}{
 				"topic":          topic,
-				"consumer_group": s.Config.WalletAlerts.ConsumerGroup,
+				"consumer_group": s.Config.WalletBalanceAlert.ConsumerGroup,
 			}).
 			Mark(ierr.ErrSystem)
 	}
@@ -172,12 +177,12 @@ func (s *walletBalanceAlertService) PublishEvent(ctx context.Context, event *wal
 // RegisterHandler registers a Kafka consumer handler with rate limiting
 func (s *walletBalanceAlertService) RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration) {
 	// Add throttle middleware for rate limiting
-	throttle := middleware.NewThrottle(cfg.WalletAlerts.RateLimit, time.Second)
+	throttle := middleware.NewThrottle(cfg.WalletBalanceAlert.RateLimit, time.Second)
 
 	// Register the handler
 	router.AddNoPublishHandler(
 		"wallet_balance_alert_handler",
-		cfg.WalletAlerts.Topic,
+		cfg.WalletBalanceAlert.Topic,
 		s.pubSub,
 		s.processMessage,
 		throttle.Middleware,
@@ -185,9 +190,9 @@ func (s *walletBalanceAlertService) RegisterHandler(router *pubsubRouter.Router,
 
 	s.Logger.Infow("registered wallet balance alert handler",
 		"handler_name", "wallet_balance_alert_handler",
-		"topic", cfg.WalletAlerts.Topic,
-		"consumer_group", cfg.WalletAlerts.ConsumerGroup,
-		"rate_limit", cfg.WalletAlerts.RateLimit,
+		"topic", cfg.WalletBalanceAlert.Topic,
+		"consumer_group", cfg.WalletBalanceAlert.ConsumerGroup,
+		"rate_limit", cfg.WalletBalanceAlert.RateLimit,
 	)
 }
 

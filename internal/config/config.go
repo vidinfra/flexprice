@@ -38,7 +38,7 @@ type Configuration struct {
 	EventPostProcessing      EventPostProcessingConfig      `mapstructure:"event_post_processing" validate:"required"`
 	FeatureUsageTracking     FeatureUsageTrackingConfig     `mapstructure:"feature_usage_tracking" validate:"required"`
 	FeatureUsageTrackingLazy FeatureUsageTrackingLazyConfig `mapstructure:"feature_usage_tracking_lazy" validate:"required"`
-	WalletAlerts             WalletAlertsConfig             `mapstructure:"wallet_alerts" validate:"required"`
+	WalletBalanceAlert       WalletBalanceAlertConfig       `mapstructure:"wallet_balance_alert" validate:"required"`
 	EnvAccess                EnvAccessConfig                `mapstructure:"env_access" json:"env_access" validate:"omitempty"`
 	FeatureFlag              FeatureFlagConfig              `mapstructure:"feature_flag" validate:"required"`
 	Email                    EmailConfig                    `mapstructure:"email" validate:"required"`
@@ -219,7 +219,7 @@ type FeatureUsageTrackingLazyConfig struct {
 	ConsumerGroupBackfill string `mapstructure:"consumer_group_backfill" default:"v1_feature_tracking_service_lazy_backfill"`
 }
 
-type WalletAlertsConfig struct {
+type WalletBalanceAlertConfig struct {
 	// Rate limit in messages consumed per second
 	Topic         string `mapstructure:"topic" default:"wallet_alert"`
 	RateLimit     int64  `mapstructure:"rate_limit" default:"1"`
