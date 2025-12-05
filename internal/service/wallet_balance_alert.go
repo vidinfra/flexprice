@@ -19,12 +19,15 @@ import (
 )
 
 // FeatureUsageTrackingService handles feature usage tracking operations for metered events
-type WalletAlertsService interface {
+type WalletBalanceAlertService interface {
 	// Publish an event for wallet alerts
 	PublishEvent(ctx context.Context, event *wallet.WalletBalanceAlertEvent) error
+
+	// Register Handler for this
+	RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration)
 }
 
-type walletAlertsService struct {
+type walletBalanceAlertService struct {
 	ServiceParams
 	pubSub pubsub.PubSub // Regular PubSub for normal processing
 }
@@ -32,8 +35,8 @@ type walletAlertsService struct {
 // NewWalletAlertsService creates a new wallet alerts service
 func NewWalletAlertsService(
 	params ServiceParams,
-) WalletAlertsService {
-	ev := &walletAlertsService{
+) WalletBalanceAlertService {
+	ev := &walletBalanceAlertService{
 		ServiceParams: params,
 	}
 
@@ -53,7 +56,7 @@ func NewWalletAlertsService(
 }
 
 // PublishEvent publishes an event to the feature usage tracking topic
-func (s *walletAlertsService) PublishEvent(ctx context.Context, event *wallet.WalletBalanceAlertEvent) error {
+func (s *walletBalanceAlertService) PublishEvent(ctx context.Context, event *wallet.WalletBalanceAlertEvent) error {
 	// Create message payload
 	payload, err := json.Marshal(event)
 	if err != nil {
@@ -106,7 +109,7 @@ func (s *walletAlertsService) PublishEvent(ctx context.Context, event *wallet.Wa
 }
 
 // RegisterHandler registers a handler for the wallet balance alert topic with rate limiting
-func (s *walletAlertsService) RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration) {
+func (s *walletBalanceAlertService) RegisterHandler(router *pubsubRouter.Router, cfg *config.Configuration) {
 	// Add throttle middleware to this specific handler
 	throttle := middleware.NewThrottle(cfg.WalletAlerts.RateLimit, time.Second)
 
@@ -127,7 +130,7 @@ func (s *walletAlertsService) RegisterHandler(router *pubsubRouter.Router, cfg *
 }
 
 // Process a single event message for wallet balance alert
-func (s *walletAlertsService) processMessage(msg *message.Message) error {
+func (s *walletBalanceAlertService) processMessage(msg *message.Message) error {
 	// Extract tenant ID from message metadata
 	partitionKey := msg.Metadata.Get("partition_key")
 	tenantID := msg.Metadata.Get("tenant_id")
@@ -191,7 +194,8 @@ func (s *walletAlertsService) processMessage(msg *message.Message) error {
 }
 
 // Process a single event for feature usage tracking
-func (s *walletAlertsService) processEvent(ctx context.Context, event wallet.WalletBalanceAlertEvent) error {
+func (s *walletBalanceAlertService) processEvent(ctx context.Context, event wallet.WalletBalanceAlertEvent) error {
+	walletService := NewWalletService(s.ServiceParams)
 
-	return nil
+	return walletService.CheckWalletBalanceAlert(ctx, &event)
 }
