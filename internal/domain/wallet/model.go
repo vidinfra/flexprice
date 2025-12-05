@@ -120,3 +120,10 @@ func FromEntList(es []*ent.Wallet) []*Wallet {
 	}
 	return wallets
 }
+
+type WalletBalanceAlertEvent struct {
+	CustomerID            string `json:"customer_id"`
+	ForceCalculateBalance bool   `json:"force_calculate_balance"`
+	TenantID              string `json:"tenant_id"`
+	EnvironmentID         string `json:"environment_id"`
+}

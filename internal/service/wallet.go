@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/flexprice/flexprice/ent/environment"
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
 	"github.com/flexprice/flexprice/internal/domain/wallet"
@@ -86,6 +87,8 @@ type WalletService interface {
 
 	// CompletePurchasedCreditTransaction completes a pending wallet transaction when payment succeeds
 	CompletePurchasedCreditTransactionWithRetry(ctx context.Context, walletTransactionID string) error
+
+	CheckWalletBalanceAlert(ctx context.Context, req *wallet.WalletBalanceAlertEvent) error
 }
 
 type walletService struct {
@@ -1921,4 +1924,81 @@ func (s *walletService) ManualBalanceDebit(ctx context.Context, walletID string,
 	}
 
 	return s.GetWalletByID(ctx, walletID)
+}
+
+func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet.WalletBalanceAlertEvent) error {
+	ctx = context.WithValue(ctx, types.CtxEnvironmentID, environment.ID)
+	ctx = context.WithValue(ctx, types.CtxTenantID, req.TenantID)
+
+	// Get active wallets for this customer
+	wallets, err := s.WalletRepo.GetWalletsByCustomerID(ctx, req.CustomerID)
+	if err != nil {
+		return err
+	}
+
+	alertLogsService := NewAlertLogsService(s.ServiceParams)
+	// Process each wallet
+	for _, wallet := range wallets {
+		// Get real-time balance
+		balance, err := s.GetWalletBalanceV2(ctx, wallet.ID)
+		if err != nil {
+			continue
+		}
+
+		// Get threshold and balances
+		threshold := wallet.AlertConfig.Threshold.Value
+		currentBalance := wallet.Balance // Current balance is just the credits
+		ongoingBalance := balance.RealTimeBalance
+		if ongoingBalance == nil {
+			ongoingBalance = &currentBalance
+		}
+
+		// Check ongoing balance
+		isOngoingBalanceBelowThreshold := ongoingBalance.LessThanOrEqual(threshold)
+
+		// Determine alert status based on balance check
+		var alertStatus types.AlertState
+		if isOngoingBalanceBelowThreshold {
+			alertStatus = types.AlertStateInAlarm
+		} else {
+			alertStatus = types.AlertStateOk
+		}
+		// Use AlertLogsService to handle alert logging and webhook publishing
+		// For wallet alerts, we store the threshold info in AlertSettings format for consistency
+		// Get customer ID from wallet if available
+		var customerID *string
+		if wallet.CustomerID != "" {
+			customerID = lo.ToPtr(wallet.CustomerID)
+		}
+
+		err = alertLogsService.LogAlert(ctx, &LogAlertRequest{
+			EntityType:  types.AlertEntityTypeWallet,
+			EntityID:    wallet.ID,
+			CustomerID:  customerID, // Customer ID from wallet
+			AlertType:   types.AlertTypeLowOngoingBalance,
+			AlertStatus: alertStatus,
+			AlertInfo: types.AlertInfo{
+				AlertSettings: &types.AlertSettings{
+					Critical: &types.AlertThreshold{
+						Threshold: wallet.AlertConfig.Threshold.Value,
+						Condition: types.AlertConditionBelow, // Wallet alerts are "below" threshold
+					},
+					AlertEnabled: lo.ToPtr(true),
+				},
+				ValueAtTime: *ongoingBalance,
+				Timestamp:   time.Now().UTC(),
+			},
+		})
+		if err != nil {
+			continue
+		}
+
+		// Update wallet alert state to match the logged status (if it changed)
+		if wallet.AlertState != string(alertStatus) {
+			if err := s.UpdateWalletAlertState(ctx, wallet.ID, alertStatus); err != nil {
+				continue
+			}
+		}
+	}
+	return nil
 }
