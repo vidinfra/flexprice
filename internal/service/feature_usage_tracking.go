@@ -331,6 +331,11 @@ func (s *featureUsageTrackingService) processEvent(ctx context.Context, event *e
 					EnvironmentID:         fu.EnvironmentID,
 				}
 				if err := s.WalletBalanceAlertService.PublishEvent(ctx, event); err != nil {
+					s.Logger.Errorw("failed to publish wallet balance alert event",
+						"error", err,
+						"event_id", event.ID,
+						"customer_id", event.CustomerID,
+					)
 					continue
 				}
 
