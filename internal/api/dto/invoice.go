@@ -1234,7 +1234,7 @@ type GetUnpaidInvoicesToBePaidResponse struct {
 	// invoices is the list of unpaid invoices to be paid
 	Invoices []*InvoiceResponse `json:"invoices"`
 
-	// total_amount is the total amount of unpaid invoices to be paid
+	// total_unpaid_amount is the total amount of unpaid invoices to be paid
 	TotalUnpaidAmount decimal.Decimal `json:"total_unpaid_amount"`
 
 	// total_unpaid_usage_charges is the total amount of unpaid usage charges to be paid
