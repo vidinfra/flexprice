@@ -2179,7 +2179,7 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 
 func (s *walletService) PublishWalletBalanceAlertEvent(ctx context.Context, customerID string, forceCalculateBalance bool, walletID string) {
 	// Create wallet balance alert service
-	walletAlertSvc := NewWalletBalanceAlertService(s.ServiceParams)
+	walletAlertSvc := NewWalletBalanceAlertServiceWithoutPubSub(s.ServiceParams)
 
 	event := &wallet.WalletBalanceAlertEvent{
 		ID:                    types.GenerateUUIDWithPrefix(types.UUID_PREFIX_WALLET_ALERT),

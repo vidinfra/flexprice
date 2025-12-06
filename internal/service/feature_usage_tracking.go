@@ -320,7 +320,7 @@ func (s *featureUsageTrackingService) processEvent(ctx context.Context, event *e
 			return err
 		}
 
-		walletBalanceAlertSvc := NewWalletBalanceAlertService(s.ServiceParams)
+		walletBalanceAlertSvc := NewWalletBalanceAlertServiceWithoutPubSub(s.ServiceParams)
 		for _, fu := range featureUsage {
 			event := &wallet.WalletBalanceAlertEvent{
 				ID:                    types.GenerateUUIDWithPrefix(types.UUID_PREFIX_WALLET_ALERT),

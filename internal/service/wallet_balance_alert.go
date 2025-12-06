@@ -77,6 +77,14 @@ func NewWalletBalanceAlertService(
 	return svc
 }
 
+func NewWalletBalanceAlertServiceWithoutPubSub(params ServiceParams) WalletBalanceAlertService {
+	return &walletBalanceAlertService{
+		ServiceParams: params,
+		cache:         cache.NewInMemoryCache(),
+		pubSub:        nil,
+	}
+}
+
 // PublishEvent publishes a wallet balance alert event to Kafka
 func (s *walletBalanceAlertService) PublishEvent(ctx context.Context, event *wallet.WalletBalanceAlertEvent) error {
 
