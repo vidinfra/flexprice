@@ -40,7 +40,7 @@ type InvoiceService interface {
 	CreateSubscriptionInvoice(ctx context.Context, req *dto.CreateSubscriptionInvoiceRequest, paymentParams *dto.PaymentParameters, flowType types.InvoiceFlowType, isDraftSubscription bool) (*dto.InvoiceResponse, *subscription.Subscription, error)
 	GetPreviewInvoice(ctx context.Context, req dto.GetPreviewInvoiceRequest) (*dto.InvoiceResponse, error)
 	GetCustomerInvoiceSummary(ctx context.Context, customerID string, currency string) (*dto.CustomerInvoiceSummary, error)
-	GetUnpaidInvoicesToBePaid(ctx context.Context, customerID string, currency string) ([]*dto.InvoiceResponse, decimal.Decimal, error)
+	GetUnpaidInvoicesToBePaid(ctx context.Context, req dto.GetUnpaidInvoicesToBePaidRequest) (*dto.GetUnpaidInvoicesToBePaidResponse, error)
 	GetCustomerMultiCurrencyInvoiceSummary(ctx context.Context, customerID string) (*dto.CustomerMultiCurrencyInvoiceSummary, error)
 	AttemptPayment(ctx context.Context, id string) error
 	GetInvoicePDF(ctx context.Context, id string) ([]byte, error)
@@ -1464,24 +1464,29 @@ func (s *invoiceService) GetCustomerInvoiceSummary(ctx context.Context, customer
 	return summary, nil
 }
 
-func (s *invoiceService) GetUnpaidInvoicesToBePaid(ctx context.Context, customerID string, currency string) ([]*dto.InvoiceResponse, decimal.Decimal, error) {
+func (s *invoiceService) GetUnpaidInvoicesToBePaid(ctx context.Context, req dto.GetUnpaidInvoicesToBePaidRequest) (*dto.GetUnpaidInvoicesToBePaidResponse, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+
 	unpaidInvoices := make([]*dto.InvoiceResponse, 0)
 	unpaidAmount := decimal.Zero
+	unpaidUsageCharges := decimal.Zero
+	unpaidFixedCharges := decimal.Zero
 
 	filter := types.NewNoLimitInvoiceFilter()
 	filter.QueryFilter.Status = lo.ToPtr(types.StatusPublished)
-	filter.CustomerID = customerID
+	filter.CustomerID = req.CustomerID
 	filter.InvoiceStatus = []types.InvoiceStatus{types.InvoiceStatusFinalized}
-	filter.SkipLineItems = true
 
 	invoicesResp, err := s.ListInvoices(ctx, filter)
 	if err != nil {
-		return nil, decimal.Zero, err
+		return nil, err
 	}
 
 	for _, inv := range invoicesResp.Items {
 		// filter by currency
-		if !types.IsMatchingCurrency(inv.Currency, currency) {
+		if !types.IsMatchingCurrency(inv.Currency, req.Currency) {
 			continue
 		}
 
@@ -1496,9 +1501,22 @@ func (s *invoiceService) GetUnpaidInvoicesToBePaid(ctx context.Context, customer
 
 		unpaidInvoices = append(unpaidInvoices, inv)
 		unpaidAmount = unpaidAmount.Add(inv.AmountRemaining)
+
+		for _, item := range inv.LineItems {
+			if lo.FromPtr(item.PriceType) == string(types.PRICE_TYPE_USAGE) {
+				unpaidUsageCharges = unpaidUsageCharges.Add(item.Amount)
+			} else {
+				unpaidFixedCharges = unpaidFixedCharges.Add(item.Amount)
+			}
+		}
 	}
 
-	return unpaidInvoices, unpaidAmount, nil
+	return &dto.GetUnpaidInvoicesToBePaidResponse{
+		Invoices:                unpaidInvoices,
+		TotalUnpaidAmount:       unpaidAmount,
+		TotalUnpaidUsageCharges: unpaidUsageCharges,
+		TotalUnpaidFixedCharges: unpaidFixedCharges,
+	}, nil
 }
 
 func (s *invoiceService) GetCustomerMultiCurrencyInvoiceSummary(ctx context.Context, customerID string) (*dto.CustomerMultiCurrencyInvoiceSummary, error) {
