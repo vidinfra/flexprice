@@ -8,6 +8,7 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/flexprice/flexprice/internal/cache"
 	"github.com/flexprice/flexprice/internal/config"
 	"github.com/flexprice/flexprice/internal/domain/wallet"
 	ierr "github.com/flexprice/flexprice/internal/errors"
@@ -27,6 +28,9 @@ const (
 	EventSourceWalletTerminate = "wallet_terminate"
 	EventSourceCron            = "cron"
 	EventSourceAPI             = "api"
+
+	// Throttle duration for wallet balance recalculations
+	WalletAlertThrottleDuration = 1 * time.Minute
 )
 
 // WalletBalanceAlertService handles wallet balance alert operations via Kafka
@@ -41,6 +45,7 @@ type WalletBalanceAlertService interface {
 type walletBalanceAlertService struct {
 	ServiceParams
 	pubSub pubsub.PubSub
+	cache  cache.Cache
 }
 
 // NewWalletAlertsService creates a new wallet alerts service
@@ -49,6 +54,7 @@ func NewWalletBalanceAlertService(
 ) WalletBalanceAlertService {
 	svc := &walletBalanceAlertService{
 		ServiceParams: params,
+		cache:         cache.NewInMemoryCache(),
 	}
 
 	// Initialize Kafka PubSub with dedicated consumer group
@@ -71,6 +77,7 @@ func NewWalletBalanceAlertService(
 		"topic", params.Config.WalletBalanceAlert.Topic,
 		"consumer_group", params.Config.WalletBalanceAlert.ConsumerGroup,
 		"rate_limit", params.Config.WalletBalanceAlert.RateLimit,
+		"throttle_duration", WalletAlertThrottleDuration,
 	)
 
 	return svc
@@ -258,13 +265,90 @@ func (s *walletBalanceAlertService) processMessage(msg *message.Message) error {
 	return nil
 }
 
+// shouldThrottle checks if we should skip processing for this customer based on cache
+// Returns true if we should skip (throttle), false if we should process
+func (s *walletBalanceAlertService) shouldThrottle(ctx context.Context, event wallet.WalletBalanceAlertEvent) bool {
+	// If force_calculate_balance is true, bypass throttle
+	if event.ForceCalculateBalance {
+		s.Logger.Debugw("bypassing throttle due to force_calculate_balance flag",
+			"customer_id", event.CustomerID,
+			"tenant_id", event.TenantID,
+			"environment_id", event.EnvironmentID,
+		)
+		return false
+	}
+
+	// Generate cache key for this customer in this tenant/environment
+	cacheKey := cache.GenerateKey(
+		cache.PrefixWalletAlertThrottle,
+		event.TenantID,
+		event.EnvironmentID,
+		event.CustomerID,
+	)
+
+	// Check if we processed this customer recently
+	_, exists := s.cache.GetWalletBalanceAlert(ctx, cacheKey)
+	if exists {
+		s.Logger.Infow("throttling wallet balance recalculation - processed recently",
+			"customer_id", event.CustomerID,
+			"tenant_id", event.TenantID,
+			"environment_id", event.EnvironmentID,
+			"cache_key", cacheKey,
+			"throttle_duration", WalletAlertThrottleDuration,
+		)
+		return true
+	}
+
+	return false
+}
+
+// markProcessed marks this customer as processed in cache to enable throttling
+func (s *walletBalanceAlertService) markProcessed(ctx context.Context, event wallet.WalletBalanceAlertEvent) {
+	cacheKey := cache.GenerateKey(
+		cache.PrefixWalletAlertThrottle,
+		event.TenantID,
+		event.EnvironmentID,
+		event.CustomerID,
+	)
+
+	// Set cache entry with TTL
+	s.cache.SetWalletBalanceAlert(ctx, cacheKey, time.Now().Unix(), WalletAlertThrottleDuration)
+
+	s.Logger.Debugw("marked customer as processed in throttle cache",
+		"customer_id", event.CustomerID,
+		"tenant_id", event.TenantID,
+		"environment_id", event.EnvironmentID,
+		"cache_key", cacheKey,
+		"ttl", WalletAlertThrottleDuration,
+	)
+}
+
 // processEvent delegates to the wallet service to check balance alerts
 func (s *walletBalanceAlertService) processEvent(ctx context.Context, event wallet.WalletBalanceAlertEvent) error {
+	// Check if we should throttle this request
+	if s.shouldThrottle(ctx, event) {
+		s.Logger.Infow("skipping wallet balance recalculation due to throttle",
+			"customer_id", event.CustomerID,
+			"tenant_id", event.TenantID,
+			"environment_id", event.EnvironmentID,
+			"source", event.Source,
+		)
+		return nil
+	}
+
 	// Create wallet service instance
 	walletService := NewWalletService(s.ServiceParams)
 
 	// Delegate to wallet service for actual processing
-	return walletService.CheckWalletBalanceAlert(ctx, &event)
+	err := walletService.CheckWalletBalanceAlert(ctx, &event)
+	if err != nil {
+		return err
+	}
+
+	// Mark customer as processed after successful balance check
+	s.markProcessed(ctx, event)
+
+	return nil
 }
 
 // createPartitionKey creates a deterministic partition key for Kafka
