@@ -18,8 +18,6 @@ import (
 	"github.com/flexprice/flexprice/internal/pdf"
 	"github.com/flexprice/flexprice/internal/postgres"
 	"github.com/flexprice/flexprice/internal/publisher"
-	"github.com/flexprice/flexprice/internal/pubsub"
-	kafkaPubSub "github.com/flexprice/flexprice/internal/pubsub/kafka"
 	pubsubRouter "github.com/flexprice/flexprice/internal/pubsub/router"
 	"github.com/flexprice/flexprice/internal/pyroscope"
 	"github.com/flexprice/flexprice/internal/rbac"
@@ -177,16 +175,6 @@ func main() {
 
 	// Webhook module (must be initialised before services)
 	opts = append(opts, webhook.Module)
-
-	// Wallet Alert PubSub (separate from webhook pubsub with different consumer group)
-	opts = append(opts,
-		fx.Provide(
-			fx.Annotate(
-				provideWalletAlertPubSub,
-				fx.ResultTags(`name:"walletAlert"`),
-			),
-		),
-	)
 
 	// Service layer
 	opts = append(opts,
@@ -410,22 +398,6 @@ func provideTemporalService(temporalClient client.TemporalClient, workerManager 
 	return service
 }
 
-func provideWalletAlertPubSub(
-	cfg *config.Configuration,
-	log *logger.Logger,
-) (pubsub.PubSub, error) {
-	ps, err := kafkaPubSub.NewPubSubFromConfig(
-		cfg,
-		log,
-		cfg.WalletBalanceAlert.ConsumerGroup,
-	)
-	if err != nil {
-		log.Errorw("failed to create wallet alert pubsub", "error", err)
-		return nil, err
-	}
-	return ps, nil
-}
-
 func startServer(
 	lc fx.Lifecycle,
 	cfg *config.Configuration,
@@ -550,11 +522,11 @@ func registerRouterHandlers(
 	// Only register processing handlers when needed
 	if includeProcessingHandlers {
 		// Register handlers
-		eventConsumptionSvc.RegisterHandler(router, cfg)
-		eventConsumptionSvc.RegisterHandlerLazy(router, cfg)
-		eventPostProcessingSvc.RegisterHandler(router, cfg)
-		featureUsageSvc.RegisterHandler(router, cfg)
-		featureUsageSvc.RegisterHandlerLazy(router, cfg)
+		// eventConsumptionSvc.RegisterHandler(router, cfg)
+		// eventConsumptionSvc.RegisterHandlerLazy(router, cfg)
+		// eventPostProcessingSvc.RegisterHandler(router, cfg)
+		// featureUsageSvc.RegisterHandler(router, cfg)
+		// featureUsageSvc.RegisterHandlerLazy(router, cfg)
 		walletBalanceAlertSvc.RegisterHandler(router, cfg)
 	}
 }

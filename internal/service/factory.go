@@ -45,7 +45,6 @@ import (
 	"github.com/flexprice/flexprice/internal/pdf"
 	"github.com/flexprice/flexprice/internal/postgres"
 	"github.com/flexprice/flexprice/internal/publisher"
-	"github.com/flexprice/flexprice/internal/pubsub"
 	"github.com/flexprice/flexprice/internal/s3"
 	webhookPublisher "github.com/flexprice/flexprice/internal/webhook/publisher"
 )
@@ -105,9 +104,6 @@ type ServiceParams struct {
 	// Publishers
 	EventPublisher   publisher.EventPublisher
 	WebhookPublisher webhookPublisher.WebhookPublisher
-
-	// Wallet Alert PubSub
-	WalletAlertPubSub pubsub.PubSub
 
 	// http client
 	Client httpclient.Client
@@ -172,7 +168,6 @@ func NewServiceParams(
 	scheduledTaskRepo scheduledtask.Repository,
 	prorationCalculator proration.Calculator,
 	integrationFactory *integration.Factory,
-	walletAlertPubSub pubsub.PubSub,
 ) ServiceParams {
 	return ServiceParams{
 		Logger:                       logger,
@@ -226,6 +221,5 @@ func NewServiceParams(
 		ScheduledTaskRepo:            scheduledTaskRepo,
 		ProrationCalculator:          prorationCalculator,
 		IntegrationFactory:           integrationFactory,
-		WalletAlertPubSub:            walletAlertPubSub,
 	}
 }

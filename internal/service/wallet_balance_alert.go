@@ -13,6 +13,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/wallet"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/pubsub"
+	"github.com/flexprice/flexprice/internal/pubsub/kafka"
 	pubsubRouter "github.com/flexprice/flexprice/internal/pubsub/router"
 	"github.com/flexprice/flexprice/internal/types"
 )
@@ -47,14 +48,50 @@ func NewWalletBalanceAlertService(
 ) WalletBalanceAlertService {
 	svc := &walletBalanceAlertService{
 		ServiceParams: params,
-		pubSub:        params.WalletAlertPubSub,
 		cache:         cache.NewInMemoryCache(),
 	}
+
+	// Skip pubsub initialization if Kafka brokers are not configured (e.g., in tests)
+	if params.Config == nil || len(params.Config.Kafka.Brokers) == 0 {
+		params.Logger.Warnw("wallet alert pubsub not initialized - Kafka not configured",
+			"reason", "missing_kafka_brokers",
+		)
+		return svc
+	}
+
+	// Initialize Kafka PubSub with dedicated consumer group
+	pubSub, err := kafka.NewPubSubFromConfig(
+		params.Config,
+		params.Logger,
+		params.Config.WalletBalanceAlert.ConsumerGroup,
+	)
+	if err != nil {
+		params.Logger.Fatalw("failed to create pubsub for wallet alerts",
+			"error", err,
+			"consumer_group", params.Config.WalletBalanceAlert.ConsumerGroup,
+		)
+		return nil
+	}
+	svc.pubSub = pubSub
+
+	params.Logger.Infow("wallet alert pubsub initialized successfully",
+		"consumer_group", params.Config.WalletBalanceAlert.ConsumerGroup,
+		"topic", params.Config.WalletBalanceAlert.Topic,
+	)
+
 	return svc
 }
 
 // PublishEvent publishes a wallet balance alert event to Kafka
 func (s *walletBalanceAlertService) PublishEvent(ctx context.Context, event *wallet.WalletBalanceAlertEvent) error {
+	// Skip if pubsub is not initialized (e.g., in tests or when Kafka is not configured)
+	if s.pubSub == nil {
+		s.Logger.Debugw("skipping wallet balance alert publish - pubsub not initialized",
+			"customer_id", event.CustomerID,
+			"event_id", event.ID,
+		)
+		return nil
+	}
 
 	err := event.Validate()
 	if err != nil {
