@@ -855,7 +855,7 @@ func (s *walletService) GetWalletBalance(ctx context.Context, walletID string) (
 		return nil, err
 	}
 
-	totalPendingCharges = currentPeriodUsage.Add(resp.TotalUnpaidAmount)
+	totalPendingCharges = currentPeriodUsage.Add(resp.TotalUnpaidUsageCharges)
 
 	// Calculate real-time balance
 	realTimeBalance := w.Balance.Sub(totalPendingCharges)
@@ -876,7 +876,7 @@ func (s *walletService) GetWalletBalance(ctx context.Context, walletID string) (
 		RealTimeCreditBalance: lo.ToPtr(realTimeCreditBalance),
 		BalanceUpdatedAt:      lo.ToPtr(w.UpdatedAt),
 		CurrentPeriodUsage:    lo.ToPtr(totalPendingCharges),
-		UnpaidInvoicesAmount:  lo.ToPtr(resp.TotalUnpaidAmount),
+		UnpaidInvoicesAmount:  lo.ToPtr(resp.TotalUnpaidUsageCharges),
 	}, nil
 }
 
