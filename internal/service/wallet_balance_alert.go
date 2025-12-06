@@ -13,7 +13,6 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/wallet"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/pubsub"
-	"github.com/flexprice/flexprice/internal/pubsub/kafka"
 	pubsubRouter "github.com/flexprice/flexprice/internal/pubsub/router"
 	"github.com/flexprice/flexprice/internal/types"
 )
@@ -48,32 +47,9 @@ func NewWalletBalanceAlertService(
 ) WalletBalanceAlertService {
 	svc := &walletBalanceAlertService{
 		ServiceParams: params,
+		pubSub:        params.WalletAlertPubSub,
 		cache:         cache.NewInMemoryCache(),
 	}
-
-	// Initialize Kafka PubSub with dedicated consumer group
-	pubSub, err := kafka.NewPubSubFromConfig(
-		params.Config,
-		params.Logger,
-		params.Config.WalletBalanceAlert.ConsumerGroup,
-	)
-
-	if err != nil {
-		params.Logger.Fatalw("failed to create pubsub for wallet alerts",
-			"error", err,
-			"consumer_group", params.Config.WalletBalanceAlert.ConsumerGroup,
-		)
-		return nil
-	}
-	svc.pubSub = pubSub
-
-	params.Logger.Infow("wallet alerts service initialized",
-		"topic", params.Config.WalletBalanceAlert.Topic,
-		"consumer_group", params.Config.WalletBalanceAlert.ConsumerGroup,
-		"rate_limit", params.Config.WalletBalanceAlert.RateLimit,
-		"throttle_duration", WalletAlertThrottleDuration,
-	)
-
 	return svc
 }
 
