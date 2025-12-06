@@ -20,14 +20,8 @@ import (
 
 const (
 	// Event sources for tracking where alerts originated
-	EventSourceWalletCredit    = "wallet_credit"
-	EventSourceWalletDebit     = "wallet_debit"
-	EventSourceManualDebit     = "manual_debit"
-	EventSourceCreditPurchase  = "credit_purchase"
-	EventSourceCreditExpiry    = "credit_expiry"
-	EventSourceWalletTerminate = "wallet_terminate"
-	EventSourceCron            = "cron"
-	EventSourceAPI             = "api"
+	EventSourceFeatureUsage      = "feature_usage"
+	EventSourceWalletTransaction = "wallet_transaction"
 
 	// Throttle duration for wallet balance recalculations
 	WalletAlertThrottleDuration = 1 * time.Minute

@@ -90,7 +90,7 @@ type WalletService interface {
 	CheckWalletBalanceAlert(ctx context.Context, req *wallet.WalletBalanceAlertEvent) error
 
 	// PublishWalletBalanceAlertEvent publishes a wallet balance alert event
-	PublishWalletBalanceAlertEvent(ctx context.Context, customerID string, forceCalculateBalance bool) error
+	PublishWalletBalanceAlertEvent(ctx context.Context, customerID string, forceCalculateBalance bool, walletID string)
 }
 
 type walletService struct {
@@ -415,15 +415,6 @@ func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *d
 	walletResp, err := s.GetWalletByID(ctx, walletID)
 	if err != nil {
 		return nil, err
-	}
-
-	err = s.PublishWalletBalanceAlertEvent(ctx, walletResp.CustomerID, true)
-	if err != nil {
-		s.Logger.Errorw("failed to publish wallet balance alert event",
-			"error", err,
-			"wallet_id", walletID,
-			"customer_id", walletResp.CustomerID,
-		)
 	}
 
 	// Return response with transaction and wallet (no invoice for direct credits)
@@ -1020,14 +1011,6 @@ func (s *walletService) UpdateWallet(ctx context.Context, id string, req *dto.Up
 
 	// Publish webhook event
 	s.publishInternalWalletWebhookEvent(ctx, types.WebhookEventWalletUpdated, id)
-	err = s.PublishWalletBalanceAlertEvent(ctx, existing.CustomerID, true)
-	if err != nil {
-		s.Logger.Errorw("failed to publish wallet balance alert event",
-			"error", err,
-			"wallet_id", id,
-			"customer_id", existing.CustomerID,
-		)
-	}
 	return existing, nil
 }
 
@@ -1221,6 +1204,8 @@ func (s *walletService) processWalletOperation(ctx context.Context, req *wallet.
 
 	// Publish webhook event after transaction commits
 	s.publishInternalTransactionWebhookEvent(ctx, types.WebhookEventWalletTransactionCreated, tx.ID)
+
+	s.PublishWalletBalanceAlertEvent(ctx, w.CustomerID, true, req.WalletID)
 
 	// Log credit balance alert after wallet operation
 	if err := s.logCreditBalanceAlert(ctx, w, newCreditBalance); err != nil {
@@ -1942,15 +1927,6 @@ func (s *walletService) ManualBalanceDebit(ctx context.Context, walletID string,
 		return nil, err
 	}
 
-	err = s.PublishWalletBalanceAlertEvent(ctx, w.CustomerID, true)
-	if err != nil {
-		s.Logger.Errorw("failed to publish wallet balance alert event",
-			"error", err,
-			"wallet_id", walletID,
-			"customer_id", w.CustomerID,
-		)
-	}
-
 	return s.GetWalletByID(ctx, walletID)
 }
 
@@ -2201,16 +2177,27 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 	return nil
 }
 
-func (s *walletService) PublishWalletBalanceAlertEvent(ctx context.Context, customerID string, forceCalculateBalance bool) error {
+func (s *walletService) PublishWalletBalanceAlertEvent(ctx context.Context, customerID string, forceCalculateBalance bool, walletID string) {
 	// Create wallet balance alert service
 	walletAlertSvc := NewWalletBalanceAlertService(s.ServiceParams)
 
 	event := &wallet.WalletBalanceAlertEvent{
+		ID:                    types.GenerateUUIDWithPrefix(types.UUID_PREFIX_WALLET_ALERT),
+		Timestamp:             time.Now().UTC(),
+		Source:                EventSourceWalletTransaction,
 		CustomerID:            customerID,
 		ForceCalculateBalance: forceCalculateBalance,
 		TenantID:              types.GetTenantID(ctx),
 		EnvironmentID:         types.GetEnvironmentID(ctx),
+		WalletID:              walletID, // Optional: specific wallet that triggered the event
 	}
 
-	return walletAlertSvc.PublishEvent(ctx, event)
+	err := walletAlertSvc.PublishEvent(ctx, event)
+	if err != nil {
+		s.Logger.Errorw("failed to publish wallet balance alert event",
+			"error", err,
+			"customer_id", customerID,
+			"force_calculate_balance", forceCalculateBalance,
+		)
+	}
 }

@@ -322,8 +322,10 @@ func (s *featureUsageTrackingService) processEvent(ctx context.Context, event *e
 
 		walletBalanceAlertSvc := NewWalletBalanceAlertService(s.ServiceParams)
 		for _, fu := range featureUsage {
-
 			event := &wallet.WalletBalanceAlertEvent{
+				ID:                    types.GenerateUUIDWithPrefix(types.UUID_PREFIX_WALLET_ALERT),
+				Timestamp:             time.Now().UTC(),
+				Source:                EventSourceFeatureUsage,
 				CustomerID:            fu.CustomerID,
 				ForceCalculateBalance: false,
 				TenantID:              fu.TenantID,
