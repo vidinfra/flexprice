@@ -42,7 +42,7 @@ type walletBalanceAlertService struct {
 	cache  cache.Cache
 }
 
-// NewWalletAlertsService creates a new wallet alerts service
+// NewWalletBalanceAlertService creates a new wallet balance alert service
 func NewWalletBalanceAlertService(
 	params ServiceParams,
 ) WalletBalanceAlertService {
@@ -75,14 +75,6 @@ func NewWalletBalanceAlertService(
 	)
 
 	return svc
-}
-
-func NewWalletBalanceAlertServiceWithoutPubSub(params ServiceParams) WalletBalanceAlertService {
-	return &walletBalanceAlertService{
-		ServiceParams: params,
-		cache:         cache.NewInMemoryCache(),
-		pubSub:        nil,
-	}
 }
 
 // PublishEvent publishes a wallet balance alert event to Kafka

@@ -2178,8 +2178,14 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 }
 
 func (s *walletService) PublishWalletBalanceAlertEvent(ctx context.Context, customerID string, forceCalculateBalance bool, walletID string) {
-	// Create wallet balance alert service
-	walletAlertSvc := NewWalletBalanceAlertServiceWithoutPubSub(s.ServiceParams)
+	// Use the wallet balance alert service from ServiceParams if available
+	if s.WalletBalanceAlertService == nil {
+		s.Logger.Warnw("wallet balance alert service not available, skipping event publish",
+			"customer_id", customerID,
+			"wallet_id", walletID,
+		)
+		return
+	}
 
 	event := &wallet.WalletBalanceAlertEvent{
 		ID:                    types.GenerateUUIDWithPrefix(types.UUID_PREFIX_WALLET_ALERT),
@@ -2189,10 +2195,10 @@ func (s *walletService) PublishWalletBalanceAlertEvent(ctx context.Context, cust
 		ForceCalculateBalance: forceCalculateBalance,
 		TenantID:              types.GetTenantID(ctx),
 		EnvironmentID:         types.GetEnvironmentID(ctx),
-		WalletID:              walletID, // Optional: specific wallet that triggered the event
+		WalletID:              walletID,
 	}
 
-	err := walletAlertSvc.PublishEvent(ctx, event)
+	err := s.WalletBalanceAlertService.PublishEvent(ctx, event)
 	if err != nil {
 		s.Logger.Errorw("failed to publish wallet balance alert event",
 			"error", err,

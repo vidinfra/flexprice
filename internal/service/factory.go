@@ -105,6 +105,9 @@ type ServiceParams struct {
 	EventPublisher   publisher.EventPublisher
 	WebhookPublisher webhookPublisher.WebhookPublisher
 
+	// Services
+	WalletBalanceAlertService WalletBalanceAlertService
+
 	// http client
 	Client httpclient.Client
 
@@ -168,6 +171,7 @@ func NewServiceParams(
 	scheduledTaskRepo scheduledtask.Repository,
 	prorationCalculator proration.Calculator,
 	integrationFactory *integration.Factory,
+	walletBalanceAlertService WalletBalanceAlertService,
 ) ServiceParams {
 	return ServiceParams{
 		Logger:                       logger,
@@ -221,5 +225,6 @@ func NewServiceParams(
 		ScheduledTaskRepo:            scheduledTaskRepo,
 		ProrationCalculator:          prorationCalculator,
 		IntegrationFactory:           integrationFactory,
+		WalletBalanceAlertService:    walletBalanceAlertService,
 	}
 }

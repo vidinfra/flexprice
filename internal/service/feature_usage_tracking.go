@@ -319,26 +319,26 @@ func (s *featureUsageTrackingService) processEvent(ctx context.Context, event *e
 		if err := s.featureUsageRepo.BulkInsertProcessedEvents(ctx, featureUsage); err != nil {
 			return err
 		}
+		if s.WalletBalanceAlertService != nil {
+			for _, fu := range featureUsage {
+				event := &wallet.WalletBalanceAlertEvent{
+					ID:                    types.GenerateUUIDWithPrefix(types.UUID_PREFIX_WALLET_ALERT),
+					Timestamp:             time.Now().UTC(),
+					Source:                EventSourceFeatureUsage,
+					CustomerID:            fu.CustomerID,
+					ForceCalculateBalance: false,
+					TenantID:              fu.TenantID,
+					EnvironmentID:         fu.EnvironmentID,
+				}
+				if err := s.WalletBalanceAlertService.PublishEvent(ctx, event); err != nil {
+					continue
+				}
 
-		walletBalanceAlertSvc := NewWalletBalanceAlertServiceWithoutPubSub(s.ServiceParams)
-		for _, fu := range featureUsage {
-			event := &wallet.WalletBalanceAlertEvent{
-				ID:                    types.GenerateUUIDWithPrefix(types.UUID_PREFIX_WALLET_ALERT),
-				Timestamp:             time.Now().UTC(),
-				Source:                EventSourceFeatureUsage,
-				CustomerID:            fu.CustomerID,
-				ForceCalculateBalance: false,
-				TenantID:              fu.TenantID,
-				EnvironmentID:         fu.EnvironmentID,
+				s.Logger.Infow("wallet balance alert event published successfully",
+					"event_id", event.ID,
+					"customer_id", event.CustomerID,
+				)
 			}
-			if err := walletBalanceAlertSvc.PublishEvent(ctx, event); err != nil {
-				continue
-			}
-
-			s.Logger.Infow("wallet balance alert event published successfully",
-				"event_id", event.ID,
-				"customer_id", event.CustomerID,
-			)
 		}
 	}
 
