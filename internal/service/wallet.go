@@ -394,12 +394,6 @@ func (s *walletService) TopUpWallet(ctx context.Context, walletID string, req *d
 		return nil, err
 	}
 
-	// // Get the wallet transaction by ID
-	// tx, err := s.WalletRepo.GetTransactionByID(ctx, transactionID)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
 	// Get the wallet transaction by idempotency key
 	tx, err := s.WalletRepo.GetTransactionByIdempotencyKey(ctx, idempotencyKey)
 	if err != nil {

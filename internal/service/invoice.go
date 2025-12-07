@@ -1139,6 +1139,29 @@ func (s *invoiceService) UpdatePaymentStatus(ctx context.Context, id string, sta
 		return err
 	}
 
+	// If invoice is for a purchased credit (has wallet_transaction_id in metadata) and the payment status transitioned to succeeded,
+	// complete the wallet transaction to credit the wallet
+	if status == types.PaymentStatusSucceeded {
+		// Check if this invoice is for a purchased credit (has wallet_transaction_id in metadata)
+		if inv.Metadata != nil {
+			if walletTransactionID, ok := inv.Metadata["wallet_transaction_id"]; ok && walletTransactionID != "" {
+				walletService := NewWalletService(s.ServiceParams)
+				if err := walletService.CompletePurchasedCreditTransactionWithRetry(ctx, walletTransactionID); err != nil {
+					s.Logger.Errorw("failed to complete purchased credit transaction",
+						"error", err,
+						"invoice_id", inv.ID,
+						"wallet_transaction_id", walletTransactionID,
+					)
+				} else {
+					s.Logger.Debugw("successfully completed purchased credit transaction",
+						"invoice_id", inv.ID,
+						"wallet_transaction_id", walletTransactionID,
+					)
+				}
+			}
+		}
+	}
+
 	// Publish webhook events
 	s.publishInternalWebhookEvent(ctx, types.WebhookEventInvoiceUpdatePayment, inv.ID)
 
