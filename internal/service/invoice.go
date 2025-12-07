@@ -177,7 +177,7 @@ func (s *invoiceService) CreateInvoice(ctx context.Context, req dto.CreateInvoic
 			invoiceNumber = *req.InvoiceNumber
 		} else {
 			settingsService := NewSettingsService(s.ServiceParams)
-			invoiceConfigResponse, err := settingsService.GetSettingByKey(ctx, types.SettingKeyInvoiceConfig)
+			invoiceConfigResponse, err := settingsService.GetSettingWithDefaults(ctx, types.SettingKeyInvoiceConfig)
 			if err != nil {
 				return err
 			}
