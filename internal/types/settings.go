@@ -114,6 +114,7 @@ func GetDefaultSettings() map[SettingKey]DefaultSettingValue {
 				"separator":      "-",
 				"suffix_length":  5,
 				"due_date_days":  1, // Default to 1 day after period end
+				"auto_complete_purchased_credit_transaction": false,
 			},
 			Description: "Default configuration for invoice generation and management",
 			Required:    true,
@@ -182,7 +183,11 @@ func ValidateInvoiceConfig(value map[string]interface{}) error {
 		return errors.New("invoice_config value cannot be nil")
 	}
 
-	// Check if this is a due_date_days only update
+	// Check if this is a partial update (only optional fields)
+	// Optional fields: due_date_days, auto_complete_purchased_credit_transaction
+	hasOnlyOptionalFields := true
+
+	// Validate due_date_days if present
 	if dueDateDaysRaw, exists := value["due_date_days"]; exists {
 		var dueDateDays int
 		switch v := dueDateDaysRaw.(type) {
@@ -202,6 +207,28 @@ func ValidateInvoiceConfig(value map[string]interface{}) error {
 		if dueDateDays < 0 {
 			return errors.New("invoice_config: 'due_date_days' must be greater than or equal to 0")
 		}
+	}
+
+	// Validate auto_complete_purchased_credit_transaction if present
+	if autoCompletePurchasedCreditTransactionRaw, exists := value["auto_complete_purchased_credit_transaction"]; exists {
+		if _, ok := autoCompletePurchasedCreditTransactionRaw.(bool); !ok {
+			return ierr.NewErrorf("invoice_config: 'auto_complete_purchased_credit_transaction' must be a boolean, got %T", autoCompletePurchasedCreditTransactionRaw).
+				WithHintf("Invoice config auto complete purchased credit transaction must be a boolean, got %T", autoCompletePurchasedCreditTransactionRaw).
+				Mark(ierr.ErrValidation)
+		}
+	}
+
+	// Check if there are any required fields present
+	requiredFields := []string{"prefix", "format", "start_sequence", "timezone", "separator", "suffix_length"}
+	for _, field := range requiredFields {
+		if _, exists := value[field]; exists {
+			hasOnlyOptionalFields = false
+			break
+		}
+	}
+
+	// If only optional fields are present, return early (validation passed)
+	if hasOnlyOptionalFields {
 		return nil
 	}
 
