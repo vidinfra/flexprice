@@ -531,13 +531,16 @@ func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Con
 
 		// Set payment status based on auto-complete setting
 		paymentStatus := types.PaymentStatusPending
+		var amountPaid *decimal.Decimal
 		if autoCompleteEnabled {
 			paymentStatus = types.PaymentStatusSucceeded
+			amountPaid = &amount
 		}
 
 		invoice, err := invoiceService.CreateInvoice(ctx, dto.CreateInvoiceRequest{
 			CustomerID:     w.CustomerID,
 			AmountDue:      amount,
+			AmountPaid:     amountPaid,
 			Subtotal:       amount,
 			Total:          amount,
 			Currency:       w.Currency,

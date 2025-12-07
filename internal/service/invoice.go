@@ -240,6 +240,12 @@ func (s *invoiceService) CreateInvoice(ctx context.Context, req dto.CreateInvoic
 			}
 		}
 
+		// Set PaidAt if the invoice is being created with SUCCEEDED status and fully paid
+		if inv.PaymentStatus == types.PaymentStatusSucceeded && inv.AmountRemaining.IsZero() && inv.PaidAt == nil {
+			now := time.Now().UTC()
+			inv.PaidAt = &now
+		}
+
 		// Validate invoice
 		if err := inv.Validate(); err != nil {
 			return err
