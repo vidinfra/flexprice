@@ -792,10 +792,10 @@ func (s *WalletServiceSuite) TestGetWalletBalance() {
 			walletID: s.testData.wallet.ID,
 			// Usage includes both storage (315 * 0.1 = 31.5) and API calls tiers (assessed across subscriptions)
 			// Given test data, current period usage totals to 123
-			// Unpaid invoices total 250 (inv_1: 100 + inv_2: 150)
-			// Total pending charges: 123 + 250 = 373, real-time balance: 1000 - 373 = 627
-			expectedRealTimeBalance: decimal.NewFromInt(627), // 1000 - 123 - 250
-			expectedCurrentUsage:    decimal.NewFromInt(373), // 123 (usage) + 250 (unpaid invoices)
+			// Wallet balance now only includes usage charges (not unpaid invoices)
+			// Real-time balance: 1000 - 123 = 877
+			expectedRealTimeBalance: decimal.NewFromInt(877), // 1000 - 123 (usage only)
+			expectedCurrentUsage:    decimal.NewFromInt(123), // 123 (usage charges only)
 		},
 		{
 			name:          "Error - Invalid wallet ID",
@@ -1809,10 +1809,11 @@ func (s *WalletServiceSuite) TestGetWalletBalanceWithEntitlements() {
 				_, err := s.GetStores().EntitlementRepo.Create(s.GetContext(), entitlement)
 				s.NoError(err)
 			},
-			// current setup; align expectation with computed usage (78) plus unpaid invoices (250)
-			// Total pending charges: 78 + 250 = 328, real-time balance: 1000 - 328 = 672
-			expectedRealTimeBalance: decimal.NewFromInt(672), // 1000 - 78 - 250
-			expectedCurrentUsage:    decimal.NewFromInt(328), // 78 (usage) + 250 (unpaid invoices)
+			// current setup; align expectation with computed usage (78)
+			// Wallet balance now only includes usage charges (not unpaid invoices)
+			// Real-time balance: 1000 - 78 = 922
+			expectedRealTimeBalance: decimal.NewFromInt(922), // 1000 - 78 (usage only)
+			expectedCurrentUsage:    decimal.NewFromInt(78),  // 78 (usage charges only)
 			wantErr:                 false,
 		},
 		{
@@ -1833,9 +1834,10 @@ func (s *WalletServiceSuite) TestGetWalletBalanceWithEntitlements() {
 				_, err := s.GetStores().EntitlementRepo.Create(s.GetContext(), entitlement)
 				s.NoError(err)
 			},
-			// Total pending charges: 78 + 250 = 328, real-time balance: 1000 - 328 = 672
-			expectedRealTimeBalance: decimal.NewFromInt(672), // 1000 - 78 - 250
-			expectedCurrentUsage:    decimal.NewFromInt(328), // 78 (usage) + 250 (unpaid invoices)
+			// Wallet balance now only includes usage charges (not unpaid invoices)
+			// Real-time balance: 1000 - 78 = 922
+			expectedRealTimeBalance: decimal.NewFromInt(922), // 1000 - 78 (usage only)
+			expectedCurrentUsage:    decimal.NewFromInt(78),  // 78 (usage charges only)
 			wantErr:                 false,
 		},
 		{
@@ -1856,9 +1858,10 @@ func (s *WalletServiceSuite) TestGetWalletBalanceWithEntitlements() {
 				_, err := s.GetStores().EntitlementRepo.Create(s.GetContext(), entitlement)
 				s.NoError(err)
 			},
-			// Total pending charges: 78 (usage) + 250 (unpaid invoices) = 328, real-time balance: 1000 - 328 = 672
-			expectedRealTimeBalance: decimal.NewFromInt(672), // 1000 - 78 - 250
-			expectedCurrentUsage:    decimal.NewFromInt(328), // 78 (usage) + 250 (unpaid invoices)
+			// Wallet balance now only includes usage charges (not unpaid invoices)
+			// Real-time balance: 1000 - 78 = 922
+			expectedRealTimeBalance: decimal.NewFromInt(922), // 1000 - 78 (usage only)
+			expectedCurrentUsage:    decimal.NewFromInt(78),  // 78 (usage charges only)
 			wantErr:                 false,
 		},
 		{
@@ -1888,9 +1891,10 @@ func (s *WalletServiceSuite) TestGetWalletBalanceWithEntitlements() {
 				s.False(created.IsEnabled, "Entitlement should be disabled")
 			},
 			// Disabled entitlement should not adjust usage; expect same charges as baseline
-			// Total pending charges: 123 (usage) + 250 (unpaid invoices) = 373, real-time balance: 1000 - 373 = 627
-			expectedRealTimeBalance: decimal.NewFromInt(627), // 1000 - 123 - 250
-			expectedCurrentUsage:    decimal.NewFromInt(373), // 123 (usage) + 250 (unpaid invoices)
+			// Wallet balance now only includes usage charges (not unpaid invoices)
+			// Real-time balance: 1000 - 123 = 877
+			expectedRealTimeBalance: decimal.NewFromInt(877), // 1000 - 123 (usage only)
+			expectedCurrentUsage:    decimal.NewFromInt(123), // 123 (usage charges only)
 			wantErr:                 false,
 		},
 	}
