@@ -18,9 +18,7 @@ import (
 	"github.com/flexprice/flexprice/internal/pdf"
 	"github.com/flexprice/flexprice/internal/postgres"
 	"github.com/flexprice/flexprice/internal/publisher"
-	"github.com/flexprice/flexprice/internal/pubsub"
 	kafkaPubsub "github.com/flexprice/flexprice/internal/pubsub/kafka"
-	"github.com/flexprice/flexprice/internal/pubsub/memory"
 	pubsubRouter "github.com/flexprice/flexprice/internal/pubsub/router"
 	"github.com/flexprice/flexprice/internal/pyroscope"
 	"github.com/flexprice/flexprice/internal/rbac"
@@ -179,10 +177,9 @@ func main() {
 	// Webhook module (must be initialised before services)
 	opts = append(opts, webhook.Module)
 
-	// Provide PubSubs with named annotations
+	// Provide Wallet Balance Alert PubSub
 	opts = append(opts,
 		fx.Provide(
-			provideWebhookPubSub,
 			provideWalletBalanceAlertPubSub,
 		),
 	)
@@ -562,26 +559,6 @@ func startRouter(
 			return router.Close()
 		},
 	})
-}
-
-// Provide Webhook and Wallet Balance Alert PubSubs
-func provideWebhookPubSub(
-	cfg *config.Configuration,
-	logger *logger.Logger,
-) pubsub.PubSub {
-	switch cfg.Webhook.PubSub {
-	case types.MemoryPubSub:
-		return memory.NewPubSub(cfg, logger)
-	case types.KafkaPubSub:
-		pubsub, err := kafkaPubsub.NewPubSubFromConfig(cfg, logger, cfg.Webhook.ConsumerGroup)
-		if err != nil {
-			logger.Fatalw("failed to create kafka pubsub for webhooks", "error", err)
-		}
-		return pubsub
-	default:
-		logger.Fatalw("unsupported webhook pubsub type", "type", cfg.Webhook.PubSub)
-	}
-	return nil
 }
 
 func provideWalletBalanceAlertPubSub(
