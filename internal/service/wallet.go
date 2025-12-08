@@ -2000,16 +2000,13 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 		// Skip if alert config is not set
 		if w.AlertConfig == nil || w.AlertConfig.Threshold == nil {
 			// // assume default threshold
-			// w.AlertConfig = &types.AlertConfig{
-			// 	Threshold: req.Threshold,
-			// }
+			w.AlertConfig = &types.AlertConfig{
+				Threshold: &types.WalletAlertThreshold{
+					Type:  types.AlertThresholdTypeAmount,
+					Value: decimal.NewFromFloat(types.WalletBalanceAlertThreshold),
+				},
+			}
 
-			// if req.Threshold == nil {
-			// 	wallet.AlertConfig.Threshold = &types.WalletAlertThreshold{
-			// 		Type:  types.AlertThresholdTypeAmount,
-			// 		Value: decimal.NewFromInt(1),
-			// 	}
-			// }
 			continue
 		}
 
