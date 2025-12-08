@@ -2006,8 +2006,6 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 					Value: decimal.NewFromFloat(types.WalletBalanceAlertThreshold),
 				},
 			}
-
-			continue
 		}
 
 		// Get real-time balance
