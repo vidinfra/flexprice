@@ -50,14 +50,6 @@ func NewWalletBalanceAlertService(
 		cache:         cache.NewInMemoryCache(),
 	}
 
-	// Skip pubsub initialization if Kafka brokers are not configured (e.g., in tests)
-	if params.Config == nil || len(params.Config.Kafka.Brokers) == 0 {
-		params.Logger.Warnw("wallet alert pubsub not initialized - Kafka not configured",
-			"reason", "missing_kafka_brokers",
-		)
-		return svc
-	}
-
 	svc.pubSub = params.WalletBalanceAlertPubSub
 
 	params.Logger.Infow("wallet alert pubsub initialized successfully",
@@ -70,14 +62,6 @@ func NewWalletBalanceAlertService(
 
 // PublishEvent publishes a wallet balance alert event to Kafka
 func (s *walletBalanceAlertService) PublishEvent(ctx context.Context, event *wallet.WalletBalanceAlertEvent) error {
-	// Skip if pubsub is not initialized (e.g., in tests or when Kafka is not configured)
-	if s.pubSub == nil {
-		s.Logger.Debugw("skipping wallet balance alert publish - pubsub not initialized",
-			"customer_id", event.CustomerID,
-			"event_id", event.ID,
-		)
-		return nil
-	}
 
 	err := event.Validate()
 	if err != nil {
