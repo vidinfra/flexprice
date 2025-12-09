@@ -177,48 +177,8 @@ func (s *CustomerService) SyncCustomerToQuickBooks(ctx context.Context, flexpric
 		"quickbooks_customer_id", customerResp.ID,
 		"display_name", customerResp.DisplayName)
 
-	// Create entity integration mapping to track the relationship between Flexprice and QuickBooks customer
-	// This mapping is used to avoid duplicate customer creation and for invoice line item references
-	mapping := &entityintegrationmapping.EntityIntegrationMapping{
-		ID:               types.GenerateUUIDWithPrefix(types.UUID_PREFIX_ENTITY_INTEGRATION_MAPPING),
-		EntityType:       types.IntegrationEntityTypeCustomer,
-		EntityID:         flexpriceCustomer.ID,
-		ProviderType:     string(types.SecretProviderQuickBooks),
-		ProviderEntityID: customerResp.ID,
-		EnvironmentID:    flexpriceCustomer.EnvironmentID,
-		BaseModel:        types.GetDefaultBaseModel(ctx),
-		Metadata: map[string]interface{}{
-			"synced_at":                        time.Now().UTC().Format(time.RFC3339),
-			"quickbooks_customer_display_name": customerResp.DisplayName,
-		},
-	}
-	mapping.TenantID = flexpriceCustomer.TenantID
-
-	// Store email in metadata for reference and debugging
-	if customerResp.PrimaryEmailAddr != nil && customerResp.PrimaryEmailAddr.Address != "" {
-		mapping.Metadata["quickbooks_customer_primary_email_addr_address"] = customerResp.PrimaryEmailAddr.Address
-	}
-
-	// Store billing address in metadata as per requirements - all address fields must be synced
-	if customerResp.BillAddr != nil {
-		if customerResp.BillAddr.Line1 != "" {
-			mapping.Metadata["quickbooks_customer_bill_addr_line1"] = customerResp.BillAddr.Line1
-		}
-		if customerResp.BillAddr.Line2 != "" {
-			mapping.Metadata["quickbooks_customer_bill_addr_line2"] = customerResp.BillAddr.Line2
-		}
-		if customerResp.BillAddr.City != "" {
-			mapping.Metadata["quickbooks_customer_bill_addr_city"] = customerResp.BillAddr.City
-		}
-		if customerResp.BillAddr.Country != "" {
-			mapping.Metadata["quickbooks_customer_bill_addr_country"] = customerResp.BillAddr.Country
-		}
-		if customerResp.BillAddr.PostalCode != "" {
-			mapping.Metadata["quickbooks_customer_bill_addr_postal_code"] = customerResp.BillAddr.PostalCode
-		}
-	}
-
-	if err := s.EntityIntegrationMappingRepo.Create(ctx, mapping); err != nil {
+	// Create entity integration mapping using the reusable method
+	if err := s.createCustomerMapping(ctx, flexpriceCustomer.ID, customerResp.ID, customerResp); err != nil {
 		s.Logger.Errorw("failed to save entity mapping",
 			"customer_id", flexpriceCustomer.ID,
 			"quickbooks_customer_id", customerResp.ID,
@@ -290,4 +250,3 @@ func (s *CustomerService) createCustomerMapping(
 
 	return s.EntityIntegrationMappingRepo.Create(ctx, mapping)
 }
-

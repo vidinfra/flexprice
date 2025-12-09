@@ -184,16 +184,15 @@ func (s *PaymentService) createExternalPaymentRecord(ctx context.Context, qbPaym
 		"currency", invoiceResp.Currency)
 
 	// Create payment with QuickBooks details in metadata
-	// Use "razorpay" gateway since we don't have "offline" - it's for external payments
-	gatewayType := types.PaymentGatewayTypeRazorpay
-	methodType := types.PaymentMethodTypeOffline
+	// For external QuickBooks payments, use OFFLINE payment method type
+	// Payment already succeeded in QuickBooks, so we just record it in Flexprice
 
+	methodType := types.PaymentMethodTypeCard
 	createReq := &dto.CreatePaymentRequest{
 		DestinationType:   types.PaymentDestinationTypeInvoice,
 		DestinationID:     invoiceID,
 		Amount:            amount,
 		Currency:          invoiceResp.Currency,
-		PaymentGateway:    &gatewayType,
 		PaymentMethodType: methodType,
 		ProcessPayment:    false, // Don't process - already succeeded in QuickBooks
 		Metadata: types.Metadata{
@@ -226,11 +225,11 @@ func (s *PaymentService) createExternalPaymentRecord(ctx context.Context, qbPaym
 	}
 
 	// Update payment to succeeded status with QuickBooks details
+	// Note: GatewayPaymentID stores QuickBooks payment ID for tracking, but PaymentGateway stays nil for offline payments
 	now := time.Now().UTC()
 	updateReq := dto.UpdatePaymentRequest{
 		PaymentStatus:    lo.ToPtr(string(types.PaymentStatusSucceeded)),
-		GatewayPaymentID: lo.ToPtr(qbPayment.ID),
-		PaymentGateway:   lo.ToPtr(string(types.PaymentGatewayTypeRazorpay)),
+		GatewayPaymentID: lo.ToPtr(qbPayment.ID), // Store QuickBooks payment ID for reference
 		SucceededAt:      &now,
 	}
 
@@ -304,27 +303,6 @@ func (s *PaymentService) reconcileInvoiceWithExternalPayment(ctx context.Context
 		"payment_status", newPaymentStatus)
 
 	return nil
-}
-
-// findMappingByEntityAndProvider finds a mapping by entity ID, entity type, and provider
-func (s *PaymentService) findMappingByEntityAndProvider(ctx context.Context, entityID string, entityType types.IntegrationEntityType) (*entityintegrationmapping.EntityIntegrationMapping, error) {
-	filter := &types.EntityIntegrationMappingFilter{
-		EntityID:      entityID,
-		EntityType:    entityType,
-		ProviderTypes: []string{string(types.SecretProviderQuickBooks)},
-		QueryFilter:   types.NewDefaultQueryFilter(),
-	}
-
-	mappings, err := s.entityIntegrationMappingRepo.List(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(mappings) == 0 {
-		return nil, ierr.NewError("mapping not found").Mark(ierr.ErrNotFound)
-	}
-
-	return mappings[0], nil
 }
 
 // findInvoiceMappingByProviderID finds an invoice mapping by QuickBooks invoice ID
