@@ -2,27 +2,20 @@ package events
 
 import (
 	"context"
-
-	"github.com/flexprice/flexprice/internal/types"
+	"time"
 )
 
 // FeatureUsageRepository defines operations for feature usage tracking
-type CostTrackingRepository interface {
+type CostSheetUsageRepository interface {
 	// Inserts a single processed event into events_processed table
-	InsertProcessedEvent(ctx context.Context, event *FeatureUsage) error
+	InsertProcessedEvent(ctx context.Context, event *CostUsage) error
 
 	// Bulk insert events into events_processed table
-	BulkInsertProcessedEvents(ctx context.Context, events []*FeatureUsage) error
+	BulkInsertProcessedEvents(ctx context.Context, events []*CostUsage) error
 
 	// Get processed events with filtering options
-	GetProcessedEvents(ctx context.Context, params *GetProcessedEventsParams) ([]*FeatureUsage, uint64, error)
-}
+	GetProcessedEvents(ctx context.Context, params *GetCostUsageEventsParams) ([]*CostUsage, uint64, error)
 
-// MaxBucketFeatureInfo contains information about a feature that uses MAX with bucket aggregation
-type MaxBucketFeatureInfo struct {
-	FeatureID    string
-	MeterID      string
-	BucketSize   types.WindowSize
-	EventName    string
-	PropertyName string
+	// Get usage by cost sheet ID
+	GetUsageByCostSheetID(ctx context.Context, costSheetID, externalCustomerID string, startTime, endTime time.Time) (map[string]*UsageByCostSheetResult, error)
 }

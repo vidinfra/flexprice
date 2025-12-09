@@ -183,18 +183,17 @@ type FeatureUsage struct {
 }
 
 type CostUsage struct {
-	ID                 string          `json:"id" ch:"id"`
-	TenantID           string          `json:"tenant_id" ch:"tenant_id"`
-	EnvironmentID      string          `json:"environment_id" ch:"environment_id"`
-	ExternalCustomerID string          `json:"external_customer_id" ch:"external_customer_id"`
-	EventName          string          `json:"event_name" ch:"event_name"`
-	CustomerID         string          `json:"customer_id" ch:"customer_id"`
-	CostSheetID        string          `json:"cost_sheet_id" ch:"cost_sheet_id"`
-	PriceID            string          `json:"price_id" ch:"price_id"`
-	MeterID            string          `json:"meter_id" ch:"meter_id"`
-	FeatureID          string          `json:"feature_id" ch:"feature_id"`
-	Currency           string          `json:"currency" ch:"currency"`
-	QtyTotal           decimal.Decimal `json:"qty_total" ch:"qty_total"`
+	// Original event fields
+	Event
+	// Processing fields
+	CostSheetID string `json:"costsheet_id" ch:"costsheet_id"`
+	PriceID     string `json:"price_id" ch:"price_id"`
+	FeatureID   string `json:"feature_id" ch:"feature_id"`
+	MeterID     string `json:"meter_id" ch:"meter_id"`
+
+	// Deduplication and metrics
+	UniqueHash string          `json:"unique_hash" ch:"unique_hash"`
+	QtyTotal   decimal.Decimal `json:"qty_total" ch:"qty_total"`
 
 	// Audit fields
 	Version uint64 `json:"version" ch:"version"`
