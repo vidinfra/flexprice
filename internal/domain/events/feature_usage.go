@@ -3,8 +3,6 @@ package events
 import (
 	"context"
 	"time"
-
-	"github.com/flexprice/flexprice/internal/types"
 )
 
 // FeatureUsageRepository defines operations for feature usage tracking
@@ -34,13 +32,4 @@ type FeatureUsageRepository interface {
 
 	// GetFeatureUsageByEventIDs gets feature usage records by event IDs
 	GetFeatureUsageByEventIDs(ctx context.Context, eventIDs []string) ([]*FeatureUsage, error)
-}
-
-// MaxBucketFeatureInfo contains information about a feature that uses MAX with bucket aggregation
-type MaxBucketFeatureInfo struct {
-	FeatureID    string
-	MeterID      string
-	BucketSize   types.WindowSize
-	EventName    string
-	PropertyName string
 }

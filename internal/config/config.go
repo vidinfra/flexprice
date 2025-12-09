@@ -35,6 +35,7 @@ type Configuration struct {
 	Cache                    CacheConfig                    `validate:"required"`
 	EventProcessing          EventProcessingConfig          `mapstructure:"event_processing" validate:"required"`
 	EventProcessingLazy      EventProcessingLazyConfig      `mapstructure:"event_processing_lazy" validate:"required"`
+	CostTracking             CostTrackingConfig             `mapstructure:"cost_tracking" validate:"required"`
 	EventPostProcessing      EventPostProcessingConfig      `mapstructure:"event_post_processing" validate:"required"`
 	FeatureUsageTracking     FeatureUsageTrackingConfig     `mapstructure:"feature_usage_tracking" validate:"required"`
 	FeatureUsageTrackingLazy FeatureUsageTrackingLazyConfig `mapstructure:"feature_usage_tracking_lazy" validate:"required"`
@@ -241,6 +242,11 @@ type EmailConfig struct {
 	FromAddress  string `mapstructure:"from_address" validate:"omitempty"`
 	ReplyTo      string `mapstructure:"reply_to" validate:"omitempty"`
 	CalendarURL  string `mapstructure:"calendar_url" validate:"omitempty"`
+}
+type CostTrackingConfig struct {
+	Topic         string `mapstructure:"topic" default:"events"`
+	RateLimit     int64  `mapstructure:"rate_limit" default:"1"`
+	ConsumerGroup string `mapstructure:"consumer_group" default:"v1_event_processing"`
 }
 
 func NewConfig() (*Configuration, error) {
