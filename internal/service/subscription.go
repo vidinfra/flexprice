@@ -1590,6 +1590,33 @@ func (s *subscriptionService) ListSubscriptions(ctx context.Context, filter *typ
 		filter.QueryFilter = types.NewDefaultQueryFilter()
 	}
 
+	// Resolve external customer ID to internal customer ID if provided
+	if filter.ExternalCustomerID != "" {
+		s.Logger.Debugw("resolving external customer ID",
+			"external_customer_id", filter.ExternalCustomerID)
+
+		customer, err := s.CustomerRepo.GetByLookupKey(ctx, filter.ExternalCustomerID)
+		if err != nil {
+			s.Logger.Errorw("failed to resolve external customer ID",
+				"error", err,
+				"external_customer_id", filter.ExternalCustomerID)
+			return nil, ierr.WithError(err).
+				WithHintf("Customer with external ID '%s' not found", filter.ExternalCustomerID).
+				WithReportableDetails(map[string]interface{}{
+					"external_customer_id": filter.ExternalCustomerID,
+				}).
+				Mark(ierr.ErrNotFound)
+		}
+
+		// Set the resolved customer ID and clear the external customer ID
+		filter.CustomerID = customer.ID
+		filter.ExternalCustomerID = "" // Clear to avoid confusion
+
+		s.Logger.Debugw("resolved external customer ID to internal customer ID",
+			"external_customer_id", filter.ExternalCustomerID,
+			"customer_id", customer.ID)
+	}
+
 	s.Logger.Debugw("calling SubRepo.List",
 		"final_filter", filter,
 		"limit", filter.GetLimit(),
