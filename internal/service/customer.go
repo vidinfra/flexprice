@@ -721,6 +721,11 @@ func (s *customerService) handleCustomerOnboarding(ctx context.Context, customer
 		return err
 	}
 
+	if workflowConfig == nil {
+		s.Logger.Infow("workflow config is nil, skipping customer onboarding", "customer_id", customer.ID)
+		return nil
+	}
+
 	// If there are no actions, return
 	if len(workflowConfig.Actions) == 0 {
 		s.Logger.Infow("no actions found for customer onboarding", "customer_id", customer.ID)
