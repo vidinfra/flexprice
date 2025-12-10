@@ -16,33 +16,34 @@ import (
 )
 
 type Configuration struct {
-	Deployment               DeploymentConfig               `validate:"required"`
-	Server                   ServerConfig                   `validate:"required"`
-	Auth                     AuthConfig                     `validate:"required"`
-	Kafka                    KafkaConfig                    `validate:"required"`
-	ClickHouse               ClickHouseConfig               `validate:"required"`
-	Logging                  LoggingConfig                  `validate:"required"`
-	Postgres                 PostgresConfig                 `validate:"required"`
-	Sentry                   SentryConfig                   `validate:"required"`
-	Pyroscope                PyroscopeConfig                `validate:"required"`
-	Event                    EventConfig                    `validate:"required"`
-	DynamoDB                 DynamoDBConfig                 `validate:"required"`
-	Temporal                 TemporalConfig                 `validate:"required"`
-	Webhook                  Webhook                        `validate:"omitempty"`
-	Secrets                  SecretsConfig                  `validate:"required"`
-	Billing                  BillingConfig                  `validate:"omitempty"`
-	S3                       S3Config                       `validate:"required"`
-	Cache                    CacheConfig                    `validate:"required"`
-	EventProcessing          EventProcessingConfig          `mapstructure:"event_processing" validate:"required"`
-	EventProcessingLazy      EventProcessingLazyConfig      `mapstructure:"event_processing_lazy" validate:"required"`
-	CostTracking             CostTrackingConfig             `mapstructure:"cost_tracking" validate:"required"`
-	EventPostProcessing      EventPostProcessingConfig      `mapstructure:"event_post_processing" validate:"required"`
-	FeatureUsageTracking     FeatureUsageTrackingConfig     `mapstructure:"feature_usage_tracking" validate:"required"`
-	FeatureUsageTrackingLazy FeatureUsageTrackingLazyConfig `mapstructure:"feature_usage_tracking_lazy" validate:"required"`
-	EnvAccess                EnvAccessConfig                `mapstructure:"env_access" json:"env_access" validate:"omitempty"`
-	FeatureFlag              FeatureFlagConfig              `mapstructure:"feature_flag" validate:"required"`
-	Email                    EmailConfig                    `mapstructure:"email" validate:"required"`
-	RBAC                     RBACConfig                     `mapstructure:"rbac" validate:"omitempty"`
+	Deployment                 DeploymentConfig                 `validate:"required"`
+	Server                     ServerConfig                     `validate:"required"`
+	Auth                       AuthConfig                       `validate:"required"`
+	Kafka                      KafkaConfig                      `validate:"required"`
+	ClickHouse                 ClickHouseConfig                 `validate:"required"`
+	Logging                    LoggingConfig                    `validate:"required"`
+	Postgres                   PostgresConfig                   `validate:"required"`
+	Sentry                     SentryConfig                     `validate:"required"`
+	Pyroscope                  PyroscopeConfig                  `validate:"required"`
+	Event                      EventConfig                      `validate:"required"`
+	DynamoDB                   DynamoDBConfig                   `validate:"required"`
+	Temporal                   TemporalConfig                   `validate:"required"`
+	Webhook                    Webhook                          `validate:"omitempty"`
+	Secrets                    SecretsConfig                    `validate:"required"`
+	Billing                    BillingConfig                    `validate:"omitempty"`
+	S3                         S3Config                         `validate:"required"`
+	Cache                      CacheConfig                      `validate:"required"`
+	EventProcessing            EventProcessingConfig            `mapstructure:"event_processing" validate:"required"`
+	EventProcessingLazy        EventProcessingLazyConfig        `mapstructure:"event_processing_lazy" validate:"required"`
+	CostSheetUsageTracking     CostSheetUsageTrackingConfig     `mapstructure:"costsheet_usage_tracking" validate:"required"`
+	CostSheetUsageTrackingLazy CostSheetUsageTrackingLazyConfig `mapstructure:"costsheet_usage_tracking_lazy" validate:"required"`
+	EventPostProcessing        EventPostProcessingConfig        `mapstructure:"event_post_processing" validate:"required"`
+	FeatureUsageTracking       FeatureUsageTrackingConfig       `mapstructure:"feature_usage_tracking" validate:"required"`
+	FeatureUsageTrackingLazy   FeatureUsageTrackingLazyConfig   `mapstructure:"feature_usage_tracking_lazy" validate:"required"`
+	EnvAccess                  EnvAccessConfig                  `mapstructure:"env_access" json:"env_access" validate:"omitempty"`
+	FeatureFlag                FeatureFlagConfig                `mapstructure:"feature_flag" validate:"required"`
+	Email                      EmailConfig                      `mapstructure:"email" validate:"required"`
+	RBAC                       RBACConfig                       `mapstructure:"rbac" validate:"omitempty"`
 }
 
 type CacheConfig struct {
@@ -243,10 +244,16 @@ type EmailConfig struct {
 	ReplyTo      string `mapstructure:"reply_to" validate:"omitempty"`
 	CalendarURL  string `mapstructure:"calendar_url" validate:"omitempty"`
 }
-type CostTrackingConfig struct {
+type CostSheetUsageTrackingConfig struct {
 	Topic         string `mapstructure:"topic" default:"events"`
 	RateLimit     int64  `mapstructure:"rate_limit" default:"1"`
-	ConsumerGroup string `mapstructure:"consumer_group" default:"v1_event_processing"`
+	ConsumerGroup string `mapstructure:"consumer_group" default:"v1_costsheet_usage_tracking_service"`
+}
+
+type CostSheetUsageTrackingLazyConfig struct {
+	Topic         string `mapstructure:"topic" default:"events_lazy"`
+	RateLimit     int64  `mapstructure:"rate_limit" default:"1"`
+	ConsumerGroup string `mapstructure:"consumer_group" default:"v1_costsheet_usage_tracking_service_lazy"`
 }
 
 func NewConfig() (*Configuration, error) {

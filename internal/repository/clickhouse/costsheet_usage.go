@@ -105,7 +105,7 @@ func (r *CostSheetUsageRepository) BulkInsertProcessedEvents(ctx context.Context
 			INSERT INTO costsheet_usage (
 				id, tenant_id, external_customer_id, customer_id, event_name, source, 
 				timestamp, ingested_at, properties, environment_id,
-				costsheet_id, price_id, meter_id, feature_id, currency,
+				costsheet_id, price_id, meter_id, feature_id,
 				unique_hash, qty_total, sign
 			)
 		`)
