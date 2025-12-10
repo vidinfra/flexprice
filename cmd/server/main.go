@@ -309,6 +309,7 @@ func provideHandlers(
 	scheduledTaskService service.ScheduledTaskService,
 	rbacService *rbac.RBACService,
 	oauthService service.OAuthService,
+	costsheetUsageTrackingService service.CostSheetUsageTrackingService,
 ) api.Handlers {
 	return api.Handlers{
 		Events:                   v1.NewEventsHandler(eventService, eventPostProcessingService, featureUsageTrackingService, cfg, logger),
@@ -338,7 +339,7 @@ func provideHandlers(
 		CronInvoice:              cron.NewInvoiceHandler(invoiceService, subscriptionService, connectionService, tenantService, environmentService, integrationFactory, logger),
 		CreditGrant:              v1.NewCreditGrantHandler(creditGrantService, logger),
 		Costsheet:                v1.NewCostsheetHandler(costsheetService, logger),
-		RevenueAnalytics:         v1.NewRevenueAnalyticsHandler(revenueAnalyticsService, cfg, logger),
+		RevenueAnalytics:         v1.NewRevenueAnalyticsHandler(revenueAnalyticsService, costsheetUsageTrackingService, cfg, logger),
 		CronCreditGrant:          cron.NewCreditGrantCronHandler(creditGrantService, logger),
 		CreditNote:               v1.NewCreditNoteHandler(creditNoteService, logger),
 		Connection:               v1.NewConnectionHandler(connectionService, logger),

@@ -38,6 +38,9 @@ type CostSheetUsageTrackingService interface {
 
 	// Register message handler with the router
 	RegisterHandlerLazy(router *pubsubRouter.Router, cfg *config.Configuration)
+
+	// Get Analytics
+	GetCostSheetUsageAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error)
 }
 
 type costsheetUsageTrackingService struct {
