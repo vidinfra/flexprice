@@ -44,6 +44,8 @@ type Configuration struct {
 	FeatureFlag                FeatureFlagConfig                `mapstructure:"feature_flag" validate:"required"`
 	Email                      EmailConfig                      `mapstructure:"email" validate:"required"`
 	RBAC                       RBACConfig                       `mapstructure:"rbac" validate:"omitempty"`
+	OAuth                      OAuthConfig                      `mapstructure:"oauth" validate:"required"`
+	WalletBalanceAlert         WalletBalanceAlertConfig         `mapstructure:"wallet_balance_alert" validate:"required"`
 }
 
 type CacheConfig struct {
@@ -220,6 +222,13 @@ type FeatureUsageTrackingLazyConfig struct {
 	ConsumerGroupBackfill string `mapstructure:"consumer_group_backfill" default:"v1_feature_tracking_service_lazy_backfill"`
 }
 
+type WalletBalanceAlertConfig struct {
+	// Rate limit in messages consumed per second
+	Topic         string `mapstructure:"topic" default:"wallet_alert"`
+	RateLimit     int64  `mapstructure:"rate_limit" default:"1"`
+	ConsumerGroup string `mapstructure:"consumer_group" default:"v1_wallet_alert_service"`
+}
+
 type EnvAccessConfig struct {
 	UserEnvMapping map[string]map[string][]string `mapstructure:"user_env_mapping" json:"user_env_mapping" validate:"omitempty"`
 }
@@ -391,4 +400,11 @@ func (c PostgresConfig) HasSeparateReader() bool {
 
 type RBACConfig struct {
 	RolesConfigPath string `mapstructure:"roles_config_path" json:"roles_config_path"`
+}
+
+// OAuthConfig holds generic OAuth configuration for multiple providers
+type OAuthConfig struct {
+	// Base redirect URI - provider-specific paths may be appended
+	// Example: "https://admin-dev.flexprice.io/tools/integrations/oauth/callback"
+	RedirectURI string `mapstructure:"redirect_uri" validate:"required,url"`
 }
