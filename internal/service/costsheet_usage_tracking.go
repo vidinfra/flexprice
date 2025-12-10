@@ -12,6 +12,7 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
+	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/config"
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/events"
@@ -916,4 +917,431 @@ func (s *costsheetUsageTrackingService) ReprocessEvents(ctx context.Context, par
 	)
 
 	return nil
+}
+
+func (s *costsheetUsageTrackingService) GetCostSheetUsageAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error) {
+	// STEP1: Get active costsheet
+	costsheetService := NewCostsheetService(s.ServiceParams)
+	costSheet, err := costsheetService.GetActiveCostsheetForTenant(ctx)
+	if err != nil {
+		s.Logger.Errorw("failed to fetch active costsheet", "error", err)
+		return nil, err
+	}
+
+	if costSheet == nil {
+		s.Logger.Debugw("no active costsheet found for tenant")
+		return nil, ierr.NewError("no active costsheet found").
+			WithHint("Please activate a costsheet for this tenant").
+			Mark(ierr.ErrNotFound)
+	}
+
+	// STEP2: Validate request
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+
+	// STEP3: Get customer if external_customer_id is provided
+	var customer *customer.Customer
+	if req.ExternalCustomerID != "" {
+		customer, err = s.CustomerRepo.GetByLookupKey(ctx, req.ExternalCustomerID)
+		if err != nil {
+			s.Logger.Errorw("failed to get customer", "error", err, "external_customer_id", req.ExternalCustomerID)
+			return nil, err
+		}
+		if customer == nil {
+			return nil, ierr.NewError("customer not found").
+				WithHint("No customer found with the provided external_customer_id").
+				WithReportableDetails(map[string]interface{}{
+					"external_customer_id": req.ExternalCustomerID,
+				}).
+				Mark(ierr.ErrNotFound)
+		}
+	}
+
+	// STEP4: Fetch analytics from costsheet usage repo
+	analytics, err := s.fetchAnalytics(ctx, costSheet, req, customer)
+	if err != nil {
+		s.Logger.Errorw("failed to fetch costsheet analytics", "error", err, "costsheet_id", costSheet.ID)
+		return nil, err
+	}
+
+	// STEP5: Calculate costs for analytics items
+	priceService := NewPriceService(s.ServiceParams)
+	if err := s.calculateCosts(ctx, costSheet, analytics, priceService); err != nil {
+		s.Logger.Errorw("failed to calculate costs", "error", err, "costsheet_id", costSheet.ID)
+		return nil, err
+	}
+
+	// STEP6: Build response
+	response := s.buildAnalyticsResponse(costSheet, req, analytics, customer)
+
+	s.Logger.Debugw("successfully retrieved costsheet analytics",
+		"costsheet_id", costSheet.ID,
+		"analytics_count", len(analytics),
+		"total_cost", response.TotalCost,
+	)
+
+	return response, nil
+}
+
+func (s *costsheetUsageTrackingService) fetchAnalytics(ctx context.Context, costsheet *dto.CostsheetResponse, req *dto.GetCostAnalyticsRequest, customer *customer.Customer) ([]*events.DetailedUsageAnalytic, error) {
+	// STEP1: Extract features and build max bucket features map
+	maxBucketFeatures, featureMap, meterMap, err := s.buildMaxBucketFeaturesFromCostsheet(ctx, costsheet)
+	if err != nil {
+		return nil, err
+	}
+
+	// STEP2: Create analytics parameters
+	params := &events.UsageAnalyticsParams{
+		TenantID:      types.GetTenantID(ctx),
+		EnvironmentID: types.GetEnvironmentID(ctx),
+		FeatureIDs:    req.FeatureIDs,
+		StartTime:     req.StartTime,
+		EndTime:       req.EndTime,
+		GroupBy:       []string{"feature_id"}, // Default grouping for costsheet analytics
+	}
+
+	// Set customer info if provided
+	if customer != nil {
+		params.CustomerID = customer.ID
+		params.ExternalCustomerID = customer.ExternalID
+	}
+
+	// STEP3: Fetch analytics using repository method
+	analytics, err := s.costUsageRepo.GetDetailedUsageAnalytics(ctx, costsheet.ID, params.ExternalCustomerID, params, maxBucketFeatures)
+	if err != nil {
+		s.Logger.Errorw("failed to get detailed usage analytics from costsheet repo",
+			"error", err,
+			"costsheet_id", costsheet.ID,
+			"external_customer_id", params.ExternalCustomerID,
+		)
+		return nil, err
+	}
+
+	// STEP4: Enrich analytics with feature and meter metadata
+	s.enrichAnalyticsWithMetadata(analytics, featureMap, meterMap)
+
+	s.Logger.Debugw("fetched analytics from costsheet usage repo",
+		"costsheet_id", costsheet.ID,
+		"analytics_count", len(analytics),
+		"feature_count", len(featureMap),
+		"meter_count", len(meterMap),
+		"max_bucket_features_count", len(maxBucketFeatures),
+	)
+
+	return analytics, nil
+}
+
+// buildMaxBucketFeaturesFromCostsheet extracts features from costsheet and builds max bucket features map
+func (s *costsheetUsageTrackingService) buildMaxBucketFeaturesFromCostsheet(ctx context.Context, costsheet *dto.CostsheetResponse) (map[string]*events.MaxBucketFeatureInfo, map[string]*feature.Feature, map[string]*meter.Meter, error) {
+	// Collect meter IDs from prices
+	meterIDs := make([]string, 0)
+	meterIDSet := make(map[string]bool)
+
+	for _, priceResp := range costsheet.Prices {
+		if priceResp == nil || !priceResp.IsUsage() {
+			continue
+		}
+		if priceResp.MeterID != "" && !meterIDSet[priceResp.MeterID] {
+			meterIDs = append(meterIDs, priceResp.MeterID)
+			meterIDSet[priceResp.MeterID] = true
+		}
+	}
+
+	if len(meterIDs) == 0 {
+		s.Logger.Debugw("no usage-based prices with meters found in costsheet",
+			"costsheet_id", costsheet.ID,
+		)
+		return make(map[string]*events.MaxBucketFeatureInfo), make(map[string]*feature.Feature), make(map[string]*meter.Meter), nil
+	}
+
+	// Fetch all meters in bulk
+	meterFilter := types.NewNoLimitMeterFilter()
+	meterFilter.MeterIDs = meterIDs
+	meters, err := s.MeterRepo.List(ctx, meterFilter)
+	if err != nil {
+		s.Logger.Errorw("failed to get meters for costsheet analytics",
+			"error", err,
+			"costsheet_id", costsheet.ID,
+			"meter_count", len(meterIDs),
+		)
+		return nil, nil, nil, err
+	}
+
+	// Build meter map
+	meterMap := make(map[string]*meter.Meter)
+	for _, m := range meters {
+		meterMap[m.ID] = m
+	}
+
+	// Fetch features associated with these meters
+	featureMap := make(map[string]*feature.Feature)
+	if len(meterMap) > 0 {
+		featureFilter := types.NewNoLimitFeatureFilter()
+		featureFilter.MeterIDs = lo.Keys(meterMap)
+		features, err := s.FeatureRepo.List(ctx, featureFilter)
+		if err != nil {
+			s.Logger.Errorw("failed to get features for costsheet analytics",
+				"error", err,
+				"costsheet_id", costsheet.ID,
+				"meter_count", len(meterMap),
+			)
+			return nil, nil, nil, err
+		}
+
+		for _, f := range features {
+			featureMap[f.ID] = f
+		}
+	}
+
+	// Build max bucket features map
+	maxBucketFeatures := make(map[string]*events.MaxBucketFeatureInfo)
+	for _, f := range featureMap {
+		if f.MeterID != "" {
+			if m, exists := meterMap[f.MeterID]; exists && m.IsBucketedMaxMeter() {
+				maxBucketFeatures[f.ID] = &events.MaxBucketFeatureInfo{
+					FeatureID:    f.ID,
+					MeterID:      f.MeterID,
+					BucketSize:   types.WindowSize(m.Aggregation.BucketSize),
+					EventName:    m.EventName,
+					PropertyName: m.Aggregation.Field,
+				}
+			}
+		}
+	}
+
+	return maxBucketFeatures, featureMap, meterMap, nil
+}
+
+// enrichAnalyticsWithMetadata enriches analytics items with feature and meter metadata
+func (s *costsheetUsageTrackingService) enrichAnalyticsWithMetadata(analytics []*events.DetailedUsageAnalytic, featureMap map[string]*feature.Feature, meterMap map[string]*meter.Meter) {
+	for _, item := range analytics {
+		if feature, exists := featureMap[item.FeatureID]; exists {
+			item.FeatureName = feature.Name
+			item.Unit = feature.UnitSingular
+			item.UnitPlural = feature.UnitPlural
+		}
+
+		if meter, exists := meterMap[item.MeterID]; exists {
+			item.EventName = meter.EventName
+			item.AggregationType = meter.Aggregation.Type
+		}
+	}
+}
+
+// calculateCosts calculates costs for all analytics items
+func (s *costsheetUsageTrackingService) calculateCosts(ctx context.Context, costsheet *dto.CostsheetResponse, analytics []*events.DetailedUsageAnalytic, priceService PriceService) error {
+	// Build price map from costsheet
+	priceMap := make(map[string]*price.Price)
+	for _, priceResp := range costsheet.Prices {
+		if priceResp != nil && priceResp.Price != nil {
+			priceMap[priceResp.ID] = priceResp.Price
+		}
+	}
+
+	// Fetch meters for determining bucketed max meters
+	meterIDs := make([]string, 0)
+	meterIDSet := make(map[string]bool)
+	for _, item := range analytics {
+		if item.MeterID != "" && !meterIDSet[item.MeterID] {
+			meterIDs = append(meterIDs, item.MeterID)
+			meterIDSet[item.MeterID] = true
+		}
+	}
+
+	meterMap := make(map[string]*meter.Meter)
+	if len(meterIDs) > 0 {
+		meterFilter := types.NewNoLimitMeterFilter()
+		meterFilter.MeterIDs = meterIDs
+		meters, err := s.MeterRepo.List(ctx, meterFilter)
+		if err != nil {
+			s.Logger.Errorw("failed to get meters for cost calculation",
+				"error", err,
+				"costsheet_id", costsheet.ID,
+			)
+			return err
+		}
+		for _, m := range meters {
+			meterMap[m.ID] = m
+		}
+	}
+
+	// Calculate cost for each analytics item
+	for _, item := range analytics {
+		price, hasPrice := priceMap[item.PriceID]
+		if !hasPrice {
+			s.Logger.Debugw("price not found for analytics item",
+				"price_id", item.PriceID,
+				"feature_id", item.FeatureID,
+			)
+			continue
+		}
+
+		meter, hasMeter := meterMap[item.MeterID]
+		if !hasMeter {
+			s.Logger.Debugw("meter not found for analytics item",
+				"meter_id", item.MeterID,
+				"feature_id", item.FeatureID,
+			)
+			continue
+		}
+
+		// Calculate cost based on meter type
+		if meter.IsBucketedMaxMeter() {
+			s.calculateBucketedCost(ctx, priceService, item, price)
+		} else {
+			s.calculateRegularCost(ctx, priceService, item, meter, price)
+		}
+	}
+
+	s.Logger.Debugw("calculated costs for costsheet analytics",
+		"costsheet_id", costsheet.ID,
+		"analytics_items_processed", len(analytics),
+	)
+
+	return nil
+}
+
+// buildAnalyticsResponse builds the analytics response from analytics items
+func (s *costsheetUsageTrackingService) buildAnalyticsResponse(costsheet *dto.CostsheetResponse, req *dto.GetCostAnalyticsRequest, analytics []*events.DetailedUsageAnalytic, customer *customer.Customer) *dto.GetCostAnalyticsResponse {
+	response := &dto.GetCostAnalyticsResponse{
+		CostsheetID:   costsheet.ID,
+		StartTime:     req.StartTime,
+		EndTime:       req.EndTime,
+		TotalCost:     decimal.Zero,
+		TotalQuantity: decimal.Zero,
+		TotalEvents:   0,
+		CostAnalytics: make([]dto.CostAnalyticItem, 0, len(analytics)),
+	}
+
+	if customer != nil {
+		response.CustomerID = customer.ID
+		response.ExternalCustomerID = customer.ExternalID
+	}
+
+	// Convert analytics to cost analytic items and calculate totals
+	for _, item := range analytics {
+		costItem := dto.CostAnalyticItem{
+			MeterID:       item.MeterID,
+			MeterName:     item.EventName,
+			Properties:    item.Properties,
+			TotalCost:     item.TotalCost,
+			TotalQuantity: item.TotalUsage,
+			TotalEvents:   int64(item.EventCount),
+			Currency:      item.Currency,
+			PriceID:       item.PriceID,
+			CostsheetID:   costsheet.ID,
+			CostByPeriod:  make([]dto.CostPoint, 0, len(item.Points)),
+		}
+
+		if customer != nil {
+			costItem.CustomerID = customer.ID
+			costItem.ExternalCustomerID = customer.ExternalID
+		}
+
+		// Add time-series points
+		for _, point := range item.Points {
+			costItem.CostByPeriod = append(costItem.CostByPeriod, dto.CostPoint{
+				Timestamp:  point.Timestamp,
+				Cost:       point.Cost,
+				Quantity:   point.Usage,
+				EventCount: int64(point.EventCount),
+			})
+		}
+
+		response.CostAnalytics = append(response.CostAnalytics, costItem)
+
+		// Accumulate totals
+		response.TotalCost = response.TotalCost.Add(item.TotalCost)
+		response.TotalQuantity = response.TotalQuantity.Add(item.TotalUsage)
+		response.TotalEvents += int64(item.EventCount)
+
+		// Set currency from first item
+		if response.Currency == "" && item.Currency != "" {
+			response.Currency = item.Currency
+		}
+	}
+
+	return response
+}
+
+// calculateBucketedCost calculates cost for bucketed max meters
+func (s *costsheetUsageTrackingService) calculateBucketedCost(ctx context.Context, priceService PriceService, item *events.DetailedUsageAnalytic, price *price.Price) {
+	var cost decimal.Decimal
+
+	if len(item.Points) > 0 {
+		// Use points as buckets
+		bucketedValues := make([]decimal.Decimal, len(item.Points))
+		for i, point := range item.Points {
+			bucketedValues[i] = s.getCorrectUsageValueForPoint(point, types.AggregationMax)
+		}
+		cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+
+		// Calculate cost for each point
+		for i := range item.Points {
+			pointCost := priceService.CalculateCost(ctx, price, s.getCorrectUsageValueForPoint(item.Points[i], types.AggregationMax))
+			item.Points[i].Cost = pointCost
+		}
+	} else {
+		// Treat total usage as single bucket
+		if item.MaxUsage.IsPositive() {
+			bucketedValues := []decimal.Decimal{item.MaxUsage}
+			cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+		}
+	}
+
+	item.TotalCost = cost
+	item.Currency = price.Currency
+}
+
+// calculateRegularCost calculates cost for regular meters
+func (s *costsheetUsageTrackingService) calculateRegularCost(ctx context.Context, priceService PriceService, item *events.DetailedUsageAnalytic, meter *meter.Meter, price *price.Price) {
+	// Set correct usage value
+	item.TotalUsage = s.getCorrectUsageValue(item, meter.Aggregation.Type)
+
+	// Calculate total cost
+	cost := priceService.CalculateCost(ctx, price, item.TotalUsage)
+	item.TotalCost = cost
+	item.Currency = price.Currency
+
+	// Calculate cost for each point
+	for i := range item.Points {
+		pointUsage := s.getCorrectUsageValueForPoint(item.Points[i], meter.Aggregation.Type)
+		pointCost := priceService.CalculateCost(ctx, price, pointUsage)
+		item.Points[i].Cost = pointCost
+	}
+}
+
+// getCorrectUsageValue returns the correct usage value based on the meter's aggregation type
+func (s *costsheetUsageTrackingService) getCorrectUsageValue(item *events.DetailedUsageAnalytic, aggregationType types.AggregationType) decimal.Decimal {
+	switch aggregationType {
+	case types.AggregationCountUnique:
+		return decimal.NewFromInt(int64(item.CountUniqueUsage))
+	case types.AggregationMax:
+		return item.MaxUsage
+	case types.AggregationLatest:
+		return item.LatestUsage
+	case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationAvg, types.AggregationWeightedSum:
+		return item.TotalUsage
+	default:
+		// Default to SUM for unknown types
+		return item.TotalUsage
+	}
+}
+
+// getCorrectUsageValueForPoint returns the correct usage value for a time series point based on aggregation type
+func (s *costsheetUsageTrackingService) getCorrectUsageValueForPoint(point events.UsageAnalyticPoint, aggregationType types.AggregationType) decimal.Decimal {
+	switch aggregationType {
+	case types.AggregationCountUnique:
+		return decimal.NewFromInt(int64(point.CountUniqueUsage))
+	case types.AggregationMax:
+		return point.MaxUsage
+	case types.AggregationLatest:
+		return point.LatestUsage
+	case types.AggregationSum, types.AggregationSumWithMultiplier, types.AggregationAvg, types.AggregationWeightedSum:
+		return point.Usage
+	default:
+		// Default to SUM for unknown types
+		return point.Usage
+	}
 }

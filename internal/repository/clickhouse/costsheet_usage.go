@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/flexprice/flexprice/internal/clickhouse"
@@ -26,68 +27,6 @@ func NewCostSheetUsageRepository(store *clickhouse.ClickHouseStore, logger *logg
 		store:  store,
 		logger: logger,
 	}
-}
-
-// InsertProcessedEvent inserts a single processed event
-func (r *CostSheetUsageRepository) InsertProcessedEvent(ctx context.Context, event *events.CostUsage) error {
-	query := `
-		INSERT INTO costsheet_usage (
-			id, tenant_id, external_customer_id, customer_id, event_name, source, 
-			timestamp, ingested_at, properties, environment_id,
-			costsheet_id, price_id, meter_id, feature_id, currency,
-			unique_hash, qty_total, sign
-		) VALUES (
-			?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-		)
-	`
-
-	propertiesJSON, err := json.Marshal(event.Properties)
-	if err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to marshal event properties").
-			WithReportableDetails(map[string]interface{}{
-				"event_id": event.ID,
-			}).
-			Mark(ierr.ErrValidation)
-	}
-
-	// Default sign to 1 if not set
-	sign := event.Sign
-	if sign == 0 {
-		sign = 1
-	}
-
-	args := []interface{}{
-		event.ID,
-		event.TenantID,
-		event.ExternalCustomerID,
-		event.CustomerID,
-		event.EventName,
-		event.Source,
-		event.Timestamp,
-		event.IngestedAt,
-		string(propertiesJSON),
-		event.EnvironmentID,
-		event.CostSheetID,
-		event.PriceID,
-		event.MeterID,
-		event.FeatureID,
-		event.UniqueHash,
-		event.QtyTotal,
-		sign,
-	}
-
-	err = r.store.GetConn().Exec(ctx, query, args...)
-	if err != nil {
-		return ierr.WithError(err).
-			WithHint("Failed to insert processed event").
-			WithReportableDetails(map[string]interface{}{
-				"event_id": event.ID,
-			}).
-			Mark(ierr.ErrDatabase)
-	}
-
-	return nil
 }
 
 // BulkInsertProcessedEvents inserts multiple processed events
@@ -343,7 +282,6 @@ func (r *CostSheetUsageRepository) GetUsageByCostSheetID(ctx context.Context, co
 
 	query := `
 		SELECT 
-			costsheet_id,
 			feature_id,
 			meter_id,
 			price_id,
@@ -361,7 +299,7 @@ func (r *CostSheetUsageRepository) GetUsageByCostSheetID(ctx context.Context, co
 			AND "timestamp" >= ?
 			AND "timestamp" < ?
 			AND sign != 0
-		GROUP BY costsheet_id, feature_id, meter_id, price_id
+		GROUP BY feature_id, meter_id, price_id
 	`
 
 	log.Printf("Executing query: %s", query)
@@ -382,11 +320,11 @@ func (r *CostSheetUsageRepository) GetUsageByCostSheetID(ctx context.Context, co
 
 	results := make(map[string]*events.UsageByCostSheetResult)
 	for rows.Next() {
-		var costSheetID, featureID, meterID, priceID string
+		var featureID, meterID, priceID string
 		var sumTotal, maxTotal, latestQty decimal.Decimal
 		var countDistinctIDs, countUniqueQty uint64
 
-		err := rows.Scan(&costSheetID, &featureID, &meterID, &priceID, &sumTotal, &maxTotal, &countDistinctIDs, &countUniqueQty, &latestQty)
+		err := rows.Scan(&featureID, &meterID, &priceID, &sumTotal, &maxTotal, &countDistinctIDs, &countUniqueQty, &latestQty)
 		if err != nil {
 			SetSpanError(span, err)
 			return nil, ierr.WithError(err).
@@ -394,14 +332,18 @@ func (r *CostSheetUsageRepository) GetUsageByCostSheetID(ctx context.Context, co
 				Mark(ierr.ErrDatabase)
 		}
 
-		results[costSheetID] = &events.UsageByCostSheetResult{
-			CostSheetID: costSheetID,
-			FeatureID:   featureID,
-			MeterID:     meterID,
-			PriceID:     priceID,
-			SumTotal:    sumTotal,
-			MaxTotal:    maxTotal,
-			LatestQty:   latestQty,
+		// Use composite key to avoid overwrites
+		key := fmt.Sprintf("%s:%s:%s", featureID, meterID, priceID)
+		results[key] = &events.UsageByCostSheetResult{
+			CostSheetID:      costSheetID,
+			FeatureID:        featureID,
+			MeterID:          meterID,
+			PriceID:          priceID,
+			SumTotal:         sumTotal,
+			MaxTotal:         maxTotal,
+			CountDistinctIDs: countDistinctIDs,
+			CountUniqueQty:   countUniqueQty,
+			LatestQty:        latestQty,
 		}
 	}
 
@@ -416,6 +358,440 @@ func (r *CostSheetUsageRepository) GetUsageByCostSheetID(ctx context.Context, co
 	r.logger.Debugw("optimized costsheet usage query completed",
 		"costsheet_id", costSheetID,
 		"feature_count", len(results))
+
+	return results, nil
+}
+
+// GetDetailedUsageAnalytics provides comprehensive usage analytics for costsheet with filtering, grouping, and time-series data
+func (r *CostSheetUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, costSheetID, externalCustomerID string, params *events.UsageAnalyticsParams, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
+	span := StartRepositorySpan(ctx, "costsheet_usage", "get_detailed_usage_analytics", map[string]interface{}{
+		"costsheet_id":           costSheetID,
+		"external_customer_id":   externalCustomerID,
+		"feature_ids_count":      len(params.FeatureIDs),
+		"property_filters_count": len(params.PropertyFilters),
+	})
+	defer FinishSpan(span)
+
+	// Set default start/end times if not provided
+	if params.EndTime.IsZero() {
+		params.EndTime = time.Now().UTC()
+	}
+
+	if params.StartTime.IsZero() {
+		// Default to last 30 days if not specified
+		params.StartTime = params.EndTime.AddDate(0, 0, -30)
+	}
+
+	// Set default group by if not provided
+	if len(params.GroupBy) == 0 {
+		params.GroupBy = []string{"feature_id"}
+	}
+
+	// Validate group by values
+	for _, groupBy := range params.GroupBy {
+		if groupBy != "feature_id" && !strings.HasPrefix(groupBy, "properties.") {
+			return nil, ierr.NewError("invalid group_by value").
+				WithHint("Valid group_by values are 'feature_id' or 'properties.<field_name>' for costsheet").
+				WithReportableDetails(map[string]interface{}{
+					"group_by": params.GroupBy,
+				}).
+				Mark(ierr.ErrValidation)
+		}
+	}
+
+	var allResults []*events.DetailedUsageAnalytic
+
+	// Handle MAX with bucket features
+	if len(maxBucketFeatures) > 0 {
+		maxBucketResults, err := r.getMaxBucketAnalytics(ctx, costSheetID, externalCustomerID, params, maxBucketFeatures)
+		if err != nil {
+			SetSpanError(span, err)
+			return nil, err
+		}
+		allResults = append(allResults, maxBucketResults...)
+	}
+
+	// Handle other features (non-MAX with bucket)
+	otherFeatureIDs := r.getOtherFeatureIDs(params.FeatureIDs, maxBucketFeatures)
+
+	// Only process other features if we have some to process
+	if len(otherFeatureIDs) > 0 || len(params.FeatureIDs) == 0 {
+		otherParams := *params
+		if len(otherFeatureIDs) > 0 {
+			otherParams.FeatureIDs = otherFeatureIDs
+		} else if len(params.FeatureIDs) == 0 {
+			otherParams.FeatureIDs = []string{}
+		}
+
+		otherResults, err := r.getStandardAnalytics(ctx, costSheetID, externalCustomerID, &otherParams, maxBucketFeatures)
+		if err != nil {
+			SetSpanError(span, err)
+			return nil, err
+		}
+		allResults = append(allResults, otherResults...)
+	}
+
+	SetSpanSuccess(span)
+	return allResults, nil
+}
+
+// getOtherFeatureIDs returns feature IDs that are not MAX with bucket features
+func (r *CostSheetUsageRepository) getOtherFeatureIDs(requestedFeatureIDs []string, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) []string {
+	if len(requestedFeatureIDs) == 0 {
+		return []string{}
+	}
+
+	otherFeatureIDs := make([]string, 0)
+	for _, featureID := range requestedFeatureIDs {
+		if _, isMaxBucket := maxBucketFeatures[featureID]; !isMaxBucket {
+			otherFeatureIDs = append(otherFeatureIDs, featureID)
+		}
+	}
+	return otherFeatureIDs
+}
+
+// getStandardAnalytics handles analytics for non-MAX with bucket features
+func (r *CostSheetUsageRepository) getStandardAnalytics(ctx context.Context, costSheetID, externalCustomerID string, params *events.UsageAnalyticsParams, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
+	queryParams := []interface{}{
+		params.TenantID,
+		params.EnvironmentID,
+		costSheetID,
+		externalCustomerID,
+		params.StartTime,
+		params.EndTime,
+	}
+
+	// Add group by columns
+	groupByColumns := []string{"feature_id", "price_id", "meter_id"}
+	groupByColumnAliases := []string{"feature_id", "price_id", "meter_id"}
+	groupByFieldMapping := make(map[string]string)
+	groupByFieldMapping["feature_id"] = "feature_id"
+	groupByFieldMapping["price_id"] = "price_id"
+	groupByFieldMapping["meter_id"] = "meter_id"
+
+	// Add requested grouping dimensions
+	for _, groupBy := range params.GroupBy {
+		if groupBy == "feature_id" {
+			continue
+		}
+		if strings.HasPrefix(groupBy, "properties.") {
+			propertyName := strings.TrimPrefix(groupBy, "properties.")
+			if propertyName != "" {
+				alias := "prop_" + strings.ReplaceAll(propertyName, ".", "_")
+				sqlExpression := fmt.Sprintf("JSONExtractString(properties, '%s') AS %s", propertyName, alias)
+				groupByColumns = append(groupByColumns, fmt.Sprintf("JSONExtractString(properties, '%s')", propertyName))
+				groupByColumnAliases = append(groupByColumnAliases, sqlExpression)
+				groupByFieldMapping[groupBy] = alias
+			}
+		}
+	}
+
+	// Build select columns
+	selectColumns := []string{}
+	if len(groupByColumnAliases) > 0 {
+		selectColumns = append(selectColumns, strings.Join(groupByColumnAliases, ", "))
+	}
+	selectColumns = append(selectColumns,
+		"SUM(qty_total * sign) AS total_usage",
+		"MAX(qty_total * sign) AS max_usage",
+		"argMax(qty_total, timestamp) AS latest_usage",
+		"COUNT(DISTINCT unique_hash) AS count_unique_usage",
+		"COUNT(DISTINCT id) AS event_count",
+	)
+
+	aggregateQuery := fmt.Sprintf(`
+		SELECT 
+			%s
+		FROM costsheet_usage
+		WHERE tenant_id = ?
+		AND environment_id = ?
+		AND costsheet_id = ?
+		AND external_customer_id = ?
+		AND timestamp >= ?
+		AND timestamp < ?
+		AND sign != 0
+	`, strings.Join(selectColumns, ",\n\t\t\t"))
+
+	// Add filters
+	filterParams := []interface{}{}
+
+	// Feature IDs filter
+	if len(params.FeatureIDs) > 0 {
+		placeholders := make([]string, len(params.FeatureIDs))
+		for i := range params.FeatureIDs {
+			placeholders[i] = "?"
+			filterParams = append(filterParams, params.FeatureIDs[i])
+		}
+		aggregateQuery += " AND feature_id IN (" + strings.Join(placeholders, ", ") + ")"
+	}
+
+	// Exclude MAX bucket features
+	if len(maxBucketFeatures) > 0 {
+		maxBucketFeatureIDs := make([]string, 0, len(maxBucketFeatures))
+		for featureID := range maxBucketFeatures {
+			maxBucketFeatureIDs = append(maxBucketFeatureIDs, featureID)
+		}
+		placeholders := make([]string, len(maxBucketFeatureIDs))
+		for i := range maxBucketFeatureIDs {
+			placeholders[i] = "?"
+			filterParams = append(filterParams, maxBucketFeatureIDs[i])
+		}
+		aggregateQuery += " AND feature_id NOT IN (" + strings.Join(placeholders, ", ") + ")"
+	}
+
+	// Property filters
+	if len(params.PropertyFilters) > 0 {
+		for property, values := range params.PropertyFilters {
+			if len(values) > 0 {
+				if len(values) == 1 {
+					aggregateQuery += " AND JSONExtractString(properties, ?) = ?"
+					filterParams = append(filterParams, property, values[0])
+				} else {
+					placeholders := make([]string, len(values))
+					for i := range values {
+						placeholders[i] = "?"
+					}
+					aggregateQuery += " AND JSONExtractString(properties, ?) IN (" + strings.Join(placeholders, ",") + ")"
+					filterParams = append(filterParams, property)
+					for _, v := range values {
+						filterParams = append(filterParams, v)
+					}
+				}
+			}
+		}
+	}
+
+	queryParams = append(queryParams, filterParams...)
+
+	// Add GROUP BY clause
+	aggregateQuery += fmt.Sprintf(" GROUP BY %s", strings.Join(groupByColumns, ", "))
+
+	// Execute query
+	rows, err := r.store.GetConn().Query(ctx, aggregateQuery, queryParams...)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to execute costsheet standard analytics query").
+			Mark(ierr.ErrDatabase)
+	}
+	defer rows.Close()
+
+	results := make([]*events.DetailedUsageAnalytic, 0)
+	for rows.Next() {
+		result := &events.DetailedUsageAnalytic{
+			Properties: make(map[string]string),
+		}
+
+		// Prepare scan values
+		scanValues := make([]interface{}, 0)
+		scanValues = append(scanValues, &result.FeatureID, &result.PriceID, &result.MeterID)
+
+		// Add property fields
+		propertyValues := make(map[string]*string)
+		for groupBy := range groupByFieldMapping {
+			if strings.HasPrefix(groupBy, "properties.") {
+				propertyName := strings.TrimPrefix(groupBy, "properties.")
+				val := new(string)
+				propertyValues[propertyName] = val
+				scanValues = append(scanValues, val)
+			}
+		}
+
+		// Add aggregation fields
+		scanValues = append(scanValues, &result.TotalUsage, &result.MaxUsage, &result.LatestUsage, &result.CountUniqueUsage, &result.EventCount)
+
+		if err := rows.Scan(scanValues...); err != nil {
+			return nil, ierr.WithError(err).
+				WithHint("Failed to scan costsheet analytics result").
+				Mark(ierr.ErrDatabase)
+		}
+
+		// Populate properties
+		for propertyName, val := range propertyValues {
+			if val != nil && *val != "" {
+				result.Properties[propertyName] = *val
+			}
+		}
+
+		results = append(results, result)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Error iterating costsheet analytics results").
+			Mark(ierr.ErrDatabase)
+	}
+
+	return results, nil
+}
+
+// getMaxBucketAnalytics handles analytics for MAX with bucket features
+func (r *CostSheetUsageRepository) getMaxBucketAnalytics(ctx context.Context, costSheetID, externalCustomerID string, params *events.UsageAnalyticsParams, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
+	var allResults []*events.DetailedUsageAnalytic
+
+	// Process each MAX with bucket feature separately
+	for featureID, featureInfo := range maxBucketFeatures {
+		featureParams := *params
+		featureParams.FeatureIDs = []string{featureID}
+
+		// Get bucket-based totals
+		totals, err := r.getMaxBucketTotals(ctx, costSheetID, externalCustomerID, &featureParams, featureInfo)
+		if err != nil {
+			return nil, err
+		}
+
+		allResults = append(allResults, totals...)
+	}
+
+	return allResults, nil
+}
+
+// getMaxBucketTotals calculates totals using bucket-based aggregation for MAX features
+func (r *CostSheetUsageRepository) getMaxBucketTotals(ctx context.Context, costSheetID, externalCustomerID string, params *events.UsageAnalyticsParams, featureInfo *events.MaxBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
+	// Build bucket window expression
+	bucketWindowExpr := r.formatWindowSize(featureInfo.BucketSize, nil)
+
+	// Build group by columns
+	groupByColumns := []string{"bucket_start", "feature_id", "price_id", "meter_id"}
+	innerSelectColumns := []string{"feature_id", "price_id", "meter_id"}
+	outerSelectColumns := []string{"feature_id", "price_id", "meter_id"}
+
+	// Add grouping columns
+	for _, groupBy := range params.GroupBy {
+		if groupBy == "feature_id" {
+			continue
+		}
+		if strings.HasPrefix(groupBy, "properties.") {
+			propertyName := strings.TrimPrefix(groupBy, "properties.")
+			groupByColumns = append(groupByColumns, fmt.Sprintf("JSONExtractString(properties, '%s')", propertyName))
+			innerSelectColumns = append(innerSelectColumns, fmt.Sprintf("JSONExtractString(properties, '%s') as %s", propertyName, propertyName))
+			outerSelectColumns = append(outerSelectColumns, propertyName)
+		}
+	}
+
+	// Build inner query
+	innerQuery := fmt.Sprintf(`
+		SELECT
+			%s as bucket_start,
+			%s,
+			max(qty_total * sign) as bucket_max,
+			argMax(qty_total, timestamp) as bucket_latest,
+			count(DISTINCT unique_hash) as bucket_count_unique,
+			count(DISTINCT id) as event_count
+		FROM costsheet_usage
+		WHERE tenant_id = ?
+		AND environment_id = ?
+		AND costsheet_id = ?
+		AND external_customer_id = ?
+		AND feature_id = ?
+		AND timestamp >= ?
+		AND timestamp < ?
+		AND sign != 0`, bucketWindowExpr, strings.Join(innerSelectColumns, ", "))
+
+	queryParams := []interface{}{
+		params.TenantID,
+		params.EnvironmentID,
+		costSheetID,
+		externalCustomerID,
+		featureInfo.FeatureID,
+		params.StartTime,
+		params.EndTime,
+	}
+
+	// Add property filters
+	if len(params.PropertyFilters) > 0 {
+		for property, values := range params.PropertyFilters {
+			if len(values) > 0 {
+				if len(values) == 1 {
+					innerQuery += " AND JSONExtractString(properties, ?) = ?"
+					queryParams = append(queryParams, property, values[0])
+				} else {
+					placeholders := make([]string, len(values))
+					for i := range values {
+						placeholders[i] = "?"
+					}
+					innerQuery += " AND JSONExtractString(properties, ?) IN (" + strings.Join(placeholders, ",") + ")"
+					queryParams = append(queryParams, property)
+					for _, v := range values {
+						queryParams = append(queryParams, v)
+					}
+				}
+			}
+		}
+	}
+
+	// Complete inner query
+	innerQuery += fmt.Sprintf(" GROUP BY %s", strings.Join(groupByColumns, ", "))
+
+	// Build complete query with CTE
+	query := fmt.Sprintf(`
+		WITH bucket_maxes AS (
+			%s
+		)
+		SELECT
+			%s,
+			sum(bucket_max) as total_usage,
+			max(bucket_max) as max_usage,
+			argMax(bucket_latest, bucket_start) as latest_usage,
+			sum(bucket_count_unique) as count_unique_usage,
+			sum(event_count) as event_count
+		FROM bucket_maxes
+		GROUP BY %s
+	`, innerQuery, strings.Join(outerSelectColumns, ", "), strings.Join(outerSelectColumns, ", "))
+
+	// Execute query
+	rows, err := r.store.GetConn().Query(ctx, query, queryParams...)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to execute costsheet max bucket analytics query").
+			Mark(ierr.ErrDatabase)
+	}
+	defer rows.Close()
+
+	results := make([]*events.DetailedUsageAnalytic, 0)
+	for rows.Next() {
+		result := &events.DetailedUsageAnalytic{
+			Properties: make(map[string]string),
+		}
+
+		// Prepare scan values
+		scanValues := make([]interface{}, 0)
+		scanValues = append(scanValues, &result.FeatureID, &result.PriceID, &result.MeterID)
+
+		// Add property fields
+		propertyValues := make(map[string]*string)
+		for _, groupBy := range params.GroupBy {
+			if strings.HasPrefix(groupBy, "properties.") {
+				propertyName := strings.TrimPrefix(groupBy, "properties.")
+				val := new(string)
+				propertyValues[propertyName] = val
+				scanValues = append(scanValues, val)
+			}
+		}
+
+		// Add aggregation fields
+		scanValues = append(scanValues, &result.TotalUsage, &result.MaxUsage, &result.LatestUsage, &result.CountUniqueUsage, &result.EventCount)
+
+		if err := rows.Scan(scanValues...); err != nil {
+			return nil, ierr.WithError(err).
+				WithHint("Failed to scan costsheet max bucket analytics result").
+				Mark(ierr.ErrDatabase)
+		}
+
+		// Populate properties
+		for propertyName, val := range propertyValues {
+			if val != nil && *val != "" {
+				result.Properties[propertyName] = *val
+			}
+		}
+
+		results = append(results, result)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Error iterating costsheet max bucket analytics results").
+			Mark(ierr.ErrDatabase)
+	}
 
 	return results, nil
 }

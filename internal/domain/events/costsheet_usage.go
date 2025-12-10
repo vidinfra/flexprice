@@ -7,9 +7,6 @@ import (
 
 // FeatureUsageRepository defines operations for feature usage tracking
 type CostSheetUsageRepository interface {
-	// Inserts a single processed event into events_processed table
-	InsertProcessedEvent(ctx context.Context, event *CostUsage) error
-
 	// Bulk insert events into events_processed table
 	BulkInsertProcessedEvents(ctx context.Context, events []*CostUsage) error
 
@@ -18,4 +15,7 @@ type CostSheetUsageRepository interface {
 
 	// Get usage by cost sheet ID
 	GetUsageByCostSheetID(ctx context.Context, costSheetID, externalCustomerID string, startTime, endTime time.Time) (map[string]*UsageByCostSheetResult, error)
+
+	// GetDetailedUsageAnalytics provides comprehensive usage analytics with filtering, grouping, and time-series data
+	GetDetailedUsageAnalytics(ctx context.Context, costSheetID, externalCustomerID string, params *UsageAnalyticsParams, maxBucketFeatures map[string]*MaxBucketFeatureInfo) ([]*DetailedUsageAnalytic, error)
 }
