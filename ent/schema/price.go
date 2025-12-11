@@ -102,6 +102,7 @@ func (Price) Fields() []ent.Field {
 				"postgres": "numeric(25,15)",
 			}).
 			Default(decimal.Zero).
+			Nillable().
 			Optional(),
 
 		field.String("type").

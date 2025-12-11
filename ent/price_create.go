@@ -752,7 +752,7 @@ func (pc *PriceCreate) createSpec() (*Price, *sqlgraph.CreateSpec) {
 	}
 	if value, ok := pc.mutation.ConversionRate(); ok {
 		_spec.SetField(price.FieldConversionRate, field.TypeOther, value)
-		_node.ConversionRate = value
+		_node.ConversionRate = &value
 	}
 	if value, ok := pc.mutation.GetType(); ok {
 		_spec.SetField(price.FieldType, field.TypeString, value)
