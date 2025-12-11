@@ -524,15 +524,6 @@ func (r *CreatePriceRequest) ToPrice(ctx context.Context) (*priceDomain.Price, e
 		}
 	}
 
-	displayName := r.DisplayName
-	if displayName == "" {
-		if r.Type == types.PRICE_TYPE_USAGE {
-			displayName = "Usage Based"
-		} else {
-			displayName = "Recurring"
-		}
-	}
-
 	// set the start date from either the request or the current time
 	var startDate *time.Time
 	if r.StartDate != nil {
@@ -648,8 +639,8 @@ func (r *CreatePriceRequest) ToPrice(ctx context.Context) (*priceDomain.Price, e
 		Tiers:              tiers,
 		PriceUnitTiers:     priceUnitTiers,
 		TransformQuantity:  transformQuantity,
-		DisplayName:        displayName,
 		EntityType:         r.EntityType,
+		DisplayName:        r.DisplayName,
 		EntityID:           r.EntityID,
 		StartDate:          startDate,
 		ParentPriceID:      r.ParentPriceID,
