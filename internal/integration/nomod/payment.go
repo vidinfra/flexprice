@@ -242,8 +242,8 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req CreatePaymen
 	}
 
 	// Add note with metadata including customer and invoice IDs
-	note := fmt.Sprintf("FlexPrice Payment - Invoice: %s, Customer: %s (Nomod ID: %s)",
-		req.InvoiceID, req.CustomerID, nomodCustomerID)
+	note := fmt.Sprintf("Payment for - %s ",
+		flexpriceCustomer.Name)
 	paymentLinkReq.Note = &note
 
 	s.logger.Infow("creating standalone payment link in Nomod",
