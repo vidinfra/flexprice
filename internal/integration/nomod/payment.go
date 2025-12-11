@@ -269,8 +269,23 @@ func (s *PaymentService) CreatePaymentLink(ctx context.Context, req CreatePaymen
 		"nomod_payment_link_id", nomodPaymentLink.ID,
 		"payment_url", nomodPaymentLink.URL)
 
-	// Parse amount
-	amount, _ := decimal.NewFromString(nomodPaymentLink.Amount)
+	// Parse amount with error handling - critical for payment links
+	amount, err := decimal.NewFromString(nomodPaymentLink.Amount)
+	if err != nil {
+		s.logger.Errorw("failed to parse payment link amount from Nomod",
+			"error", err,
+			"invoice_id", req.InvoiceID,
+			"nomod_amount", nomodPaymentLink.Amount,
+			"payment_link_id", nomodPaymentLink.ID)
+		return nil, ierr.WithError(err).
+			WithHint("Failed to parse payment amount from Nomod response").
+			WithReportableDetails(map[string]interface{}{
+				"invoice_id":      req.InvoiceID,
+				"payment_link_id": nomodPaymentLink.ID,
+				"raw_amount":      nomodPaymentLink.Amount,
+			}).
+			Mark(ierr.ErrInternal)
+	}
 
 	return &CreatePaymentLinkResp{
 		ID:                 nomodPaymentLink.ID,

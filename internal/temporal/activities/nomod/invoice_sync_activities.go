@@ -13,14 +13,14 @@ import (
 
 // InvoiceSyncActivities handles Nomod invoice sync activities
 type InvoiceSyncActivities struct {
-	integrationFactory integration.Factory
+	integrationFactory *integration.Factory
 	customerService    interfaces.CustomerService
 	logger             *logger.Logger
 }
 
 // NewInvoiceSyncActivities creates a new Nomod invoice sync activities handler
 func NewInvoiceSyncActivities(
-	integrationFactory integration.Factory,
+	integrationFactory *integration.Factory,
 	customerService interfaces.CustomerService,
 	logger *logger.Logger,
 ) *InvoiceSyncActivities {

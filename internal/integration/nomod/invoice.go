@@ -284,8 +284,16 @@ func (s *InvoiceSyncService) buildInvoiceNote(flexInvoice *invoice.Invoice) stri
 
 // buildSyncResponse constructs the sync response from Nomod invoice data
 func (s *InvoiceSyncService) buildSyncResponse(nomodInvoice *InvoiceResponse) *NomodInvoiceSyncResponse {
-	// Parse amount
-	amount, _ := decimal.NewFromString(nomodInvoice.Amount)
+	// Parse amount with error handling
+	amount, err := decimal.NewFromString(nomodInvoice.Amount)
+	if err != nil {
+		s.logger.Errorw("failed to parse Nomod invoice amount",
+			"raw_amount", nomodInvoice.Amount,
+			"invoice_id", nomodInvoice.ID,
+			"error", err)
+		// Use zero as fallback but log the error for visibility
+		amount = decimal.Zero
+	}
 
 	return &NomodInvoiceSyncResponse{
 		NomodInvoiceID: nomodInvoice.ID,

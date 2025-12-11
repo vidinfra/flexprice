@@ -103,12 +103,6 @@ func (c *Client) GetDecryptedNomodConfig(conn *connection.Connection) (*NomodCon
 
 // decryptConnectionMetadata decrypts the connection encrypted secret data
 func (c *Client) decryptConnectionMetadata(conn *connection.Connection) (types.Metadata, error) {
-	// Check if the connection has encrypted secret data
-	if conn.EncryptedSecretData.Nomod == nil {
-		c.logger.Warnw("no nomod metadata found in encrypted secret data", "connection_id", conn.ID)
-		return types.Metadata{}, nil
-	}
-
 	// For Nomod connections, decrypt the structured metadata
 	if conn.ProviderType == types.SecretProviderNomod {
 		if conn.EncryptedSecretData.Nomod == nil {

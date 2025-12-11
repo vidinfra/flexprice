@@ -78,7 +78,7 @@ func RegisterWorkflowsAndActivities(temporalService temporalService.TemporalServ
 	// Nomod activities - need to create customer service
 	customerService := service.NewCustomerService(params)
 	nomodInvoiceSyncActivities := nomodActivities.NewInvoiceSyncActivities(
-		*params.IntegrationFactory,
+		params.IntegrationFactory,
 		customerService,
 		params.Logger,
 	)
