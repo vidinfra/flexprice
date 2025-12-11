@@ -914,7 +914,7 @@ func (s *subscriptionService) handleSubscriptionPhases(
 		phaseLineItems := lo.Map(validPrices, func(priceResp *dto.PriceResponse, _ int) *subscription.SubscriptionLineItem {
 			// Build line item params
 			params := dto.LineItemParams{
-				Subscription: sub,
+				Subscription: &dto.SubscriptionResponse{Subscription: sub},
 				Price:        priceResp,
 				Plan:         planResponse,
 				EntityType:   types.SubscriptionLineItemEntityTypePlan,

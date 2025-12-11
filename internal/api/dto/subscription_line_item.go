@@ -13,13 +13,14 @@ import (
 
 // CreateSubscriptionLineItemRequest represents the request to create a subscription line item
 type CreateSubscriptionLineItemRequest struct {
-	PriceID             string            `json:"price_id" validate:"required"`
-	Quantity            decimal.Decimal   `json:"quantity,omitempty" swaggertype:"string"`
-	StartDate           *time.Time        `json:"start_date,omitempty"`
-	EndDate             *time.Time        `json:"end_date,omitempty"`
-	Metadata            map[string]string `json:"metadata,omitempty"`
-	DisplayName         string            `json:"display_name,omitempty"`
-	SubscriptionPhaseID *string           `json:"subscription_phase_id,omitempty"`
+	PriceID              string            `json:"price_id" validate:"required"`
+	Quantity             decimal.Decimal   `json:"quantity,omitempty" swaggertype:"string"`
+	StartDate            *time.Time        `json:"start_date,omitempty"`
+	EndDate              *time.Time        `json:"end_date,omitempty"`
+	Metadata             map[string]string `json:"metadata,omitempty"`
+	DisplayName          string            `json:"display_name,omitempty"`
+	SubscriptionPhaseID  *string           `json:"subscription_phase_id,omitempty"`
+	SkipEntitlementCheck bool              `json:"-"` // This is used to skip entitlement check when creating a subscription line item
 }
 
 // DeleteSubscriptionLineItemRequest represents the request to delete a subscription line item
@@ -51,7 +52,7 @@ type UpdateSubscriptionLineItemRequest struct {
 
 // LineItemParams contains all necessary parameters for creating a line item
 type LineItemParams struct {
-	Subscription *subscription.Subscription
+	Subscription *SubscriptionResponse
 	Price        *PriceResponse
 	Plan         *PlanResponse  // Optional, for plan-based line items
 	Addon        *AddonResponse // Optional, for addon-based line items
