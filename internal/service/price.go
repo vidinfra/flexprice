@@ -224,6 +224,7 @@ func (s *priceService) CreateBulkPrice(ctx context.Context, req dto.CreateBulkPr
 				priceUnitConfigPrices = append(priceUnitConfigPrices, priceReq)
 			} else {
 				// Handle regular prices
+				s.getDisplayName(txCtx, &priceReq)
 				price, err := priceReq.ToPrice(txCtx)
 				if err != nil {
 					return ierr.WithError(err).
@@ -255,6 +256,7 @@ func (s *priceService) CreateBulkPrice(ctx context.Context, req dto.CreateBulkPr
 
 		// Handle price unit config prices individually (they need special processing)
 		for _, priceReq := range priceUnitConfigPrices {
+			s.getDisplayName(txCtx, &priceReq)
 			priceResp, err := s.createPriceWithUnitConfig(txCtx, priceReq)
 			if err != nil {
 				return ierr.WithError(err).
