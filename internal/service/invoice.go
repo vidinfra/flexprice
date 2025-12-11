@@ -780,6 +780,9 @@ func (s *invoiceService) ProcessDraftInvoice(ctx context.Context, id string, pay
 			"invoice_id", inv.ID)
 	}
 
+	// Sync to Nomod if Nomod connection is enabled (async via Temporal)
+	s.triggerNomodInvoiceSyncWorkflow(ctx, inv.ID, inv.CustomerID)
+
 	// try to process payment for the invoice based on behavior and log any errors
 	// Pass the subscription object to avoid extra DB call
 	// Error handling logic is properly handled in attemptPaymentForSubscriptionInvoice
@@ -1127,6 +1130,82 @@ func (s *invoiceService) triggerHubSpotInvoiceSyncWorkflow(ctx context.Context, 
 	}
 
 	s.Logger.Infow("HubSpot invoice sync workflow started successfully",
+		"invoice_id", invoiceID,
+		"customer_id", customerID,
+		"workflow_id", workflowRun.GetID(),
+		"run_id", workflowRun.GetRunID())
+}
+
+// triggerNomodInvoiceSyncWorkflow triggers the Nomod invoice sync workflow via Temporal
+func (s *invoiceService) triggerNomodInvoiceSyncWorkflow(ctx context.Context, invoiceID, customerID string) {
+	// Copy necessary context values
+	tenantID := types.GetTenantID(ctx)
+	envID := types.GetEnvironmentID(ctx)
+
+	s.Logger.Infow("triggering Nomod invoice sync workflow",
+		"invoice_id", invoiceID,
+		"customer_id", customerID,
+		"tenant_id", tenantID,
+		"environment_id", envID)
+
+	// Check if Nomod connection exists and invoice outbound sync is enabled
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderNomod)
+	if err != nil {
+		s.Logger.Debugw("Nomod connection not found, skipping invoice sync",
+			"error", err,
+			"invoice_id", invoiceID,
+			"customer_id", customerID)
+		return
+	}
+
+	if !conn.IsInvoiceOutboundEnabled() {
+		s.Logger.Debugw("Nomod invoice outbound sync disabled, skipping invoice sync",
+			"invoice_id", invoiceID,
+			"customer_id", customerID,
+			"connection_id", conn.ID)
+		return
+	}
+
+	// Prepare workflow input with all necessary IDs
+	input := &models.NomodInvoiceSyncWorkflowInput{
+		InvoiceID:     invoiceID,
+		CustomerID:    customerID,
+		TenantID:      tenantID,
+		EnvironmentID: envID,
+	}
+
+	// Validate input
+	if err := input.Validate(); err != nil {
+		s.Logger.Errorw("invalid workflow input for Nomod invoice sync",
+			"error", err,
+			"invoice_id", invoiceID,
+			"customer_id", customerID)
+		return
+	}
+
+	// Get global temporal service
+	temporalSvc := temporalservice.GetGlobalTemporalService()
+	if temporalSvc == nil {
+		s.Logger.Warnw("temporal service not available for Nomod invoice sync",
+			"invoice_id", invoiceID)
+		return
+	}
+
+	// Start workflow - Temporal handles async execution, no need for goroutines
+	workflowRun, err := temporalSvc.ExecuteWorkflow(
+		ctx,
+		types.TemporalNomodInvoiceSyncWorkflow,
+		input,
+	)
+	if err != nil {
+		s.Logger.Errorw("failed to start Nomod invoice sync workflow",
+			"error", err,
+			"invoice_id", invoiceID,
+			"customer_id", customerID)
+		return
+	}
+
+	s.Logger.Infow("Nomod invoice sync workflow started successfully",
 		"invoice_id", invoiceID,
 		"customer_id", customerID,
 		"workflow_id", workflowRun.GetID(),

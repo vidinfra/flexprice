@@ -238,6 +238,34 @@ func (s *connectionService) encryptMetadata(encryptedSecretData types.Connection
 			WebhookVerifierToken: encryptedWebhookVerifierToken,
 		}
 
+	case types.SecretProviderNomod:
+		if encryptedSecretData.Nomod == nil {
+			s.Logger.Warnw("Nomod metadata is nil, cannot encrypt", "provider_type", providerType)
+			return types.ConnectionMetadata{}, ierr.NewError("Nomod metadata is required").
+				WithHint("Nomod connection requires encrypted_secret_data with api_key").
+				Mark(ierr.ErrValidation)
+		}
+		// Encrypt API key
+		encryptedAPIKey, err := s.encryptionService.Encrypt(encryptedSecretData.Nomod.APIKey)
+		if err != nil {
+			return types.ConnectionMetadata{}, err
+		}
+
+		nomodMeta := &types.NomodConnectionMetadata{
+			APIKey: encryptedAPIKey,
+		}
+
+		// Encrypt webhook secret if provided
+		if encryptedSecretData.Nomod.WebhookSecret != "" {
+			encryptedWebhookSecret, err := s.encryptionService.Encrypt(encryptedSecretData.Nomod.WebhookSecret)
+			if err != nil {
+				return types.ConnectionMetadata{}, err
+			}
+			nomodMeta.WebhookSecret = encryptedWebhookSecret
+		}
+
+		encryptedMetadata.Nomod = nomodMeta
+
 	default:
 		// For other providers or unknown types, use generic format
 		if encryptedSecretData.Generic != nil {

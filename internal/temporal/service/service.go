@@ -356,6 +356,8 @@ func (s *temporalService) buildWorkflowInput(ctx context.Context, workflowType t
 		return s.buildHubSpotInvoiceSyncInput(ctx, tenantID, environmentID, params)
 	case types.TemporalHubSpotQuoteSyncWorkflow:
 		return s.buildHubSpotQuoteSyncInput(ctx, tenantID, environmentID, params)
+	case types.TemporalNomodInvoiceSyncWorkflow:
+		return s.buildNomodInvoiceSyncInput(ctx, tenantID, environmentID, params)
 	default:
 		return nil, errors.NewError("unsupported workflow type").
 			WithHintf("Workflow type %s is not supported", workflowType.String()).
@@ -510,6 +512,27 @@ func (s *temporalService) buildHubSpotQuoteSyncInput(_ context.Context, tenantID
 
 	return nil, errors.NewError("invalid input for HubSpot quote sync workflow").
 		WithHint("Provide HubSpotQuoteSyncWorkflowInput with subscription_id").
+		Mark(errors.ErrValidation)
+}
+
+// buildNomodInvoiceSyncInput builds input for Nomod invoice sync workflow
+func (s *temporalService) buildNomodInvoiceSyncInput(_ context.Context, tenantID, environmentID string, params interface{}) (interface{}, error) {
+	// If already correct type, just ensure context is set
+	if input, ok := params.(*models.NomodInvoiceSyncWorkflowInput); ok {
+		input.TenantID = tenantID
+		input.EnvironmentID = environmentID
+		return *input, nil
+	}
+
+	// Handle value type as well
+	if input, ok := params.(models.NomodInvoiceSyncWorkflowInput); ok {
+		input.TenantID = tenantID
+		input.EnvironmentID = environmentID
+		return input, nil
+	}
+
+	return nil, errors.NewError("invalid input for Nomod invoice sync workflow").
+		WithHint("Provide NomodInvoiceSyncWorkflowInput with invoice_id and customer_id").
 		Mark(errors.ErrValidation)
 }
 
