@@ -165,50 +165,9 @@ func (s *CustomerService) SyncCustomerToNomod(ctx context.Context, flexpriceCust
 		Email:     flexpriceCustomer.Email,
 	}
 
-	// Add optional fields from FlexPrice customer model
-
-	// Phone number - check both model and metadata
-	if phoneNumber, exists := flexpriceCustomer.Metadata["phone_number"]; exists && phoneNumber != "" {
-		req.PhoneNumber = &phoneNumber
-	}
-
-	// Business name from metadata
-	if businessName, exists := flexpriceCustomer.Metadata["business_name"]; exists && businessName != "" {
-		req.BusinessName = &businessName
-	}
-
-	// Job title from metadata
-	if jobTitle, exists := flexpriceCustomer.Metadata["job_title"]; exists && jobTitle != "" {
-		req.JobTitle = &jobTitle
-	}
-
-	// Address fields from FlexPrice customer model
-	if flexpriceCustomer.AddressCountry != "" {
-		req.Country = &flexpriceCustomer.AddressCountry
-	}
-
-	// Province from metadata (if available as UUID)
-	if province, exists := flexpriceCustomer.Metadata["province"]; exists && province != "" {
-		req.Province = &province
-	}
-
-	if flexpriceCustomer.AddressLine1 != "" {
-		req.Street = &flexpriceCustomer.AddressLine1
-	}
-
-	if flexpriceCustomer.AddressCity != "" {
-		req.City = &flexpriceCustomer.AddressCity
-	}
-
-	if flexpriceCustomer.AddressPostalCode != "" {
-		req.ZipCode = &flexpriceCustomer.AddressPostalCode
-	}
-
 	s.logger.Infow("creating customer in Nomod",
 		"customer_id", flexpriceCustomer.ID,
-		"has_address", flexpriceCustomer.AddressLine1 != "",
-		"has_country", flexpriceCustomer.AddressCountry != "",
-		"has_phone", req.PhoneNumber != nil)
+		"email", flexpriceCustomer.Email)
 
 	// Create customer in Nomod
 	nomodCustomer, err := s.client.CreateCustomer(ctx, req)
