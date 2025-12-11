@@ -765,17 +765,11 @@ func (h *WebhookHandler) HandleQuickBooksWebhook(c *gin.Context) {
 // @Produce json
 // @Param tenant_id path string true "Tenant ID"
 // @Param environment_id path string true "Environment ID"
-// @Success 200 {object} map[string]interface{} "Webhook received (always returns 200)"
+// @Param X-API-KEY header string false "Nomod webhook secret (if configured)"
+// @Success 200 {object} map[string]interface{} "Webhook processed successfully"
+// @Failure 401 {object} map[string]interface{} "Unauthorized - invalid or missing X-API-KEY"
 // @Router /webhooks/nomod/{tenant_id}/{environment_id} [post]
 func (h *WebhookHandler) HandleNomodWebhook(c *gin.Context) {
-	// Always return 200 OK to Nomod to prevent retries
-	// We log errors internally but don't expose them to Nomod
-	defer func() {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "Webhook received",
-		})
-	}()
-
 	tenantID := c.Param("tenant_id")
 	environmentID := c.Param("environment_id")
 
@@ -783,6 +777,9 @@ func (h *WebhookHandler) HandleNomodWebhook(c *gin.Context) {
 		h.logger.Errorw("missing tenant_id or environment_id in webhook URL",
 			"tenant_id", tenantID,
 			"environment_id", environmentID)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Webhook received",
+		})
 		return
 	}
 
@@ -790,6 +787,9 @@ func (h *WebhookHandler) HandleNomodWebhook(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		h.logger.Errorw("failed to read request body", "error", err)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Webhook received",
+		})
 		return
 	}
 
@@ -805,6 +805,9 @@ func (h *WebhookHandler) HandleNomodWebhook(c *gin.Context) {
 	nomodIntegration, err := h.integrationFactory.GetNomodIntegration(ctx)
 	if err != nil {
 		h.logger.Errorw("failed to get Nomod integration", "error", err)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Webhook received",
+		})
 		return
 	}
 
@@ -812,32 +815,44 @@ func (h *WebhookHandler) HandleNomodWebhook(c *gin.Context) {
 	conn, err := nomodIntegration.Client.GetConnection(ctx)
 	if err != nil {
 		h.logger.Errorw("failed to get Nomod connection", "error", err)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Webhook received",
+		})
 		return
 	}
 
 	// Check if webhook secret is configured
-	hasWebhookSecret := conn.EncryptedSecretData.Nomod != nil &&
+	hasWebhookSecretConfigured := conn.EncryptedSecretData.Nomod != nil &&
 		conn.EncryptedSecretData.Nomod.WebhookSecret != ""
 
+	hasAPIKey := providedAPIKey != ""
+
 	// Verify webhook authentication if webhook secret is configured
-	if hasWebhookSecret {
-		if providedAPIKey == "" {
-			h.logger.Warnw("webhook secret configured but X-API-KEY header not provided - allowing request",
+	if hasWebhookSecretConfigured {
+		if !hasAPIKey {
+			h.logger.Errorw("webhook secret configured but X-API-KEY header not provided",
 				"remote_addr", c.ClientIP(),
 				"tenant_id", tenantID,
 				"environment_id", environmentID)
-		} else {
-			// Verify the API key
-			err = nomodIntegration.Client.VerifyWebhookAuth(ctx, providedAPIKey)
-			if err != nil {
-				h.logger.Errorw("Nomod webhook authentication failed",
-					"error", err,
-					"remote_addr", c.ClientIP())
-				return
-			}
-			h.logger.Debugw("Nomod webhook authentication successful",
-				"remote_addr", c.ClientIP())
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "X-API-KEY header required for webhook authentication",
+			})
+			return
 		}
+
+		// Verify the API key
+		err = nomodIntegration.Client.VerifyWebhookAuth(ctx, providedAPIKey)
+		if err != nil {
+			h.logger.Errorw("Nomod webhook authentication failed",
+				"error", err,
+				"remote_addr", c.ClientIP())
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Invalid webhook authentication",
+			})
+			return
+		}
+		h.logger.Debugw("Nomod webhook authentication successful",
+			"remote_addr", c.ClientIP())
 	} else {
 		h.logger.Debugw("Nomod webhook processing without authentication",
 			"tenant_id", tenantID,
@@ -876,10 +891,17 @@ func (h *WebhookHandler) HandleNomodWebhook(c *gin.Context) {
 			"error", err,
 			"charge_id", payload.ID,
 			"environment_id", environmentID)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Webhook received",
+		})
 		return
 	}
 
 	h.logger.Infow("successfully processed Nomod webhook",
 		"charge_id", payload.ID,
 		"environment_id", environmentID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Webhook processed successfully",
+	})
 }
