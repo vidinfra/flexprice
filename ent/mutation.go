@@ -36607,6 +36607,7 @@ type PriceMutation struct {
 	created_by                *string
 	updated_by                *string
 	environment_id            *string
+	display_name              *string
 	amount                    *decimal.Decimal
 	currency                  *string
 	display_amount            *string
@@ -37041,6 +37042,55 @@ func (m *PriceMutation) EnvironmentIDCleared() bool {
 func (m *PriceMutation) ResetEnvironmentID() {
 	m.environment_id = nil
 	delete(m.clearedFields, price.FieldEnvironmentID)
+}
+
+// SetDisplayName sets the "display_name" field.
+func (m *PriceMutation) SetDisplayName(s string) {
+	m.display_name = &s
+}
+
+// DisplayName returns the value of the "display_name" field in the mutation.
+func (m *PriceMutation) DisplayName() (r string, exists bool) {
+	v := m.display_name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDisplayName returns the old "display_name" field's value of the Price entity.
+// If the Price object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PriceMutation) OldDisplayName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDisplayName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDisplayName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDisplayName: %w", err)
+	}
+	return oldValue.DisplayName, nil
+}
+
+// ClearDisplayName clears the value of the "display_name" field.
+func (m *PriceMutation) ClearDisplayName() {
+	m.display_name = nil
+	m.clearedFields[price.FieldDisplayName] = struct{}{}
+}
+
+// DisplayNameCleared returns if the "display_name" field was cleared in this mutation.
+func (m *PriceMutation) DisplayNameCleared() bool {
+	_, ok := m.clearedFields[price.FieldDisplayName]
+	return ok
+}
+
+// ResetDisplayName resets all changes to the "display_name" field.
+func (m *PriceMutation) ResetDisplayName() {
+	m.display_name = nil
+	delete(m.clearedFields, price.FieldDisplayName)
 }
 
 // SetAmount sets the "amount" field.
@@ -38538,7 +38588,7 @@ func (m *PriceMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PriceMutation) Fields() []string {
-	fields := make([]string, 0, 38)
+	fields := make([]string, 0, 39)
 	if m.tenant_id != nil {
 		fields = append(fields, price.FieldTenantID)
 	}
@@ -38559,6 +38609,9 @@ func (m *PriceMutation) Fields() []string {
 	}
 	if m.environment_id != nil {
 		fields = append(fields, price.FieldEnvironmentID)
+	}
+	if m.display_name != nil {
+		fields = append(fields, price.FieldDisplayName)
 	}
 	if m.amount != nil {
 		fields = append(fields, price.FieldAmount)
@@ -38675,6 +38728,8 @@ func (m *PriceMutation) Field(name string) (ent.Value, bool) {
 		return m.UpdatedBy()
 	case price.FieldEnvironmentID:
 		return m.EnvironmentID()
+	case price.FieldDisplayName:
+		return m.DisplayName()
 	case price.FieldAmount:
 		return m.Amount()
 	case price.FieldCurrency:
@@ -38760,6 +38815,8 @@ func (m *PriceMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldUpdatedBy(ctx)
 	case price.FieldEnvironmentID:
 		return m.OldEnvironmentID(ctx)
+	case price.FieldDisplayName:
+		return m.OldDisplayName(ctx)
 	case price.FieldAmount:
 		return m.OldAmount(ctx)
 	case price.FieldCurrency:
@@ -38879,6 +38936,13 @@ func (m *PriceMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetEnvironmentID(v)
+		return nil
+	case price.FieldDisplayName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDisplayName(v)
 		return nil
 	case price.FieldAmount:
 		v, ok := value.(decimal.Decimal)
@@ -39163,6 +39227,9 @@ func (m *PriceMutation) ClearedFields() []string {
 	if m.FieldCleared(price.FieldEnvironmentID) {
 		fields = append(fields, price.FieldEnvironmentID)
 	}
+	if m.FieldCleared(price.FieldDisplayName) {
+		fields = append(fields, price.FieldDisplayName)
+	}
 	if m.FieldCleared(price.FieldPriceUnitID) {
 		fields = append(fields, price.FieldPriceUnitID)
 	}
@@ -39248,6 +39315,9 @@ func (m *PriceMutation) ClearField(name string) error {
 		return nil
 	case price.FieldEnvironmentID:
 		m.ClearEnvironmentID()
+		return nil
+	case price.FieldDisplayName:
+		m.ClearDisplayName()
 		return nil
 	case price.FieldPriceUnitID:
 		m.ClearPriceUnitID()
@@ -39340,6 +39410,9 @@ func (m *PriceMutation) ResetField(name string) error {
 		return nil
 	case price.FieldEnvironmentID:
 		m.ResetEnvironmentID()
+		return nil
+	case price.FieldDisplayName:
+		m.ResetDisplayName()
 		return nil
 	case price.FieldAmount:
 		m.ResetAmount()

@@ -35,6 +35,13 @@ func (Price) Fields() []ent.Field {
 			Unique().
 			Immutable(),
 
+		// display_name is the name of the price
+		field.String("display_name").
+			SchemaType(map[string]string{
+				"postgres": "varchar(255)",
+			}).
+			Optional(),
+
 		field.Other("amount", decimal.Decimal{}).
 			SchemaType(map[string]string{
 				"postgres": "numeric(25,15)",

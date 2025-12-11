@@ -112,6 +112,20 @@ func (pc *PriceCreate) SetNillableEnvironmentID(s *string) *PriceCreate {
 	return pc
 }
 
+// SetDisplayName sets the "display_name" field.
+func (pc *PriceCreate) SetDisplayName(s string) *PriceCreate {
+	pc.mutation.SetDisplayName(s)
+	return pc
+}
+
+// SetNillableDisplayName sets the "display_name" field if the given value is not nil.
+func (pc *PriceCreate) SetNillableDisplayName(s *string) *PriceCreate {
+	if s != nil {
+		pc.SetDisplayName(*s)
+	}
+	return pc
+}
+
 // SetAmount sets the "amount" field.
 func (pc *PriceCreate) SetAmount(d decimal.Decimal) *PriceCreate {
 	pc.mutation.SetAmount(d)
@@ -696,6 +710,10 @@ func (pc *PriceCreate) createSpec() (*Price, *sqlgraph.CreateSpec) {
 	if value, ok := pc.mutation.EnvironmentID(); ok {
 		_spec.SetField(price.FieldEnvironmentID, field.TypeString, value)
 		_node.EnvironmentID = value
+	}
+	if value, ok := pc.mutation.DisplayName(); ok {
+		_spec.SetField(price.FieldDisplayName, field.TypeString, value)
+		_node.DisplayName = value
 	}
 	if value, ok := pc.mutation.Amount(); ok {
 		_spec.SetField(price.FieldAmount, field.TypeOther, value)

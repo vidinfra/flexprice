@@ -71,6 +71,26 @@ func (pu *PriceUpdate) ClearUpdatedBy() *PriceUpdate {
 	return pu
 }
 
+// SetDisplayName sets the "display_name" field.
+func (pu *PriceUpdate) SetDisplayName(s string) *PriceUpdate {
+	pu.mutation.SetDisplayName(s)
+	return pu
+}
+
+// SetNillableDisplayName sets the "display_name" field if the given value is not nil.
+func (pu *PriceUpdate) SetNillableDisplayName(s *string) *PriceUpdate {
+	if s != nil {
+		pu.SetDisplayName(*s)
+	}
+	return pu
+}
+
+// ClearDisplayName clears the value of the "display_name" field.
+func (pu *PriceUpdate) ClearDisplayName() *PriceUpdate {
+	pu.mutation.ClearDisplayName()
+	return pu
+}
+
 // SetAmount sets the "amount" field.
 func (pu *PriceUpdate) SetAmount(d decimal.Decimal) *PriceUpdate {
 	pu.mutation.SetAmount(d)
@@ -640,6 +660,12 @@ func (pu *PriceUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	if pu.mutation.EnvironmentIDCleared() {
 		_spec.ClearField(price.FieldEnvironmentID, field.TypeString)
 	}
+	if value, ok := pu.mutation.DisplayName(); ok {
+		_spec.SetField(price.FieldDisplayName, field.TypeString, value)
+	}
+	if pu.mutation.DisplayNameCleared() {
+		_spec.ClearField(price.FieldDisplayName, field.TypeString)
+	}
 	if value, ok := pu.mutation.Amount(); ok {
 		_spec.SetField(price.FieldAmount, field.TypeOther, value)
 	}
@@ -851,6 +877,26 @@ func (puo *PriceUpdateOne) SetNillableUpdatedBy(s *string) *PriceUpdateOne {
 // ClearUpdatedBy clears the value of the "updated_by" field.
 func (puo *PriceUpdateOne) ClearUpdatedBy() *PriceUpdateOne {
 	puo.mutation.ClearUpdatedBy()
+	return puo
+}
+
+// SetDisplayName sets the "display_name" field.
+func (puo *PriceUpdateOne) SetDisplayName(s string) *PriceUpdateOne {
+	puo.mutation.SetDisplayName(s)
+	return puo
+}
+
+// SetNillableDisplayName sets the "display_name" field if the given value is not nil.
+func (puo *PriceUpdateOne) SetNillableDisplayName(s *string) *PriceUpdateOne {
+	if s != nil {
+		puo.SetDisplayName(*s)
+	}
+	return puo
+}
+
+// ClearDisplayName clears the value of the "display_name" field.
+func (puo *PriceUpdateOne) ClearDisplayName() *PriceUpdateOne {
+	puo.mutation.ClearDisplayName()
 	return puo
 }
 
@@ -1452,6 +1498,12 @@ func (puo *PriceUpdateOne) sqlSave(ctx context.Context) (_node *Price, err error
 	}
 	if puo.mutation.EnvironmentIDCleared() {
 		_spec.ClearField(price.FieldEnvironmentID, field.TypeString)
+	}
+	if value, ok := puo.mutation.DisplayName(); ok {
+		_spec.SetField(price.FieldDisplayName, field.TypeString, value)
+	}
+	if puo.mutation.DisplayNameCleared() {
+		_spec.ClearField(price.FieldDisplayName, field.TypeString)
 	}
 	if value, ok := puo.mutation.Amount(); ok {
 		_spec.SetField(price.FieldAmount, field.TypeOther, value)
