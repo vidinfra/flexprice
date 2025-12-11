@@ -53,36 +53,12 @@ func (s *priceService) CreatePrice(ctx context.Context, req dto.CreatePriceReque
 		return nil, err
 	}
 
-	// Handle entity type validation
-	if req.EntityType != "" {
-		if err := req.EntityType.Validate(); err != nil {
+	// Validate that the entity exists based on entity type
+	if !req.SkipEntityValidation {
+		if err := s.validateEntityExists(ctx, req.EntityType, req.EntityID); err != nil {
 			return nil, err
 		}
-
-		if req.EntityID == "" {
-			return nil, ierr.NewError("entity_id is required when entity_type is provided").
-				WithHint("Please provide an entity id").
-				Mark(ierr.ErrValidation)
-		}
-
-		// Validate that the entity exists based on entity type
-		if !req.SkipEntityValidation {
-			if err := s.validateEntityExists(ctx, req.EntityType, req.EntityID); err != nil {
-				return nil, err
-			}
-		}
-	} else {
-		// Legacy support for plan_id
-		if req.PlanID == "" {
-			return nil, ierr.NewError("either entity_type/entity_id or plan_id is required").
-				WithHint("Please provide entity_type and entity_id, or plan_id for backward compatibility").
-				Mark(ierr.ErrValidation)
-		}
-		// Set entity type and ID from plan_id for backward compatibility
-		req.EntityType = types.PRICE_ENTITY_TYPE_PLAN
-		req.EntityID = req.PlanID
 	}
-
 	// Handle price unit config case
 	if req.PriceUnitConfig != nil {
 		return s.createPriceWithUnitConfig(ctx, req)
@@ -1484,7 +1460,7 @@ func (s *priceService) syncPriceToQuickBooksIfEnabled(ctx context.Context, price
 		s.Logger.Debugw("Temporal service not available, skipping QuickBooks sync",
 			"price_id", priceID)
 		return
-		}
+	}
 
 	// Check if QuickBooks integration is available
 	if s.IntegrationFactory == nil {
@@ -1528,8 +1504,8 @@ func (s *priceService) syncPriceToQuickBooksIfEnabled(ctx context.Context, price
 	}
 
 	s.Logger.Debugw("QuickBooks sync workflow started",
-			"price_id", priceID,
-			"plan_id", planID,
+		"price_id", priceID,
+		"plan_id", planID,
 		"workflow_id", workflowRun.GetID(),
 		"run_id", workflowRun.GetRunID())
 }

@@ -17,9 +17,8 @@ import (
 type CreatePriceRequest struct {
 	Amount             string                   `json:"amount,omitempty"`
 	Currency           string                   `json:"currency" validate:"required,len=3"`
-	PlanID             string                   `json:"plan_id,omitempty"`     // TODO: This is deprecated and will be removed in the future
-	EntityType         types.PriceEntityType    `json:"entity_type,omitempty"` // TODO: this will be required in the future as we will not allow prices to be created without an entity type
-	EntityID           string                   `json:"entity_id,omitempty"`   // TODO: this will be required in the future as we will not allow prices to be created without an entity id
+	EntityType         types.PriceEntityType    `json:"entity_type" validate:"required"`
+	EntityID           string                   `json:"entity_id" validate:"required"`
 	Type               types.PriceType          `json:"type" validate:"required"`
 	PriceUnitType      types.PriceUnitType      `json:"price_unit_type" validate:"required"`
 	BillingPeriod      types.BillingPeriod      `json:"billing_period" validate:"required"`
@@ -76,6 +75,18 @@ type CreatePriceTier struct {
 // TODO : add all price validations
 func (r *CreatePriceRequest) Validate() error {
 	var err error
+
+	// Validate entity type
+	err = r.EntityType.Validate()
+	if err != nil {
+		return err
+	}
+
+	if r.EntityID == "" {
+		return ierr.NewError("entity_id is required when entity_type is provided").
+			WithHint("Please provide an entity id").
+			Mark(ierr.ErrValidation)
+	}
 
 	// Set default price unit type to FIAT if not provided
 	if r.PriceUnitType == "" {
@@ -605,12 +616,6 @@ func (r *CreatePriceRequest) ToPrice(ctx context.Context) (*priceDomain.Price, e
 		}
 
 		priceUnitTiers = priceDomain.JSONBTiers(priceTiers)
-	}
-
-	// TODO: remove this
-	if r.PlanID != "" {
-		r.EntityType = types.PRICE_ENTITY_TYPE_PLAN
-		r.EntityID = r.PlanID
 	}
 
 	price := &priceDomain.Price{

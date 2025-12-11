@@ -24,7 +24,7 @@ import (
 	"github.com/flexprice/flexprice/internal/types"
 	webhookDto "github.com/flexprice/flexprice/internal/webhook/dto"
 	"github.com/samber/lo"
-	"github.com/shopspring/decimal"
+"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
