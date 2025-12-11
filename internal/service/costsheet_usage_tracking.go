@@ -13,6 +13,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/flexprice/flexprice/internal/api/dto"
+	"github.com/flexprice/flexprice/internal/cache"
 	"github.com/flexprice/flexprice/internal/config"
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/events"
@@ -292,22 +293,10 @@ func (s *costsheetUsageTrackingService) generateUniqueHash(event *events.Event, 
 func (s *costsheetUsageTrackingService) prepareProcessedEvents(ctx context.Context, event *events.Event) ([]*events.CostUsage, error) {
 	results := make([]*events.CostUsage, 0)
 
-	// CASE 1: Get active costsheet
-	costSheetService := NewCostsheetService(s.ServiceParams)
-	costSheet, err := costSheetService.GetActiveCostsheetForTenant(ctx)
+	// CASE 1: Get active costsheet (with caching)
+	costSheet, err := s.getActiveCostsheetWithCache(ctx)
 	if err != nil {
-		s.Logger.Warnw("costsheet not found for event, skipping",
-			"event_id", event.ID,
-			"error", err,
-		)
-		return results, nil
-	}
-
-	if costSheet == nil {
-		s.Logger.Debugw("no active costsheet found for tenant, skipping",
-			"event_id", event.ID,
-		)
-		return results, nil
+		return results, err
 	}
 
 	// CASE 2: Lookup customer (similar to feature usage tracking)
@@ -923,9 +912,8 @@ func (s *costsheetUsageTrackingService) ReprocessEvents(ctx context.Context, par
 }
 
 func (s *costsheetUsageTrackingService) GetCostSheetUsageAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error) {
-	// STEP1: Get active costsheet
-	costsheetService := NewCostsheetService(s.ServiceParams)
-	costSheet, err := costsheetService.GetActiveCostsheetForTenant(ctx)
+	// STEP1: Get active costsheet (with caching)
+	costSheet, err := s.getActiveCostsheetWithCache(ctx)
 	if err != nil {
 		s.Logger.Errorw("failed to fetch active costsheet", "error", err)
 		return nil, err
@@ -1347,4 +1335,39 @@ func (s *costsheetUsageTrackingService) getCorrectUsageValueForPoint(point event
 		// Default to SUM for unknown types
 		return point.Usage
 	}
+}
+
+// getActiveCostsheetWithCache fetches the active costsheet for the tenant with caching
+// It first checks the cache, and if not found, fetches from the service and caches the result
+func (s *costsheetUsageTrackingService) getActiveCostsheetWithCache(ctx context.Context) (*dto.CostsheetResponse, error) {
+	tenantID := types.GetTenantID(ctx)
+	environmentID := types.GetEnvironmentID(ctx)
+	cacheKey := cache.GenerateKey(cache.PrefixCostsheet, tenantID, environmentID)
+
+	// Try to get from cache first
+	cacheClient := cache.GetInMemoryCache()
+	var costSheet *dto.CostsheetResponse
+	if cached, found := cacheClient.ForceCacheGet(ctx, cacheKey); found {
+		if cachedCostSheet, ok := cached.(*dto.CostsheetResponse); ok {
+			s.Logger.Debugw("costsheet cache hit", "tenant_id", tenantID, "environment_id", environmentID)
+			costSheet = cachedCostSheet
+		}
+	}
+
+	// If not in cache, fetch from service
+	if costSheet == nil {
+		costSheetService := NewCostsheetService(s.ServiceParams)
+		var err error
+		costSheet, err = costSheetService.GetActiveCostsheetForTenant(ctx)
+		if err != nil {
+			s.Logger.Warnw("failed to get active costsheet", "error", err, "tenant_id", tenantID, "environment_id", environmentID)
+			return nil, err
+		}
+
+		// Cache the result for 5 minutes
+		cacheClient.ForceCacheSet(ctx, cacheKey, costSheet, 5*time.Minute)
+		s.Logger.Debugw("costsheet cached", "tenant_id", tenantID, "environment_id", environmentID)
+	}
+
+	return costSheet, nil
 }
