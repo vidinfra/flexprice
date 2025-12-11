@@ -1,6 +1,6 @@
 {
   "name": "@flexprice/sdk",
-  "version": "1.0.0",
+  "version": "1.0.40",
   "description": "Official TypeScript/JavaScript SDK of Flexprice",
   "author": "Flexprice",
   "repository": {
