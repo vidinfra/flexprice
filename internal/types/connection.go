@@ -15,6 +15,7 @@ const (
 	ConnectionMetadataTypeHubSpot   ConnectionMetadataType = "hubspot"
 	ConnectionMetadataTypeRazorpay  ConnectionMetadataType = "razorpay"
 	ConnectionMetadataTypeChargebee ConnectionMetadataType = "chargebee"
+	ConnectionMetadataTypeNomod     ConnectionMetadataType = "nomod"
 )
 
 func (t ConnectionMetadataType) Validate() error {
@@ -25,10 +26,11 @@ func (t ConnectionMetadataType) Validate() error {
 		ConnectionMetadataTypeHubSpot,
 		ConnectionMetadataTypeRazorpay,
 		ConnectionMetadataTypeChargebee,
+		ConnectionMetadataTypeNomod,
 	}
 	if !lo.Contains(allowedTypes, t) {
 		return ierr.NewError("invalid connection metadata type").
-			WithHint("Connection metadata type must be one of: stripe, generic, s3, hubspot, razorpay, chargebee").
+			WithHint("Connection metadata type must be one of: stripe, generic, s3, hubspot, razorpay, chargebee, nomod").
 			Mark(ierr.ErrValidation)
 	}
 	return nil
@@ -186,6 +188,23 @@ func (q *QuickBooksConnectionMetadata) Validate() error {
 	return nil
 }
 
+// NomodConnectionMetadata represents Nomod-specific connection metadata
+type NomodConnectionMetadata struct {
+	APIKey        string `json:"api_key"`        // Nomod API Key (encrypted)
+	WebhookSecret string `json:"webhook_secret"` // Basic Auth secret for webhooks (encrypted, optional)
+}
+
+// Validate validates the Nomod connection metadata
+func (n *NomodConnectionMetadata) Validate() error {
+	if n.APIKey == "" {
+		return ierr.NewError("api_key is required").
+			WithHint("Nomod API key is required").
+			Mark(ierr.ErrValidation)
+	}
+	// WebhookSecret is optional
+	return nil
+}
+
 // ConnectionSettings represents general connection settings
 type ConnectionSettings struct {
 	InvoiceSyncEnable *bool `json:"invoice_sync_enable,omitempty"`
@@ -234,6 +253,7 @@ type ConnectionMetadata struct {
 	Razorpay   *RazorpayConnectionMetadata   `json:"razorpay,omitempty"`
 	Chargebee  *ChargebeeConnectionMetadata  `json:"chargebee,omitempty"`
 	QuickBooks *QuickBooksConnectionMetadata `json:"quickbooks,omitempty"`
+	Nomod      *NomodConnectionMetadata      `json:"nomod,omitempty"`
 	Generic    *GenericConnectionMetadata    `json:"generic,omitempty"`
 	Settings   *ConnectionSettings           `json:"settings,omitempty"`
 }
@@ -283,6 +303,13 @@ func (c *ConnectionMetadata) Validate(providerType SecretProvider) error {
 				Mark(ierr.ErrValidation)
 		}
 		return c.QuickBooks.Validate()
+	case SecretProviderNomod:
+		if c.Nomod == nil {
+			return ierr.NewError("nomod metadata is required").
+				WithHint("Nomod metadata is required for nomod provider").
+				Mark(ierr.ErrValidation)
+		}
+		return c.Nomod.Validate()
 	default:
 		// For other providers or unknown types, use generic format
 		if c.Generic == nil {

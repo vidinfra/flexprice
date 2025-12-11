@@ -183,6 +183,20 @@ func convertFlatMetadataToStructured(flatMetadata map[string]interface{}, provid
 			QuickBooks: qbMetadata,
 		}
 
+	case types.SecretProviderNomod:
+		nomodMetadata := &types.NomodConnectionMetadata{}
+
+		if apiKey, ok := flatMetadata["api_key"].(string); ok {
+			nomodMetadata.APIKey = apiKey
+		}
+		if webhookSecret, ok := flatMetadata["webhook_secret"].(string); ok {
+			nomodMetadata.WebhookSecret = webhookSecret
+		}
+
+		return types.ConnectionMetadata{
+			Nomod: nomodMetadata,
+		}
+
 	default:
 		// For other providers or unknown types, use generic format
 		return types.ConnectionMetadata{
@@ -195,10 +209,10 @@ func convertFlatMetadataToStructured(flatMetadata map[string]interface{}, provid
 
 // UpdateConnectionRequest represents the request to update a connection
 type UpdateConnectionRequest struct {
-	Name                string                     `json:"name,omitempty" validate:"omitempty,max=255"`
-	Metadata            map[string]interface{}     `json:"metadata,omitempty"`
-	SyncConfig          *types.SyncConfig          `json:"sync_config,omitempty" validate:"omitempty,dive"`
-	EncryptedSecretData *types.ConnectionMetadata  `json:"encrypted_secret_data,omitempty"` // For updating webhook tokens, etc.
+	Name                string                    `json:"name,omitempty" validate:"omitempty,max=255"`
+	Metadata            map[string]interface{}    `json:"metadata,omitempty"`
+	SyncConfig          *types.SyncConfig         `json:"sync_config,omitempty" validate:"omitempty,dive"`
+	EncryptedSecretData *types.ConnectionMetadata `json:"encrypted_secret_data,omitempty"` // For updating webhook tokens, etc.
 }
 
 // UnmarshalJSON custom unmarshaling to handle flat metadata structure

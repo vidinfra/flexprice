@@ -10,6 +10,7 @@ import (
 	"github.com/flexprice/flexprice/internal/config"
 	"github.com/flexprice/flexprice/internal/integration"
 	chargebeewebhook "github.com/flexprice/flexprice/internal/integration/chargebee/webhook"
+	nomodwebhook "github.com/flexprice/flexprice/internal/integration/nomod/webhook"
 	quickbookswebhook "github.com/flexprice/flexprice/internal/integration/quickbooks/webhook"
 	razorpaywebhook "github.com/flexprice/flexprice/internal/integration/razorpay/webhook"
 	"github.com/flexprice/flexprice/internal/integration/stripe/webhook"
@@ -755,4 +756,152 @@ func (h *WebhookHandler) HandleQuickBooksWebhook(c *gin.Context) {
 	h.logger.Infow("successfully processed QuickBooks webhook",
 		"tenant_id", tenantID,
 		"environment_id", environmentID)
+}
+
+// @Summary Handle Nomod webhook events
+// @Description Process incoming Nomod webhook events for payment and invoice payments
+// @Tags Webhooks
+// @Accept json
+// @Produce json
+// @Param tenant_id path string true "Tenant ID"
+// @Param environment_id path string true "Environment ID"
+// @Param X-API-KEY header string false "Nomod webhook secret (if configured)"
+// @Success 200 {object} map[string]interface{} "Webhook processed successfully"
+// @Failure 401 {object} map[string]interface{} "Unauthorized - invalid or missing X-API-KEY"
+// @Router /webhooks/nomod/{tenant_id}/{environment_id} [post]
+func (h *WebhookHandler) HandleNomodWebhook(c *gin.Context) {
+	tenantID := c.Param("tenant_id")
+	environmentID := c.Param("environment_id")
+
+	if tenantID == "" || environmentID == "" {
+		h.logger.Errorw("missing tenant_id or environment_id in webhook URL",
+			"tenant_id", tenantID,
+			"environment_id", environmentID)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Webhook received",
+		})
+		return
+	}
+
+	// Read the raw request body
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		h.logger.Errorw("failed to read request body", "error", err)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Webhook received",
+		})
+		return
+	}
+
+	// Get X-API-KEY from headers for authentication
+	providedAPIKey := c.GetHeader("X-API-KEY")
+
+	// Set context with tenant and environment IDs
+	ctx := types.SetTenantID(c.Request.Context(), tenantID)
+	ctx = types.SetEnvironmentID(ctx, environmentID)
+	c.Request = c.Request.WithContext(ctx)
+
+	// Get Nomod integration
+	nomodIntegration, err := h.integrationFactory.GetNomodIntegration(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get Nomod integration", "error", err)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Webhook received",
+		})
+		return
+	}
+
+	// Get connection to check if webhook secret is configured
+	conn, err := nomodIntegration.Client.GetConnection(ctx)
+	if err != nil {
+		h.logger.Errorw("failed to get Nomod connection", "error", err)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Webhook received",
+		})
+		return
+	}
+
+	// Check if webhook secret is configured
+	hasWebhookSecretConfigured := conn.EncryptedSecretData.Nomod != nil &&
+		conn.EncryptedSecretData.Nomod.WebhookSecret != ""
+
+	hasAPIKey := providedAPIKey != ""
+
+	// Verify webhook authentication if webhook secret is configured
+	if hasWebhookSecretConfigured {
+		if !hasAPIKey {
+			h.logger.Errorw("webhook secret configured but X-API-KEY header not provided",
+				"remote_addr", c.ClientIP(),
+				"tenant_id", tenantID,
+				"environment_id", environmentID)
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "X-API-KEY header required for webhook authentication",
+			})
+			return
+		}
+
+		// Verify the API key
+		err = nomodIntegration.Client.VerifyWebhookAuth(ctx, providedAPIKey)
+		if err != nil {
+			h.logger.Errorw("Nomod webhook authentication failed",
+				"error", err,
+				"remote_addr", c.ClientIP())
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Invalid webhook authentication",
+			})
+			return
+		}
+		h.logger.Debugw("Nomod webhook authentication successful",
+			"remote_addr", c.ClientIP())
+	} else {
+		h.logger.Debugw("Nomod webhook processing without authentication",
+			"tenant_id", tenantID,
+			"environment_id", environmentID)
+	}
+
+	// Log webhook processing (without sensitive data)
+	h.logger.Infow("processing Nomod webhook",
+		"environment_id", environmentID,
+		"tenant_id", tenantID)
+
+	// Parse webhook payload
+	var payload nomodwebhook.NomodWebhookPayload
+	if err := json.Unmarshal(body, &payload); err != nil {
+		h.logger.Errorw("failed to parse Nomod webhook payload", "error", err)
+		return
+	}
+
+	h.logger.Infow("parsed Nomod webhook payload",
+		"charge_id", payload.ID,
+		"has_invoice_id", payload.InvoiceID != nil,
+		"has_payment_link_id", payload.PaymentLinkID != nil)
+
+	// Create service dependencies for webhook handler
+	serviceDeps := &nomodwebhook.ServiceDependencies{
+		CustomerService: h.customerService,
+		PaymentService:  h.paymentService,
+		InvoiceService:  h.invoiceService,
+		PlanService:     h.planService,
+	}
+
+	// Handle the event
+	err = nomodIntegration.WebhookHandler.HandleWebhookEvent(ctx, &payload, serviceDeps)
+	if err != nil {
+		h.logger.Errorw("failed to handle Nomod webhook event",
+			"error", err,
+			"charge_id", payload.ID,
+			"environment_id", environmentID)
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Webhook received",
+		})
+		return
+	}
+
+	h.logger.Infow("successfully processed Nomod webhook",
+		"charge_id", payload.ID,
+		"environment_id", environmentID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Webhook processed successfully",
+	})
 }

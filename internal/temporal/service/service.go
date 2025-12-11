@@ -357,6 +357,8 @@ func (s *temporalService) buildWorkflowInput(ctx context.Context, workflowType t
 		return s.buildHubSpotInvoiceSyncInput(ctx, tenantID, environmentID, params)
 	case types.TemporalHubSpotQuoteSyncWorkflow:
 		return s.buildHubSpotQuoteSyncInput(ctx, tenantID, environmentID, params)
+	case types.TemporalNomodInvoiceSyncWorkflow:
+		return s.buildNomodInvoiceSyncInput(ctx, tenantID, environmentID, params)
 	case types.TemporalCustomerOnboardingWorkflow:
 		return s.buildCustomerOnboardingInput(ctx, tenantID, environmentID, userID, params)
 	default:
@@ -536,6 +538,26 @@ func (s *temporalService) buildCustomerOnboardingInput(_ context.Context, tenant
 
 	return nil, errors.NewError("invalid input for customer onboarding workflow").
 		WithHint("Provide CustomerOnboardingWorkflowInput with customer_id and workflow_config").
+		Mark(errors.ErrValidation)
+}
+
+func (s *temporalService) buildNomodInvoiceSyncInput(_ context.Context, tenantID, environmentID string, params interface{}) (interface{}, error) {
+	// If already correct type, just ensure context is set
+	if input, ok := params.(*models.NomodInvoiceSyncWorkflowInput); ok {
+		input.TenantID = tenantID
+		input.EnvironmentID = environmentID
+		return *input, nil
+	}
+
+	// Handle value type as well
+	if input, ok := params.(models.NomodInvoiceSyncWorkflowInput); ok {
+		input.TenantID = tenantID
+		input.EnvironmentID = environmentID
+		return input, nil
+	}
+
+	return nil, errors.NewError("invalid input for Nomod invoice sync workflow").
+		WithHint("Provide NomodInvoiceSyncWorkflowInput with invoice_id and customer_id").
 		Mark(errors.ErrValidation)
 }
 
