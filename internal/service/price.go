@@ -1079,7 +1079,7 @@ func (s *priceService) calculateSingletonCost(ctx context.Context, price *price.
 	if quantity.IsZero() {
 		return cost
 	}
-
+ 
 	switch price.BillingModel {
 	case types.BILLING_MODEL_FLAT_FEE:
 		cost = price.CalculateAmount(quantity)
