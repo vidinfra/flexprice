@@ -658,7 +658,7 @@ type UpdatePriceRequest struct {
 	BillingModel types.BillingModel `json:"billing_model,omitempty"`
 
 	// Amount is the new price amount that overrides the original price (optional)
-	Amount *decimal.Decimal `json:"amount,omitempty"`
+	Amount *decimal.Decimal `json:"amount,omitempty" swaggertype:"string"`
 
 	// TierMode determines how to calculate the price for a given quantity
 	TierMode types.BillingTier `json:"tier_mode,omitempty"`
