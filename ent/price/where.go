@@ -1285,16 +1285,6 @@ func ConversionRateLTE(v decimal.Decimal) predicate.Price {
 	return predicate.Price(sql.FieldLTE(FieldConversionRate, v))
 }
 
-// ConversionRateIsNil applies the IsNil predicate on the "conversion_rate" field.
-func ConversionRateIsNil() predicate.Price {
-	return predicate.Price(sql.FieldIsNull(FieldConversionRate))
-}
-
-// ConversionRateNotNil applies the NotNil predicate on the "conversion_rate" field.
-func ConversionRateNotNil() predicate.Price {
-	return predicate.Price(sql.FieldNotNull(FieldConversionRate))
-}
-
 // TypeEQ applies the EQ predicate on the "type" field.
 func TypeEQ(v string) predicate.Price {
 	return predicate.Price(sql.FieldEQ(FieldType, v))

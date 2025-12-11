@@ -235,12 +235,6 @@ func (pu *PriceUpdate) SetNillableConversionRate(d *decimal.Decimal) *PriceUpdat
 	return pu
 }
 
-// ClearConversionRate clears the value of the "conversion_rate" field.
-func (pu *PriceUpdate) ClearConversionRate() *PriceUpdate {
-	pu.mutation.ClearConversionRate()
-	return pu
-}
-
 // SetType sets the "type" field.
 func (pu *PriceUpdate) SetType(s string) *PriceUpdate {
 	pu.mutation.SetType(s)
@@ -696,9 +690,6 @@ func (pu *PriceUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	if value, ok := pu.mutation.ConversionRate(); ok {
 		_spec.SetField(price.FieldConversionRate, field.TypeOther, value)
 	}
-	if pu.mutation.ConversionRateCleared() {
-		_spec.ClearField(price.FieldConversionRate, field.TypeOther)
-	}
 	if value, ok := pu.mutation.GetType(); ok {
 		_spec.SetField(price.FieldType, field.TypeString, value)
 	}
@@ -1032,12 +1023,6 @@ func (puo *PriceUpdateOne) SetNillableConversionRate(d *decimal.Decimal) *PriceU
 	if d != nil {
 		puo.SetConversionRate(*d)
 	}
-	return puo
-}
-
-// ClearConversionRate clears the value of the "conversion_rate" field.
-func (puo *PriceUpdateOne) ClearConversionRate() *PriceUpdateOne {
-	puo.mutation.ClearConversionRate()
 	return puo
 }
 
@@ -1525,9 +1510,6 @@ func (puo *PriceUpdateOne) sqlSave(ctx context.Context) (_node *Price, err error
 	}
 	if value, ok := puo.mutation.ConversionRate(); ok {
 		_spec.SetField(price.FieldConversionRate, field.TypeOther, value)
-	}
-	if puo.mutation.ConversionRateCleared() {
-		_spec.ClearField(price.FieldConversionRate, field.TypeOther)
 	}
 	if value, ok := puo.mutation.GetType(); ok {
 		_spec.SetField(price.FieldType, field.TypeString, value)

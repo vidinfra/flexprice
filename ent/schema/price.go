@@ -101,9 +101,7 @@ func (Price) Fields() []ent.Field {
 			SchemaType(map[string]string{
 				"postgres": "numeric(25,15)",
 			}).
-			Default(decimal.Zero).
-			Nillable().
-			Optional(),
+			Default(decimal.Zero),
 
 		field.String("type").
 			SchemaType(map[string]string{

@@ -53,7 +53,7 @@ type Price struct {
 	// DisplayPriceUnitAmount holds the value of the "display_price_unit_amount" field.
 	DisplayPriceUnitAmount string `json:"display_price_unit_amount,omitempty"`
 	// ConversionRate holds the value of the "conversion_rate" field.
-	ConversionRate *decimal.Decimal `json:"conversion_rate,omitempty"`
+	ConversionRate decimal.Decimal `json:"conversion_rate,omitempty"`
 	// Type holds the value of the "type" field.
 	Type string `json:"type,omitempty"`
 	// BillingPeriod holds the value of the "billing_period" field.
@@ -106,11 +106,9 @@ func (*Price) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case price.FieldConversionRate:
-			values[i] = &sql.NullScanner{S: new(decimal.Decimal)}
 		case price.FieldFilterValues, price.FieldTiers, price.FieldPriceUnitTiers, price.FieldTransformQuantity, price.FieldMetadata:
 			values[i] = new([]byte)
-		case price.FieldAmount, price.FieldPriceUnitAmount:
+		case price.FieldAmount, price.FieldPriceUnitAmount, price.FieldConversionRate:
 			values[i] = new(decimal.Decimal)
 		case price.FieldBillingPeriodCount, price.FieldTrialPeriod:
 			values[i] = new(sql.NullInt64)
@@ -237,11 +235,10 @@ func (pr *Price) assignValues(columns []string, values []any) error {
 				pr.DisplayPriceUnitAmount = value.String
 			}
 		case price.FieldConversionRate:
-			if value, ok := values[i].(*sql.NullScanner); !ok {
+			if value, ok := values[i].(*decimal.Decimal); !ok {
 				return fmt.Errorf("unexpected type %T for field conversion_rate", values[i])
-			} else if value.Valid {
-				pr.ConversionRate = new(decimal.Decimal)
-				*pr.ConversionRate = *value.S.(*decimal.Decimal)
+			} else if value != nil {
+				pr.ConversionRate = *value
 			}
 		case price.FieldType:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -479,10 +476,8 @@ func (pr *Price) String() string {
 	builder.WriteString("display_price_unit_amount=")
 	builder.WriteString(pr.DisplayPriceUnitAmount)
 	builder.WriteString(", ")
-	if v := pr.ConversionRate; v != nil {
-		builder.WriteString("conversion_rate=")
-		builder.WriteString(fmt.Sprintf("%v", *v))
-	}
+	builder.WriteString("conversion_rate=")
+	builder.WriteString(fmt.Sprintf("%v", pr.ConversionRate))
 	builder.WriteString(", ")
 	builder.WriteString("type=")
 	builder.WriteString(pr.Type)

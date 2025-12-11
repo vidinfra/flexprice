@@ -608,6 +608,9 @@ func (pc *PriceCreate) check() error {
 	if _, ok := pc.mutation.PriceUnitAmount(); !ok {
 		return &ValidationError{Name: "price_unit_amount", err: errors.New(`ent: missing required field "Price.price_unit_amount"`)}
 	}
+	if _, ok := pc.mutation.ConversionRate(); !ok {
+		return &ValidationError{Name: "conversion_rate", err: errors.New(`ent: missing required field "Price.conversion_rate"`)}
+	}
 	if _, ok := pc.mutation.GetType(); !ok {
 		return &ValidationError{Name: "type", err: errors.New(`ent: missing required field "Price.type"`)}
 	}
@@ -752,7 +755,7 @@ func (pc *PriceCreate) createSpec() (*Price, *sqlgraph.CreateSpec) {
 	}
 	if value, ok := pc.mutation.ConversionRate(); ok {
 		_spec.SetField(price.FieldConversionRate, field.TypeOther, value)
-		_node.ConversionRate = &value
+		_node.ConversionRate = value
 	}
 	if value, ok := pc.mutation.GetType(); ok {
 		_spec.SetField(price.FieldType, field.TypeString, value)
