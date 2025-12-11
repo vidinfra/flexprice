@@ -376,7 +376,7 @@ func FromEnt(e *ent.Price) *Price {
 
 	return &Price{
 		ID:                     e.ID,
-		Amount:                 decimal.NewFromFloat(e.Amount),
+		Amount:                 e.Amount,
 		Currency:               e.Currency,
 		DisplayAmount:          e.DisplayAmount,
 		PriceUnitType:          types.PriceUnitType(e.PriceUnitType),
@@ -398,9 +398,9 @@ func FromEnt(e *ent.Price) *Price {
 		EnvironmentID:          e.EnvironmentID,
 		PriceUnitID:            lo.FromPtr(e.PriceUnitID),
 		PriceUnit:              e.PriceUnit,
-		PriceUnitAmount:        decimal.NewFromFloat(e.PriceUnitAmount),
+		PriceUnitAmount:        e.PriceUnitAmount,
 		DisplayPriceUnitAmount: e.DisplayPriceUnitAmount,
-		ConversionRate:         decimal.NewFromFloat(e.ConversionRate),
+		ConversionRate:         e.ConversionRate,
 		EntityType:             types.PriceEntityType(lo.FromPtr(e.EntityType)),
 		EntityID:               lo.FromPtr(e.EntityID),
 		ParentPriceID:          lo.FromPtr(e.ParentPriceID),
