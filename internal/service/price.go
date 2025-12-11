@@ -112,16 +112,18 @@ func (s *priceService) getDisplayName(ctx context.Context, req *dto.CreatePriceR
 
 	// If validation is skipped, use default names
 	if req.SkipEntityValidation {
-		if req.Type == types.PRICE_TYPE_FIXED {
+		switch req.Type {
+		case types.PRICE_TYPE_FIXED:
 			req.DisplayName = "Recurring"
-		} else if req.Type == types.PRICE_TYPE_USAGE {
+		case types.PRICE_TYPE_USAGE:
 			req.DisplayName = "Usage"
 		}
 		return
 	}
 
 	// Extract from entity when validation is enabled
-	if req.Type == types.PRICE_TYPE_FIXED {
+	switch req.Type {
+	case types.PRICE_TYPE_FIXED:
 		// For FIXED prices, extract plan/addon name
 		if req.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
 			plan, err := s.PlanRepo.Get(ctx, req.EntityID)
@@ -134,7 +136,7 @@ func (s *priceService) getDisplayName(ctx context.Context, req *dto.CreatePriceR
 				req.DisplayName = addon.Name
 			}
 		}
-	} else if req.Type == types.PRICE_TYPE_USAGE {
+	case types.PRICE_TYPE_USAGE:
 		// For USAGE prices, extract meter name
 		if req.MeterID != "" {
 			meterService := NewMeterService(s.MeterRepo)
