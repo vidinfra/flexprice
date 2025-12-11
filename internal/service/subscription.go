@@ -40,42 +40,31 @@ func NewSubscriptionService(params ServiceParams) SubscriptionService {
 }
 
 func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.CreateSubscriptionRequest) (*dto.SubscriptionResponse, error) {
-	// Handle default values
 	if req.BillingCycle == "" {
 		req.BillingCycle = types.BillingCycleAnniversary
 	}
-
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
 
-	// Get customer based on the provided IDs
+	// Get and validate customer
 	var customer *customer.Customer
 	var err error
-
-	// Case- CustomerID is present - use it directly (ignore ExternalCustomerID if present)
 	if req.CustomerID != "" {
 		customer, err = s.CustomerRepo.Get(ctx, req.CustomerID)
-		if err != nil {
-			return nil, err
-		}
 	} else {
-		// Case- Only ExternalCustomerID is present
 		customer, err = s.CustomerRepo.GetByLookupKey(ctx, req.ExternalCustomerID)
-		if err != nil {
-			return nil, err
+		if err == nil {
+			req.CustomerID = customer.ID
 		}
-		// Set the CustomerID from the found customer
-		req.CustomerID = customer.ID
 	}
-
+	if err != nil {
+		return nil, err
+	}
 	if customer.Status != types.StatusPublished {
 		return nil, ierr.NewError("customer is not active").
 			WithHint("The customer must be active to create a subscription").
-			WithReportableDetails(map[string]interface{}{
-				"customer_id": req.CustomerID,
-				"status":      customer.Status,
-			}).
+			WithReportableDetails(map[string]interface{}{"customer_id": req.CustomerID, "status": customer.Status}).
 			Mark(ierr.ErrValidation)
 	}
 
@@ -83,13 +72,10 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 	// The DTO layer ensures InvoiceBilling is always set (defaults to invoice_to_self)
 	// For invoice_to_self, we don't need to set InvoicingCustomerID as it defaults to subscription customer
 	if lo.FromPtr(req.InvoiceBilling) == types.InvoiceBillingInvoiceToParent {
-		// Set invoicing customer to parent customer
 		if customer.ParentCustomerID == nil {
 			return nil, ierr.NewError("customer does not have a parent customer").
 				WithHint("The customer must have a parent customer to use invoice_to_parent").
-				WithReportableDetails(map[string]interface{}{
-					"customer_id": req.CustomerID,
-				}).
+				WithReportableDetails(map[string]interface{}{"customer_id": req.CustomerID}).
 				Mark(ierr.ErrValidation)
 		}
 		req.InvoicingCustomerID = customer.ParentCustomerID
@@ -101,43 +87,30 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		if err != nil {
 			return nil, err
 		}
-
 		if invoicingCustomer.Status != types.StatusPublished {
 			return nil, ierr.NewError("invoicing customer is not active").
 				WithHint("The invoicing customer must be active").
-				WithReportableDetails(map[string]interface{}{
-					"invoicing_customer_id": *req.InvoicingCustomerID,
-					"status":                invoicingCustomer.Status,
-				}).
+				WithReportableDetails(map[string]interface{}{"invoicing_customer_id": *req.InvoicingCustomerID, "status": invoicingCustomer.Status}).
 				Mark(ierr.ErrValidation)
 		}
 	}
 
+	// Get and validate plan
 	plan, err := s.PlanRepo.Get(ctx, req.PlanID)
 	if err != nil {
 		return nil, err
 	}
-
 	if plan.Status != types.StatusPublished {
 		return nil, ierr.NewError("plan is not active").
 			WithHint("The plan must be active to create a subscription").
-			WithReportableDetails(map[string]interface{}{
-				"plan_id": req.PlanID,
-				"status":  plan.Status,
-			}).
+			WithReportableDetails(map[string]interface{}{"plan_id": req.PlanID, "status": plan.Status}).
 			Mark(ierr.ErrValidation)
 	}
 
 	sub := req.ToSubscription(ctx)
 
-	// Validate and filter prices for the plan using the reusable method
-	validPrices, err := s.ValidateAndFilterPricesForSubscription(
-		ctx,
-		plan.ID,
-		types.PRICE_ENTITY_TYPE_PLAN,
-		sub,
-		req.Workflow,
-	)
+	// Validate and filter prices
+	validPrices, err := s.ValidateAndFilterPricesForSubscription(ctx, plan.ID, types.PRICE_ENTITY_TYPE_PLAN, sub, req.Workflow)
 	if err != nil {
 		return nil, err
 	}
@@ -162,92 +135,61 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		}
 	}
 
-	// Ensure start date is in UTC format
-	// Note: StartDate is now guaranteed to be set (either from request or defaulted in DTO validation)
-	sub.StartDate = sub.StartDate.UTC()
-	now := time.Now().UTC()
-
-	// Set start date and ensure it's in UTC
-	// TODO: handle when start date is in the past and there are
-	// multiple billing periods in the past so in this case we need to keep
-	// the current period start as now only and handle past periods in proration
+	// Setup subscription dates
 	if sub.StartDate.IsZero() {
-		sub.StartDate = now
+		sub.StartDate = time.Now().UTC()
 	} else {
 		sub.StartDate = sub.StartDate.UTC()
 	}
-
-	// TODO: handle customer timezone here
 	if req.BillingAnchor != nil {
 		sub.BillingAnchor = *req.BillingAnchor
 	} else if sub.BillingCycle == types.BillingCycleCalendar {
 		sub.BillingAnchor = types.CalculateCalendarBillingAnchor(sub.StartDate, sub.BillingPeriod)
 	} else {
-		// default to start date for anniversary billing
 		sub.BillingAnchor = sub.StartDate
 	}
-
 	if sub.BillingPeriodCount == 0 {
 		sub.BillingPeriodCount = 1
 	}
-
-	// Calculate the first billing period end date
 	nextBillingDate, err := types.NextBillingDate(sub.StartDate, sub.BillingAnchor, sub.BillingPeriodCount, sub.BillingPeriod, sub.EndDate)
 	if err != nil {
 		return nil, err
 	}
-
 	sub.CurrentPeriodStart = sub.StartDate
 	sub.CurrentPeriodEnd = nextBillingDate
 
-	// Prepare DTO objects for line item creation
+	// Create line items using DTO method
 	subscriptionResponse := &dto.SubscriptionResponse{Subscription: sub}
 	planResponse := &dto.PlanResponse{Plan: plan}
-
-	// Convert line items using the reusable DTO method
 	lineItems := make([]*subscription.SubscriptionLineItem, 0, len(validPrices))
-	for _, priceResponse := range validPrices {
-		// Create request for line item
-		lineItemReq := dto.CreateSubscriptionLineItemRequest{
-			PriceID: priceResponse.Price.ID,
-		}
 
-		// Build params for ToSubscriptionLineItem
-		params := dto.LineItemParams{
+	for _, priceResponse := range validPrices {
+		lineItemReq := &dto.CreateSubscriptionLineItemRequest{PriceID: priceResponse.Price.ID}
+		item := lineItemReq.ToSubscriptionLineItem(ctx, dto.LineItemParams{
 			Subscription: subscriptionResponse,
 			Price:        priceResponse,
 			Plan:         planResponse,
 			EntityType:   types.SubscriptionLineItemEntityTypePlan,
-		}
+		})
 
-		// Use the DTO method to create the line item (handles all standard fields)
-		item := lineItemReq.ToSubscriptionLineItem(ctx, params)
-
-		// Handle subscription-specific overrides
-		// Set phase ID if phases exist
+		// Apply subscription-specific overrides
 		if firstPhaseID != "" {
 			item.SubscriptionPhaseID = &firstPhaseID
 		}
-
-		// If phases exist, set end date to first phase end date, otherwise use subscription end date
 		if len(req.Phases) > 0 && req.Phases[0].EndDate != nil {
 			item.EndDate = *req.Phases[0].EndDate
 		} else if sub.EndDate != nil {
 			item.EndDate = *sub.EndDate
 		}
-
-		// Set start date to the price start date if it is after the subscription start date
-		if priceResponse.StartDate != nil && priceResponse.Price.StartDate.After(sub.StartDate) {
+		if priceResponse.Price.StartDate != nil && priceResponse.Price.StartDate.After(sub.StartDate) {
 			item.StartDate = lo.FromPtr(priceResponse.Price.StartDate)
 		} else {
 			item.StartDate = sub.StartDate
 		}
-
 		lineItems = append(lineItems, item)
 	}
 
-	// Create original price to line item mapping before processing overrides
-	// This captures the mapping before any price overrides change the PriceID
+	// Build price to line item mapping for overrides
 	originalPriceToLineItemMap := make(map[string]string)
 	for _, item := range lineItems {
 		if item.PriceID != "" && item.ID != "" {
@@ -255,77 +197,58 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		}
 	}
 
-	// Process price overrides if provided
+	// Process price overrides
 	if len(req.OverrideLineItems) > 0 {
-		err = s.ProcessSubscriptionPriceOverrides(ctx, sub, req.OverrideLineItems, lineItems, priceMap)
-		if err != nil {
+		if err = s.ProcessSubscriptionPriceOverrides(ctx, sub, req.OverrideLineItems, lineItems, priceMap); err != nil {
 			return nil, err
 		}
 	}
 
 	sub.LineItems = lineItems
-
 	sub.EnableTrueUp = req.EnableTrueUp
-
-	s.Logger.Infow("creating subscription",
-		"customer_id", sub.CustomerID,
-		"plan_id", sub.PlanID,
-		"start_date", sub.StartDate,
-		"billing_anchor", sub.BillingAnchor,
-		"current_period_start", sub.CurrentPeriodStart,
-		"current_period_end", sub.CurrentPeriodEnd,
-		"valid_prices", len(validPrices),
-		"num_line_items", len(sub.LineItems))
-
-	// Create response object
-	response := &dto.SubscriptionResponse{Subscription: sub}
-
 	if req.SubscriptionStatus != "" {
 		sub.SubscriptionStatus = req.SubscriptionStatus
 	}
 
-	invoiceService := NewInvoiceService(s.ServiceParams)
+	s.Logger.Infow("creating subscription",
+		"customer_id", sub.CustomerID, "plan_id", sub.PlanID, "start_date", sub.StartDate,
+		"billing_anchor", sub.BillingAnchor, "current_period_start", sub.CurrentPeriodStart,
+		"current_period_end", sub.CurrentPeriodEnd, "valid_prices", len(validPrices),
+		"num_line_items", len(sub.LineItems))
+
+	// Process subscription creation in transaction
 	var invoice *dto.InvoiceResponse
 	var updatedSub *subscription.Subscription
-	err = s.DB.WithTx(ctx, func(ctx context.Context) error {
+	invoiceService := NewInvoiceService(s.ServiceParams)
 
-		// Create subscription with line items
-		err = s.SubRepo.CreateWithLineItems(ctx, sub, sub.LineItems)
-		if err != nil {
+	err = s.DB.WithTx(ctx, func(ctx context.Context) error {
+		if err = s.SubRepo.CreateWithLineItems(ctx, sub, sub.LineItems); err != nil {
 			return err
 		}
-		// Handle addons if provided
 		if len(req.Addons) > 0 {
-			err = s.handleSubscriptionAddons(ctx, sub, req.Addons)
-			if err != nil {
+			if err = s.handleSubscriptionAddons(ctx, sub, req.Addons); err != nil {
 				return err
 			}
 		}
-
-		// Process entitlement overrides if provided
 		if len(req.OverrideEntitlements) > 0 {
-			err = s.ProcessSubscriptionEntitlementOverrides(ctx, sub, req.OverrideEntitlements)
-			if err != nil {
+			if err = s.ProcessSubscriptionEntitlementOverrides(ctx, sub, req.OverrideEntitlements); err != nil {
 				return err
 			}
 		}
 
-		creditGrantRequests := make([]dto.CreateCreditGrantRequest, 0)
-
-		// check if user has overidden the plan credit grants, if so add them to the request
+		// Prepare credit grants
+		var creditGrantRequests []dto.CreateCreditGrantRequest
 		if req.CreditGrants != nil {
-			creditGrantRequests = append(creditGrantRequests, req.CreditGrants...)
+			creditGrantRequests = req.CreditGrants
 		} else {
-			// if user has not overidden the plan credit grants, add the plan credit grants to the request
 			creditGrantService := NewCreditGrantService(s.ServiceParams)
 			planCreditGrants, err := creditGrantService.GetCreditGrantsByPlan(ctx, plan.ID)
 			if err != nil {
 				return err
 			}
-
-			s.Logger.Infow("plan has credit grants", "plan_id", plan.ID, "credit_grants_count", len(planCreditGrants.Items))
-			// if plan has credit grants, add them to the request
 			if len(planCreditGrants.Items) > 0 {
+				s.Logger.Infow("plan has credit grants", "plan_id", plan.ID, "credit_grants_count", len(planCreditGrants.Items))
+				creditGrantRequests = make([]dto.CreateCreditGrantRequest, 0, len(planCreditGrants.Items))
 				for _, cg := range planCreditGrants.Items {
 					creditGrantRequests = append(creditGrantRequests, dto.CreateCreditGrantRequest{
 						Name:                   cg.Name,
@@ -345,31 +268,19 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 				}
 			}
 		}
-
-		// handle credit grants
-		err = s.handleCreditGrants(ctx, sub, creditGrantRequests)
-		if err != nil {
+		if err = s.handleCreditGrants(ctx, sub, creditGrantRequests); err != nil {
+			return err
+		}
+		if err = s.handleTaxRateLinking(ctx, sub, req); err != nil {
+			return err
+		}
+		if err = s.handleSubCoupons(ctx, sub, req, originalPriceToLineItemMap); err != nil {
 			return err
 		}
 
-		// handle tax rate linking
-		err = s.handleTaxRateLinking(ctx, sub, req)
-		if err != nil {
-			return err
-		}
-
-		// handle subscription coupons
-		err = s.handleSubCoupons(ctx, sub, req, originalPriceToLineItemMap)
-		if err != nil {
-			return err
-		}
-
-		// Create invoice for the subscription (in case it has advance charges)
-		// Skip invoice creation for draft subscriptions
+		// Create invoice for non-draft subscriptions
 		if req.SubscriptionStatus != types.SubscriptionStatusDraft {
-			paymentParams := dto.NewPaymentParametersFromSubscription(sub.CollectionMethod, sub.PaymentBehavior, sub.GatewayPaymentMethodID)
-			// Apply backward compatibility normalization
-			paymentParams = paymentParams.NormalizePaymentParameters()
+			paymentParams := dto.NewPaymentParametersFromSubscription(sub.CollectionMethod, sub.PaymentBehavior, sub.GatewayPaymentMethodID).NormalizePaymentParameters()
 			invoice, updatedSub, err = invoiceService.CreateSubscriptionInvoice(ctx, &dto.CreateSubscriptionInvoiceRequest{
 				SubscriptionID: sub.ID,
 				PeriodStart:    sub.CurrentPeriodStart,
@@ -379,58 +290,45 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 			if err != nil {
 				return err
 			}
-
-			// Use the updated subscription from CreateSubscriptionInvoice to avoid extra DB call
 			if updatedSub != nil {
 				sub = updatedSub
 			}
-
-			// if the subscription is created with incomplete status, but it doesn't create an invoice, we need to mark it as active
-			// This applies regardless of collection method - if there's no invoice to pay, the subscription should be active
-			if (req.Workflow != nil && *req.Workflow != types.TemporalStripeIntegrationWorkflow) && sub.SubscriptionStatus == types.SubscriptionStatusIncomplete && (invoice == nil || invoice.PaymentStatus == types.PaymentStatusSucceeded) {
+			// Activate subscription if no invoice needed or already paid
+			if (req.Workflow == nil || *req.Workflow != types.TemporalStripeIntegrationWorkflow) &&
+				sub.SubscriptionStatus == types.SubscriptionStatusIncomplete &&
+				(invoice == nil || invoice.PaymentStatus == types.PaymentStatusSucceeded) {
 				sub.SubscriptionStatus = types.SubscriptionStatusActive
-				err = s.SubRepo.Update(ctx, sub)
-				if err != nil {
+				if err = s.SubRepo.Update(ctx, sub); err != nil {
 					return err
 				}
 			}
 		}
-
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	// Handle subscription phases if provided
-	// Skip phases for draft subscriptions
+	// Handle phases (post-transaction)
 	if req.SubscriptionStatus != types.SubscriptionStatusDraft && len(phases) > 0 {
-		err = s.handleSubscriptionPhases(ctx, sub, phases, req.Phases, plan, validPrices)
-		if err != nil {
+		if err = s.handleSubscriptionPhases(ctx, sub, phases, req.Phases, plan, validPrices); err != nil {
 			return nil, err
 		}
 	}
 
-	// Update response to ensure it has the latest subscription data
-	response.Subscription = sub
-
-	// Include latest invoice if created
+	// Build response
+	response := &dto.SubscriptionResponse{Subscription: sub}
 	if invoice != nil {
 		response.LatestInvoice = invoice
 	}
 
-	// Sync subscription to HubSpot deal (async via Temporal - no goroutine needed)
-	// For draft subscriptions, sync to quote instead of deal
-	if req.SubscriptionStatus == types.SubscriptionStatusDraft {
+	// Sync to HubSpot and publish webhooks
+	isDraft := req.SubscriptionStatus == types.SubscriptionStatusDraft
+	if isDraft {
 		s.triggerHubSpotQuoteSyncWorkflow(ctx, sub.ID, customer.ID)
-	} else {
-		s.triggerHubSpotDealSyncWorkflow(ctx, sub.ID, customer.ID)
-	}
-
-	// Publish appropriate webhook event
-	if req.SubscriptionStatus == types.SubscriptionStatusDraft {
 		s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionDraftCreated, sub.ID)
 	} else {
+		s.triggerHubSpotDealSyncWorkflow(ctx, sub.ID, customer.ID)
 		s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionCreated, sub.ID)
 	}
 	return response, nil
