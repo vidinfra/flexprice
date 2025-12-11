@@ -200,57 +200,30 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 	sub.CurrentPeriodStart = sub.StartDate
 	sub.CurrentPeriodEnd = nextBillingDate
 
-	// Convert line items
+	// Prepare DTO objects for line item creation
+	subscriptionResponse := &dto.SubscriptionResponse{Subscription: sub}
+	planResponse := &dto.PlanResponse{Plan: plan}
+
+	// Convert line items using the reusable DTO method
 	lineItems := make([]*subscription.SubscriptionLineItem, 0, len(validPrices))
-	for _, price := range validPrices {
-		lineItems = append(lineItems, &subscription.SubscriptionLineItem{
-			PriceID:       price.Price.ID,
-			EnvironmentID: types.GetEnvironmentID(ctx),
-			BaseModel:     types.GetDefaultBaseModel(ctx),
-		})
-	}
-
-	// Convert line items
-	for _, item := range lineItems {
-		price, ok := priceMap[item.PriceID]
-		if !ok {
-			return nil, ierr.NewError("failed to get price %s: price not found").
-				WithHint("Ensure all prices are valid and available").
-				WithReportableDetails(map[string]interface{}{
-					"price_id": item.PriceID,
-				}).
-				Mark(ierr.ErrDatabase)
+	for _, priceResponse := range validPrices {
+		// Create request for line item
+		lineItemReq := dto.CreateSubscriptionLineItemRequest{
+			PriceID: priceResponse.Price.ID,
 		}
 
-		if price.Price.Type == types.PRICE_TYPE_USAGE && price.Meter != nil {
-			item.MeterID = price.Meter.ID
-			item.MeterDisplayName = price.Meter.Name
-			item.DisplayName = price.Meter.Name
-			item.Quantity = decimal.Zero
-		} else {
-			item.DisplayName = plan.Name
-			if item.Quantity.IsZero() {
-				item.Quantity = decimal.NewFromInt(1)
-			}
+		// Build params for ToSubscriptionLineItem
+		params := dto.LineItemParams{
+			Subscription: subscriptionResponse,
+			Price:        priceResponse,
+			Plan:         planResponse,
+			EntityType:   types.SubscriptionLineItemEntityTypePlan,
 		}
 
-		if item.ID == "" {
-			item.ID = types.GenerateUUIDWithPrefix(types.UUID_PREFIX_SUBSCRIPTION_LINE_ITEM)
-		}
+		// Use the DTO method to create the line item (handles all standard fields)
+		item := lineItemReq.ToSubscriptionLineItem(ctx, params)
 
-		item.SubscriptionID = sub.ID
-		item.PriceType = price.Type
-		item.EntityID = plan.ID
-		item.EntityType = types.SubscriptionLineItemEntityTypePlan
-		item.PlanDisplayName = plan.Name
-		item.CustomerID = sub.CustomerID
-		item.Currency = sub.Currency
-		item.BillingPeriod = sub.BillingPeriod
-		item.InvoiceCadence = price.InvoiceCadence
-		item.TrialPeriod = price.TrialPeriod
-		item.PriceUnitID = price.PriceUnitID
-		item.PriceUnit = price.PriceUnit
-
+		// Handle subscription-specific overrides
 		// Set phase ID if phases exist
 		if firstPhaseID != "" {
 			item.SubscriptionPhaseID = &firstPhaseID
@@ -264,11 +237,13 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		}
 
 		// Set start date to the price start date if it is after the subscription start date
-		if price.StartDate != nil && price.StartDate.After(sub.StartDate) {
-			item.StartDate = lo.FromPtr(price.StartDate)
+		if priceResponse.StartDate != nil && priceResponse.Price.StartDate.After(sub.StartDate) {
+			item.StartDate = lo.FromPtr(priceResponse.Price.StartDate)
 		} else {
 			item.StartDate = sub.StartDate
 		}
+
+		lineItems = append(lineItems, item)
 	}
 
 	// Create original price to line item mapping before processing overrides
