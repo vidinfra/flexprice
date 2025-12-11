@@ -59,6 +59,10 @@ func (s *priceService) CreatePrice(ctx context.Context, req dto.CreatePriceReque
 			return nil, err
 		}
 	}
+
+	// Get display name if needed (before price creation)
+	s.getDisplayName(ctx, &req)
+
 	// Handle price unit config case
 	if req.PriceUnitConfig != nil {
 		return s.createPriceWithUnitConfig(ctx, req)
@@ -67,9 +71,7 @@ func (s *priceService) CreatePrice(ctx context.Context, req dto.CreatePriceReque
 	// Handle regular price case
 	p, err := req.ToPrice(ctx)
 	if err != nil {
-		return nil, ierr.WithError(err).
-			WithHint("Failed to parse price data").
-			Mark(ierr.ErrValidation)
+		return nil, err
 	}
 
 	// Validate group if provided
@@ -101,6 +103,52 @@ func (s *priceService) CreatePrice(ctx context.Context, req dto.CreatePriceReque
 	}
 
 	return response, nil
+}
+
+// getDisplayName extracts the display name from the entity (plan/addon) or meter
+// if SkipEntityValidation is false and DisplayName is empty.
+// If SkipEntityValidation is true, it sets default names: "Recurring" for FIXED and "Usage" for USAGE.
+// This should be called before price creation repository operations.
+func (s *priceService) getDisplayName(ctx context.Context, req *dto.CreatePriceRequest) {
+	// If display name is already set, don't override it
+	if req.DisplayName != "" {
+		return
+	}
+
+	// If validation is skipped, use default names
+	if req.SkipEntityValidation {
+		if req.Type == types.PRICE_TYPE_FIXED {
+			req.DisplayName = "Recurring"
+		} else if req.Type == types.PRICE_TYPE_USAGE {
+			req.DisplayName = "Usage"
+		}
+		return
+	}
+
+	// Extract from entity when validation is enabled
+	if req.Type == types.PRICE_TYPE_FIXED {
+		// For FIXED prices, extract plan/addon name
+		if req.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
+			plan, err := s.PlanRepo.Get(ctx, req.EntityID)
+			if err == nil && plan != nil {
+				req.DisplayName = plan.Name
+			}
+		} else if req.EntityType == types.PRICE_ENTITY_TYPE_ADDON {
+			addon, err := s.AddonRepo.GetByID(ctx, req.EntityID)
+			if err == nil && addon != nil {
+				req.DisplayName = addon.Name
+			}
+		}
+	} else if req.Type == types.PRICE_TYPE_USAGE {
+		// For USAGE prices, extract meter name
+		if req.MeterID != "" {
+			meterService := NewMeterService(s.MeterRepo)
+			meter, err := meterService.GetMeter(ctx, req.MeterID)
+			if err == nil && meter != nil {
+				req.DisplayName = meter.Name
+			}
+		}
+	}
 }
 
 // validateEntityExists validates that the entity exists based on the entity type
@@ -272,6 +320,9 @@ func (s *priceService) createPriceWithUnitConfig(ctx context.Context, req dto.Cr
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
+
+	// Get display name if needed (before price creation)
+	s.getDisplayName(ctx, &req)
 
 	// Parse price unit amount - this is the amount in the price unit currency
 	priceUnitAmount := decimal.Zero
