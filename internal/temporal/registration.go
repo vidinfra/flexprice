@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/flexprice/flexprice/internal/service"
+	customerActivities "github.com/flexprice/flexprice/internal/temporal/activities/customer"
 	exportActivities "github.com/flexprice/flexprice/internal/temporal/activities/export"
 	hubspotActivities "github.com/flexprice/flexprice/internal/temporal/activities/hubspot"
 	nomodActivities "github.com/flexprice/flexprice/internal/temporal/activities/nomod"
@@ -82,10 +83,15 @@ func RegisterWorkflowsAndActivities(temporalService temporalService.TemporalServ
 		customerService,
 		params.Logger,
 	)
+	// Customer activities
+	customerActivities := customerActivities.NewCustomerActivities(
+		params,
+		params.Logger,
+	)
 
 	// Get all task queues and register workflows/activities for each
 	for _, taskQueue := range types.GetAllTaskQueues() {
-		config := buildWorkerConfig(taskQueue, planActivities, taskActivities, taskActivity, scheduledTaskActivity, exportActivity, hubspotDealSyncActivities, hubspotInvoiceSyncActivities, hubspotQuoteSyncActivities, qbPriceSyncActivities, nomodInvoiceSyncActivities)
+		config := buildWorkerConfig(taskQueue, planActivities, taskActivities, taskActivity, scheduledTaskActivity, exportActivity, hubspotDealSyncActivities, hubspotInvoiceSyncActivities, hubspotQuoteSyncActivities, qbPriceSyncActivities, nomodInvoiceSyncActivities, customerActivities)
 		if err := registerWorker(temporalService, config); err != nil {
 			return fmt.Errorf("failed to register worker for task queue %s: %w", taskQueue, err)
 		}
@@ -107,6 +113,7 @@ func buildWorkerConfig(
 	hubspotQuoteSyncActivities *hubspotActivities.QuoteSyncActivities,
 	qbPriceSyncActivities *qbActivities.QuickBooksPriceSyncActivities,
 	nomodInvoiceSyncActivities *nomodActivities.InvoiceSyncActivities,
+	customerActivities *customerActivities.CustomerActivities,
 ) WorkerConfig {
 	workflowsList := []interface{}{}
 	activitiesList := []interface{}{}
@@ -151,6 +158,17 @@ func buildWorkerConfig(
 			taskActivity.CompleteTask,
 			scheduledTaskActivity.GetScheduledTaskDetails,
 			exportActivity.ExportData,
+		)
+
+	case types.TemporalTaskQueueWorkflows:
+		// Customer workflows
+		workflowsList = append(workflowsList,
+			workflows.CustomerOnboardingWorkflow,
+		)
+		// Customer activities
+		activitiesList = append(activitiesList,
+			customerActivities.CreateWalletActivity,
+			customerActivities.CreateSubscriptionActivity,
 		)
 	}
 
