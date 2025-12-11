@@ -38,6 +38,7 @@ type CreatePriceRequest struct {
 	PriceUnitConfig    *PriceUnitConfig         `json:"price_unit_config,omitempty"`
 	StartDate          *time.Time               `json:"start_date,omitempty"`
 	EndDate            *time.Time               `json:"end_date,omitempty"`
+	DisplayName        string                   `json:"display_name,omitempty"`
 
 	// SkipEntityValidation is used to skip entity validation when creating a price from a subscription i.e. override price workflow
 	// This is used when creating a subscription-scoped price
@@ -523,6 +524,15 @@ func (r *CreatePriceRequest) ToPrice(ctx context.Context) (*priceDomain.Price, e
 		}
 	}
 
+	displayName := r.DisplayName
+	if displayName == "" {
+		if r.Type == types.PRICE_TYPE_USAGE {
+			displayName = "Usage Based"
+		} else {
+			displayName = "Recurring"
+		}
+	}
+
 	// set the start date from either the request or the current time
 	var startDate *time.Time
 	if r.StartDate != nil {
@@ -638,6 +648,7 @@ func (r *CreatePriceRequest) ToPrice(ctx context.Context) (*priceDomain.Price, e
 		Tiers:              tiers,
 		PriceUnitTiers:     priceUnitTiers,
 		TransformQuantity:  transformQuantity,
+		DisplayName:        displayName,
 		EntityType:         r.EntityType,
 		EntityID:           r.EntityID,
 		StartDate:          startDate,

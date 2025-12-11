@@ -74,6 +74,9 @@ type Price struct {
 
 	BillingModel types.BillingModel `db:"billing_model" json:"billing_model"`
 
+	// DisplayName is the name of the price
+	DisplayName string `db:"display_name" json:"display_name"`
+
 	BillingCadence types.BillingCadence `db:"billing_cadence" json:"billing_cadence"`
 
 	InvoiceCadence types.InvoiceCadence `db:"invoice_cadence" json:"invoice_cadence"`
@@ -384,6 +387,7 @@ func FromEnt(e *ent.Price) *Price {
 		BillingPeriod:          types.BillingPeriod(e.BillingPeriod),
 		BillingPeriodCount:     e.BillingPeriodCount,
 		BillingModel:           types.BillingModel(e.BillingModel),
+		DisplayName:            e.DisplayName,
 		BillingCadence:         types.BillingCadence(e.BillingCadence),
 		InvoiceCadence:         types.InvoiceCadence(e.InvoiceCadence),
 		TrialPeriod:            e.TrialPeriod,
