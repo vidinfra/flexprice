@@ -101,58 +101,47 @@ func (r *CreateSubscriptionLineItemRequest) ToSubscriptionLineItem(ctx context.C
 		PriceUnitID:         params.Price.PriceUnitID,
 		PriceUnit:           params.Price.PriceUnit,
 		EntityType:          params.EntityType,
-		DisplayName:         r.DisplayName,
 		Metadata:            r.Metadata,
 		SubscriptionPhaseID: r.SubscriptionPhaseID,
 		EnvironmentID:       types.GetEnvironmentID(ctx),
 		BaseModel:           types.GetDefaultBaseModel(ctx),
 	}
 
-	if params.Price != nil && params.Price.Type == types.PRICE_TYPE_USAGE {
-		// Usage-based pricing
-		lineItem.MeterID = params.Price.MeterID
-		if params.Price.Meter != nil {
-			lineItem.MeterDisplayName = params.Price.Meter.Name
-			// Meter name takes priority for display name
-			lineItem.DisplayName = params.Price.Meter.Name
-		}
-		lineItem.Quantity = decimal.Zero // Start with zero for usage-based pricing
-	} else {
-		// Fixed pricing - set default quantity first
-		if params.Price != nil {
-			lineItem.Quantity = params.Price.GetDefaultQuantity()
-		} else {
-			lineItem.Quantity = decimal.NewFromInt(1)
-		}
+	// Always use price display name (priority: request > price display name)
+	if r.DisplayName != "" {
+		lineItem.DisplayName = r.DisplayName
+	} else if params.Price != nil && params.Price.DisplayName != "" {
+		lineItem.DisplayName = params.Price.DisplayName
 	}
 
-	// Set entity-specific fields (only if display name not already set by meter)
-	switch params.EntityType {
-	case types.SubscriptionLineItemEntityTypePlan:
-		if params.Plan != nil {
-			lineItem.EntityID = params.Plan.ID
-			lineItem.PlanDisplayName = params.Plan.Name
-			// Only use plan name if display name not set by meter
-			if lineItem.DisplayName == "" {
-				lineItem.DisplayName = params.Plan.Name
+	// Set price type specific fields
+	if params.Price != nil {
+		if params.Price.Type == types.PRICE_TYPE_USAGE {
+			lineItem.MeterID = params.Price.MeterID
+			if params.Price.Meter != nil {
+				lineItem.MeterDisplayName = params.Price.Meter.Name
 			}
+			lineItem.Quantity = decimal.Zero
+		} else {
+			lineItem.Quantity = params.Price.GetDefaultQuantity()
 		}
-	case types.SubscriptionLineItemEntityTypeAddon:
-		if params.Addon != nil {
-			lineItem.EntityID = params.Addon.ID
-			// Only use addon name if display name not set by meter
-			if lineItem.DisplayName == "" {
-				lineItem.DisplayName = params.Addon.Name
-			}
-			// Add addon-specific metadata
-			if lineItem.Metadata == nil {
-				lineItem.Metadata = make(map[string]string)
-			}
-			lineItem.Metadata["addon_id"] = params.Addon.ID
-			lineItem.Metadata["subscription_id"] = params.Subscription.ID
-			lineItem.Metadata["addon_quantity"] = "1"
-			lineItem.Metadata["addon_status"] = string(types.AddonStatusActive)
+	} else {
+		lineItem.Quantity = decimal.NewFromInt(1)
+	}
+
+	// Set entity-specific fields
+	if params.EntityType == types.SubscriptionLineItemEntityTypePlan && params.Plan != nil {
+		lineItem.EntityID = params.Plan.ID
+		lineItem.PlanDisplayName = params.Plan.Name
+	} else if params.EntityType == types.SubscriptionLineItemEntityTypeAddon && params.Addon != nil {
+		lineItem.EntityID = params.Addon.ID
+		if lineItem.Metadata == nil {
+			lineItem.Metadata = make(map[string]string)
 		}
+		lineItem.Metadata["addon_id"] = params.Addon.ID
+		lineItem.Metadata["subscription_id"] = params.Subscription.ID
+		lineItem.Metadata["addon_quantity"] = "1"
+		lineItem.Metadata["addon_status"] = string(types.AddonStatusActive)
 	}
 
 	// Override quantity if provided in request
@@ -160,13 +149,12 @@ func (r *CreateSubscriptionLineItemRequest) ToSubscriptionLineItem(ctx context.C
 		lineItem.Quantity = r.Quantity
 	}
 
-	// Set dates if provided
+	// Set dates
 	if r.StartDate != nil {
 		lineItem.StartDate = r.StartDate.UTC()
 	} else {
 		lineItem.StartDate = time.Now().UTC()
 	}
-
 	if r.EndDate != nil {
 		lineItem.EndDate = r.EndDate.UTC()
 	}

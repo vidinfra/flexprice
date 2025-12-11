@@ -24,7 +24,7 @@ import (
 	"github.com/flexprice/flexprice/internal/types"
 	webhookDto "github.com/flexprice/flexprice/internal/webhook/dto"
 	"github.com/samber/lo"
-"github.com/shopspring/decimal"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
@@ -932,6 +932,7 @@ func (s *subscriptionService) ProcessSubscriptionPriceOverrides(
 		lineItem := lineItemsByPriceID[override.PriceID]
 
 		// Create subscription-scoped price using price service
+		// Always preserve the original price's display name
 		createPriceReq := dto.CreatePriceRequest{
 			Amount:               originalPrice.Amount.String(),
 			Currency:             originalPrice.Currency,
@@ -950,6 +951,7 @@ func (s *subscriptionService) ProcessSubscriptionPriceOverrides(
 			Description:          originalPrice.Description,
 			Metadata:             originalPrice.Metadata,
 			ParentPriceID:        originalPrice.GetRootPriceID(), // Always point to the root price ID
+			DisplayName:          originalPrice.DisplayName,      // Preserve original price display name
 			SkipEntityValidation: true,
 		}
 
@@ -1011,7 +1013,11 @@ func (s *subscriptionService) ProcessSubscriptionPriceOverrides(
 		}
 
 		// Update the line item to reference the new subscription-scoped price
+		// Also update display name to match the new price (which preserves the original display name)
 		lineItem.PriceID = overriddenPriceResp.ID
+		if overriddenPriceResp.DisplayName != "" {
+			lineItem.DisplayName = overriddenPriceResp.DisplayName
+		}
 
 		s.Logger.Infow("created subscription-scoped price override",
 			"subscription_id", sub.ID,
@@ -3542,14 +3548,20 @@ func (s *subscriptionService) createLineItemFromPrice(ctx context.Context, price
 		BaseModel:     types.GetDefaultBaseModel(ctx),
 	}
 
+	// Set display name from price (always use price display name)
+	if price.DisplayName != "" {
+		lineItem.DisplayName = price.DisplayName
+	} else {
+		// Fallback to addon name if price display name is not set
+		lineItem.DisplayName = addonName
+	}
+
 	// Set price-related fields
 	if price.Type == types.PRICE_TYPE_USAGE && price.MeterID != "" && priceResponse.Meter != nil {
 		lineItem.MeterID = price.MeterID
 		lineItem.MeterDisplayName = priceResponse.Meter.Name
-		lineItem.DisplayName = priceResponse.Meter.Name
 		lineItem.Quantity = decimal.Zero
 	} else {
-		lineItem.DisplayName = addonName
 		lineItem.Quantity = decimal.NewFromInt(1)
 	}
 
