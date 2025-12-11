@@ -87,11 +87,6 @@ func (s *priceService) CreatePrice(ctx context.Context, req dto.CreatePriceReque
 
 	response := &dto.PriceResponse{Price: p}
 
-	// TODO: !REMOVE after migration
-	if p.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
-		response.PlanID = p.EntityID
-	}
-
 	// Sync new price to Chargebee if it belongs to a plan
 	if p.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
 		s.syncPriceToChargebeeIfEnabled(ctx, p.ID, p.EntityID)
@@ -252,9 +247,6 @@ func (s *priceService) CreateBulkPrice(ctx context.Context, req dto.CreateBulkPr
 			// Add successful regular prices to response
 			for _, p := range regularPrices {
 				priceResp := &dto.PriceResponse{Price: p}
-				if p.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
-					priceResp.PlanID = p.EntityID
-				}
 				response.Items = append(response.Items, priceResp)
 			}
 		}
@@ -523,11 +515,6 @@ func (s *priceService) createPriceWithUnitConfig(ctx context.Context, req dto.Cr
 
 	response := &dto.PriceResponse{Price: p}
 
-	// TODO: !REMOVE after migration
-	if p.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
-		response.PlanID = p.EntityID
-	}
-
 	// Sync new price to Chargebee if it belongs to a plan
 	if p.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
 		s.syncPriceToChargebeeIfEnabled(ctx, p.ID, p.EntityID)
@@ -567,11 +554,6 @@ func (s *priceService) GetPrice(ctx context.Context, id string) (*dto.PriceRespo
 	// Set entity information
 	response.EntityType = price.EntityType
 	response.EntityID = price.EntityID
-
-	// TODO: !REMOVE after migration
-	if price.EntityType == types.PRICE_ENTITY_TYPE_PLAN {
-		response.PlanID = price.EntityID
-	}
 
 	if price.MeterID != "" {
 		meterService := NewMeterService(s.MeterRepo)
