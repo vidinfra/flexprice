@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"entgo.io/ent/dialect/sql"
+	"github.com/shopspring/decimal"
 )
 
 const (
@@ -159,6 +160,8 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// DefaultEnvironmentID holds the default value on creation for the "environment_id" field.
 	DefaultEnvironmentID string
+	// DefaultAmount holds the default value on creation for the "amount" field.
+	DefaultAmount decimal.Decimal
 	// CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
 	CurrencyValidator func(string) error
 	// DisplayAmountValidator is a validator for the "display_amount" field. It is called by the builders before save.
@@ -167,6 +170,10 @@ var (
 	DefaultPriceUnitType string
 	// PriceUnitTypeValidator is a validator for the "price_unit_type" field. It is called by the builders before save.
 	PriceUnitTypeValidator func(string) error
+	// DefaultPriceUnitAmount holds the default value on creation for the "price_unit_amount" field.
+	DefaultPriceUnitAmount decimal.Decimal
+	// DefaultConversionRate holds the default value on creation for the "conversion_rate" field.
+	DefaultConversionRate decimal.Decimal
 	// TypeValidator is a validator for the "type" field. It is called by the builders before save.
 	TypeValidator func(string) error
 	// BillingPeriodValidator is a validator for the "billing_period" field. It is called by the builders before save.

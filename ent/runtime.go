@@ -1291,6 +1291,10 @@ func init() {
 	priceDescEnvironmentID := priceMixinFields1[0].Descriptor()
 	// price.DefaultEnvironmentID holds the default value on creation for the environment_id field.
 	price.DefaultEnvironmentID = priceDescEnvironmentID.Default.(string)
+	// priceDescAmount is the schema descriptor for amount field.
+	priceDescAmount := priceFields[1].Descriptor()
+	// price.DefaultAmount holds the default value on creation for the amount field.
+	price.DefaultAmount = priceDescAmount.Default.(decimal.Decimal)
 	// priceDescCurrency is the schema descriptor for currency field.
 	priceDescCurrency := priceFields[2].Descriptor()
 	// price.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
@@ -1305,6 +1309,14 @@ func init() {
 	price.DefaultPriceUnitType = priceDescPriceUnitType.Default.(string)
 	// price.PriceUnitTypeValidator is a validator for the "price_unit_type" field. It is called by the builders before save.
 	price.PriceUnitTypeValidator = priceDescPriceUnitType.Validators[0].(func(string) error)
+	// priceDescPriceUnitAmount is the schema descriptor for price_unit_amount field.
+	priceDescPriceUnitAmount := priceFields[7].Descriptor()
+	// price.DefaultPriceUnitAmount holds the default value on creation for the price_unit_amount field.
+	price.DefaultPriceUnitAmount = priceDescPriceUnitAmount.Default.(decimal.Decimal)
+	// priceDescConversionRate is the schema descriptor for conversion_rate field.
+	priceDescConversionRate := priceFields[9].Descriptor()
+	// price.DefaultConversionRate holds the default value on creation for the conversion_rate field.
+	price.DefaultConversionRate = priceDescConversionRate.Default.(decimal.Decimal)
 	// priceDescType is the schema descriptor for type field.
 	priceDescType := priceFields[10].Descriptor()
 	// price.TypeValidator is a validator for the "type" field. It is called by the builders before save.
