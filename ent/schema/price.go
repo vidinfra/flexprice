@@ -87,8 +87,7 @@ func (Price) Fields() []ent.Field {
 			SchemaType(map[string]string{
 				"postgres": "numeric(25,15)",
 			}).
-			Default(decimal.Zero).
-			Optional(),
+			Default(decimal.Zero),
 
 		// display_price_unit_amount is the amount of the price unit in the display currency
 		field.String("display_price_unit_amount").

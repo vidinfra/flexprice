@@ -201,12 +201,6 @@ func (pu *PriceUpdate) SetNillablePriceUnitAmount(d *decimal.Decimal) *PriceUpda
 	return pu
 }
 
-// ClearPriceUnitAmount clears the value of the "price_unit_amount" field.
-func (pu *PriceUpdate) ClearPriceUnitAmount() *PriceUpdate {
-	pu.mutation.ClearPriceUnitAmount()
-	return pu
-}
-
 // SetDisplayPriceUnitAmount sets the "display_price_unit_amount" field.
 func (pu *PriceUpdate) SetDisplayPriceUnitAmount(s string) *PriceUpdate {
 	pu.mutation.SetDisplayPriceUnitAmount(s)
@@ -693,9 +687,6 @@ func (pu *PriceUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	if value, ok := pu.mutation.PriceUnitAmount(); ok {
 		_spec.SetField(price.FieldPriceUnitAmount, field.TypeOther, value)
 	}
-	if pu.mutation.PriceUnitAmountCleared() {
-		_spec.ClearField(price.FieldPriceUnitAmount, field.TypeOther)
-	}
 	if value, ok := pu.mutation.DisplayPriceUnitAmount(); ok {
 		_spec.SetField(price.FieldDisplayPriceUnitAmount, field.TypeString, value)
 	}
@@ -1007,12 +998,6 @@ func (puo *PriceUpdateOne) SetNillablePriceUnitAmount(d *decimal.Decimal) *Price
 	if d != nil {
 		puo.SetPriceUnitAmount(*d)
 	}
-	return puo
-}
-
-// ClearPriceUnitAmount clears the value of the "price_unit_amount" field.
-func (puo *PriceUpdateOne) ClearPriceUnitAmount() *PriceUpdateOne {
-	puo.mutation.ClearPriceUnitAmount()
 	return puo
 }
 
@@ -1531,9 +1516,6 @@ func (puo *PriceUpdateOne) sqlSave(ctx context.Context) (_node *Price, err error
 	}
 	if value, ok := puo.mutation.PriceUnitAmount(); ok {
 		_spec.SetField(price.FieldPriceUnitAmount, field.TypeOther, value)
-	}
-	if puo.mutation.PriceUnitAmountCleared() {
-		_spec.ClearField(price.FieldPriceUnitAmount, field.TypeOther)
 	}
 	if value, ok := puo.mutation.DisplayPriceUnitAmount(); ok {
 		_spec.SetField(price.FieldDisplayPriceUnitAmount, field.TypeString, value)

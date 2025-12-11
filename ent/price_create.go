@@ -605,6 +605,9 @@ func (pc *PriceCreate) check() error {
 			return &ValidationError{Name: "price_unit_type", err: fmt.Errorf(`ent: validator failed for field "Price.price_unit_type": %w`, err)}
 		}
 	}
+	if _, ok := pc.mutation.PriceUnitAmount(); !ok {
+		return &ValidationError{Name: "price_unit_amount", err: errors.New(`ent: missing required field "Price.price_unit_amount"`)}
+	}
 	if _, ok := pc.mutation.GetType(); !ok {
 		return &ValidationError{Name: "type", err: errors.New(`ent: missing required field "Price.type"`)}
 	}

@@ -37366,22 +37366,9 @@ func (m *PriceMutation) OldPriceUnitAmount(ctx context.Context) (v decimal.Decim
 	return oldValue.PriceUnitAmount, nil
 }
 
-// ClearPriceUnitAmount clears the value of the "price_unit_amount" field.
-func (m *PriceMutation) ClearPriceUnitAmount() {
-	m.price_unit_amount = nil
-	m.clearedFields[price.FieldPriceUnitAmount] = struct{}{}
-}
-
-// PriceUnitAmountCleared returns if the "price_unit_amount" field was cleared in this mutation.
-func (m *PriceMutation) PriceUnitAmountCleared() bool {
-	_, ok := m.clearedFields[price.FieldPriceUnitAmount]
-	return ok
-}
-
 // ResetPriceUnitAmount resets all changes to the "price_unit_amount" field.
 func (m *PriceMutation) ResetPriceUnitAmount() {
 	m.price_unit_amount = nil
-	delete(m.clearedFields, price.FieldPriceUnitAmount)
 }
 
 // SetDisplayPriceUnitAmount sets the "display_price_unit_amount" field.
@@ -39236,9 +39223,6 @@ func (m *PriceMutation) ClearedFields() []string {
 	if m.FieldCleared(price.FieldPriceUnit) {
 		fields = append(fields, price.FieldPriceUnit)
 	}
-	if m.FieldCleared(price.FieldPriceUnitAmount) {
-		fields = append(fields, price.FieldPriceUnitAmount)
-	}
 	if m.FieldCleared(price.FieldDisplayPriceUnitAmount) {
 		fields = append(fields, price.FieldDisplayPriceUnitAmount)
 	}
@@ -39324,9 +39308,6 @@ func (m *PriceMutation) ClearField(name string) error {
 		return nil
 	case price.FieldPriceUnit:
 		m.ClearPriceUnit()
-		return nil
-	case price.FieldPriceUnitAmount:
-		m.ClearPriceUnitAmount()
 		return nil
 	case price.FieldDisplayPriceUnitAmount:
 		m.ClearDisplayPriceUnitAmount()
