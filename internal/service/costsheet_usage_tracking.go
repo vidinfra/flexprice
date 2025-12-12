@@ -1274,9 +1274,10 @@ func (s *costsheetUsageTrackingService) calculateBucketedCost(ctx context.Contex
 			item.Points[i].Cost = pointCost
 		}
 	} else {
-		// Treat total usage as single bucket
-		if item.MaxUsage.IsPositive() {
-			bucketedValues := []decimal.Decimal{item.MaxUsage}
+		// Treat total usage (sum of bucket maxes) as single bucket
+		// For MAX with buckets, TotalUsage contains the sum of bucket maxes
+		if item.TotalUsage.IsPositive() {
+			bucketedValues := []decimal.Decimal{item.TotalUsage}
 			cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
 		}
 	}

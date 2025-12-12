@@ -626,10 +626,15 @@ func (r *CostSheetUsageRepository) getStandardAnalytics(ctx context.Context, cos
 
 // getMaxBucketAnalytics handles analytics for MAX with bucket features
 func (r *CostSheetUsageRepository) getMaxBucketAnalytics(ctx context.Context, costSheetID, externalCustomerID string, params *events.UsageAnalyticsParams, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
+	// For MAX with bucket features, we need to:
+	// 1. Calculate totals using bucket-based aggregation (meter's bucket size)
+	// 2. Calculate time series points using request window size
+
 	var allResults []*events.DetailedUsageAnalytic
 
-	// Process each MAX with bucket feature separately
+	// Process each MAX with bucket feature separately since they may have different bucket sizes
 	for featureID, featureInfo := range maxBucketFeatures {
+		// Create a copy of params for this specific feature
 		featureParams := *params
 		featureParams.FeatureIDs = []string{featureID}
 
@@ -639,7 +644,20 @@ func (r *CostSheetUsageRepository) getMaxBucketAnalytics(ctx context.Context, co
 			return nil, err
 		}
 
-		allResults = append(allResults, totals...)
+		// Get window-based time series points for each group
+		if featureInfo.BucketSize != "" {
+			// Need to get points per group to match totals
+			for _, total := range totals {
+				points, err := r.getMaxBucketPointsForGroup(ctx, costSheetID, externalCustomerID, &featureParams, featureInfo, total)
+				if err != nil {
+					return nil, err
+				}
+				total.Points = points
+				allResults = append(allResults, total)
+			}
+		} else {
+			allResults = append(allResults, totals...)
+		}
 	}
 
 	return allResults, nil
@@ -751,6 +769,7 @@ func (r *CostSheetUsageRepository) getMaxBucketTotals(ctx context.Context, costS
 	for rows.Next() {
 		result := &events.DetailedUsageAnalytic{
 			Properties: make(map[string]string),
+			Points:     []events.UsageAnalyticPoint{},
 		}
 
 		// Prepare scan values
@@ -784,6 +803,10 @@ func (r *CostSheetUsageRepository) getMaxBucketTotals(ctx context.Context, costS
 			}
 		}
 
+		// Set metadata fields for MAX bucket features
+		result.AggregationType = types.AggregationMax
+		result.EventName = featureInfo.EventName
+
 		results = append(results, result)
 	}
 
@@ -794,6 +817,155 @@ func (r *CostSheetUsageRepository) getMaxBucketTotals(ctx context.Context, costS
 	}
 
 	return results, nil
+}
+
+// getMaxBucketPointsForGroup calculates time series points for a specific group
+func (r *CostSheetUsageRepository) getMaxBucketPointsForGroup(ctx context.Context, costSheetID, externalCustomerID string, params *events.UsageAnalyticsParams, featureInfo *events.MaxBucketFeatureInfo, group *events.DetailedUsageAnalytic) ([]events.UsageAnalyticPoint, error) {
+	// Build window expression based on request window size
+	// For costsheet, we use the bucket size as the window size if WindowSize is not specified
+	windowSize := params.WindowSize
+	if windowSize == "" {
+		windowSize = featureInfo.BucketSize
+	}
+	windowExpr := r.formatWindowSize(windowSize, params.BillingAnchor)
+
+	// For MAX with bucket features, we need to first get max within each bucket,
+	// then aggregate those maxes within the request window
+	// This version filters by the specific group's attributes (properties, etc.)
+
+	// Build inner query with filters
+	innerQuery := fmt.Sprintf(`
+		SELECT
+			%s as bucket_start,
+			%s as window_start,
+			max(qty_total * sign) as bucket_max,
+			argMax(qty_total, timestamp) as bucket_latest,
+			count(DISTINCT unique_hash) as bucket_count_unique,
+			count(DISTINCT id) as event_count
+		FROM costsheet_usage
+		WHERE tenant_id = ?
+		AND environment_id = ?
+		AND costsheet_id = ?
+		AND external_customer_id = ?
+		AND feature_id = ?
+		AND timestamp >= ?
+		AND timestamp < ?
+		AND sign != 0`, r.formatWindowSize(featureInfo.BucketSize, nil), windowExpr)
+
+	queryParams := []interface{}{
+		params.TenantID,
+		params.EnvironmentID,
+		costSheetID,
+		externalCustomerID,
+		featureInfo.FeatureID,
+		params.StartTime,
+		params.EndTime,
+	}
+
+	// Add filter for this specific group's price_id
+	if group.PriceID != "" {
+		innerQuery += " AND price_id = ?"
+		queryParams = append(queryParams, group.PriceID)
+	}
+
+	// Add filter for this specific group's meter_id
+	if group.MeterID != "" {
+		innerQuery += " AND meter_id = ?"
+		queryParams = append(queryParams, group.MeterID)
+	}
+
+	// Add filters for this specific group's properties
+	if len(group.Properties) > 0 {
+		for propertyName, propertyValue := range group.Properties {
+			if propertyValue != "" {
+				innerQuery += " AND JSONExtractString(properties, ?) = ?"
+				queryParams = append(queryParams, propertyName, propertyValue)
+			}
+		}
+	}
+
+	// Add general property filters from params
+	if len(params.PropertyFilters) > 0 {
+		for property, values := range params.PropertyFilters {
+			if len(values) > 0 {
+				if len(values) == 1 {
+					innerQuery += " AND JSONExtractString(properties, ?) = ?"
+					queryParams = append(queryParams, property, values[0])
+				} else {
+					placeholders := make([]string, len(values))
+					for i := range values {
+						placeholders[i] = "?"
+					}
+					innerQuery += " AND JSONExtractString(properties, ?) IN (" + strings.Join(placeholders, ",") + ")"
+					queryParams = append(queryParams, property)
+					// Now append all values after the property
+					for _, v := range values {
+						queryParams = append(queryParams, v)
+					}
+				}
+			}
+		}
+	}
+
+	// Complete the inner query with GROUP BY
+	innerQuery += " GROUP BY bucket_start, window_start"
+
+	// Build the complete query with CTE
+	query := fmt.Sprintf(`
+		WITH bucket_maxes AS (
+			%s
+		)
+		SELECT
+			window_start as timestamp,
+			sum(bucket_max) as usage,
+			max(bucket_max) as max_usage,
+			argMax(bucket_latest, window_start) as latest_usage,
+			sum(bucket_count_unique) as count_unique_usage,
+			sum(event_count) as event_count
+		FROM bucket_maxes
+	`, innerQuery)
+
+	// Add GROUP BY and ORDER BY clauses
+	query += " GROUP BY window_start ORDER BY window_start"
+
+	rows, err := r.store.GetConn().Query(ctx, query, queryParams...)
+	if err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Failed to execute costsheet MAX bucket points query").
+			WithReportableDetails(map[string]interface{}{
+				"feature_id":  featureInfo.FeatureID,
+				"bucket_size": featureInfo.BucketSize,
+				"window_size": params.WindowSize,
+			}).
+			Mark(ierr.ErrDatabase)
+	}
+	defer rows.Close()
+
+	var points []events.UsageAnalyticPoint
+	for rows.Next() {
+		var point events.UsageAnalyticPoint
+		var timestamp time.Time
+
+		err := rows.Scan(
+			&timestamp,
+			&point.Usage,
+			&point.MaxUsage,
+			&point.LatestUsage,
+			&point.CountUniqueUsage,
+			&point.EventCount,
+		)
+		if err != nil {
+			return nil, ierr.WithError(err).
+				WithHint("Failed to scan costsheet MAX bucket points row").
+				Mark(ierr.ErrDatabase)
+		}
+
+		point.Timestamp = timestamp
+		point.Cost = decimal.Zero // Will be calculated in enrichment
+		points = append(points, point)
+	}
+
+	return points, nil
 }
 
 // formatWindowSize formats window size for ClickHouse queries
