@@ -16,6 +16,7 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/idempotency"
 	"github.com/flexprice/flexprice/internal/integration/chargebee"
+	"github.com/flexprice/flexprice/internal/integration/quickbooks"
 	"github.com/flexprice/flexprice/internal/integration/razorpay"
 	"github.com/flexprice/flexprice/internal/integration/stripe"
 	"github.com/flexprice/flexprice/internal/interfaces"
@@ -176,21 +177,19 @@ func (s *invoiceService) CreateInvoice(ctx context.Context, req dto.CreateInvoic
 		if req.InvoiceNumber != nil {
 			invoiceNumber = *req.InvoiceNumber
 		} else {
-			settingsService := NewSettingsService(s.ServiceParams)
-			invoiceConfigResponse, err := settingsService.GetSettingWithDefaults(ctx, types.SettingKeyInvoiceConfig)
-			if err != nil {
-				return err
-			}
-
-			// Use the safe conversion function
-			invoiceConfig, err := dto.ConvertToInvoiceConfig(invoiceConfigResponse.Value)
+			settingsSvc := NewSettingsService(s.ServiceParams).(*settingsService)
+			invoiceConfig, err := GetSetting[types.InvoiceConfig](
+				settingsSvc,
+				ctx,
+				types.SettingKeyInvoiceConfig,
+			)
 			if err != nil {
 				return ierr.WithError(err).
-					WithHint("Failed to parse invoice configuration").
+					WithHint("Failed to get invoice configuration").
 					Mark(ierr.ErrValidation)
 			}
 
-			invoiceNumber, err = s.InvoiceRepo.GetNextInvoiceNumber(ctx, invoiceConfig)
+			invoiceNumber, err = s.InvoiceRepo.GetNextInvoiceNumber(ctx, &invoiceConfig)
 			if err != nil {
 				return err
 			}
@@ -644,6 +643,7 @@ func (s *invoiceService) performFinalizeInvoiceActions(ctx context.Context, inv 
 	}
 
 	s.publishInternalWebhookEvent(ctx, types.WebhookEventInvoiceUpdateFinalized, inv.ID)
+
 	return nil
 }
 
@@ -769,6 +769,17 @@ func (s *invoiceService) ProcessDraftInvoice(ctx context.Context, id string, pay
 			"error", err,
 			"invoice_id", inv.ID)
 	}
+
+	// Sync to QuickBooks if QuickBooks connection is enabled
+	if err := s.syncInvoiceToQuickBooksIfEnabled(ctx, inv); err != nil {
+		// Log error but don't fail the entire process
+		s.Logger.Errorw("failed to sync invoice to QuickBooks",
+			"error", err,
+			"invoice_id", inv.ID)
+	}
+
+	// Sync to Nomod if Nomod connection is enabled (async via Temporal)
+	s.triggerNomodInvoiceSyncWorkflow(ctx, inv.ID, inv.CustomerID)
 
 	// try to process payment for the invoice based on behavior and log any errors
 	// Pass the subscription object to avoid extra DB call
@@ -990,6 +1001,63 @@ func (s *invoiceService) syncInvoiceToChargebeeIfEnabled(ctx context.Context, in
 	return nil
 }
 
+// syncInvoiceToQuickBooksIfEnabled syncs the invoice to QuickBooks if QuickBooks connection is enabled
+func (s *invoiceService) syncInvoiceToQuickBooksIfEnabled(ctx context.Context, inv *invoice.Invoice) error {
+	// Check if QuickBooks connection exists
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderQuickBooks)
+	if err != nil || conn == nil {
+		// If connection doesn't exist (not found), this is expected - just skip sync
+		if err != nil && !ierr.IsNotFound(err) {
+			// Actual error occurred (not just missing connection)
+			s.Logger.Errorw("failed to check QuickBooks connection, skipping invoice sync",
+				"invoice_id", inv.ID,
+				"error", err)
+			return nil // Don't fail invoice creation, just skip sync
+		}
+		// Connection not found - this is expected, log at debug level
+		s.Logger.Debugw("QuickBooks connection not available, skipping invoice sync",
+			"invoice_id", inv.ID)
+		return nil // Not an error, just skip sync
+	}
+
+	// Check if invoice sync is enabled - only proceed if outbound is true
+	if !conn.IsInvoiceOutboundEnabled() {
+		s.Logger.Debugw("invoice sync disabled, skipping",
+			"invoice_id", inv.ID)
+		return nil
+	}
+
+	// Get QuickBooks integration
+	qbIntegration, err := s.IntegrationFactory.GetQuickBooksIntegration(ctx)
+	if err != nil {
+		s.Logger.Errorw("failed to get QuickBooks integration, skipping invoice sync",
+			"invoice_id", inv.ID,
+			"error", err)
+		return nil // Don't fail the entire process, just skip invoice sync
+	}
+
+	s.Logger.Infow("syncing invoice to QuickBooks",
+		"invoice_id", inv.ID,
+		"customer_id", inv.CustomerID)
+
+	// Create sync request
+	syncRequest := quickbooks.QuickBooksInvoiceSyncRequest{
+		InvoiceID: inv.ID,
+	}
+
+	// Perform the sync
+	syncResponse, err := qbIntegration.InvoiceSvc.SyncInvoiceToQuickBooks(ctx, syncRequest)
+	if err != nil {
+		return err
+	}
+
+	s.Logger.Infow("successfully synced invoice to QuickBooks",
+		"invoice_id", inv.ID,
+		"quickbooks_invoice_id", syncResponse.QuickBooksInvoiceID)
+
+	return nil
+}
+
 // triggerHubSpotInvoiceSyncWorkflow triggers the HubSpot invoice sync workflow via Temporal
 func (s *invoiceService) triggerHubSpotInvoiceSyncWorkflow(ctx context.Context, invoiceID, customerID string) {
 	// Copy necessary context values
@@ -1060,6 +1128,82 @@ func (s *invoiceService) triggerHubSpotInvoiceSyncWorkflow(ctx context.Context, 
 	}
 
 	s.Logger.Infow("HubSpot invoice sync workflow started successfully",
+		"invoice_id", invoiceID,
+		"customer_id", customerID,
+		"workflow_id", workflowRun.GetID(),
+		"run_id", workflowRun.GetRunID())
+}
+
+// triggerNomodInvoiceSyncWorkflow triggers the Nomod invoice sync workflow via Temporal
+func (s *invoiceService) triggerNomodInvoiceSyncWorkflow(ctx context.Context, invoiceID, customerID string) {
+	// Copy necessary context values
+	tenantID := types.GetTenantID(ctx)
+	envID := types.GetEnvironmentID(ctx)
+
+	s.Logger.Infow("triggering Nomod invoice sync workflow",
+		"invoice_id", invoiceID,
+		"customer_id", customerID,
+		"tenant_id", tenantID,
+		"environment_id", envID)
+
+	// Check if Nomod connection exists and invoice outbound sync is enabled
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderNomod)
+	if err != nil {
+		s.Logger.Debugw("Nomod connection not found, skipping invoice sync",
+			"error", err,
+			"invoice_id", invoiceID,
+			"customer_id", customerID)
+		return
+	}
+
+	if !conn.IsInvoiceOutboundEnabled() {
+		s.Logger.Debugw("Nomod invoice outbound sync disabled, skipping invoice sync",
+			"invoice_id", invoiceID,
+			"customer_id", customerID,
+			"connection_id", conn.ID)
+		return
+	}
+
+	// Prepare workflow input with all necessary IDs
+	input := &models.NomodInvoiceSyncWorkflowInput{
+		InvoiceID:     invoiceID,
+		CustomerID:    customerID,
+		TenantID:      tenantID,
+		EnvironmentID: envID,
+	}
+
+	// Validate input
+	if err := input.Validate(); err != nil {
+		s.Logger.Errorw("invalid workflow input for Nomod invoice sync",
+			"error", err,
+			"invoice_id", invoiceID,
+			"customer_id", customerID)
+		return
+	}
+
+	// Get global temporal service
+	temporalSvc := temporalservice.GetGlobalTemporalService()
+	if temporalSvc == nil {
+		s.Logger.Warnw("temporal service not available for Nomod invoice sync",
+			"invoice_id", invoiceID)
+		return
+	}
+
+	// Start workflow - Temporal handles async execution, no need for goroutines
+	workflowRun, err := temporalSvc.ExecuteWorkflow(
+		ctx,
+		types.TemporalNomodInvoiceSyncWorkflow,
+		input,
+	)
+	if err != nil {
+		s.Logger.Errorw("failed to start Nomod invoice sync workflow",
+			"error", err,
+			"invoice_id", invoiceID,
+			"customer_id", customerID)
+		return
+	}
+
+	s.Logger.Infow("Nomod invoice sync workflow started successfully",
 		"invoice_id", invoiceID,
 		"customer_id", customerID,
 		"workflow_id", workflowRun.GetID(),
@@ -1838,8 +1982,12 @@ func (s *invoiceService) GetInvoicePDFUrl(ctx context.Context, id string) (strin
 // GetInvoicePDF implements InvoiceService.
 func (s *invoiceService) GetInvoicePDF(ctx context.Context, id string) ([]byte, error) {
 
-	settingsService := NewSettingsService(s.ServiceParams)
-	settings, err := settingsService.GetSettingWithDefaults(ctx, types.SettingKeyInvoicePDFConfig)
+	settingsSvc := NewSettingsService(s.ServiceParams).(*settingsService)
+	pdfConfig, err := GetSetting[types.InvoicePDFConfig](
+		settingsSvc,
+		ctx,
+		types.SettingKeyInvoicePDFConfig,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1847,9 +1995,9 @@ func (s *invoiceService) GetInvoicePDF(ctx context.Context, id string) ([]byte, 
 	// validate request
 	req := dto.GetInvoiceWithBreakdownRequest{ID: id}
 
-	// Get properly typed values (type conversion is handled in GetSettingWithDefaults)
-	req.GroupBy = settings.Value["group_by"].([]string)
-	templateName := types.TemplateName(settings.Value["template_name"].(string))
+	// Use typed config directly
+	req.GroupBy = pdfConfig.GroupBy
+	templateName := pdfConfig.TemplateName
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
