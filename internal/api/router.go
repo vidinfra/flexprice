@@ -503,6 +503,8 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 		webhooks.POST("/chargebee/:tenant_id/:environment_id", handlers.Webhook.HandleChargebeeWebhook)
 		// QuickBooks webhook endpoint: POST /v1/webhooks/quickbooks/{tenant_id}/{environment_id}
 		webhooks.POST("/quickbooks/:tenant_id/:environment_id", handlers.Webhook.HandleQuickBooksWebhook)
+		// Nomod webhook endpoint: POST /v1/webhooks/nomod/{tenant_id}/{environment_id}
+		webhooks.POST("/nomod/:tenant_id/:environment_id", handlers.Webhook.HandleNomodWebhook)
 	}
 
 	// Cron routes

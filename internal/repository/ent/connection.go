@@ -306,6 +306,16 @@ func convertConnectionMetadataToMap(encryptedSecretData types.ConnectionMetadata
 			}
 			return result
 		}
+	case types.SecretProviderNomod:
+		if encryptedSecretData.Nomod != nil {
+			data := map[string]interface{}{
+				"api_key": encryptedSecretData.Nomod.APIKey,
+			}
+			if encryptedSecretData.Nomod.WebhookSecret != "" {
+				data["webhook_secret"] = encryptedSecretData.Nomod.WebhookSecret
+			}
+			return data
+		}
 	default:
 		// For other providers or unknown types, use generic format
 		if encryptedSecretData.Generic != nil {

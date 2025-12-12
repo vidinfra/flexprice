@@ -184,6 +184,17 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		return types.ConnectionMetadata{
 			QuickBooks: qbMetadata,
 		}
+	case types.SecretProviderNomod:
+		nomodMetadata := &types.NomodConnectionMetadata{}
+		if apiKey, ok := metadata["api_key"].(string); ok {
+			nomodMetadata.APIKey = apiKey
+		}
+		if webhookSecret, ok := metadata["webhook_secret"].(string); ok {
+			nomodMetadata.WebhookSecret = webhookSecret
+		}
+		return types.ConnectionMetadata{
+			Nomod: nomodMetadata,
+		}
 	default:
 		// For other providers or unknown types, use generic format
 		return types.ConnectionMetadata{
