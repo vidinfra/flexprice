@@ -34,7 +34,7 @@ type Price struct {
 
 	// Amount stored in main currency units (e.g., dollars, not cents)
 	// For USD: 12.50 means $12.50
-	Amount decimal.Decimal `db:"amount" json:"amount"`
+	Amount decimal.Decimal `db:"amount" json:"amount" swaggertype:"string"`
 
 	// DisplayAmount is the formatted amount with currency symbol
 	// For USD: $12.50
@@ -51,7 +51,7 @@ type Price struct {
 
 	// PriceUnitAmount is the amount stored in price unit
 	// For BTC: 0.00000001 means 0.00000001 BTC
-	PriceUnitAmount decimal.Decimal `db:"price_unit_amount" json:"price_unit_amount,omitempty"`
+	PriceUnitAmount decimal.Decimal `db:"price_unit_amount" json:"price_unit_amount,omitempty" swaggertype:"string"`
 
 	// DisplayPriceUnitAmount is the formatted amount with price unit symbol
 	// For BTC: 0.00000001 BTC
@@ -63,7 +63,7 @@ type Price struct {
 
 	// ConversionRate is the rate of the price unit to the base currency
 	// For BTC: 1 BTC = 100000000 USD
-	ConversionRate decimal.Decimal `db:"conversion_rate" json:"conversion_rate,omitempty"`
+	ConversionRate decimal.Decimal `db:"conversion_rate" json:"conversion_rate,omitempty" swaggertype:"string"`
 
 	Type types.PriceType `db:"type" json:"type"`
 
@@ -235,11 +235,11 @@ type PriceTier struct {
 	UpTo *uint64 `json:"up_to"`
 
 	// unit_amount is the amount per unit for the given tier
-	UnitAmount decimal.Decimal `json:"unit_amount"`
+	UnitAmount decimal.Decimal `json:"unit_amount" swaggertype:"string"`
 
 	// flat_amount is the flat amount for the given tier (optional)
 	// Applied on top of unit_amount*quantity. Useful for cases like "2.7$ + 5c"
-	FlatAmount *decimal.Decimal `json:"flat_amount,omitempty"`
+	FlatAmount *decimal.Decimal `json:"flat_amount,omitempty" swaggertype:"string"`
 }
 
 // TODO : comeup with a better way to handle jsonb fields

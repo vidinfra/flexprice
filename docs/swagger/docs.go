@@ -12842,19 +12842,19 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "discount_percentage": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "discount_type": {
                     "$ref": "#/definitions/types.CouponType"
                 },
                 "discounted_amount": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "environment_id": {
                     "type": "string"
                 },
                 "final_price": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "id": {
                     "type": "string"
@@ -12872,7 +12872,7 @@ const docTemplate = `{
                     }
                 },
                 "original_price": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "status": {
                     "$ref": "#/definitions/types.Status"
@@ -12955,7 +12955,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "amount_off": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "cadence": {
                     "$ref": "#/definitions/types.CouponCadence"
@@ -12991,7 +12991,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "percentage_off": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "redeem_after": {
                     "type": "string"
@@ -17503,7 +17503,7 @@ const docTemplate = `{
                 },
                 "amount": {
                     "description": "Amount stored in main currency units (e.g., dollars, not cents)\nFor USD: 12.50 means $12.50",
-                    "type": "number"
+                    "type": "string"
                 },
                 "billing_cadence": {
                     "$ref": "#/definitions/types.BillingCadence"
@@ -17521,7 +17521,7 @@ const docTemplate = `{
                 },
                 "conversion_rate": {
                     "description": "ConversionRate is the rate of the price unit to the base currency\nFor BTC: 1 BTC = 100000000 USD",
-                    "type": "number"
+                    "type": "string"
                 },
                 "created_at": {
                     "type": "string"
@@ -17610,7 +17610,7 @@ const docTemplate = `{
                 },
                 "price_unit_amount": {
                     "description": "PriceUnitAmount is the amount stored in price unit\nFor BTC: 0.00000001 means 0.00000001 BTC",
-                    "type": "number"
+                    "type": "string"
                 },
                 "price_unit_id": {
                     "description": "PriceUnitID is the id of the price unit",
@@ -17701,7 +17701,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "conversion_rate": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "created_at": {
                     "type": "string"
@@ -18292,7 +18292,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "quantity": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "start_date": {
                     "type": "string"
@@ -18535,7 +18535,7 @@ const docTemplate = `{
                 },
                 "commitment_amount": {
                     "description": "CommitmentAmount is the minimum amount a customer commits to paying for a billing period",
-                    "type": "number"
+                    "type": "string"
                 },
                 "coupon_associations": {
                     "description": "CouponAssociations are the coupon associations for this subscription",
@@ -18625,7 +18625,7 @@ const docTemplate = `{
                 },
                 "overage_factor": {
                     "description": "OverageFactor is a multiplier applied to usage beyond the commitment amount",
-                    "type": "number"
+                    "type": "string"
                 },
                 "pause_status": {
                     "$ref": "#/definitions/types.PauseStatus"
@@ -18889,7 +18889,7 @@ const docTemplate = `{
                     "$ref": "#/definitions/types.Status"
                 },
                 "tax_amount": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "tax_association_id": {
                     "type": "string"
@@ -18901,7 +18901,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "taxable_amount": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "tenant_id": {
                     "type": "string"
@@ -19040,7 +19040,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "fixed_value": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "id": {
                     "type": "string"
@@ -19055,7 +19055,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "percentage_value": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "scope": {
                     "$ref": "#/definitions/types.TaxRateScope"
@@ -20232,16 +20232,16 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "auto_topup_amount": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "auto_topup_min_balance": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "auto_topup_trigger": {
                     "$ref": "#/definitions/types.AutoTopupTrigger"
                 },
                 "balance": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "balance_updated_at": {
                     "type": "string"
@@ -20250,7 +20250,7 @@ const docTemplate = `{
                     "$ref": "#/definitions/types.WalletConfig"
                 },
                 "conversion_rate": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "created_at": {
                     "type": "string"
@@ -20259,7 +20259,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "credit_balance": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "currency": {
                     "type": "string"
@@ -20517,7 +20517,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "amount_off": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "cadence": {
                     "$ref": "#/definitions/types.CouponCadence"
@@ -20553,7 +20553,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "percentage_off": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "redeem_after": {
                     "type": "string"
@@ -20803,7 +20803,7 @@ const docTemplate = `{
                 },
                 "multiplier": {
                     "description": "Multiplier is the multiplier for the aggregation\nFor ex if the aggregation type is sum_with_multiplier for API usage, the multiplier could be 1000\nto scale up by a factor of 1000. If not provided, it will be null.",
-                    "type": "number"
+                    "type": "string"
                 },
                 "type": {
                     "$ref": "#/definitions/types.AggregationType"
@@ -20935,7 +20935,7 @@ const docTemplate = `{
             "properties": {
                 "amount": {
                     "description": "Amount stored in main currency units (e.g., dollars, not cents)\nFor USD: 12.50 means $12.50",
-                    "type": "number"
+                    "type": "string"
                 },
                 "billing_cadence": {
                     "$ref": "#/definitions/types.BillingCadence"
@@ -20953,7 +20953,7 @@ const docTemplate = `{
                 },
                 "conversion_rate": {
                     "description": "ConversionRate is the rate of the price unit to the base currency\nFor BTC: 1 BTC = 100000000 USD",
-                    "type": "number"
+                    "type": "string"
                 },
                 "created_at": {
                     "type": "string"
@@ -21029,7 +21029,7 @@ const docTemplate = `{
                 },
                 "price_unit_amount": {
                     "description": "PriceUnitAmount is the amount stored in price unit\nFor BTC: 0.00000001 means 0.00000001 BTC",
-                    "type": "number"
+                    "type": "string"
                 },
                 "price_unit_id": {
                     "description": "PriceUnitID is the id of the price unit",
@@ -21092,11 +21092,11 @@ const docTemplate = `{
             "properties": {
                 "flat_amount": {
                     "description": "flat_amount is the flat amount for the given tier (optional)\nApplied on top of unit_amount*quantity. Useful for cases like \"2.7$ + 5c\"",
-                    "type": "number"
+                    "type": "string"
                 },
                 "unit_amount": {
                     "description": "unit_amount is the amount per unit for the given tier",
-                    "type": "number"
+                    "type": "string"
                 },
                 "up_to": {
                     "description": "up_to is the quantity up to which this tier applies. It is null for the last tier.\nIMPORTANT: Tier boundaries are INCLUSIVE.\n- If up_to is 1000, then quantity less than or equal to 1000 belongs to this tier\n- This behavior is consistent across both VOLUME and SLAB tier modes",
@@ -21238,7 +21238,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "quantity": {
-                    "type": "number"
+                    "type": "string"
                 },
                 "start_date": {
                     "type": "string"

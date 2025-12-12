@@ -4,6 +4,8 @@ github.com/flexprice/go-sdk v1.0.10 h1:swBtC0r2mgUGY2Le0OTpjB8xGDWPQBAeIeuRWZpxZ
 github.com/flexprice/go-sdk v1.0.10/go.mod h1:ba0SiRO4N5iIQenGMIyvk/0lOuzhf1vji3M3D0SxBKg=
 github.com/flexprice/go-sdk v1.0.41 h1:iCODizAJuaH/Oqa0IIXT1MrsGsJW8saTE14lO/wfJxA=
 github.com/flexprice/go-sdk v1.0.41/go.mod h1:ba0SiRO4N5iIQenGMIyvk/0lOuzhf1vji3M3D0SxBKg=
+github.com/flexprice/go-sdk v1.0.42 h1:7XyHBur47MYjvgUcI+u9XNaR7zwaydbkw4cGCCVG1ls=
+github.com/flexprice/go-sdk v1.0.42/go.mod h1:ba0SiRO4N5iIQenGMIyvk/0lOuzhf1vji3M3D0SxBKg=
 github.com/joho/godotenv v1.5.1 h1:7eLL/+HRGLY0ldzfGMeQkb7vMd0as4CfYvUVzLqw0N0=
 github.com/joho/godotenv v1.5.1/go.mod h1:f4LDr5Voq0i2e/R5DDNOoa2zzDfwtkZa6DnEwAbqwq4=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
