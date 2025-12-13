@@ -112,7 +112,6 @@ func (Price) Fields() []ent.Field {
 			SchemaType(map[string]string{
 				"postgres": "numeric(20,8)",
 			}).
-			Immutable().
 			Optional().
 			Nillable(),
 

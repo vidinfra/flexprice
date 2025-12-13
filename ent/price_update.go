@@ -247,6 +247,26 @@ func (pu *PriceUpdate) ClearConversionRate() *PriceUpdate {
 	return pu
 }
 
+// SetMinQuantity sets the "min_quantity" field.
+func (pu *PriceUpdate) SetMinQuantity(d decimal.Decimal) *PriceUpdate {
+	pu.mutation.SetMinQuantity(d)
+	return pu
+}
+
+// SetNillableMinQuantity sets the "min_quantity" field if the given value is not nil.
+func (pu *PriceUpdate) SetNillableMinQuantity(d *decimal.Decimal) *PriceUpdate {
+	if d != nil {
+		pu.SetMinQuantity(*d)
+	}
+	return pu
+}
+
+// ClearMinQuantity clears the value of the "min_quantity" field.
+func (pu *PriceUpdate) ClearMinQuantity() *PriceUpdate {
+	pu.mutation.ClearMinQuantity()
+	return pu
+}
+
 // SetType sets the "type" field.
 func (pu *PriceUpdate) SetType(s string) *PriceUpdate {
 	pu.mutation.SetType(s)
@@ -708,6 +728,9 @@ func (pu *PriceUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	if pu.mutation.ConversionRateCleared() {
 		_spec.ClearField(price.FieldConversionRate, field.TypeOther)
 	}
+	if value, ok := pu.mutation.MinQuantity(); ok {
+		_spec.SetField(price.FieldMinQuantity, field.TypeOther, value)
+	}
 	if pu.mutation.MinQuantityCleared() {
 		_spec.ClearField(price.FieldMinQuantity, field.TypeOther)
 	}
@@ -1056,6 +1079,26 @@ func (puo *PriceUpdateOne) SetNillableConversionRate(d *decimal.Decimal) *PriceU
 // ClearConversionRate clears the value of the "conversion_rate" field.
 func (puo *PriceUpdateOne) ClearConversionRate() *PriceUpdateOne {
 	puo.mutation.ClearConversionRate()
+	return puo
+}
+
+// SetMinQuantity sets the "min_quantity" field.
+func (puo *PriceUpdateOne) SetMinQuantity(d decimal.Decimal) *PriceUpdateOne {
+	puo.mutation.SetMinQuantity(d)
+	return puo
+}
+
+// SetNillableMinQuantity sets the "min_quantity" field if the given value is not nil.
+func (puo *PriceUpdateOne) SetNillableMinQuantity(d *decimal.Decimal) *PriceUpdateOne {
+	if d != nil {
+		puo.SetMinQuantity(*d)
+	}
+	return puo
+}
+
+// ClearMinQuantity clears the value of the "min_quantity" field.
+func (puo *PriceUpdateOne) ClearMinQuantity() *PriceUpdateOne {
+	puo.mutation.ClearMinQuantity()
 	return puo
 }
 
@@ -1549,6 +1592,9 @@ func (puo *PriceUpdateOne) sqlSave(ctx context.Context) (_node *Price, err error
 	}
 	if puo.mutation.ConversionRateCleared() {
 		_spec.ClearField(price.FieldConversionRate, field.TypeOther)
+	}
+	if value, ok := puo.mutation.MinQuantity(); ok {
+		_spec.SetField(price.FieldMinQuantity, field.TypeOther, value)
 	}
 	if puo.mutation.MinQuantityCleared() {
 		_spec.ClearField(price.FieldMinQuantity, field.TypeOther)

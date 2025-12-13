@@ -77,6 +77,9 @@ type Price struct {
 	// DisplayName is the name of the price
 	DisplayName string `db:"display_name" json:"display_name"`
 
+	// MinQuantity is the minimum quantity of the price
+	MinQuantity *decimal.Decimal `db:"min_quantity" json:"min_quantity"`
+
 	BillingCadence types.BillingCadence `db:"billing_cadence" json:"billing_cadence"`
 
 	InvoiceCadence types.InvoiceCadence `db:"invoice_cadence" json:"invoice_cadence"`
@@ -411,6 +414,7 @@ func FromEnt(e *ent.Price) *Price {
 		GroupID:                lo.FromPtr(e.GroupID),
 		StartDate:              e.StartDate,
 		EndDate:                e.EndDate,
+		MinQuantity:            e.MinQuantity,
 		BaseModel: types.BaseModel{
 			TenantID:  e.TenantID,
 			Status:    types.Status(e.Status),

@@ -11,6 +11,7 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/flexprice/flexprice/internal/validator"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
@@ -39,6 +40,9 @@ type CreatePriceRequest struct {
 	StartDate          *time.Time               `json:"start_date,omitempty"`
 	EndDate            *time.Time               `json:"end_date,omitempty"`
 	DisplayName        string                   `json:"display_name,omitempty"`
+
+	// MinQuantity is the minimum quantity of the price
+	MinQuantity *int64 `json:"min_quantity,omitempty"`
 
 	// SkipEntityValidation is used to skip entity validation when creating a price from a subscription i.e. override price workflow
 	// This is used when creating a subscription-scoped price
@@ -291,6 +295,11 @@ func (r *CreatePriceRequest) Validate() error {
 		if r.MeterID == "" {
 			return ierr.NewError("meter_id is required when type is USAGE").
 				WithHint("Please select a metered feature to set up usage pricing").
+				Mark(ierr.ErrValidation)
+		}
+		if r.MinQuantity != nil {
+			return ierr.NewError("min_quantity cannot be set for usage pricing").
+				WithHint("min_quantity cannot be set for usage pricing").
 				Mark(ierr.ErrValidation)
 		}
 	}
@@ -619,6 +628,12 @@ func (r *CreatePriceRequest) ToPrice(ctx context.Context) (*priceDomain.Price, e
 		priceUnitTiers = priceDomain.JSONBTiers(priceTiers)
 	}
 
+	var minQuantity *decimal.Decimal
+	if r.MinQuantity != nil {
+		minQuantityInt := int64(*r.MinQuantity)
+		minQuantity = lo.ToPtr(decimal.NewFromInt(minQuantityInt))
+	}
+
 	price := &priceDomain.Price{
 		ID:                 types.GenerateUUIDWithPrefix(types.UUID_PREFIX_PRICE),
 		Amount:             amount,
@@ -642,6 +657,7 @@ func (r *CreatePriceRequest) ToPrice(ctx context.Context) (*priceDomain.Price, e
 		EntityType:         r.EntityType,
 		DisplayName:        r.DisplayName,
 		EntityID:           r.EntityID,
+		MinQuantity:        minQuantity,
 		StartDate:          startDate,
 		ParentPriceID:      r.ParentPriceID,
 		EndDate:            r.EndDate,
