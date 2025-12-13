@@ -38,6 +38,9 @@ type WalletService interface {
 	// GetWalletTransactionByID retrieves a transaction by its ID
 	GetWalletTransactionByID(ctx context.Context, transactionID string) (*dto.WalletTransactionResponse, error)
 
+	// ListWalletTransactionsByFilter lists wallet transactions by filter
+	ListWalletTransactionsByFilter(ctx context.Context, filter *types.WalletTransactionFilter) (*dto.ListWalletTransactionsResponse, error)
+
 	// GetWalletBalance retrieves the real-time balance of a wallet
 	GetWalletBalance(ctx context.Context, walletID string) (*dto.WalletBalanceResponse, error)
 
@@ -251,6 +254,45 @@ func (s *walletService) GetWalletTransactions(ctx context.Context, walletID stri
 
 	// Set wallet ID in filter
 	filter.WalletID = &walletID
+
+	if err := filter.Validate(); err != nil {
+		return nil, ierr.WithError(err).
+			WithHint("Invalid filter").
+			Mark(ierr.ErrValidation)
+	}
+
+	transactions, err := s.WalletRepo.ListWalletTransactions(ctx, filter)
+	if err != nil {
+		return nil, err // Repository already using ierr
+	}
+
+	// Get total count
+	count, err := s.WalletRepo.CountWalletTransactions(ctx, filter)
+	if err != nil {
+		return nil, err // Repository already using ierr
+	}
+
+	response := &dto.ListWalletTransactionsResponse{
+		Items: make([]*dto.WalletTransactionResponse, len(transactions)),
+		Pagination: types.NewPaginationResponse(
+			count,
+			filter.GetLimit(),
+			filter.GetOffset(),
+		),
+	}
+
+	for i, txn := range transactions {
+		response.Items[i] = dto.FromWalletTransaction(txn)
+	}
+
+	return response, nil
+}
+
+func (s *walletService) ListWalletTransactionsByFilter(ctx context.Context, filter *types.WalletTransactionFilter) (*dto.ListWalletTransactionsResponse, error) {
+	// Ensure filter is initialized
+	if filter == nil {
+		filter = types.NewWalletTransactionFilter()
+	}
 
 	if err := filter.Validate(); err != nil {
 		return nil, ierr.WithError(err).
