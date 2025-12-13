@@ -48,6 +48,8 @@ const (
 	FieldDisplayPriceUnitAmount = "display_price_unit_amount"
 	// FieldConversionRate holds the string denoting the conversion_rate field in the database.
 	FieldConversionRate = "conversion_rate"
+	// FieldMinQuantity holds the string denoting the min_quantity field in the database.
+	FieldMinQuantity = "min_quantity"
 	// FieldType holds the string denoting the type field in the database.
 	FieldType = "type"
 	// FieldBillingPeriod holds the string denoting the billing_period field in the database.
@@ -116,6 +118,7 @@ var Columns = []string{
 	FieldPriceUnitAmount,
 	FieldDisplayPriceUnitAmount,
 	FieldConversionRate,
+	FieldMinQuantity,
 	FieldType,
 	FieldBillingPeriod,
 	FieldBillingPeriodCount,
@@ -177,6 +180,8 @@ var (
 	DefaultPriceUnitAmount decimal.Decimal
 	// DefaultConversionRate holds the default value on creation for the "conversion_rate" field.
 	DefaultConversionRate decimal.Decimal
+	// DefaultMinQuantity holds the default value on creation for the "min_quantity" field.
+	DefaultMinQuantity decimal.Decimal
 	// TypeValidator is a validator for the "type" field. It is called by the builders before save.
 	TypeValidator func(string) error
 	// BillingPeriodValidator is a validator for the "billing_period" field. It is called by the builders before save.
@@ -286,6 +291,11 @@ func ByDisplayPriceUnitAmount(opts ...sql.OrderTermOption) OrderOption {
 // ByConversionRate orders the results by the conversion_rate field.
 func ByConversionRate(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldConversionRate, opts...).ToFunc()
+}
+
+// ByMinQuantity orders the results by the min_quantity field.
+func ByMinQuantity(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMinQuantity, opts...).ToFunc()
 }
 
 // ByType orders the results by the type field.

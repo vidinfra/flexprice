@@ -236,6 +236,20 @@ func (pc *PriceCreate) SetNillableConversionRate(d *decimal.Decimal) *PriceCreat
 	return pc
 }
 
+// SetMinQuantity sets the "min_quantity" field.
+func (pc *PriceCreate) SetMinQuantity(d decimal.Decimal) *PriceCreate {
+	pc.mutation.SetMinQuantity(d)
+	return pc
+}
+
+// SetNillableMinQuantity sets the "min_quantity" field if the given value is not nil.
+func (pc *PriceCreate) SetNillableMinQuantity(d *decimal.Decimal) *PriceCreate {
+	if d != nil {
+		pc.SetMinQuantity(*d)
+	}
+	return pc
+}
+
 // SetType sets the "type" field.
 func (pc *PriceCreate) SetType(s string) *PriceCreate {
 	pc.mutation.SetType(s)
@@ -545,6 +559,10 @@ func (pc *PriceCreate) defaults() {
 		v := price.DefaultConversionRate
 		pc.mutation.SetConversionRate(v)
 	}
+	if _, ok := pc.mutation.MinQuantity(); !ok {
+		v := price.DefaultMinQuantity
+		pc.mutation.SetMinQuantity(v)
+	}
 	if _, ok := pc.mutation.TrialPeriod(); !ok {
 		v := price.DefaultTrialPeriod
 		pc.mutation.SetTrialPeriod(v)
@@ -750,6 +768,10 @@ func (pc *PriceCreate) createSpec() (*Price, *sqlgraph.CreateSpec) {
 	if value, ok := pc.mutation.ConversionRate(); ok {
 		_spec.SetField(price.FieldConversionRate, field.TypeOther, value)
 		_node.ConversionRate = &value
+	}
+	if value, ok := pc.mutation.MinQuantity(); ok {
+		_spec.SetField(price.FieldMinQuantity, field.TypeOther, value)
+		_node.MinQuantity = &value
 	}
 	if value, ok := pc.mutation.GetType(); ok {
 		_spec.SetField(price.FieldType, field.TypeString, value)
