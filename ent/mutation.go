@@ -37352,7 +37352,7 @@ func (m *PriceMutation) PriceUnitAmount() (r decimal.Decimal, exists bool) {
 // OldPriceUnitAmount returns the old "price_unit_amount" field's value of the Price entity.
 // If the Price object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PriceMutation) OldPriceUnitAmount(ctx context.Context) (v decimal.Decimal, err error) {
+func (m *PriceMutation) OldPriceUnitAmount(ctx context.Context) (v *decimal.Decimal, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldPriceUnitAmount is only allowed on UpdateOne operations")
 	}
@@ -37366,9 +37366,22 @@ func (m *PriceMutation) OldPriceUnitAmount(ctx context.Context) (v decimal.Decim
 	return oldValue.PriceUnitAmount, nil
 }
 
+// ClearPriceUnitAmount clears the value of the "price_unit_amount" field.
+func (m *PriceMutation) ClearPriceUnitAmount() {
+	m.price_unit_amount = nil
+	m.clearedFields[price.FieldPriceUnitAmount] = struct{}{}
+}
+
+// PriceUnitAmountCleared returns if the "price_unit_amount" field was cleared in this mutation.
+func (m *PriceMutation) PriceUnitAmountCleared() bool {
+	_, ok := m.clearedFields[price.FieldPriceUnitAmount]
+	return ok
+}
+
 // ResetPriceUnitAmount resets all changes to the "price_unit_amount" field.
 func (m *PriceMutation) ResetPriceUnitAmount() {
 	m.price_unit_amount = nil
+	delete(m.clearedFields, price.FieldPriceUnitAmount)
 }
 
 // SetDisplayPriceUnitAmount sets the "display_price_unit_amount" field.
@@ -37437,7 +37450,7 @@ func (m *PriceMutation) ConversionRate() (r decimal.Decimal, exists bool) {
 // OldConversionRate returns the old "conversion_rate" field's value of the Price entity.
 // If the Price object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PriceMutation) OldConversionRate(ctx context.Context) (v decimal.Decimal, err error) {
+func (m *PriceMutation) OldConversionRate(ctx context.Context) (v *decimal.Decimal, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldConversionRate is only allowed on UpdateOne operations")
 	}
@@ -37451,9 +37464,22 @@ func (m *PriceMutation) OldConversionRate(ctx context.Context) (v decimal.Decima
 	return oldValue.ConversionRate, nil
 }
 
+// ClearConversionRate clears the value of the "conversion_rate" field.
+func (m *PriceMutation) ClearConversionRate() {
+	m.conversion_rate = nil
+	m.clearedFields[price.FieldConversionRate] = struct{}{}
+}
+
+// ConversionRateCleared returns if the "conversion_rate" field was cleared in this mutation.
+func (m *PriceMutation) ConversionRateCleared() bool {
+	_, ok := m.clearedFields[price.FieldConversionRate]
+	return ok
+}
+
 // ResetConversionRate resets all changes to the "conversion_rate" field.
 func (m *PriceMutation) ResetConversionRate() {
 	m.conversion_rate = nil
+	delete(m.clearedFields, price.FieldConversionRate)
 }
 
 // SetType sets the "type" field.
@@ -39210,8 +39236,14 @@ func (m *PriceMutation) ClearedFields() []string {
 	if m.FieldCleared(price.FieldPriceUnit) {
 		fields = append(fields, price.FieldPriceUnit)
 	}
+	if m.FieldCleared(price.FieldPriceUnitAmount) {
+		fields = append(fields, price.FieldPriceUnitAmount)
+	}
 	if m.FieldCleared(price.FieldDisplayPriceUnitAmount) {
 		fields = append(fields, price.FieldDisplayPriceUnitAmount)
+	}
+	if m.FieldCleared(price.FieldConversionRate) {
+		fields = append(fields, price.FieldConversionRate)
 	}
 	if m.FieldCleared(price.FieldInvoiceCadence) {
 		fields = append(fields, price.FieldInvoiceCadence)
@@ -39293,8 +39325,14 @@ func (m *PriceMutation) ClearField(name string) error {
 	case price.FieldPriceUnit:
 		m.ClearPriceUnit()
 		return nil
+	case price.FieldPriceUnitAmount:
+		m.ClearPriceUnitAmount()
+		return nil
 	case price.FieldDisplayPriceUnitAmount:
 		m.ClearDisplayPriceUnitAmount()
+		return nil
+	case price.FieldConversionRate:
+		m.ClearConversionRate()
 		return nil
 	case price.FieldInvoiceCadence:
 		m.ClearInvoiceCadence()

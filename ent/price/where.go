@@ -1170,6 +1170,16 @@ func PriceUnitAmountLTE(v decimal.Decimal) predicate.Price {
 	return predicate.Price(sql.FieldLTE(FieldPriceUnitAmount, v))
 }
 
+// PriceUnitAmountIsNil applies the IsNil predicate on the "price_unit_amount" field.
+func PriceUnitAmountIsNil() predicate.Price {
+	return predicate.Price(sql.FieldIsNull(FieldPriceUnitAmount))
+}
+
+// PriceUnitAmountNotNil applies the NotNil predicate on the "price_unit_amount" field.
+func PriceUnitAmountNotNil() predicate.Price {
+	return predicate.Price(sql.FieldNotNull(FieldPriceUnitAmount))
+}
+
 // DisplayPriceUnitAmountEQ applies the EQ predicate on the "display_price_unit_amount" field.
 func DisplayPriceUnitAmountEQ(v string) predicate.Price {
 	return predicate.Price(sql.FieldEQ(FieldDisplayPriceUnitAmount, v))
@@ -1283,6 +1293,16 @@ func ConversionRateLT(v decimal.Decimal) predicate.Price {
 // ConversionRateLTE applies the LTE predicate on the "conversion_rate" field.
 func ConversionRateLTE(v decimal.Decimal) predicate.Price {
 	return predicate.Price(sql.FieldLTE(FieldConversionRate, v))
+}
+
+// ConversionRateIsNil applies the IsNil predicate on the "conversion_rate" field.
+func ConversionRateIsNil() predicate.Price {
+	return predicate.Price(sql.FieldIsNull(FieldConversionRate))
+}
+
+// ConversionRateNotNil applies the NotNil predicate on the "conversion_rate" field.
+func ConversionRateNotNil() predicate.Price {
+	return predicate.Price(sql.FieldNotNull(FieldConversionRate))
 }
 
 // TypeEQ applies the EQ predicate on the "type" field.
