@@ -14,7 +14,7 @@ import (
 // CreateSubscriptionLineItemRequest represents the request to create a subscription line item
 type CreateSubscriptionLineItemRequest struct {
 	PriceID             string            `json:"price_id" validate:"required"`
-	Quantity            decimal.Decimal   `json:"quantity,omitempty"`
+	Quantity            decimal.Decimal   `json:"quantity,omitempty" swaggertype:"string"`
 	StartDate           *time.Time        `json:"start_date,omitempty"`
 	EndDate             *time.Time        `json:"end_date,omitempty"`
 	Metadata            map[string]string `json:"metadata,omitempty"`
@@ -34,7 +34,7 @@ type UpdateSubscriptionLineItemRequest struct {
 	BillingModel types.BillingModel `json:"billing_model,omitempty"`
 
 	// Amount is the new price amount that overrides the original price
-	Amount *decimal.Decimal `json:"amount,omitempty"`
+	Amount *decimal.Decimal `json:"amount,omitempty" swaggertype:"string"`
 
 	// TierMode determines how to calculate the price for a given quantity
 	TierMode types.BillingTier `json:"tier_mode,omitempty"`
