@@ -185,11 +185,15 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		} else if sub.EndDate != nil {
 			item.EndDate = *sub.EndDate
 		}
-		if priceResponse.Price.StartDate != nil && priceResponse.Price.StartDate.After(sub.StartDate) {
-			item.StartDate = lo.FromPtr(priceResponse.Price.StartDate)
-		} else {
-			item.StartDate = sub.StartDate
+		// Determine start date: max of first phase start, subscription start, and price start
+		startDate := sub.StartDate
+		if len(req.Phases) > 0 && req.Phases[0].StartDate.After(startDate) {
+			startDate = req.Phases[0].StartDate
 		}
+		if priceResponse.Price.StartDate != nil && priceResponse.Price.StartDate.After(startDate) {
+			startDate = lo.FromPtr(priceResponse.Price.StartDate)
+		}
+		item.StartDate = startDate
 		lineItems = append(lineItems, item)
 	}
 
