@@ -110,11 +110,10 @@ func (Price) Fields() []ent.Field {
 		// min_quantity is the minimum quantity of the price
 		field.Other("min_quantity", decimal.Decimal{}).
 			SchemaType(map[string]string{
-				"postgres": "numeric(25,15)",
+				"postgres": "numeric(20,8)",
 			}).
 			Optional().
-			Nillable().
-			Default(decimal.NewFromInt(1)),
+			Nillable(),
 
 		field.String("type").
 			SchemaType(map[string]string{

@@ -559,10 +559,6 @@ func (pc *PriceCreate) defaults() {
 		v := price.DefaultConversionRate
 		pc.mutation.SetConversionRate(v)
 	}
-	if _, ok := pc.mutation.MinQuantity(); !ok {
-		v := price.DefaultMinQuantity
-		pc.mutation.SetMinQuantity(v)
-	}
 	if _, ok := pc.mutation.TrialPeriod(); !ok {
 		v := price.DefaultTrialPeriod
 		pc.mutation.SetTrialPeriod(v)

@@ -180,8 +180,6 @@ var (
 	DefaultPriceUnitAmount decimal.Decimal
 	// DefaultConversionRate holds the default value on creation for the "conversion_rate" field.
 	DefaultConversionRate decimal.Decimal
-	// DefaultMinQuantity holds the default value on creation for the "min_quantity" field.
-	DefaultMinQuantity decimal.Decimal
 	// TypeValidator is a validator for the "type" field. It is called by the builders before save.
 	TypeValidator func(string) error
 	// BillingPeriodValidator is a validator for the "billing_period" field. It is called by the builders before save.

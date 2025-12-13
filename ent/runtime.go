@@ -1317,10 +1317,6 @@ func init() {
 	priceDescConversionRate := priceFields[10].Descriptor()
 	// price.DefaultConversionRate holds the default value on creation for the conversion_rate field.
 	price.DefaultConversionRate = priceDescConversionRate.Default.(decimal.Decimal)
-	// priceDescMinQuantity is the schema descriptor for min_quantity field.
-	priceDescMinQuantity := priceFields[11].Descriptor()
-	// price.DefaultMinQuantity holds the default value on creation for the min_quantity field.
-	price.DefaultMinQuantity = priceDescMinQuantity.Default.(decimal.Decimal)
 	// priceDescType is the schema descriptor for type field.
 	priceDescType := priceFields[12].Descriptor()
 	// price.TypeValidator is a validator for the "type" field. It is called by the builders before save.
