@@ -939,13 +939,30 @@ func (r *OverrideLineItemRequest) Validate(
 	}
 
 	// Validate quantity if provided
-	if r.Quantity != nil && r.Quantity.IsNegative() {
-		return ierr.NewError("quantity must be non-negative").
-			WithHint("Override quantity cannot be negative").
-			WithReportableDetails(map[string]interface{}{
-				"quantity": r.Quantity.String(),
-			}).
-			Mark(ierr.ErrValidation)
+	if r.Quantity != nil {
+		if r.Quantity.IsNegative() {
+			return ierr.NewError("quantity must be non-negative").
+				WithHint("Override quantity cannot be negative").
+				WithReportableDetails(map[string]interface{}{
+					"quantity": r.Quantity.String(),
+				}).
+				Mark(ierr.ErrValidation)
+		}
+
+		// Quantity can only be set for fixed prices, not usage-based prices
+		if priceMap != nil {
+			if price, exists := priceMap[r.PriceID]; exists && price != nil {
+				if price.Type == types.PRICE_TYPE_USAGE {
+					return ierr.NewError("quantity cannot be set for usage-based prices").
+						WithHint("Quantity overrides are only allowed for fixed prices. Usage-based prices track quantity automatically from meter events").
+						WithReportableDetails(map[string]interface{}{
+							"price_id":   r.PriceID,
+							"price_type": price.Type,
+						}).
+						Mark(ierr.ErrValidation)
+				}
+			}
+		}
 	}
 
 	// Validate billing model if provided

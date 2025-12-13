@@ -74,6 +74,12 @@ type Price struct {
 
 	BillingModel types.BillingModel `db:"billing_model" json:"billing_model"`
 
+	// DisplayName is the name of the price
+	DisplayName string `db:"display_name" json:"display_name"`
+
+	// MinQuantity is the minimum quantity of the price
+	MinQuantity *decimal.Decimal `db:"min_quantity" json:"min_quantity"`
+
 	BillingCadence types.BillingCadence `db:"billing_cadence" json:"billing_cadence"`
 
 	InvoiceCadence types.InvoiceCadence `db:"invoice_cadence" json:"invoice_cadence"`
@@ -376,7 +382,7 @@ func FromEnt(e *ent.Price) *Price {
 
 	return &Price{
 		ID:                     e.ID,
-		Amount:                 decimal.NewFromFloat(e.Amount),
+		Amount:                 e.Amount,
 		Currency:               e.Currency,
 		DisplayAmount:          e.DisplayAmount,
 		PriceUnitType:          types.PriceUnitType(e.PriceUnitType),
@@ -384,6 +390,7 @@ func FromEnt(e *ent.Price) *Price {
 		BillingPeriod:          types.BillingPeriod(e.BillingPeriod),
 		BillingPeriodCount:     e.BillingPeriodCount,
 		BillingModel:           types.BillingModel(e.BillingModel),
+		DisplayName:            e.DisplayName,
 		BillingCadence:         types.BillingCadence(e.BillingCadence),
 		InvoiceCadence:         types.InvoiceCadence(e.InvoiceCadence),
 		TrialPeriod:            e.TrialPeriod,
@@ -398,15 +405,16 @@ func FromEnt(e *ent.Price) *Price {
 		EnvironmentID:          e.EnvironmentID,
 		PriceUnitID:            lo.FromPtr(e.PriceUnitID),
 		PriceUnit:              e.PriceUnit,
-		PriceUnitAmount:        decimal.NewFromFloat(e.PriceUnitAmount),
+		PriceUnitAmount:        lo.FromPtrOr(e.PriceUnitAmount, decimal.Zero),
 		DisplayPriceUnitAmount: e.DisplayPriceUnitAmount,
-		ConversionRate:         decimal.NewFromFloat(e.ConversionRate),
+		ConversionRate:         lo.FromPtrOr(e.ConversionRate, decimal.Zero),
 		EntityType:             types.PriceEntityType(lo.FromPtr(e.EntityType)),
 		EntityID:               lo.FromPtr(e.EntityID),
 		ParentPriceID:          lo.FromPtr(e.ParentPriceID),
 		GroupID:                lo.FromPtr(e.GroupID),
 		StartDate:              e.StartDate,
 		EndDate:                e.EndDate,
+		MinQuantity:            e.MinQuantity,
 		BaseModel: types.BaseModel{
 			TenantID:  e.TenantID,
 			Status:    types.Status(e.Status),
