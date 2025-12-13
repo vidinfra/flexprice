@@ -80,6 +80,7 @@ func (r *priceRepository) Create(ctx context.Context, p *domainPrice.Price) erro
 		SetLookupKey(p.LookupKey).
 		SetDescription(p.Description).
 		SetMetadata(map[string]string(p.Metadata)).
+		SetNillableMinQuantity(p.MinQuantity).
 		SetStatus(string(p.Status)).
 		SetCreatedAt(p.CreatedAt).
 		SetUpdatedAt(p.UpdatedAt).
