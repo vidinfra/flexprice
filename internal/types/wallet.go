@@ -159,6 +159,11 @@ func (t AutoTopupTrigger) String() string {
 type WalletTransactionFilter struct {
 	*QueryFilter
 	*TimeRangeFilter
+
+	// filters allows complex filtering based on multiple fields
+	Filters []*FilterCondition `json:"filters,omitempty" form:"filters" validate:"omitempty"`
+	Sort    []*SortCondition   `json:"sort,omitempty" form:"sort" validate:"omitempty"`
+
 	WalletID           *string            `json:"id,omitempty" form:"id"`
 	Type               *TransactionType   `json:"type,omitempty" form:"type"`
 	TransactionStatus  *TransactionStatus `json:"transaction_status,omitempty" form:"transaction_status"`

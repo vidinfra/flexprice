@@ -405,3 +405,46 @@ func (h *WalletHandler) ManualBalanceDebit(c *gin.Context) {
 
 	c.JSON(http.StatusOK, wallet)
 }
+
+// ListWalletTransactionsByFilter godoc
+// @Summary List wallet transactions by filter
+// @Description List wallet transactions by filter
+// @Tags Wallets
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Param id path string true "Wallet ID"
+// @Param filter query types.WalletTransactionFilter false "Filter"
+// @Success 200 {object} dto.ListWalletTransactionsResponse
+// @Failure 400 {object} ierr.ErrorResponse
+// @Failure 500 {object} ierr.ErrorResponse
+// @Router /wallets/{id}/transactions/search [post]
+func (h *WalletHandler) ListWalletTransactionsByFilter(c *gin.Context) {
+	walletID := c.Param("id")
+	if walletID == "" {
+		c.Error(ierr.NewError("wallet_id is required").
+			WithHint("Wallet ID is required").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	var filter types.WalletTransactionFilter
+	if err := c.ShouldBindJSON(&filter); err != nil {
+		c.Error(ierr.WithError(err).
+			WithHint("Invalid filter parameters").
+			Mark(ierr.ErrValidation))
+		return
+	}
+
+	if filter.GetLimit() == 0 {
+		filter.Limit = lo.ToPtr(types.GetDefaultFilter().Limit)
+	}
+
+	resp, err := h.walletService.GetWalletTransactions(c.Request.Context(), walletID, &filter)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
