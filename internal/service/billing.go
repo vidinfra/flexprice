@@ -506,11 +506,88 @@ func (s *billingService) CalculateUsageCharges(
 
 			// Add the amount to total usage cost
 			lineItemAmount := decimal.NewFromFloat(matchingCharge.Amount)
+
+			// Store commitment metadata separately since matchingCharge doesn't have Metadata field
+			var commitmentMetadataForLineItem types.Metadata
+
+			// Apply line-item commitment if configured
+			// Line item commitment takes precedence over subscription-level commitment
+			if item.HasCommitment() {
+				commitmentCalc := newLineItemCommitmentCalculator(s)
+
+				// Check if this is window-based commitment
+				if item.IsWindowCommitment {
+					// For window commitment, we need bucketed values
+					// Get meter to access bucket configuration
+					meter, ok := meterMap[item.MeterID]
+					if !ok {
+						return nil, decimal.Zero, ierr.NewError("meter not found for window commitment").
+							WithHint(fmt.Sprintf("Meter with ID %s not found", item.MeterID)).
+							WithReportableDetails(map[string]interface{}{
+								"meter_id":     item.MeterID,
+								"line_item_id": item.ID,
+							}).
+							Mark(ierr.ErrNotFound)
+					}
+
+					// Fetch bucketed usage values
+					usageRequest := &dto.GetUsageByMeterRequest{
+						MeterID:            item.MeterID,
+						PriceID:            item.PriceID,
+						ExternalCustomerID: customer.ExternalID,
+						StartTime:          item.GetPeriodStart(periodStart),
+						EndTime:            item.GetPeriodEnd(periodEnd),
+						WindowSize:         meter.Aggregation.BucketSize,
+						BillingAnchor:      &sub.BillingAnchor,
+					}
+
+					usageResult, err := eventService.GetUsageByMeter(ctx, usageRequest)
+					if err != nil {
+						return nil, decimal.Zero, err
+					}
+
+					// Extract bucket values
+					bucketedValues := make([]decimal.Decimal, len(usageResult.Results))
+					for i, result := range usageResult.Results {
+						bucketedValues[i] = result.Value
+					}
+
+					// Apply window-based commitment
+					adjustedAmount, commitmentMetadata, err := commitmentCalc.applyWindowCommitmentToLineItem(
+						ctx, item, bucketedValues, matchingCharge.Price)
+					if err != nil {
+						return nil, decimal.Zero, err
+					}
+
+					lineItemAmount = adjustedAmount
+					matchingCharge.Amount = adjustedAmount.InexactFloat64()
+					commitmentMetadataForLineItem = commitmentMetadata
+				} else {
+					// Non-window commitment: apply to aggregated usage cost
+					adjustedAmount, commitmentMetadata, err := commitmentCalc.applyCommitmentToLineItem(
+						ctx, item, lineItemAmount, matchingCharge.Price)
+					if err != nil {
+						return nil, decimal.Zero, err
+					}
+
+					lineItemAmount = adjustedAmount
+					matchingCharge.Amount = adjustedAmount.InexactFloat64()
+					commitmentMetadataForLineItem = commitmentMetadata
+				}
+			}
+
 			totalUsageCost = totalUsageCost.Add(lineItemAmount)
 
 			// Create metadata for the line item, including overage information if applicable
 			metadata := types.Metadata{
 				"description": fmt.Sprintf("%s (Usage Charge)", item.DisplayName),
+			}
+
+			// Add commitment metadata if present
+			if item.HasCommitment() && commitmentMetadataForLineItem != nil {
+				for k, v := range commitmentMetadataForLineItem {
+					metadata[k] = v
+				}
 			}
 
 			displayName := lo.ToPtr(item.DisplayName)

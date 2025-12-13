@@ -850,6 +850,14 @@ type SubscriptionLineItemRequest struct {
 	Quantity    decimal.Decimal   `json:"quantity" validate:"required"`
 	DisplayName string            `json:"display_name,omitempty"`
 	Metadata    map[string]string `json:"metadata,omitempty"`
+
+	// Commitment fields
+	CommitmentAmount   *decimal.Decimal     `json:"commitment_amount,omitempty"`
+	CommitmentQuantity *decimal.Decimal     `json:"commitment_quantity,omitempty"`
+	CommitmentType     types.CommitmentType `json:"commitment_type,omitempty"`
+	OverageFactor      *decimal.Decimal     `json:"overage_factor,omitempty"`
+	EnableTrueUp       bool                 `json:"enable_true_up,omitempty"`
+	IsWindowCommitment bool                 `json:"is_window_commitment,omitempty"`
 }
 
 // SubscriptionLineItemResponse represents the response for a subscription line item
@@ -1128,7 +1136,7 @@ func (r *OverrideLineItemRequest) Validate(
 
 // ToSubscriptionLineItem converts a request to a domain subscription line item
 func (r *SubscriptionLineItemRequest) ToSubscriptionLineItem(ctx context.Context) *subscription.SubscriptionLineItem {
-	return &subscription.SubscriptionLineItem{
+	lineItem := &subscription.SubscriptionLineItem{
 		ID:            types.GenerateUUIDWithPrefix(types.UUID_PREFIX_SUBSCRIPTION_LINE_ITEM),
 		PriceID:       r.PriceID,
 		Quantity:      r.Quantity,
@@ -1137,6 +1145,24 @@ func (r *SubscriptionLineItemRequest) ToSubscriptionLineItem(ctx context.Context
 		EnvironmentID: types.GetEnvironmentID(ctx),
 		BaseModel:     types.GetDefaultBaseModel(ctx),
 	}
+
+	// Set commitment fields if provided
+	if r.CommitmentAmount != nil {
+		lineItem.CommitmentAmount = r.CommitmentAmount
+	}
+	if r.CommitmentQuantity != nil {
+		lineItem.CommitmentQuantity = r.CommitmentQuantity
+	}
+	if r.CommitmentType != "" {
+		lineItem.CommitmentType = r.CommitmentType
+	}
+	if r.OverageFactor != nil {
+		lineItem.OverageFactor = r.OverageFactor
+	}
+	lineItem.EnableTrueUp = r.EnableTrueUp
+	lineItem.IsWindowCommitment = r.IsWindowCommitment
+
+	return lineItem
 }
 
 type GetUsageBySubscriptionRequest struct {
