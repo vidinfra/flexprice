@@ -8,6 +8,7 @@ import (
 	"github.com/flexprice/flexprice/internal/domain/subscription"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
@@ -60,7 +61,8 @@ type LineItemParams struct {
 }
 
 // Validate validates the create subscription line item request
-func (r *CreateSubscriptionLineItemRequest) Validate() error {
+// price is optional and can be provided for MinQuantity validation
+func (r *CreateSubscriptionLineItemRequest) Validate(price *price.Price) error {
 	if r.PriceID == "" {
 		return ierr.NewError("price_id is required").
 			WithHint("Price ID is required").
@@ -81,6 +83,24 @@ func (r *CreateSubscriptionLineItemRequest) Validate() error {
 		return ierr.NewError("quantity must be positive").
 			WithHint("Quantity must be positive").
 			Mark(ierr.ErrValidation)
+	}
+
+	// Validate MinQuantity for fixed prices
+	if price != nil && price.Type == types.PRICE_TYPE_FIXED && price.MinQuantity != nil {
+		finalQuantity := r.Quantity
+		if finalQuantity.IsZero() {
+			// Will be set to MinQuantity in ToSubscriptionLineItem, so validation passes
+			finalQuantity = *price.MinQuantity
+		}
+		if finalQuantity.LessThan(lo.FromPtr(price.MinQuantity)) {
+			return ierr.NewError("quantity must be greater than or equal to min_quantity").
+				WithHint("Quantity must be at least the minimum quantity specified for this price").
+				WithReportableDetails(map[string]interface{}{
+					"quantity":     finalQuantity.String(),
+					"min_quantity": price.MinQuantity.String(),
+				}).
+				Mark(ierr.ErrValidation)
+		}
 	}
 
 	return nil
@@ -123,7 +143,14 @@ func (r *CreateSubscriptionLineItemRequest) ToSubscriptionLineItem(ctx context.C
 			}
 			lineItem.Quantity = decimal.Zero
 		} else {
-			lineItem.Quantity = params.Price.GetDefaultQuantity()
+			// For fixed prices, use MinQuantity if quantity not provided and MinQuantity exists
+			if !r.Quantity.IsZero() {
+				lineItem.Quantity = r.Quantity
+			} else if params.Price.MinQuantity != nil {
+				lineItem.Quantity = lo.FromPtr(params.Price.MinQuantity)
+			} else {
+				lineItem.Quantity = params.Price.GetDefaultQuantity()
+			}
 		}
 	} else {
 		lineItem.Quantity = decimal.NewFromInt(1)
@@ -142,11 +169,6 @@ func (r *CreateSubscriptionLineItemRequest) ToSubscriptionLineItem(ctx context.C
 		lineItem.Metadata["subscription_id"] = params.Subscription.ID
 		lineItem.Metadata["addon_quantity"] = "1"
 		lineItem.Metadata["addon_status"] = string(types.AddonStatusActive)
-	}
-
-	// Override quantity if provided in request
-	if !r.Quantity.IsZero() {
-		lineItem.Quantity = r.Quantity
 	}
 
 	// Set dates

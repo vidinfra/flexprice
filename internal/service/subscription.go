@@ -165,6 +165,10 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 
 	for _, priceResponse := range validPrices {
 		lineItemReq := &dto.CreateSubscriptionLineItemRequest{PriceID: priceResponse.Price.ID}
+		// Validate with price for MinQuantity checks
+		if err := lineItemReq.Validate(priceResponse.Price); err != nil {
+			return nil, err
+		}
 		item := lineItemReq.ToSubscriptionLineItem(ctx, dto.LineItemParams{
 			Subscription: subscriptionResponse,
 			Price:        priceResponse,
@@ -782,6 +786,23 @@ func (s *subscriptionService) handleSubscriptionPhases(
 
 		// Get corresponding phase request for additional data
 		phaseReq := phaseRequests[i]
+
+		// Validate all line item requests before creating them
+		for _, priceResp := range validPrices {
+			startDate := phaseReq.StartDate
+			if priceResp.Price.StartDate != nil && priceResp.Price.StartDate.After(phaseReq.StartDate) {
+				startDate = lo.FromPtr(priceResp.Price.StartDate)
+			}
+			req := dto.CreateSubscriptionLineItemRequest{
+				PriceID:             priceResp.Price.ID,
+				SubscriptionPhaseID: lo.ToPtr(phase.ID),
+				StartDate:           lo.ToPtr(startDate),
+				EndDate:             phaseReq.EndDate,
+			}
+			if err := req.Validate(priceResp.Price); err != nil {
+				return err
+			}
+		}
 
 		// Create line items from plan prices - reusing DTO's ToSubscriptionLineItem logic (same as AddSubscriptionLineItem)
 		phaseLineItems := lo.Map(validPrices, func(priceResp *dto.PriceResponse, _ int) *subscription.SubscriptionLineItem {

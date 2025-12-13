@@ -12,10 +12,6 @@ import (
 
 // AddSubscriptionLineItem adds a new line item to an existing subscription
 func (s *subscriptionService) AddSubscriptionLineItem(ctx context.Context, subscriptionID string, req dto.CreateSubscriptionLineItemRequest) (*dto.SubscriptionLineItemResponse, error) {
-	if err := req.Validate(); err != nil {
-		return nil, err
-	}
-
 	// Get the subscription
 	sub, err := s.SubRepo.Get(ctx, subscriptionID)
 	if err != nil {
@@ -42,6 +38,11 @@ func (s *subscriptionService) AddSubscriptionLineItem(ctx context.Context, subsc
 	priceService := NewPriceService(s.ServiceParams)
 	price, err := priceService.GetPrice(ctx, req.PriceID)
 	if err != nil {
+		return nil, err
+	}
+
+	// Validate with price for MinQuantity checks
+	if err := req.Validate(price.Price); err != nil {
 		return nil, err
 	}
 
