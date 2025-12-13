@@ -419,6 +419,7 @@ func (r *priceRepository) CreateBulk(ctx context.Context, prices []*domainPrice.
 			SetTransformQuantity(types.TransformQuantity(p.TransformQuantity)).
 			SetLookupKey(p.LookupKey).
 			SetDescription(p.Description).
+			SetNillableMinQuantity(p.MinQuantity).
 			SetMetadata(map[string]string(p.Metadata)).
 			SetEnvironmentID(p.EnvironmentID).
 			SetStatus(string(p.Status)).
