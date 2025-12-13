@@ -2,7 +2,6 @@ package internal
 
 import (
 	"context"
-	"database/sql"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -23,7 +22,6 @@ import (
 	entRepo "github.com/flexprice/flexprice/internal/repository/ent"
 	"github.com/flexprice/flexprice/internal/sentry"
 	"github.com/flexprice/flexprice/internal/types"
-	_ "github.com/lib/pq"
 	"github.com/shopspring/decimal"
 )
 
@@ -64,7 +62,6 @@ type pricingImportScript struct {
 	planRepo      plan.Repository
 	entClient     *ent.Client
 	pgClient      postgres.IClient
-	sqlDB         *sql.DB
 	summary       PricingImportSummary
 	tenantID      string
 	environmentID string
@@ -91,13 +88,6 @@ func newPricingImportScript(tenantID, environmentID string) (*pricingImportScrip
 	}
 	entClient := entClients.Writer
 
-	// Get underlying SQL.DB for direct SQL execution
-	// Open a direct SQL connection for ExecContext
-	sqlDB, err := sql.Open("postgres", cfg.Postgres.GetDSN())
-	if err != nil {
-		return nil, fmt.Errorf("failed to open SQL connection: %w", err)
-	}
-
 	// Create postgres client
 	pgClient := postgres.NewClient(entClients, log, sentry.NewSentryService(cfg, log))
 	cacheClient := cache.NewInMemoryCache()
@@ -117,7 +107,6 @@ func newPricingImportScript(tenantID, environmentID string) (*pricingImportScrip
 		planRepo:      planRepo,
 		entClient:     entClient,
 		pgClient:      pgClient,
-		sqlDB:         sqlDB,
 		summary:       PricingImportSummary{},
 		tenantID:      tenantID,
 		environmentID: environmentID,
@@ -211,7 +200,7 @@ func (s *pricingImportScript) updateMeterDefinition(ctx context.Context, row Pri
 				SET status = $1, updated_at = $2 
 				WHERE id = $3 AND tenant_id = $4 AND environment_id = $5
 			`
-			_, err = s.sqlDB.ExecContext(ctx, query,
+			_, err = s.entClient.ExecContext(ctx, query,
 				types.StatusDeleted,
 				time.Now().UTC(),
 				row.MeterID,
@@ -261,7 +250,7 @@ func (s *pricingImportScript) updateMeterDefinition(ctx context.Context, row Pri
 			SET event_name = $1, aggregation = $2, updated_at = $3 
 			WHERE id = $4 AND tenant_id = $5 AND environment_id = $6
 		`
-		_, err = s.sqlDB.ExecContext(ctx, query,
+		_, err = s.entClient.ExecContext(ctx, query,
 			row.EventName,
 			aggregationJSON,
 			time.Now().UTC(),
@@ -302,7 +291,7 @@ func (s *pricingImportScript) updateFeatureMapping(ctx context.Context, row Pric
 				SET status = $1, updated_at = $2 
 				WHERE id = $3 AND tenant_id = $4 AND environment_id = $5
 			`
-			_, err = s.sqlDB.ExecContext(ctx, query,
+			_, err = s.entClient.ExecContext(ctx, query,
 				types.StatusDeleted,
 				time.Now().UTC(),
 				row.FeatureID,
@@ -339,7 +328,7 @@ func (s *pricingImportScript) updateFeatureMapping(ctx context.Context, row Pric
 			SET name = $1, meter_id = $2, updated_at = $3 
 			WHERE id = $4 AND tenant_id = $5 AND environment_id = $6
 		`
-		_, err = s.sqlDB.ExecContext(ctx, query,
+		_, err = s.entClient.ExecContext(ctx, query,
 			row.FeatureName,
 			row.MeterID,
 			time.Now().UTC(),
@@ -370,7 +359,7 @@ func (s *pricingImportScript) updatePrice(ctx context.Context, row PricingRow) e
 				SET status = $1, updated_at = $2 
 				WHERE id = $3 AND tenant_id = $4 AND environment_id = $5
 			`
-			_, err := s.sqlDB.ExecContext(ctx, query,
+			_, err := s.entClient.ExecContext(ctx, query,
 				types.StatusDeleted,
 				time.Now().UTC(),
 				row.PriceID,
@@ -407,7 +396,7 @@ func (s *pricingImportScript) updatePrice(ctx context.Context, row PricingRow) e
 					WHERE id = $4 AND tenant_id = $5 AND environment_id = $6
 				`
 				displayAmount := decimalAmount.String()
-				_, err = s.sqlDB.ExecContext(ctx, query,
+				_, err = s.entClient.ExecContext(ctx, query,
 					decimalAmount,
 					displayAmount,
 					time.Now().UTC(),
@@ -441,7 +430,6 @@ func (s *pricingImportScript) updatePrice(ctx context.Context, row PricingRow) e
 		BillingPeriod:      types.BILLING_PERIOD_MONTHLY,
 		BillingPeriodCount: 1,
 		InvoiceCadence:     types.InvoiceCadenceArrear,
-		DisplayName:        row.FeatureName, // Use feature name as display name
 		BaseModel: types.BaseModel{
 			TenantID:  s.tenantID,
 			Status:    types.StatusPublished,
@@ -458,20 +446,18 @@ func (s *pricingImportScript) updatePrice(ctx context.Context, row PricingRow) e
 	// Use SQL to insert new price
 	query := `
 		INSERT INTO prices (
-			id, entity_id, entity_type, meter_id, amount, display_amount, currency, type, 
+			id, plan_id, meter_id, amount, display_amount, currency, type, 
 			billing_model, billing_cadence, billing_period, billing_period_count, invoice_cadence,
-			price_unit_type, display_name,
 			tenant_id, environment_id, status, created_at, updated_at, created_by, updated_by
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
 		)
 	`
-	_, err := s.sqlDB.ExecContext(ctx, query,
-		priceObj.ID, priceObj.EntityID, string(priceObj.EntityType), priceObj.MeterID,
-		priceObj.Amount, priceObj.DisplayAmount, priceObj.Currency, string(priceObj.Type),
-		string(priceObj.BillingModel), string(priceObj.BillingCadence), string(priceObj.BillingPeriod), priceObj.BillingPeriodCount, string(priceObj.InvoiceCadence),
-		string(types.PRICE_UNIT_TYPE_FIAT), priceObj.DisplayName,
-		s.tenantID, s.environmentID, string(priceObj.Status),
+	_, err := s.entClient.ExecContext(ctx, query,
+		priceObj.ID, priceObj.EntityID, priceObj.MeterID,
+		priceObj.Amount, priceObj.DisplayAmount, priceObj.Currency, priceObj.Type,
+		priceObj.BillingModel, priceObj.BillingCadence, priceObj.BillingPeriod, priceObj.BillingPeriodCount, priceObj.InvoiceCadence,
+		s.tenantID, s.environmentID, priceObj.Status,
 		priceObj.CreatedAt, priceObj.UpdatedAt, priceObj.CreatedBy, priceObj.UpdatedBy,
 	)
 
