@@ -414,7 +414,7 @@ func (h *WalletHandler) ManualBalanceDebit(c *gin.Context) {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param id path string true "Wallet ID"
-// @Param filter query types.WalletTransactionFilter false "Filter"
+// @Param filter body types.WalletTransactionFilter false "Filter"
 // @Success 200 {object} dto.ListWalletTransactionsResponse
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
