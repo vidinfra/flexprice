@@ -372,6 +372,7 @@ func (r *walletRepository) CreateTransaction(ctx context.Context, tx *walletdoma
 		SetID(tx.ID).
 		SetTenantID(tx.TenantID).
 		SetWalletID(tx.WalletID).
+		SetNillableCustomerID(&tx.CustomerID).
 		SetType(string(tx.Type)).
 		SetAmount(tx.Amount).
 		SetCreditAmount(tx.CreditAmount).

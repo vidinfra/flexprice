@@ -174,6 +174,7 @@ type WalletTransactionFilter struct {
 	CreditsAvailableGT *decimal.Decimal   `json:"credits_available_gt,omitempty" form:"credits_available_gt"`
 	TransactionReason  *TransactionReason `json:"transaction_reason,omitempty" form:"transaction_reason"`
 	Priority           *int               `json:"priority,omitempty" form:"priority"`
+	CreatedBy          *string            `json:"created_by,omitempty" form:"created_by"`
 }
 
 func NewWalletTransactionFilter() *WalletTransactionFilter {

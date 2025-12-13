@@ -414,6 +414,7 @@ func (h *WalletHandler) ManualBalanceDebit(c *gin.Context) {
 // @Produce json
 // @Security ApiKeyAuth
 // @Param filter body types.WalletTransactionFilter false "Filter"
+// @Param expand query string false "Expand fields (e.g., customer,created_by_user)"
 // @Success 200 {object} dto.ListWalletTransactionsResponse
 // @Failure 400 {object} ierr.ErrorResponse
 // @Failure 500 {object} ierr.ErrorResponse
@@ -425,6 +426,14 @@ func (h *WalletHandler) ListWalletTransactionsByFilter(c *gin.Context) {
 			WithHint("Invalid filter parameters").
 			Mark(ierr.ErrValidation))
 		return
+	}
+
+	// Support expand as query parameter
+	if expandParam := c.Query("expand"); expandParam != "" {
+		if filter.QueryFilter == nil {
+			filter.QueryFilter = types.NewDefaultQueryFilter()
+		}
+		filter.QueryFilter.Expand = &expandParam
 	}
 
 	if filter.GetLimit() == 0 {
