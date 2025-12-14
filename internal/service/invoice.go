@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	cm "github.com/chartmogul/chartmogul-go/v4"
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	"github.com/flexprice/flexprice/internal/domain/invoice"
@@ -278,6 +279,66 @@ func (s *invoiceService) CreateInvoice(ctx context.Context, req dto.CreateInvoic
 	}
 
 	s.publishInternalWebhookEvent(ctx, eventName, resp.ID)
+
+	if resp.InvoiceStatus == types.InvoiceStatusFinalized && resp.InvoiceType == types.InvoiceTypeSubscription && s.ChartMogul != nil {
+		dataSourceUUID := s.Config.ChartMogul.SourceID
+		if dataSourceUUID != "" {
+			customer, err := s.CustomerRepo.Get(ctx, resp.CustomerID)
+			if err == nil && customer.Metadata != nil {
+				if customerUUID, exists := customer.Metadata["chartmogul_customer_uuid"]; exists {
+					cmInvoice := &cm.Invoice{
+						ExternalID:         resp.ID,
+						Date:               resp.CreatedAt.Format("2006-01-02"),
+						Currency:           resp.Currency,
+						DataSourceUUID:     dataSourceUUID,
+						CustomerExternalID: resp.CustomerID,
+					}
+
+					if resp.DueDate != nil {
+						cmInvoice.DueDate = resp.DueDate.Format("2006-01-02")
+					}
+
+					cmLineItems := make([]*cm.LineItem, 0, len(resp.LineItems))
+					for _, item := range resp.LineItems {
+						amountInCents := int(item.Amount.Mul(decimal.NewFromInt(100)).IntPart())
+						cmLineItem := &cm.LineItem{
+							Type:                   "subscription",
+							AmountInCents:          amountInCents,
+							Quantity:               int(item.Quantity.IntPart()),
+							Description:            lo.FromPtr(item.DisplayName),
+							ExternalID:             item.ID,
+							SubscriptionExternalID: resp.ID, // Link to subscription
+						}
+						cmLineItems = append(cmLineItems, cmLineItem)
+					}
+					cmInvoice.LineItems = cmLineItems
+
+					createdInvoices, cmErr := s.ChartMogul.CreateInvoices([]*cm.Invoice{cmInvoice}, customerUUID)
+					if cmErr != nil {
+						s.Logger.Errorw("Failed to create invoice in ChartMogul", "error", cmErr, "invoice_id", resp.ID)
+					} else if createdInvoices != nil && len(createdInvoices.Invoices) > 0 {
+						createdInvoice := createdInvoices.Invoices[0]
+						inv, err := s.InvoiceRepo.Get(ctx, resp.ID)
+						if err == nil {
+							if inv.Metadata == nil {
+								inv.Metadata = make(types.Metadata)
+							}
+							inv.Metadata["chartmogul_invoice_uuid"] = createdInvoice.UUID
+
+							if err := s.InvoiceRepo.Update(ctx, inv); err != nil {
+								s.Logger.Errorw("Failed to store ChartMogul UUID in invoice metadata", "error", err, "invoice_id", resp.ID, "chartmogul_uuid", createdInvoice.UUID)
+							} else {
+								s.Logger.Infow("Stored ChartMogul UUID in invoice metadata", "invoice_id", resp.ID, "chartmogul_uuid", createdInvoice.UUID)
+							}
+						}
+					}
+				} else {
+					s.Logger.Warnw("ChartMogul customer UUID not found in metadata, skipping invoice sync", "customer_id", resp.CustomerID)
+				}
+			}
+		}
+	}
+
 	return resp, nil
 }
 
@@ -895,6 +956,33 @@ func (s *invoiceService) UpdatePaymentStatus(ctx context.Context, id string, sta
 
 	if err := s.InvoiceRepo.Update(ctx, inv); err != nil {
 		return err
+	}
+
+	// ChartMogul sync for transaction creation when payment succeeds
+	if status == types.PaymentStatusSucceeded && s.ChartMogul != nil {
+		// Get ChartMogul invoice UUID from metadata
+		invoiceUUID := ""
+		if inv.Metadata != nil {
+			if uuid, exists := inv.Metadata["chartmogul_invoice_uuid"]; exists {
+				invoiceUUID = uuid
+			}
+		}
+
+		if invoiceUUID != "" {
+			cmTransaction := &cm.Transaction{
+				Type:   "payment",
+				Date:   now.Format("2006-01-02"),
+				Result: "successful",
+			}
+			_, cmErr := s.ChartMogul.CreateTransaction(cmTransaction, invoiceUUID)
+			if cmErr != nil {
+				s.Logger.Errorw("Failed to create transaction in ChartMogul", "error", cmErr, "invoice_id", inv.ID, "chartmogul_invoice_uuid", invoiceUUID)
+			} else {
+				s.Logger.Infow("Created transaction in ChartMogul", "invoice_id", inv.ID, "chartmogul_invoice_uuid", invoiceUUID)
+			}
+		} else {
+			s.Logger.Warnw("ChartMogul invoice UUID not found in metadata, skipping transaction sync", "invoice_id", inv.ID)
+		}
 	}
 
 	// Publish webhook events

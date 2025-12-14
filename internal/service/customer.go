@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	cm "github.com/chartmogul/chartmogul-go/v4"
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/customer"
 	ierr "github.com/flexprice/flexprice/internal/errors"
@@ -150,6 +151,40 @@ func (s *customerService) CreateCustomer(ctx context.Context, req dto.CreateCust
 
 	// Publish webhook event for customer creation
 	s.publishWebhookEvent(ctx, types.WebhookEventCustomerCreated, cust.ID)
+
+	// ChartMogul sync for customer creation
+	if s.ChartMogul != nil {
+		dataSourceUUID := s.Config.ChartMogul.SourceID
+		if dataSourceUUID != "" {
+			cmCustomer := &cm.NewCustomer{
+				DataSourceUUID: dataSourceUUID,
+				ExternalID:     cust.ID,
+				Name:           cust.Name,
+				Email:          cust.Email,
+				Country:        cust.AddressCountry,
+				State:          cust.AddressState,
+				City:           cust.AddressCity,
+				Company:        cust.Name,
+			}
+			createdCustomer, cmErr := s.ChartMogul.CreateCustomer(cmCustomer)
+			if cmErr != nil {
+				s.Logger.Errorw("Failed to sync customer to ChartMogul", "error", cmErr, "customer_id", cust.ID)
+			} else if createdCustomer != nil {
+				// Store ChartMogul UUID in customer metadata
+				if cust.Metadata == nil {
+					cust.Metadata = make(map[string]string)
+				}
+				cust.Metadata["chartmogul_customer_uuid"] = createdCustomer.UUID
+
+				// Update customer in database with ChartMogul UUID
+				if err := s.CustomerRepo.Update(ctx, cust); err != nil {
+					s.Logger.Errorw("Failed to store ChartMogul UUID in customer metadata", "error", err, "customer_id", cust.ID, "chartmogul_uuid", createdCustomer.UUID)
+				} else {
+					s.Logger.Infow("Stored ChartMogul UUID in customer metadata", "customer_id", cust.ID, "chartmogul_uuid", createdCustomer.UUID)
+				}
+			}
+		}
+	}
 
 	return &dto.CustomerResponse{Customer: cust}, nil
 }
@@ -365,6 +400,36 @@ func (s *customerService) UpdateCustomer(ctx context.Context, id string, req dto
 
 	s.publishWebhookEvent(ctx, types.WebhookEventCustomerUpdated, cust.ID)
 
+	// ChartMogul sync for customer update
+	if s.ChartMogul != nil {
+		// Get ChartMogul customer UUID from metadata
+		customerUUID := ""
+		if cust.Metadata != nil {
+			if uuid, exists := cust.Metadata["chartmogul_customer_uuid"]; exists {
+				customerUUID = uuid
+			}
+		}
+
+		if customerUUID != "" {
+			cmCustomer := &cm.Customer{
+				Name:    cust.Name,
+				Email:   cust.Email,
+				Country: cust.AddressCountry,
+				State:   cust.AddressState,
+				City:    cust.AddressCity,
+				Company: cust.Name,
+			}
+			_, cmErr := s.ChartMogul.UpdateCustomer(cmCustomer, customerUUID)
+			if cmErr != nil {
+				s.Logger.Errorw("Failed to update customer in ChartMogul", "error", cmErr, "customer_id", cust.ID, "chartmogul_uuid", customerUUID)
+			} else {
+				s.Logger.Infow("Updated customer in ChartMogul", "customer_id", cust.ID, "chartmogul_uuid", customerUUID)
+			}
+		} else {
+			s.Logger.Warnw("ChartMogul customer UUID not found in metadata, skipping sync", "customer_id", cust.ID)
+		}
+	}
+
 	return &dto.CustomerResponse{Customer: cust}, nil
 }
 
@@ -417,6 +482,29 @@ func (s *customerService) DeleteCustomer(ctx context.Context, id string) error {
 	}
 
 	s.publishWebhookEvent(ctx, types.WebhookEventCustomerDeleted, id)
+
+	// ChartMogul sync for customer deletion
+	if s.ChartMogul != nil {
+		// Get ChartMogul customer UUID from metadata
+		customerUUID := ""
+		if customer.Metadata != nil {
+			if uuid, exists := customer.Metadata["chartmogul_customer_uuid"]; exists {
+				customerUUID = uuid
+			}
+		}
+
+		if customerUUID != "" {
+			cmErr := s.ChartMogul.DeleteCustomer(customerUUID)
+			if cmErr != nil {
+				s.Logger.Errorw("Failed to delete customer in ChartMogul", "error", cmErr, "customer_id", id, "chartmogul_uuid", customerUUID)
+			} else {
+				s.Logger.Infow("Deleted customer in ChartMogul", "customer_id", id, "chartmogul_uuid", customerUUID)
+			}
+		} else {
+			s.Logger.Warnw("ChartMogul customer UUID not found in metadata, skipping sync", "customer_id", id)
+		}
+	}
+
 	return nil
 }
 

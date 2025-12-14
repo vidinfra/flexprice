@@ -144,3 +144,12 @@ func (s *ChartMogulService) SetTransactionDisabledState(transactionUUID string, 
 func (s *ChartMogulService) DeleteTransaction(transactionUUID string) error {
 	return fmt.Errorf("DeleteTransaction not implemented: use custom HTTP DELETE if SDK does not support")
 }
+
+func (s *ChartMogulService) CreateInvoices(invoices []*cm.Invoice, customerUUID string) (*cm.Invoices, error) {
+	createdInvoices, err := s.client.CreateInvoices(invoices, customerUUID)
+	if err != nil {
+		s.logger.Errorw("ChartMogul CreateInvoices failed", "error", err, "customerUUID", customerUUID)
+		return nil, err
+	}
+	return createdInvoices, nil
+}
