@@ -47,6 +47,8 @@ const (
 	FieldAddressPostalCode = "address_postal_code"
 	// FieldAddressCountry holds the string denoting the address_country field in the database.
 	FieldAddressCountry = "address_country"
+	// FieldChartmogulUUID holds the string denoting the chartmogul_uuid field in the database.
+	FieldChartmogulUUID = "chartmogul_uuid"
 	// Table holds the table name of the customer in the database.
 	Table = "customers"
 )
@@ -71,6 +73,7 @@ var Columns = []string{
 	FieldAddressState,
 	FieldAddressPostalCode,
 	FieldAddressCountry,
+	FieldChartmogulUUID,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -188,4 +191,9 @@ func ByAddressPostalCode(opts ...sql.OrderTermOption) OrderOption {
 // ByAddressCountry orders the results by the address_country field.
 func ByAddressCountry(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAddressCountry, opts...).ToFunc()
+}
+
+// ByChartmogulUUID orders the results by the chartmogul_uuid field.
+func ByChartmogulUUID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldChartmogulUUID, opts...).ToFunc()
 }

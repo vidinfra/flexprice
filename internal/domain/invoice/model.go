@@ -117,6 +117,9 @@ type Invoice struct {
 	// total_tax is the sum of all taxes combined at the invoice level.
 	TotalTax decimal.Decimal `json:"total_tax"`
 
+	// ChartMogulUUID is the ChartMogul invoice UUID for analytics sync
+	ChartMogulUUID *string `json:"chartmogul_uuid,omitempty"`
+
 	// common fields including tenant information, creation/update timestamps, and status
 	types.BaseModel
 }
@@ -140,6 +143,13 @@ func FromEnt(e *ent.Invoice) *Invoice {
 	if e.Edges.CouponApplications != nil {
 		couponApplications = coupon_application.FromEntList(e.Edges.CouponApplications)
 	}
+
+	// Convert ChartMogul UUID from string to *string
+	var chartMogulUUID *string
+	if e.ChartmogulUUID != "" {
+		chartMogulUUID = &e.ChartmogulUUID
+	}
+
 	return &Invoice{
 		ID:                 e.ID,
 		CustomerID:         e.CustomerID,
@@ -160,6 +170,7 @@ func FromEnt(e *ent.Invoice) *Invoice {
 		InvoiceNumber:      e.InvoiceNumber,
 		IdempotencyKey:     e.IdempotencyKey,
 		BillingSequence:    e.BillingSequence,
+		ChartMogulUUID:     chartMogulUUID,
 		Description:        e.Description,
 		DueDate:            e.DueDate,
 		PaidAt:             e.PaidAt,

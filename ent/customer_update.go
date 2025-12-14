@@ -248,6 +248,26 @@ func (cu *CustomerUpdate) ClearAddressCountry() *CustomerUpdate {
 	return cu
 }
 
+// SetChartmogulUUID sets the "chartmogul_uuid" field.
+func (cu *CustomerUpdate) SetChartmogulUUID(s string) *CustomerUpdate {
+	cu.mutation.SetChartmogulUUID(s)
+	return cu
+}
+
+// SetNillableChartmogulUUID sets the "chartmogul_uuid" field if the given value is not nil.
+func (cu *CustomerUpdate) SetNillableChartmogulUUID(s *string) *CustomerUpdate {
+	if s != nil {
+		cu.SetChartmogulUUID(*s)
+	}
+	return cu
+}
+
+// ClearChartmogulUUID clears the value of the "chartmogul_uuid" field.
+func (cu *CustomerUpdate) ClearChartmogulUUID() *CustomerUpdate {
+	cu.mutation.ClearChartmogulUUID()
+	return cu
+}
+
 // Mutation returns the CustomerMutation object of the builder.
 func (cu *CustomerUpdate) Mutation() *CustomerMutation {
 	return cu.mutation
@@ -387,6 +407,12 @@ func (cu *CustomerUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if cu.mutation.AddressCountryCleared() {
 		_spec.ClearField(customer.FieldAddressCountry, field.TypeString)
+	}
+	if value, ok := cu.mutation.ChartmogulUUID(); ok {
+		_spec.SetField(customer.FieldChartmogulUUID, field.TypeString, value)
+	}
+	if cu.mutation.ChartmogulUUIDCleared() {
+		_spec.ClearField(customer.FieldChartmogulUUID, field.TypeString)
 	}
 	if n, err = sqlgraph.UpdateNodes(ctx, cu.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -628,6 +654,26 @@ func (cuo *CustomerUpdateOne) ClearAddressCountry() *CustomerUpdateOne {
 	return cuo
 }
 
+// SetChartmogulUUID sets the "chartmogul_uuid" field.
+func (cuo *CustomerUpdateOne) SetChartmogulUUID(s string) *CustomerUpdateOne {
+	cuo.mutation.SetChartmogulUUID(s)
+	return cuo
+}
+
+// SetNillableChartmogulUUID sets the "chartmogul_uuid" field if the given value is not nil.
+func (cuo *CustomerUpdateOne) SetNillableChartmogulUUID(s *string) *CustomerUpdateOne {
+	if s != nil {
+		cuo.SetChartmogulUUID(*s)
+	}
+	return cuo
+}
+
+// ClearChartmogulUUID clears the value of the "chartmogul_uuid" field.
+func (cuo *CustomerUpdateOne) ClearChartmogulUUID() *CustomerUpdateOne {
+	cuo.mutation.ClearChartmogulUUID()
+	return cuo
+}
+
 // Mutation returns the CustomerMutation object of the builder.
 func (cuo *CustomerUpdateOne) Mutation() *CustomerMutation {
 	return cuo.mutation
@@ -797,6 +843,12 @@ func (cuo *CustomerUpdateOne) sqlSave(ctx context.Context) (_node *Customer, err
 	}
 	if cuo.mutation.AddressCountryCleared() {
 		_spec.ClearField(customer.FieldAddressCountry, field.TypeString)
+	}
+	if value, ok := cuo.mutation.ChartmogulUUID(); ok {
+		_spec.SetField(customer.FieldChartmogulUUID, field.TypeString, value)
+	}
+	if cuo.mutation.ChartmogulUUIDCleared() {
+		_spec.ClearField(customer.FieldChartmogulUUID, field.TypeString)
 	}
 	_node = &Customer{config: cuo.config}
 	_spec.Assign = _node.assignValues

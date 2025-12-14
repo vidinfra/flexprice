@@ -226,6 +226,20 @@ func (cc *CustomerCreate) SetNillableAddressCountry(s *string) *CustomerCreate {
 	return cc
 }
 
+// SetChartmogulUUID sets the "chartmogul_uuid" field.
+func (cc *CustomerCreate) SetChartmogulUUID(s string) *CustomerCreate {
+	cc.mutation.SetChartmogulUUID(s)
+	return cc
+}
+
+// SetNillableChartmogulUUID sets the "chartmogul_uuid" field if the given value is not nil.
+func (cc *CustomerCreate) SetNillableChartmogulUUID(s *string) *CustomerCreate {
+	if s != nil {
+		cc.SetChartmogulUUID(*s)
+	}
+	return cc
+}
+
 // SetID sets the "id" field.
 func (cc *CustomerCreate) SetID(s string) *CustomerCreate {
 	cc.mutation.SetID(s)
@@ -422,6 +436,10 @@ func (cc *CustomerCreate) createSpec() (*Customer, *sqlgraph.CreateSpec) {
 	if value, ok := cc.mutation.AddressCountry(); ok {
 		_spec.SetField(customer.FieldAddressCountry, field.TypeString, value)
 		_node.AddressCountry = value
+	}
+	if value, ok := cc.mutation.ChartmogulUUID(); ok {
+		_spec.SetField(customer.FieldChartmogulUUID, field.TypeString, value)
+		_node.ChartmogulUUID = value
 	}
 	return _node, _spec
 }

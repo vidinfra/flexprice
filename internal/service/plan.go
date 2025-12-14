@@ -175,17 +175,14 @@ func (s *planService) CreatePlan(ctx context.Context, req dto.CreatePlanRequest)
 			if cmErr != nil {
 				s.Logger.Errorw("Failed to sync plan to ChartMogul", "error", cmErr, "plan_id", plan.ID)
 			} else if createdPlan != nil {
-				// Store ChartMogul UUID in plan metadata
-				if plan.Metadata == nil {
-					plan.Metadata = make(map[string]string)
-				}
-				plan.Metadata["chartmogul_plan_uuid"] = createdPlan.UUID
+				// Store ChartMogul UUID in the dedicated column
+				plan.ChartMogulUUID = &createdPlan.UUID
 
 				// Update plan in database with ChartMogul UUID
 				if err := s.PlanRepo.Update(ctx, plan); err != nil {
-					s.Logger.Errorw("Failed to store ChartMogul UUID in plan metadata", "error", err, "plan_id", plan.ID, "chartmogul_uuid", createdPlan.UUID)
+					s.Logger.Errorw("Failed to store ChartMogul UUID in plan", "error", err, "plan_id", plan.ID, "chartmogul_uuid", createdPlan.UUID)
 				} else {
-					s.Logger.Infow("Stored ChartMogul UUID in plan metadata", "plan_id", plan.ID, "chartmogul_uuid", createdPlan.UUID)
+					s.Logger.Infow("Stored ChartMogul UUID in plan", "plan_id", plan.ID, "chartmogul_uuid", createdPlan.UUID)
 				}
 			}
 		}
@@ -638,26 +635,19 @@ func (s *planService) UpdatePlan(ctx context.Context, id string, req dto.UpdateP
 	// ChartMogul sync for plan update
 	dataSourceUUID := s.Config.ChartMogul.SourceID
 	if s.ChartMogul != nil && dataSourceUUID != "" {
-		// Get ChartMogul plan UUID from metadata
-		planUUID := ""
-		if plan.Metadata != nil {
-			if uuid, exists := plan.Metadata["chartmogul_plan_uuid"]; exists {
-				planUUID = uuid
-			}
-		}
-
-		if planUUID != "" {
+		// Get ChartMogul plan UUID from the dedicated column
+		if plan.ChartMogulUUID != nil && *plan.ChartMogulUUID != "" {
 			cmPlan := &cm.Plan{
 				Name: plan.Name,
 			}
-			_, cmErr := s.ChartMogul.UpdatePlan(cmPlan, planUUID)
+			_, cmErr := s.ChartMogul.UpdatePlan(cmPlan, *plan.ChartMogulUUID)
 			if cmErr != nil {
-				s.Logger.Errorw("Failed to update plan in ChartMogul", "error", cmErr, "plan_id", plan.ID, "chartmogul_uuid", planUUID)
+				s.Logger.Errorw("Failed to update plan in ChartMogul", "error", cmErr, "plan_id", plan.ID, "chartmogul_uuid", *plan.ChartMogulUUID)
 			} else {
-				s.Logger.Infow("Updated plan in ChartMogul", "plan_id", plan.ID, "chartmogul_uuid", planUUID)
+				s.Logger.Infow("Updated plan in ChartMogul", "plan_id", plan.ID, "chartmogul_uuid", *plan.ChartMogulUUID)
 			}
 		} else {
-			s.Logger.Warnw("ChartMogul plan UUID not found in metadata, skipping sync", "plan_id", plan.ID)
+			s.Logger.Warnw("ChartMogul plan UUID not found, skipping sync", "plan_id", plan.ID)
 		}
 	}
 
@@ -706,23 +696,16 @@ func (s *planService) DeletePlan(ctx context.Context, id string) error {
 
 	// ChartMogul sync for plan deletion
 	if s.ChartMogul != nil {
-		// Get ChartMogul plan UUID from metadata
-		planUUID := ""
-		if plan.Metadata != nil {
-			if uuid, exists := plan.Metadata["chartmogul_plan_uuid"]; exists {
-				planUUID = uuid
-			}
-		}
-
-		if planUUID != "" {
-			cmErr := s.ChartMogul.DeletePlan(planUUID)
+		// Get ChartMogul plan UUID from the dedicated column
+		if plan.ChartMogulUUID != nil && *plan.ChartMogulUUID != "" {
+			cmErr := s.ChartMogul.DeletePlan(*plan.ChartMogulUUID)
 			if cmErr != nil {
-				s.Logger.Errorw("Failed to delete plan in ChartMogul", "error", cmErr, "plan_id", plan.ID, "chartmogul_uuid", planUUID)
+				s.Logger.Errorw("Failed to delete plan in ChartMogul", "error", cmErr, "plan_id", plan.ID, "chartmogul_uuid", *plan.ChartMogulUUID)
 			} else {
-				s.Logger.Infow("Deleted plan in ChartMogul", "plan_id", plan.ID, "chartmogul_uuid", planUUID)
+				s.Logger.Infow("Deleted plan in ChartMogul", "plan_id", plan.ID, "chartmogul_uuid", *plan.ChartMogulUUID)
 			}
 		} else {
-			s.Logger.Warnw("ChartMogul plan UUID not found in metadata, skipping sync", "plan_id", plan.ID)
+			s.Logger.Warnw("ChartMogul plan UUID not found, skipping sync", "plan_id", plan.ID)
 		}
 	}
 

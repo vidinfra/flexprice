@@ -236,6 +236,11 @@ func ProrationBehavior(v string) predicate.Subscription {
 	return predicate.Subscription(sql.FieldEQ(FieldProrationBehavior, v))
 }
 
+// ChartmogulInvoiceUUID applies equality check predicate on the "chartmogul_invoice_uuid" field. It's identical to ChartmogulInvoiceUUIDEQ.
+func ChartmogulInvoiceUUID(v string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldEQ(FieldChartmogulInvoiceUUID, v))
+}
+
 // TenantIDEQ applies the EQ predicate on the "tenant_id" field.
 func TenantIDEQ(v string) predicate.Subscription {
 	return predicate.Subscription(sql.FieldEQ(FieldTenantID, v))
@@ -2194,6 +2199,81 @@ func ProrationBehaviorEqualFold(v string) predicate.Subscription {
 // ProrationBehaviorContainsFold applies the ContainsFold predicate on the "proration_behavior" field.
 func ProrationBehaviorContainsFold(v string) predicate.Subscription {
 	return predicate.Subscription(sql.FieldContainsFold(FieldProrationBehavior, v))
+}
+
+// ChartmogulInvoiceUUIDEQ applies the EQ predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDEQ(v string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldEQ(FieldChartmogulInvoiceUUID, v))
+}
+
+// ChartmogulInvoiceUUIDNEQ applies the NEQ predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDNEQ(v string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldNEQ(FieldChartmogulInvoiceUUID, v))
+}
+
+// ChartmogulInvoiceUUIDIn applies the In predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDIn(vs ...string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldIn(FieldChartmogulInvoiceUUID, vs...))
+}
+
+// ChartmogulInvoiceUUIDNotIn applies the NotIn predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDNotIn(vs ...string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldNotIn(FieldChartmogulInvoiceUUID, vs...))
+}
+
+// ChartmogulInvoiceUUIDGT applies the GT predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDGT(v string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldGT(FieldChartmogulInvoiceUUID, v))
+}
+
+// ChartmogulInvoiceUUIDGTE applies the GTE predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDGTE(v string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldGTE(FieldChartmogulInvoiceUUID, v))
+}
+
+// ChartmogulInvoiceUUIDLT applies the LT predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDLT(v string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldLT(FieldChartmogulInvoiceUUID, v))
+}
+
+// ChartmogulInvoiceUUIDLTE applies the LTE predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDLTE(v string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldLTE(FieldChartmogulInvoiceUUID, v))
+}
+
+// ChartmogulInvoiceUUIDContains applies the Contains predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDContains(v string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldContains(FieldChartmogulInvoiceUUID, v))
+}
+
+// ChartmogulInvoiceUUIDHasPrefix applies the HasPrefix predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDHasPrefix(v string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldHasPrefix(FieldChartmogulInvoiceUUID, v))
+}
+
+// ChartmogulInvoiceUUIDHasSuffix applies the HasSuffix predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDHasSuffix(v string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldHasSuffix(FieldChartmogulInvoiceUUID, v))
+}
+
+// ChartmogulInvoiceUUIDIsNil applies the IsNil predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDIsNil() predicate.Subscription {
+	return predicate.Subscription(sql.FieldIsNull(FieldChartmogulInvoiceUUID))
+}
+
+// ChartmogulInvoiceUUIDNotNil applies the NotNil predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDNotNil() predicate.Subscription {
+	return predicate.Subscription(sql.FieldNotNull(FieldChartmogulInvoiceUUID))
+}
+
+// ChartmogulInvoiceUUIDEqualFold applies the EqualFold predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDEqualFold(v string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldEqualFold(FieldChartmogulInvoiceUUID, v))
+}
+
+// ChartmogulInvoiceUUIDContainsFold applies the ContainsFold predicate on the "chartmogul_invoice_uuid" field.
+func ChartmogulInvoiceUUIDContainsFold(v string) predicate.Subscription {
+	return predicate.Subscription(sql.FieldContainsFold(FieldChartmogulInvoiceUUID, v))
 }
 
 // HasLineItems applies the HasEdge predicate on the "line_items" edge.

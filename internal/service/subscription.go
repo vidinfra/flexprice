@@ -408,79 +408,91 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		if dataSourceUUID != "" {
 			// Get customer to retrieve ChartMogul customer UUID
 			customer, err := s.CustomerRepo.Get(ctx, sub.CustomerID)
-			if err == nil && customer.Metadata != nil {
-				if customerUUID, exists := customer.Metadata["chartmogul_customer_uuid"]; exists {
-					// Get plan to retrieve ChartMogul plan UUID
-					plan, planErr := s.PlanRepo.Get(ctx, sub.PlanID)
-					var planUUID string
-					if planErr == nil && plan.Metadata != nil {
+			var customerUUID string
+			if err == nil {
+				// Try new column first, fall back to metadata for backward compatibility
+				if customer.ChartMogulUUID != nil && *customer.ChartMogulUUID != "" {
+					customerUUID = *customer.ChartMogulUUID
+				} else if customer.Metadata != nil {
+					if uuid, exists := customer.Metadata["chartmogul_customer_uuid"]; exists {
+						customerUUID = uuid
+					}
+				}
+			}
+
+			if customerUUID != "" {
+				// Get plan to retrieve ChartMogul plan UUID
+				plan, planErr := s.PlanRepo.Get(ctx, sub.PlanID)
+				var planUUID string
+				if planErr == nil {
+					// Try new column first, fall back to metadata for backward compatibility
+					if plan.ChartMogulUUID != nil && *plan.ChartMogulUUID != "" {
+						planUUID = *plan.ChartMogulUUID
+					} else if plan.Metadata != nil {
 						if uuid, exists := plan.Metadata["chartmogul_plan_uuid"]; exists {
 							planUUID = uuid
 						}
 					}
-
-					// Calculate service period end (one billing period after start)
-					servicePeriodEnd := sub.CurrentPeriodEnd
-					if servicePeriodEnd.IsZero() {
-						// Fallback: calculate one month after start if CurrentPeriodEnd is not set
-						servicePeriodEnd = sub.StartDate.AddDate(0, 1, 0)
-					}
-
-					// Calculate amount in cents from the invoice (if available) or use a placeholder
-					amountInCents := 0
-					if invoice != nil && invoice.AmountDue.GreaterThan(decimal.Zero) {
-						amountInCents = int(invoice.AmountDue.Mul(decimal.NewFromInt(100)).IntPart())
-					}
-
-					// Build ChartMogul invoice to create subscription
-					cmInvoice := &cm.Invoice{
-						ExternalID:         fmt.Sprintf("inv_%s", sub.ID), // Unique invoice ID
-						Date:               sub.StartDate.Format("2006-01-02 15:04:05"),
-						Currency:           strings.ToUpper(sub.Currency),
-						CustomerExternalID: sub.CustomerID,
-						DataSourceUUID:     dataSourceUUID,
-						LineItems: []*cm.LineItem{
-							{
-								Type:                   "subscription",
-								SubscriptionExternalID: sub.ID,   // This creates the subscription in ChartMogul
-								PlanUUID:               planUUID, // Links to the plan using ChartMogul UUID
-								ServicePeriodStart:     sub.StartDate.Format("2006-01-02 15:04:05"),
-								ServicePeriodEnd:       servicePeriodEnd.Format("2006-01-02 15:04:05"),
-								AmountInCents:          amountInCents,
-								Quantity:               1,
-							},
-						},
-						Transactions: []*cm.Transaction{
-							{
-								Date:   sub.StartDate.Format("2006-01-02 15:04:05"),
-								Type:   "payment",
-								Result: "successful",
-							},
-						},
-					}
-
-					// Create invoice in ChartMogul (which creates the subscription)
-					createdInvoices, cmErr := s.ChartMogul.CreateInvoices([]*cm.Invoice{cmInvoice}, customerUUID)
-					if cmErr != nil {
-						s.Logger.Errorw("Failed to sync subscription to ChartMogul via invoice", "error", cmErr, "subscription_id", sub.ID)
-					} else if createdInvoices != nil && len(createdInvoices.Invoices) > 0 {
-						createdInvoice := createdInvoices.Invoices[0]
-						// Store ChartMogul invoice UUID in subscription metadata
-						if sub.Metadata == nil {
-							sub.Metadata = make(map[string]string)
-						}
-						sub.Metadata["chartmogul_subscription_invoice_uuid"] = createdInvoice.UUID
-
-						// Update subscription in database with ChartMogul invoice UUID
-						if err := s.SubRepo.Update(ctx, sub); err != nil {
-							s.Logger.Errorw("Failed to store ChartMogul invoice UUID in subscription metadata", "error", err, "subscription_id", sub.ID, "chartmogul_invoice_uuid", createdInvoice.UUID)
-						} else {
-							s.Logger.Infow("Created subscription in ChartMogul via invoice import", "subscription_id", sub.ID, "chartmogul_invoice_uuid", createdInvoice.UUID)
-						}
-					}
-				} else {
-					s.Logger.Warnw("ChartMogul customer UUID not found in metadata, skipping subscription sync", "customer_id", sub.CustomerID)
 				}
+
+				// Calculate service period end (one billing period after start)
+				servicePeriodEnd := sub.CurrentPeriodEnd
+				if servicePeriodEnd.IsZero() {
+					// Fallback: calculate one month after start if CurrentPeriodEnd is not set
+					servicePeriodEnd = sub.StartDate.AddDate(0, 1, 0)
+				}
+
+				// Calculate amount in cents from the invoice (if available) or use a placeholder
+				amountInCents := 0
+				if invoice != nil && invoice.AmountDue.GreaterThan(decimal.Zero) {
+					amountInCents = int(invoice.AmountDue.Mul(decimal.NewFromInt(100)).IntPart())
+				}
+
+				// Build ChartMogul invoice to create subscription
+				cmInvoice := &cm.Invoice{
+					ExternalID:         fmt.Sprintf("inv_%s", sub.ID), // Unique invoice ID
+					Date:               sub.StartDate.Format("2006-01-02 15:04:05"),
+					Currency:           strings.ToUpper(sub.Currency),
+					CustomerExternalID: sub.CustomerID,
+					DataSourceUUID:     dataSourceUUID,
+					LineItems: []*cm.LineItem{
+						{
+							Type:                   "subscription",
+							SubscriptionExternalID: sub.ID,   // This creates the subscription in ChartMogul
+							PlanUUID:               planUUID, // Links to the plan using ChartMogul UUID
+							ServicePeriodStart:     sub.StartDate.Format("2006-01-02 15:04:05"),
+							ServicePeriodEnd:       servicePeriodEnd.Format("2006-01-02 15:04:05"),
+							AmountInCents:          amountInCents,
+							Quantity:               1,
+						},
+					},
+					Transactions: []*cm.Transaction{
+						{
+							Date:   sub.StartDate.Format("2006-01-02 15:04:05"),
+							Type:   "payment",
+							Result: "successful",
+						},
+					},
+				}
+
+				// Create invoice in ChartMogul (which creates the subscription)
+				createdInvoices, cmErr := s.ChartMogul.CreateInvoices([]*cm.Invoice{cmInvoice}, customerUUID)
+				if cmErr != nil {
+					s.Logger.Errorw("Failed to sync subscription to ChartMogul via invoice", "error", cmErr, "subscription_id", sub.ID)
+				} else if createdInvoices != nil && len(createdInvoices.Invoices) > 0 {
+					createdInvoice := createdInvoices.Invoices[0]
+					// Store ChartMogul invoice UUID in the dedicated column
+					sub.ChartMogulInvoiceUUID = &createdInvoice.UUID
+
+					// Update subscription in database with ChartMogul invoice UUID
+					if err := s.SubRepo.Update(ctx, sub); err != nil {
+						s.Logger.Errorw("Failed to store ChartMogul invoice UUID in subscription", "error", err, "subscription_id", sub.ID, "chartmogul_invoice_uuid", createdInvoice.UUID)
+					} else {
+						s.Logger.Infow("Created subscription in ChartMogul via invoice import", "subscription_id", sub.ID, "chartmogul_invoice_uuid", createdInvoice.UUID)
+					}
+				}
+			} else {
+				s.Logger.Warnw("ChartMogul customer UUID not found, skipping subscription sync", "customer_id", sub.CustomerID)
 			}
 		}
 	}

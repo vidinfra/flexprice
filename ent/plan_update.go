@@ -156,6 +156,26 @@ func (pu *PlanUpdate) AddDisplayOrder(i int) *PlanUpdate {
 	return pu
 }
 
+// SetChartmogulUUID sets the "chartmogul_uuid" field.
+func (pu *PlanUpdate) SetChartmogulUUID(s string) *PlanUpdate {
+	pu.mutation.SetChartmogulUUID(s)
+	return pu
+}
+
+// SetNillableChartmogulUUID sets the "chartmogul_uuid" field if the given value is not nil.
+func (pu *PlanUpdate) SetNillableChartmogulUUID(s *string) *PlanUpdate {
+	if s != nil {
+		pu.SetChartmogulUUID(*s)
+	}
+	return pu
+}
+
+// ClearChartmogulUUID clears the value of the "chartmogul_uuid" field.
+func (pu *PlanUpdate) ClearChartmogulUUID() *PlanUpdate {
+	pu.mutation.ClearChartmogulUUID()
+	return pu
+}
+
 // AddCreditGrantIDs adds the "credit_grants" edge to the CreditGrant entity by IDs.
 func (pu *PlanUpdate) AddCreditGrantIDs(ids ...string) *PlanUpdate {
 	pu.mutation.AddCreditGrantIDs(ids...)
@@ -299,6 +319,12 @@ func (pu *PlanUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if value, ok := pu.mutation.AddedDisplayOrder(); ok {
 		_spec.AddField(plan.FieldDisplayOrder, field.TypeInt, value)
+	}
+	if value, ok := pu.mutation.ChartmogulUUID(); ok {
+		_spec.SetField(plan.FieldChartmogulUUID, field.TypeString, value)
+	}
+	if pu.mutation.ChartmogulUUIDCleared() {
+		_spec.ClearField(plan.FieldChartmogulUUID, field.TypeString)
 	}
 	if pu.mutation.CreditGrantsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -492,6 +518,26 @@ func (puo *PlanUpdateOne) AddDisplayOrder(i int) *PlanUpdateOne {
 	return puo
 }
 
+// SetChartmogulUUID sets the "chartmogul_uuid" field.
+func (puo *PlanUpdateOne) SetChartmogulUUID(s string) *PlanUpdateOne {
+	puo.mutation.SetChartmogulUUID(s)
+	return puo
+}
+
+// SetNillableChartmogulUUID sets the "chartmogul_uuid" field if the given value is not nil.
+func (puo *PlanUpdateOne) SetNillableChartmogulUUID(s *string) *PlanUpdateOne {
+	if s != nil {
+		puo.SetChartmogulUUID(*s)
+	}
+	return puo
+}
+
+// ClearChartmogulUUID clears the value of the "chartmogul_uuid" field.
+func (puo *PlanUpdateOne) ClearChartmogulUUID() *PlanUpdateOne {
+	puo.mutation.ClearChartmogulUUID()
+	return puo
+}
+
 // AddCreditGrantIDs adds the "credit_grants" edge to the CreditGrant entity by IDs.
 func (puo *PlanUpdateOne) AddCreditGrantIDs(ids ...string) *PlanUpdateOne {
 	puo.mutation.AddCreditGrantIDs(ids...)
@@ -665,6 +711,12 @@ func (puo *PlanUpdateOne) sqlSave(ctx context.Context) (_node *Plan, err error) 
 	}
 	if value, ok := puo.mutation.AddedDisplayOrder(); ok {
 		_spec.AddField(plan.FieldDisplayOrder, field.TypeInt, value)
+	}
+	if value, ok := puo.mutation.ChartmogulUUID(); ok {
+		_spec.SetField(plan.FieldChartmogulUUID, field.TypeString, value)
+	}
+	if puo.mutation.ChartmogulUUIDCleared() {
+		_spec.ClearField(plan.FieldChartmogulUUID, field.TypeString)
 	}
 	if puo.mutation.CreditGrantsCleared() {
 		edge := &sqlgraph.EdgeSpec{

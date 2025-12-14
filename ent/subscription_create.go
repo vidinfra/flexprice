@@ -489,6 +489,20 @@ func (sc *SubscriptionCreate) SetNillableProrationBehavior(s *string) *Subscript
 	return sc
 }
 
+// SetChartmogulInvoiceUUID sets the "chartmogul_invoice_uuid" field.
+func (sc *SubscriptionCreate) SetChartmogulInvoiceUUID(s string) *SubscriptionCreate {
+	sc.mutation.SetChartmogulInvoiceUUID(s)
+	return sc
+}
+
+// SetNillableChartmogulInvoiceUUID sets the "chartmogul_invoice_uuid" field if the given value is not nil.
+func (sc *SubscriptionCreate) SetNillableChartmogulInvoiceUUID(s *string) *SubscriptionCreate {
+	if s != nil {
+		sc.SetChartmogulInvoiceUUID(*s)
+	}
+	return sc
+}
+
 // SetID sets the "id" field.
 func (sc *SubscriptionCreate) SetID(s string) *SubscriptionCreate {
 	sc.mutation.SetID(s)
@@ -1005,6 +1019,10 @@ func (sc *SubscriptionCreate) createSpec() (*Subscription, *sqlgraph.CreateSpec)
 	if value, ok := sc.mutation.ProrationBehavior(); ok {
 		_spec.SetField(subscription.FieldProrationBehavior, field.TypeString, value)
 		_node.ProrationBehavior = value
+	}
+	if value, ok := sc.mutation.ChartmogulInvoiceUUID(); ok {
+		_spec.SetField(subscription.FieldChartmogulInvoiceUUID, field.TypeString, value)
+		_node.ChartmogulInvoiceUUID = value
 	}
 	if nodes := sc.mutation.LineItemsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

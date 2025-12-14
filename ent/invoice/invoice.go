@@ -89,6 +89,8 @@ const (
 	FieldBillingSequence = "billing_sequence"
 	// FieldIdempotencyKey holds the string denoting the idempotency_key field in the database.
 	FieldIdempotencyKey = "idempotency_key"
+	// FieldChartmogulUUID holds the string denoting the chartmogul_uuid field in the database.
+	FieldChartmogulUUID = "chartmogul_uuid"
 	// EdgeLineItems holds the string denoting the line_items edge name in mutations.
 	EdgeLineItems = "line_items"
 	// EdgeCouponApplications holds the string denoting the coupon_applications edge name in mutations.
@@ -151,6 +153,7 @@ var Columns = []string{
 	FieldInvoiceNumber,
 	FieldBillingSequence,
 	FieldIdempotencyKey,
+	FieldChartmogulUUID,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -394,6 +397,11 @@ func ByBillingSequence(opts ...sql.OrderTermOption) OrderOption {
 // ByIdempotencyKey orders the results by the idempotency_key field.
 func ByIdempotencyKey(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIdempotencyKey, opts...).ToFunc()
+}
+
+// ByChartmogulUUID orders the results by the chartmogul_uuid field.
+func ByChartmogulUUID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldChartmogulUUID, opts...).ToFunc()
 }
 
 // ByLineItemsCount orders the results by line_items count.

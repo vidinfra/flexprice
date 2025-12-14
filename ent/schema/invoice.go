@@ -189,6 +189,11 @@ func (Invoice) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("Key for ensuring idempotent invoice creation"),
+		field.String("chartmogul_uuid").
+			SchemaType(map[string]string{
+				"postgres": "varchar(255)",
+			}).
+			Optional(),
 	}
 }
 

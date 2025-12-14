@@ -90,6 +90,8 @@ const (
 	FieldCustomerTimezone = "customer_timezone"
 	// FieldProrationBehavior holds the string denoting the proration_behavior field in the database.
 	FieldProrationBehavior = "proration_behavior"
+	// FieldChartmogulInvoiceUUID holds the string denoting the chartmogul_invoice_uuid field in the database.
+	FieldChartmogulInvoiceUUID = "chartmogul_invoice_uuid"
 	// EdgeLineItems holds the string denoting the line_items edge name in mutations.
 	EdgeLineItems = "line_items"
 	// EdgePauses holds the string denoting the pauses edge name in mutations.
@@ -188,6 +190,7 @@ var Columns = []string{
 	FieldGatewayPaymentMethodID,
 	FieldCustomerTimezone,
 	FieldProrationBehavior,
+	FieldChartmogulInvoiceUUID,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -495,6 +498,11 @@ func ByCustomerTimezone(opts ...sql.OrderTermOption) OrderOption {
 // ByProrationBehavior orders the results by the proration_behavior field.
 func ByProrationBehavior(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProrationBehavior, opts...).ToFunc()
+}
+
+// ByChartmogulInvoiceUUID orders the results by the chartmogul_invoice_uuid field.
+func ByChartmogulInvoiceUUID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldChartmogulInvoiceUUID, opts...).ToFunc()
 }
 
 // ByLineItemsCount orders the results by line_items count.

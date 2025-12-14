@@ -6,13 +6,14 @@ import (
 )
 
 type Plan struct {
-	ID            string         `db:"id" json:"id"`
-	Name          string         `db:"name" json:"name"`
-	LookupKey     string         `db:"lookup_key" json:"lookup_key"`
-	Description   string         `db:"description" json:"description"`
-	EnvironmentID string         `db:"environment_id" json:"environment_id"`
-	Metadata      types.Metadata `db:"metadata" json:"metadata"`
-	DisplayOrder  *int           `db:"display_order" json:"display_order,omitempty"`
+	ID             string         `db:"id" json:"id"`
+	Name           string         `db:"name" json:"name"`
+	LookupKey      string         `db:"lookup_key" json:"lookup_key"`
+	Description    string         `db:"description" json:"description"`
+	EnvironmentID  string         `db:"environment_id" json:"environment_id"`
+	Metadata       types.Metadata `db:"metadata" json:"metadata"`
+	DisplayOrder   *int           `db:"display_order" json:"display_order,omitempty"`
+	ChartMogulUUID *string        `db:"chartmogul_uuid" json:"chartmogul_uuid,omitempty"`
 	types.BaseModel
 }
 
@@ -21,14 +22,22 @@ func FromEnt(e *ent.Plan) *Plan {
 	if e == nil {
 		return nil
 	}
+
+	// Convert ChartMogul UUID from string to *string
+	var chartMogulUUID *string
+	if e.ChartmogulUUID != "" {
+		chartMogulUUID = &e.ChartmogulUUID
+	}
+
 	return &Plan{
-		ID:            e.ID,
-		Name:          e.Name,
-		LookupKey:     e.LookupKey,
-		Description:   e.Description,
-		EnvironmentID: e.EnvironmentID,
-		Metadata:      types.Metadata(e.Metadata),
-		DisplayOrder:  &e.DisplayOrder,
+		ID:             e.ID,
+		Name:           e.Name,
+		LookupKey:      e.LookupKey,
+		Description:    e.Description,
+		ChartMogulUUID: chartMogulUUID,
+		EnvironmentID:  e.EnvironmentID,
+		Metadata:       types.Metadata(e.Metadata),
+		DisplayOrder:   &e.DisplayOrder,
 		BaseModel: types.BaseModel{
 			TenantID:  e.TenantID,
 			Status:    types.Status(e.Status),

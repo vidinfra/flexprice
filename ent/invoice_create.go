@@ -501,6 +501,20 @@ func (ic *InvoiceCreate) SetNillableIdempotencyKey(s *string) *InvoiceCreate {
 	return ic
 }
 
+// SetChartmogulUUID sets the "chartmogul_uuid" field.
+func (ic *InvoiceCreate) SetChartmogulUUID(s string) *InvoiceCreate {
+	ic.mutation.SetChartmogulUUID(s)
+	return ic
+}
+
+// SetNillableChartmogulUUID sets the "chartmogul_uuid" field if the given value is not nil.
+func (ic *InvoiceCreate) SetNillableChartmogulUUID(s *string) *InvoiceCreate {
+	if s != nil {
+		ic.SetChartmogulUUID(*s)
+	}
+	return ic
+}
+
 // SetID sets the "id" field.
 func (ic *InvoiceCreate) SetID(s string) *InvoiceCreate {
 	ic.mutation.SetID(s)
@@ -881,6 +895,10 @@ func (ic *InvoiceCreate) createSpec() (*Invoice, *sqlgraph.CreateSpec) {
 	if value, ok := ic.mutation.IdempotencyKey(); ok {
 		_spec.SetField(invoice.FieldIdempotencyKey, field.TypeString, value)
 		_node.IdempotencyKey = &value
+	}
+	if value, ok := ic.mutation.ChartmogulUUID(); ok {
+		_spec.SetField(invoice.FieldChartmogulUUID, field.TypeString, value)
+		_node.ChartmogulUUID = value
 	}
 	if nodes := ic.mutation.LineItemsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

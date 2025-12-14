@@ -246,6 +246,11 @@ func IdempotencyKey(v string) predicate.Invoice {
 	return predicate.Invoice(sql.FieldEQ(FieldIdempotencyKey, v))
 }
 
+// ChartmogulUUID applies equality check predicate on the "chartmogul_uuid" field. It's identical to ChartmogulUUIDEQ.
+func ChartmogulUUID(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEQ(FieldChartmogulUUID, v))
+}
+
 // TenantIDEQ applies the EQ predicate on the "tenant_id" field.
 func TenantIDEQ(v string) predicate.Invoice {
 	return predicate.Invoice(sql.FieldEQ(FieldTenantID, v))
@@ -2349,6 +2354,81 @@ func IdempotencyKeyEqualFold(v string) predicate.Invoice {
 // IdempotencyKeyContainsFold applies the ContainsFold predicate on the "idempotency_key" field.
 func IdempotencyKeyContainsFold(v string) predicate.Invoice {
 	return predicate.Invoice(sql.FieldContainsFold(FieldIdempotencyKey, v))
+}
+
+// ChartmogulUUIDEQ applies the EQ predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDEQ(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEQ(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDNEQ applies the NEQ predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDNEQ(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNEQ(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDIn applies the In predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDIn(vs ...string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldIn(FieldChartmogulUUID, vs...))
+}
+
+// ChartmogulUUIDNotIn applies the NotIn predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDNotIn(vs ...string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotIn(FieldChartmogulUUID, vs...))
+}
+
+// ChartmogulUUIDGT applies the GT predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDGT(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldGT(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDGTE applies the GTE predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDGTE(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldGTE(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDLT applies the LT predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDLT(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldLT(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDLTE applies the LTE predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDLTE(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldLTE(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDContains applies the Contains predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDContains(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldContains(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDHasPrefix applies the HasPrefix predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDHasPrefix(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldHasPrefix(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDHasSuffix applies the HasSuffix predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDHasSuffix(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldHasSuffix(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDIsNil applies the IsNil predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDIsNil() predicate.Invoice {
+	return predicate.Invoice(sql.FieldIsNull(FieldChartmogulUUID))
+}
+
+// ChartmogulUUIDNotNil applies the NotNil predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDNotNil() predicate.Invoice {
+	return predicate.Invoice(sql.FieldNotNull(FieldChartmogulUUID))
+}
+
+// ChartmogulUUIDEqualFold applies the EqualFold predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDEqualFold(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldEqualFold(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDContainsFold applies the ContainsFold predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDContainsFold(v string) predicate.Invoice {
+	return predicate.Invoice(sql.FieldContainsFold(FieldChartmogulUUID, v))
 }
 
 // HasLineItems applies the HasEdge predicate on the "line_items" edge.
