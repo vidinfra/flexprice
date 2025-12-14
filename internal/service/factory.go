@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/flexprice/flexprice/internal/chartmogul"
 	"github.com/flexprice/flexprice/internal/config"
 	"github.com/flexprice/flexprice/internal/domain/addon"
 	"github.com/flexprice/flexprice/internal/domain/addonassociation"
@@ -105,6 +106,9 @@ type ServiceParams struct {
 
 	// Proration
 	ProrationCalculator proration.Calculator
+
+	// ChartMogul Service
+	ChartMogul *chartmogul.ChartMogulService
 }
 
 // Common service params
@@ -157,6 +161,7 @@ func NewServiceParams(
 	settingsRepo settings.Repository,
 	alertLogsRepo alertlogs.Repository,
 	prorationCalculator proration.Calculator,
+	ChartMogul *chartmogul.ChartMogulService,
 ) ServiceParams {
 	return ServiceParams{
 		Logger:                       logger,
@@ -207,5 +212,6 @@ func NewServiceParams(
 		SettingsRepo:                 settingsRepo,
 		AlertLogsRepo:                alertLogsRepo,
 		ProrationCalculator:          prorationCalculator,
+		ChartMogul:                   ChartMogul,
 	}
 }

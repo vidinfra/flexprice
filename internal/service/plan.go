@@ -153,6 +153,18 @@ func (s *planService) CreatePlan(ctx context.Context, req dto.CreatePlanRequest)
 
 	response := &dto.CreatePlanResponse{Plan: plan}
 
+	// ChartMogul sync (after DB commit, before return)
+	dataSourceUUID := s.ServiceParams.Config.ChartMogul.SourceID
+	name := plan.Name
+	intervalCount := 1      // Default; replace with plan.IntervalCount if available
+	intervalUnit := "month" // Default; replace with plan.IntervalUnit if available
+	externalID := plan.ID   // or plan.ExternalID if you have one
+
+	_, cmErr := s.ChartMogul.CreatePlan(dataSourceUUID, name, intervalCount, intervalUnit, externalID)
+	if cmErr != nil {
+		s.Logger.Errorw("Failed to sync plan to ChartMogul", "error", cmErr, "plan_id", plan.ID)
+	}
+
 	return response, nil
 }
 

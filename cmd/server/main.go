@@ -12,6 +12,7 @@ import (
 	"github.com/flexprice/flexprice/internal/api/cron"
 	v1 "github.com/flexprice/flexprice/internal/api/v1"
 	"github.com/flexprice/flexprice/internal/cache"
+	"github.com/flexprice/flexprice/internal/chartmogul"
 	"github.com/flexprice/flexprice/internal/clickhouse"
 	"github.com/flexprice/flexprice/internal/config"
 	"github.com/flexprice/flexprice/internal/dynamodb"
@@ -122,6 +123,9 @@ func main() {
 
 			// Svix
 			svix.NewClient,
+
+			// ChartMogul Service
+			chartmogul.NewChartMogulService,
 
 			// Repositories
 			repository.NewEventRepository,
