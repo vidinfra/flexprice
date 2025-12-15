@@ -6,28 +6,29 @@ import (
 
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
+	"github.com/flexprice/flexprice/internal/logger"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
-// lineItemCommitmentCalculator handles commitment-based pricing calculations for line items
-type lineItemCommitmentCalculator struct {
-	service      *billingService
+// commitmentCalculator handles commitment-based pricing calculations for line items
+type commitmentCalculator struct {
+	logger       *logger.Logger
 	priceService PriceService
 }
 
-// newLineItemCommitmentCalculator creates a new commitment calculator
-func newLineItemCommitmentCalculator(service *billingService) *lineItemCommitmentCalculator {
-	return &lineItemCommitmentCalculator{
-		service:      service,
-		priceService: NewPriceService(service.ServiceParams),
+// newCommitmentCalculator creates a new commitment calculator
+func newCommitmentCalculator(logger *logger.Logger, priceService PriceService) *commitmentCalculator {
+	return &commitmentCalculator{
+		logger:       logger,
+		priceService: priceService,
 	}
 }
 
 // normalizeCommitmentToAmount converts quantity-based commitment to amount
 // This is the core normalization function that ensures we always compare amounts
-func (c *lineItemCommitmentCalculator) normalizeCommitmentToAmount(
+func (c *commitmentCalculator) normalizeCommitmentToAmount(
 	ctx context.Context,
 	lineItem *subscription.SubscriptionLineItem,
 	priceObj *price.Price,
@@ -43,7 +44,7 @@ func (c *lineItemCommitmentCalculator) normalizeCommitmentToAmount(
 		// This handles all pricing models: flat_fee, tiered, package
 		commitmentAmount := c.priceService.CalculateCost(ctx, priceObj, commitmentQuantity)
 
-		c.service.Logger.Debugw("normalized quantity commitment to amount",
+		c.logger.Debugw("normalized quantity commitment to amount",
 			"line_item_id", lineItem.ID,
 			"commitment_quantity", commitmentQuantity,
 			"commitment_amount", commitmentAmount,
@@ -57,7 +58,7 @@ func (c *lineItemCommitmentCalculator) normalizeCommitmentToAmount(
 
 // applyCommitmentToLineItem applies commitment logic to a single line item's charges
 // Returns the adjusted amount and metadata about the commitment application
-func (c *lineItemCommitmentCalculator) applyCommitmentToLineItem(
+func (c *commitmentCalculator) applyCommitmentToLineItem(
 	ctx context.Context,
 	lineItem *subscription.SubscriptionLineItem,
 	usageCost decimal.Decimal,
@@ -99,7 +100,7 @@ func (c *lineItemCommitmentCalculator) applyCommitmentToLineItem(
 		metadata["overage_amount"] = overage.String()
 		metadata["overage_charge"] = overageCharge.String()
 
-		c.service.Logger.Debugw("usage exceeds commitment, applying overage",
+		c.logger.Debugw("usage exceeds commitment, applying overage",
 			"line_item_id", lineItem.ID,
 			"usage_cost", usageCost,
 			"commitment_amount", commitmentAmount,
@@ -114,7 +115,7 @@ func (c *lineItemCommitmentCalculator) applyCommitmentToLineItem(
 			metadata["commitment_utilized"] = usageCost.String()
 			metadata["true_up_amount"] = commitmentAmount.Sub(usageCost).String()
 
-			c.service.Logger.Debugw("usage below commitment, applying true-up",
+			c.logger.Debugw("usage below commitment, applying true-up",
 				"line_item_id", lineItem.ID,
 				"usage_cost", usageCost,
 				"commitment_amount", commitmentAmount,
@@ -126,7 +127,7 @@ func (c *lineItemCommitmentCalculator) applyCommitmentToLineItem(
 			metadata["commitment_utilized"] = usageCost.String()
 			metadata["no_true_up"] = "true"
 
-			c.service.Logger.Debugw("usage below commitment, no true-up",
+			c.logger.Debugw("usage below commitment, no true-up",
 				"line_item_id", lineItem.ID,
 				"usage_cost", usageCost,
 				"commitment_amount", commitmentAmount,
@@ -139,7 +140,7 @@ func (c *lineItemCommitmentCalculator) applyCommitmentToLineItem(
 
 // applyWindowCommitmentToLineItem applies window-based commitment logic
 // Processes each bucket individually and applies commitment per window
-func (c *lineItemCommitmentCalculator) applyWindowCommitmentToLineItem(
+func (c *commitmentCalculator) applyWindowCommitmentToLineItem(
 	ctx context.Context,
 	lineItem *subscription.SubscriptionLineItem,
 	bucketedValues []decimal.Decimal,
@@ -191,7 +192,7 @@ func (c *lineItemCommitmentCalculator) applyWindowCommitmentToLineItem(
 			totalOverage = totalOverage.Add(overage)
 			windowsWithOverage++
 
-			c.service.Logger.Debugw("window usage exceeds commitment",
+			c.logger.Debugw("window usage exceeds commitment",
 				"line_item_id", lineItem.ID,
 				"window_index", i,
 				"bucket_value", bucketValue,
@@ -208,7 +209,7 @@ func (c *lineItemCommitmentCalculator) applyWindowCommitmentToLineItem(
 				totalTrueUp = totalTrueUp.Add(trueUp)
 				windowsWithTrueUp++
 
-				c.service.Logger.Debugw("window usage below commitment, applying true-up",
+				c.logger.Debugw("window usage below commitment, applying true-up",
 					"line_item_id", lineItem.ID,
 					"window_index", i,
 					"bucket_value", bucketValue,
@@ -220,7 +221,7 @@ func (c *lineItemCommitmentCalculator) applyWindowCommitmentToLineItem(
 				// Charge only actual usage for this window
 				windowCharge = windowCost
 
-				c.service.Logger.Debugw("window usage below commitment, no true-up",
+				c.logger.Debugw("window usage below commitment, no true-up",
 					"line_item_id", lineItem.ID,
 					"window_index", i,
 					"bucket_value", bucketValue,
@@ -244,7 +245,7 @@ func (c *lineItemCommitmentCalculator) applyWindowCommitmentToLineItem(
 		metadata["windows_with_true_up"] = fmt.Sprintf("%d", windowsWithTrueUp)
 	}
 
-	c.service.Logger.Infow("window commitment applied to line item",
+	c.logger.Infow("window commitment applied to line item",
 		"line_item_id", lineItem.ID,
 		"num_windows", len(bucketedValues),
 		"commitment_per_window", commitmentAmountPerWindow,

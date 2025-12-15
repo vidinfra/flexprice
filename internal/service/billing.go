@@ -513,7 +513,7 @@ func (s *billingService) CalculateUsageCharges(
 			// Apply line-item commitment if configured
 			// Line item commitment takes precedence over subscription-level commitment
 			if item.HasCommitment() {
-				commitmentCalc := newLineItemCommitmentCalculator(s)
+				commitmentCalc := newCommitmentCalculator(s.Logger, priceService)
 
 				// Check if this is window-based commitment
 				if item.IsWindowCommitment {
