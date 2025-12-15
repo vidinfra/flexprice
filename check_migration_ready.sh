@@ -8,7 +8,7 @@ echo "ChartMogul UUID Migration - Pre-flight Check"
 echo "================================================"
 echo ""
 
-cd /Users/tenbyte/Documents/TenByte/Services/flexprice
+cd /var/www/html/flexprice
 
 # Check 1: Migration file exists
 echo "✓ Checking migration file exists..."

@@ -8,7 +8,7 @@ echo "ChartMogul UUID Migration - Execution"
 echo "================================================"
 echo ""
 
-cd /Users/tenbyte/Documents/TenByte/Services/flexprice
+cd /var/www/html/flexprice
 
 # Ensure postgres is running
 echo "📦 Starting postgres..."
