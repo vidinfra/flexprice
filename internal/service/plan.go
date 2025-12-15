@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	cm "github.com/chartmogul/chartmogul-go/v4"
 	"github.com/flexprice/flexprice/internal/api/dto"
@@ -151,44 +153,82 @@ func (s *planService) CreatePlan(ctx context.Context, req dto.CreatePlanRequest)
 	if err != nil {
 		return nil, err
 	}
-	//TODO:
-	/*
-		1. At flexprice, a plan can have multiple prices (e.g., different billing intervals).
-		2. But in ChartMogul, a plan can only have one billing interval.
-		3. And you can not create two ChartMogul plans with the same external_id.
-
-		What to do in this situation?
-	*/
 
 	response := &dto.CreatePlanResponse{Plan: plan}
 
-	// ChartMogul sync for plan creation
-	if s.ChartMogul != nil {
-		dataSourceUUID := s.ServiceParams.Config.ChartMogul.SourceID
-		if dataSourceUUID != "" {
-			name := plan.Name
-			intervalCount := 1      // Default; replace with plan.IntervalCount if available
-			intervalUnit := "month" // Default; replace with plan.IntervalUnit if available
-			externalID := plan.ID   // Using Flexprice plan ID as external ID
+	s.chartMogulAnalyticsSyncPlan(ctx, plan, response)
 
-			createdPlan, cmErr := s.ChartMogul.CreatePlan(dataSourceUUID, name, intervalCount, intervalUnit, externalID)
-			if cmErr != nil {
-				s.Logger.Errorw("Failed to sync plan to ChartMogul", "error", cmErr, "plan_id", plan.ID)
-			} else if createdPlan != nil {
-				// Store ChartMogul UUID in the dedicated column
-				plan.ChartMogulUUID = &createdPlan.UUID
+	return response, nil
+}
 
-				// Update plan in database with ChartMogul UUID
-				if err := s.PlanRepo.Update(ctx, plan); err != nil {
-					s.Logger.Errorw("Failed to store ChartMogul UUID in plan", "error", err, "plan_id", plan.ID, "chartmogul_uuid", createdPlan.UUID)
-				} else {
-					s.Logger.Infow("Stored ChartMogul UUID in plan", "plan_id", plan.ID, "chartmogul_uuid", createdPlan.UUID)
-				}
-			}
+func (s *planService) chartMogulAnalyticsSyncPlan(ctx context.Context, plan *plan.Plan, response *dto.CreatePlanResponse) *dto.CreatePlanResponse {
+	if s.ChartMogul == nil {
+		return response
+	}
+	dataSourceUUID := s.ServiceParams.Config.ChartMogul.SourceID
+	if dataSourceUUID == "" {
+		return response
+	}
+	priceService := NewPriceService(s.ServiceParams)
+	pricesResponse, err := priceService.GetPricesByPlanID(ctx, plan.ID)
+	if err != nil {
+		s.Logger.Errorw("Failed to fetch prices for ChartMogul sync", "error", err, "plan_id", plan.ID)
+		return response
+	}
+
+	chartMogulPlanIDs := make(map[string]string)
+
+	for _, priceResp := range pricesResponse.Items {
+		price := priceResp.Price
+
+		intervalUnit := s.ChartMogul.ChartMogulIntervalUnit(price.BillingPeriod)
+		intervalCount := 1
+
+		externalID := fmt.Sprintf("%s-%s-%s", plan.ID, price.ID, intervalUnit)
+		name := fmt.Sprintf("%s-%s", plan.Name, string(price.BillingPeriod))
+
+		createdPlan, cmErr := s.ChartMogul.CreatePlan(
+			dataSourceUUID,
+			name,
+			intervalCount,
+			intervalUnit,
+			externalID,
+		)
+
+		if cmErr != nil {
+			s.Logger.Errorw(
+				"Failed to sync price plan to ChartMogul",
+				"error", cmErr,
+				"plan_id", plan.ID,
+				"price_id", price.ID,
+			)
+			continue
+		}
+
+		if createdPlan != nil {
+			chartMogulPlanIDs[externalID] = createdPlan.UUID
 		}
 	}
 
-	return response, nil
+	if len(chartMogulPlanIDs) > 0 {
+		plan.ChartMogulUUID = &chartMogulPlanIDs
+
+		if err := s.PlanRepo.Update(ctx, plan); err != nil {
+			s.Logger.Errorw(
+				"Failed to store ChartMogul UUIDs in plan",
+				"error", err,
+				"plan_id", plan.ID,
+				"chartmogul_uuid", chartMogulPlanIDs,
+			)
+		} else {
+			s.Logger.Infow(
+				"Stored ChartMogul UUIDs in plan",
+				"plan_id", plan.ID,
+				"chartmogul_uuid", chartMogulPlanIDs,
+			)
+		}
+	}
+	return response
 }
 
 func (s *planService) GetPlan(ctx context.Context, id string) (*dto.PlanResponse, error) {
@@ -632,22 +672,34 @@ func (s *planService) UpdatePlan(ctx context.Context, id string, req dto.UpdateP
 		return nil, err
 	}
 
-	// ChartMogul sync for plan update
 	dataSourceUUID := s.Config.ChartMogul.SourceID
 	if s.ChartMogul != nil && dataSourceUUID != "" {
-		// Get ChartMogul plan UUID from the dedicated column
-		if plan.ChartMogulUUID != nil && *plan.ChartMogulUUID != "" {
-			cmPlan := &cm.Plan{
-				Name: plan.Name,
-			}
-			_, cmErr := s.ChartMogul.UpdatePlan(cmPlan, *plan.ChartMogulUUID)
-			if cmErr != nil {
-				s.Logger.Errorw("Failed to update plan in ChartMogul", "error", cmErr, "plan_id", plan.ID, "chartmogul_uuid", *plan.ChartMogulUUID)
-			} else {
-				s.Logger.Infow("Updated plan in ChartMogul", "plan_id", plan.ID, "chartmogul_uuid", *plan.ChartMogulUUID)
+		if plan.ChartMogulUUID != nil && len(*plan.ChartMogulUUID) > 0 {
+			for externalID, cmUUID := range *plan.ChartMogulUUID {
+				if cmUUID == "" {
+					s.Logger.Warnw("Empty ChartMogul UUID for key, skipping", "plan_id", plan.ID, "key", externalID)
+					continue
+				}
+
+				intervalPart := "unknown"
+				parts := strings.Split(externalID, "-")
+				if len(parts) >= 3 {
+					intervalPart = parts[len(parts)-1] // last part is intervalUnit
+				}
+
+				cmPlan := &cm.Plan{
+					Name: fmt.Sprintf("%s-%s", plan.Name, intervalPart),
+				}
+
+				_, cmErr := s.ChartMogul.UpdatePlan(cmPlan, cmUUID)
+				if cmErr != nil {
+					s.Logger.Errorw("Failed to update plan in ChartMogul", "error", cmErr, "plan_id", plan.ID, "chartmogul_uuid", cmUUID, "key", externalID)
+				} else {
+					s.Logger.Infow("Updated plan in ChartMogul", "plan_id", plan.ID, "chartmogul_uuid", cmUUID, "key", externalID)
+				}
 			}
 		} else {
-			s.Logger.Warnw("ChartMogul plan UUID not found, skipping sync", "plan_id", plan.ID)
+			s.Logger.Warnw("ChartMogul plan UUID map empty or nil, skipping sync", "plan_id", plan.ID)
 		}
 	}
 
@@ -695,17 +747,23 @@ func (s *planService) DeletePlan(ctx context.Context, id string) error {
 	}
 
 	// ChartMogul sync for plan deletion
+	// ChartMogul sync for plan deletion
 	if s.ChartMogul != nil {
-		// Get ChartMogul plan UUID from the dedicated column
-		if plan.ChartMogulUUID != nil && *plan.ChartMogulUUID != "" {
-			cmErr := s.ChartMogul.DeletePlan(*plan.ChartMogulUUID)
-			if cmErr != nil {
-				s.Logger.Errorw("Failed to delete plan in ChartMogul", "error", cmErr, "plan_id", plan.ID, "chartmogul_uuid", *plan.ChartMogulUUID)
-			} else {
-				s.Logger.Infow("Deleted plan in ChartMogul", "plan_id", plan.ID, "chartmogul_uuid", *plan.ChartMogulUUID)
+		if plan.ChartMogulUUID != nil && len(*plan.ChartMogulUUID) > 0 {
+			for key, cmUUID := range *plan.ChartMogulUUID {
+				if cmUUID == "" {
+					s.Logger.Warnw("Empty ChartMogul UUID for key, skipping delete", "plan_id", plan.ID, "key", key)
+					continue
+				}
+				cmErr := s.ChartMogul.DeletePlan(cmUUID)
+				if cmErr != nil {
+					s.Logger.Errorw("Failed to delete plan in ChartMogul", "error", cmErr, "plan_id", plan.ID, "chartmogul_uuid", cmUUID, "key", key)
+				} else {
+					s.Logger.Infow("Deleted plan in ChartMogul", "plan_id", plan.ID, "chartmogul_uuid", cmUUID, "key", key)
+				}
 			}
 		} else {
-			s.Logger.Warnw("ChartMogul plan UUID not found, skipping sync", "plan_id", plan.ID)
+			s.Logger.Warnw("ChartMogul plan UUID map empty or nil, skipping sync", "plan_id", plan.ID)
 		}
 	}
 

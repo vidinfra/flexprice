@@ -1,19 +1,21 @@
 package plan
 
 import (
+	"encoding/json"
+
 	"github.com/flexprice/flexprice/ent"
 	"github.com/flexprice/flexprice/internal/types"
 )
 
 type Plan struct {
-	ID             string         `db:"id" json:"id"`
-	Name           string         `db:"name" json:"name"`
-	LookupKey      string         `db:"lookup_key" json:"lookup_key"`
-	Description    string         `db:"description" json:"description"`
-	EnvironmentID  string         `db:"environment_id" json:"environment_id"`
-	Metadata       types.Metadata `db:"metadata" json:"metadata"`
-	DisplayOrder   *int           `db:"display_order" json:"display_order,omitempty"`
-	ChartMogulUUID *string        `db:"chartmogul_uuid" json:"chartmogul_uuid,omitempty"`
+	ID             string             `db:"id" json:"id"`
+	Name           string             `db:"name" json:"name"`
+	LookupKey      string             `db:"lookup_key" json:"lookup_key"`
+	Description    string             `db:"description" json:"description"`
+	EnvironmentID  string             `db:"environment_id" json:"environment_id"`
+	Metadata       types.Metadata     `db:"metadata" json:"metadata"`
+	DisplayOrder   *int               `db:"display_order" json:"display_order,omitempty"`
+	ChartMogulUUID *map[string]string `db:"chartmogul_uuid" json:"chartmogul_uuid,omitempty"`
 	types.BaseModel
 }
 
@@ -23,10 +25,14 @@ func FromEnt(e *ent.Plan) *Plan {
 		return nil
 	}
 
-	// Convert ChartMogul UUID from string to *string
-	var chartMogulUUID *string
+	// Convert ChartMogulUUID from JSON string to *map[string]string
+	var chartMogulUUID *map[string]string
 	if e.ChartmogulUUID != "" {
-		chartMogulUUID = &e.ChartmogulUUID
+		var m map[string]string
+		err := json.Unmarshal([]byte(e.ChartmogulUUID), &m)
+		if err == nil {
+			chartMogulUUID = &m
+		}
 	}
 
 	return &Plan{

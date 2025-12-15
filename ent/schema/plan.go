@@ -48,9 +48,9 @@ func (Plan) Fields() []ent.Field {
 			Optional(),
 		field.Int("display_order").
 			Default(0),
-		field.String("chartmogul_uuid").
+		field.JSON("chartmogul_uuid", map[string]string{}).
 			SchemaType(map[string]string{
-				"postgres": "varchar(255)",
+				"postgres": "jsonb",
 			}).
 			Optional(),
 	}
