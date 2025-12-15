@@ -57,8 +57,9 @@ type DetailedUsageAnalytic struct {
 	TotalUsage      decimal.Decimal `swaggertype:"string"`
 	TotalCost       decimal.Decimal `swaggertype:"string"`
 	Currency        string
-	EventCount      uint64            // Number of events that contributed to this aggregation
-	Properties      map[string]string // Stores property values for flexible grouping (e.g., org_id -> "org123")
+	EventCount      uint64                // Number of events that contributed to this aggregation
+	Properties      map[string]string     // Stores property values for flexible grouping (e.g., org_id -> "org123")
+	CommitmentInfo  *types.CommitmentInfo // Stores commitment info if applicable
 	Points          []UsageAnalyticPoint
 
 	// All aggregation values - we fetch all and use the appropriate one based on meter type

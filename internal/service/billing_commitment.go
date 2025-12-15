@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/flexprice/flexprice/internal/domain/price"
 	"github.com/flexprice/flexprice/internal/domain/subscription"
@@ -57,34 +56,28 @@ func (c *commitmentCalculator) normalizeCommitmentToAmount(
 }
 
 // applyCommitmentToLineItem applies commitment logic to a single line item's charges
-// Returns the adjusted amount and metadata about the commitment application
+// Returns the adjusted amount and commitment info about the commitment application
 func (c *commitmentCalculator) applyCommitmentToLineItem(
 	ctx context.Context,
 	lineItem *subscription.SubscriptionLineItem,
 	usageCost decimal.Decimal,
 	priceObj *price.Price,
-) (decimal.Decimal, types.Metadata, error) {
-	metadata := make(types.Metadata)
-
+) (decimal.Decimal, *types.CommitmentInfo, error) {
 	// Normalize commitment to amount for comparison
 	commitmentAmount, err := c.normalizeCommitmentToAmount(ctx, lineItem, priceObj)
 	if err != nil {
-		return usageCost, metadata, err
-	}
-
-	// Add commitment metadata
-	metadata["line_item_commitment"] = "true"
-	metadata["commitment_type"] = string(lineItem.CommitmentType)
-	metadata["commitment_amount"] = commitmentAmount.String()
-
-	if lineItem.CommitmentType == types.COMMITMENT_TYPE_QUANTITY {
-		metadata["commitment_quantity"] = lineItem.CommitmentQuantity.String()
+		return usageCost, nil, err
 	}
 
 	overageFactor := lo.FromPtr(lineItem.CommitmentOverageFactor)
-	metadata["overage_factor"] = overageFactor.String()
-	metadata["enable_true_up"] = fmt.Sprintf("%v", lineItem.CommitmentTrueUpEnabled)
-	metadata["is_window_commitment"] = fmt.Sprintf("%v", lineItem.CommitmentWindowed)
+	info := &types.CommitmentInfo{
+		Type:          lineItem.CommitmentType,
+		Amount:        commitmentAmount,
+		Quantity:      lo.FromPtr(lineItem.CommitmentQuantity),
+		OverageFactor: lineItem.CommitmentOverageFactor,
+		TrueUpEnabled: lineItem.CommitmentTrueUpEnabled,
+		IsWindowed:    false,
+	}
 
 	// Calculate final charge based on commitment logic
 	var finalCharge decimal.Decimal
@@ -96,9 +89,9 @@ func (c *commitmentCalculator) applyCommitmentToLineItem(
 		overageCharge := overage.Mul(overageFactor)
 		finalCharge = commitmentAmount.Add(overageCharge)
 
-		metadata["commitment_utilized"] = commitmentAmount.String()
-		metadata["overage_amount"] = overage.String()
-		metadata["overage_charge"] = overageCharge.String()
+		info.Utilized = commitmentAmount
+		info.Overage = overageCharge
+		info.TrueUp = decimal.Zero
 
 		c.logger.Debugw("usage exceeds commitment, applying overage",
 			"line_item_id", lineItem.ID,
@@ -112,20 +105,22 @@ func (c *commitmentCalculator) applyCommitmentToLineItem(
 		if lineItem.CommitmentTrueUpEnabled {
 			// Charge full commitment (true-up)
 			finalCharge = commitmentAmount
-			metadata["commitment_utilized"] = usageCost.String()
-			metadata["true_up_amount"] = commitmentAmount.Sub(usageCost).String()
+			info.Utilized = usageCost
+			info.Overage = decimal.Zero
+			info.TrueUp = commitmentAmount.Sub(usageCost)
 
 			c.logger.Debugw("usage below commitment, applying true-up",
 				"line_item_id", lineItem.ID,
 				"usage_cost", usageCost,
 				"commitment_amount", commitmentAmount,
-				"true_up", commitmentAmount.Sub(usageCost),
+				"true_up", info.TrueUp,
 				"final_charge", finalCharge)
 		} else {
 			// Charge only actual usage (no true-up)
 			finalCharge = usageCost
-			metadata["commitment_utilized"] = usageCost.String()
-			metadata["no_true_up"] = "true"
+			info.Utilized = usageCost
+			info.Overage = decimal.Zero
+			info.TrueUp = decimal.Zero
 
 			c.logger.Debugw("usage below commitment, no true-up",
 				"line_item_id", lineItem.ID,
@@ -135,7 +130,7 @@ func (c *commitmentCalculator) applyCommitmentToLineItem(
 		}
 	}
 
-	return finalCharge, metadata, nil
+	return finalCharge, info, nil
 }
 
 // applyWindowCommitmentToLineItem applies window-based commitment logic
@@ -145,28 +140,22 @@ func (c *commitmentCalculator) applyWindowCommitmentToLineItem(
 	lineItem *subscription.SubscriptionLineItem,
 	bucketedValues []decimal.Decimal,
 	priceObj *price.Price,
-) (decimal.Decimal, types.Metadata, error) {
-	metadata := make(types.Metadata)
-
+) (decimal.Decimal, *types.CommitmentInfo, error) {
 	// Normalize commitment to amount (this is the per-window commitment)
 	commitmentAmountPerWindow, err := c.normalizeCommitmentToAmount(ctx, lineItem, priceObj)
 	if err != nil {
-		return decimal.Zero, metadata, err
-	}
-
-	// Add commitment metadata
-	metadata["line_item_commitment"] = "true"
-	metadata["commitment_type"] = string(lineItem.CommitmentType)
-	metadata["commitment_amount_per_window"] = commitmentAmountPerWindow.String()
-	metadata["is_window_commitment"] = "true"
-	metadata["num_windows"] = fmt.Sprintf("%d", len(bucketedValues))
-
-	if lineItem.CommitmentType == types.COMMITMENT_TYPE_QUANTITY {
-		metadata["commitment_quantity_per_window"] = lineItem.CommitmentQuantity.String()
+		return decimal.Zero, nil, err
 	}
 
 	overageFactor := lo.FromPtr(lineItem.CommitmentOverageFactor)
-	metadata["overage_factor"] = overageFactor.String()
+	info := &types.CommitmentInfo{
+		Type:          lineItem.CommitmentType,
+		Amount:        commitmentAmountPerWindow, // This is per window
+		Quantity:      lo.FromPtr(lineItem.CommitmentQuantity),
+		OverageFactor: lineItem.CommitmentOverageFactor,
+		TrueUpEnabled: lineItem.CommitmentTrueUpEnabled,
+		IsWindowed:    true,
+	}
 
 	totalCharge := decimal.Zero
 	totalCommitmentUtilized := decimal.Zero
@@ -189,7 +178,7 @@ func (c *commitmentCalculator) applyWindowCommitmentToLineItem(
 			windowCharge = commitmentAmountPerWindow.Add(overageCharge)
 
 			totalCommitmentUtilized = totalCommitmentUtilized.Add(commitmentAmountPerWindow)
-			totalOverage = totalOverage.Add(overage)
+			totalOverage = totalOverage.Add(overageCharge) // Storing charge, not amount
 			windowsWithOverage++
 
 			c.logger.Debugw("window usage exceeds commitment",
@@ -235,15 +224,9 @@ func (c *commitmentCalculator) applyWindowCommitmentToLineItem(
 		totalCharge = totalCharge.Add(windowCharge)
 	}
 
-	// Add summary metadata
-	metadata["total_commitment_utilized"] = totalCommitmentUtilized.String()
-	metadata["total_overage"] = totalOverage.String()
-	metadata["windows_with_overage"] = fmt.Sprintf("%d", windowsWithOverage)
-
-	if lineItem.CommitmentTrueUpEnabled {
-		metadata["total_true_up"] = totalTrueUp.String()
-		metadata["windows_with_true_up"] = fmt.Sprintf("%d", windowsWithTrueUp)
-	}
+	info.Utilized = totalCommitmentUtilized
+	info.Overage = totalOverage
+	info.TrueUp = totalTrueUp
 
 	c.logger.Infow("window commitment applied to line item",
 		"line_item_id", lineItem.ID,
@@ -253,5 +236,5 @@ func (c *commitmentCalculator) applyWindowCommitmentToLineItem(
 		"windows_with_overage", windowsWithOverage,
 		"windows_with_true_up", windowsWithTrueUp)
 
-	return totalCharge, metadata, nil
+	return totalCharge, info, nil
 }

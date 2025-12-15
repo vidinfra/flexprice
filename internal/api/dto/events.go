@@ -319,6 +319,7 @@ type UsageAnalyticItem struct {
 	Currency             string                             `json:"currency,omitempty"`
 	EventCount           uint64                             `json:"event_count"`          // Number of events that contributed to this aggregation
 	Properties           map[string]string                  `json:"properties,omitempty"` // Stores property values for flexible grouping (e.g., org_id -> "org123")
+	CommitmentInfo       *types.CommitmentInfo              `json:"commitment_info,omitempty"`
 	Points               []UsageAnalyticPoint               `json:"points,omitempty"`
 	AddOnID              string                             `json:"add_on_id,omitempty"`
 	PlanID               string                             `json:"plan_id,omitempty"`

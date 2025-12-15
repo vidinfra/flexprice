@@ -507,8 +507,8 @@ func (s *billingService) CalculateUsageCharges(
 			// Add the amount to total usage cost
 			lineItemAmount := decimal.NewFromFloat(matchingCharge.Amount)
 
-			// Store commitment metadata separately since matchingCharge doesn't have Metadata field
-			var commitmentMetadataForLineItem types.Metadata
+			// Store commitment info separately
+			var commitmentInfo *types.CommitmentInfo
 
 			// Apply line-item commitment if configured
 			// Line item commitment takes precedence over subscription-level commitment
@@ -553,7 +553,7 @@ func (s *billingService) CalculateUsageCharges(
 					}
 
 					// Apply window-based commitment
-					adjustedAmount, commitmentMetadata, err := commitmentCalc.applyWindowCommitmentToLineItem(
+					adjustedAmount, info, err := commitmentCalc.applyWindowCommitmentToLineItem(
 						ctx, item, bucketedValues, matchingCharge.Price)
 					if err != nil {
 						return nil, decimal.Zero, err
@@ -561,10 +561,10 @@ func (s *billingService) CalculateUsageCharges(
 
 					lineItemAmount = adjustedAmount
 					matchingCharge.Amount = adjustedAmount.InexactFloat64()
-					commitmentMetadataForLineItem = commitmentMetadata
+					commitmentInfo = info
 				} else {
 					// Non-window commitment: apply to aggregated usage cost
-					adjustedAmount, commitmentMetadata, err := commitmentCalc.applyCommitmentToLineItem(
+					adjustedAmount, info, err := commitmentCalc.applyCommitmentToLineItem(
 						ctx, item, lineItemAmount, matchingCharge.Price)
 					if err != nil {
 						return nil, decimal.Zero, err
@@ -572,7 +572,7 @@ func (s *billingService) CalculateUsageCharges(
 
 					lineItemAmount = adjustedAmount
 					matchingCharge.Amount = adjustedAmount.InexactFloat64()
-					commitmentMetadataForLineItem = commitmentMetadata
+					commitmentInfo = info
 				}
 			}
 
@@ -581,13 +581,6 @@ func (s *billingService) CalculateUsageCharges(
 			// Create metadata for the line item, including overage information if applicable
 			metadata := types.Metadata{
 				"description": fmt.Sprintf("%s (Usage Charge)", item.DisplayName),
-			}
-
-			// Add commitment metadata if present
-			if item.HasCommitment() && commitmentMetadataForLineItem != nil {
-				for k, v := range commitmentMetadataForLineItem {
-					metadata[k] = v
-				}
 			}
 
 			displayName := lo.ToPtr(item.DisplayName)
@@ -650,6 +643,7 @@ func (s *billingService) CalculateUsageCharges(
 				PeriodStart:      lo.ToPtr(item.GetPeriodStart(periodStart)),
 				PeriodEnd:        lo.ToPtr(item.GetPeriodEnd(periodEnd)),
 				Metadata:         metadata,
+				CommitmentInfo:   commitmentInfo,
 			})
 		}
 	}

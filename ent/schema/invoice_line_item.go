@@ -6,6 +6,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 	baseMixin "github.com/flexprice/flexprice/ent/schema/mixin"
+	"github.com/flexprice/flexprice/internal/types"
 	"github.com/shopspring/decimal"
 )
 
@@ -143,6 +144,11 @@ func (InvoiceLineItem) Fields() []ent.Field {
 			Optional().
 			Nillable(),
 		field.JSON("metadata", map[string]string{}).
+			Optional().
+			SchemaType(map[string]string{
+				"postgres": "jsonb",
+			}),
+		field.JSON("commitment_info", &types.CommitmentInfo{}).
 			Optional().
 			SchemaType(map[string]string{
 				"postgres": "jsonb",

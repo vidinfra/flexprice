@@ -1055,6 +1055,7 @@ var (
 		{Name: "period_start", Type: field.TypeTime, Nullable: true},
 		{Name: "period_end", Type: field.TypeTime, Nullable: true},
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "commitment_info", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
 		{Name: "invoice_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 	}
 	// InvoiceLineItemsTable holds the schema information for the "invoice_line_items" table.
@@ -1065,7 +1066,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "invoice_line_items_invoices_line_items",
-				Columns:    []*schema.Column{InvoiceLineItemsColumns[27]},
+				Columns:    []*schema.Column{InvoiceLineItemsColumns[28]},
 				RefColumns: []*schema.Column{InvoicesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1074,7 +1075,7 @@ var (
 			{
 				Name:    "invoicelineitem_tenant_id_environment_id_invoice_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{InvoiceLineItemsColumns[1], InvoiceLineItemsColumns[7], InvoiceLineItemsColumns[27], InvoiceLineItemsColumns[2]},
+				Columns: []*schema.Column{InvoiceLineItemsColumns[1], InvoiceLineItemsColumns[7], InvoiceLineItemsColumns[28], InvoiceLineItemsColumns[2]},
 			},
 			{
 				Name:    "invoicelineitem_tenant_id_environment_id_customer_id_status",

@@ -1873,6 +1873,7 @@ func (s *featureUsageTrackingService) aggregateAnalyticsByGrouping(analytics []*
 				TotalCost:        item.TotalCost,
 				Currency:         item.Currency,
 				Properties:       make(map[string]string),
+				CommitmentInfo:   item.CommitmentInfo,
 				Points:           make([]events.UsageAnalyticPoint, len(item.Points)),
 			}
 
@@ -2226,6 +2227,7 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			Currency:        analytic.Currency,
 			EventCount:      analytic.EventCount,
 			Properties:      analytic.Properties,
+			CommitmentInfo:  analytic.CommitmentInfo,
 			Points:          make([]dto.UsageAnalyticPoint, 0, len(analytic.Points)),
 		}
 		// Can expand plan and addon
@@ -2579,14 +2581,14 @@ func (s *featureUsageTrackingService) applyLineItemCommitment(
 ) decimal.Decimal {
 	commitmentCalc := newCommitmentCalculator(s.Logger, priceService)
 	var cost decimal.Decimal
-	var commitmentMetadata map[string]string
+	var commitmentInfo *types.CommitmentInfo
 	var err error
 
 	if lineItem.CommitmentWindowed {
-		cost, commitmentMetadata, err = commitmentCalc.applyWindowCommitmentToLineItem(
+		cost, commitmentInfo, err = commitmentCalc.applyWindowCommitmentToLineItem(
 			ctx, lineItem, bucketedValues, price)
 		if err == nil {
-			s.updateItemProperties(item, commitmentMetadata)
+			item.CommitmentInfo = commitmentInfo
 			return cost
 		}
 		s.Logger.Warnw("failed to apply window commitment", "error", err, "line_item_id", lineItem.ID)
@@ -2603,11 +2605,11 @@ func (s *featureUsageTrackingService) applyLineItemCommitment(
 		rawCost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
 	}
 
-	cost, commitmentMetadata, err = commitmentCalc.applyCommitmentToLineItem(
+	cost, commitmentInfo, err = commitmentCalc.applyCommitmentToLineItem(
 		ctx, lineItem, rawCost, price)
 
 	if err == nil {
-		s.updateItemProperties(item, commitmentMetadata)
+		item.CommitmentInfo = commitmentInfo
 		return cost
 	}
 
@@ -2615,11 +2617,4 @@ func (s *featureUsageTrackingService) applyLineItemCommitment(
 	return rawCost
 }
 
-func (s *featureUsageTrackingService) updateItemProperties(item *events.DetailedUsageAnalytic, metadata map[string]string) {
-	if item.Properties == nil {
-		item.Properties = make(map[string]string)
-	}
-	for k, v := range metadata {
-		item.Properties[k] = v
-	}
-}
+// updateItemProperties is removed as it is no longer used for commitment info

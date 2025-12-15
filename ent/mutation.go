@@ -28347,6 +28347,7 @@ type InvoiceLineItemMutation struct {
 	period_start               *time.Time
 	period_end                 *time.Time
 	metadata                   *map[string]string
+	commitment_info            **types.CommitmentInfo
 	clearedFields              map[string]struct{}
 	invoice                    *string
 	clearedinvoice             bool
@@ -29668,6 +29669,55 @@ func (m *InvoiceLineItemMutation) ResetMetadata() {
 	delete(m.clearedFields, invoicelineitem.FieldMetadata)
 }
 
+// SetCommitmentInfo sets the "commitment_info" field.
+func (m *InvoiceLineItemMutation) SetCommitmentInfo(ti *types.CommitmentInfo) {
+	m.commitment_info = &ti
+}
+
+// CommitmentInfo returns the value of the "commitment_info" field in the mutation.
+func (m *InvoiceLineItemMutation) CommitmentInfo() (r *types.CommitmentInfo, exists bool) {
+	v := m.commitment_info
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCommitmentInfo returns the old "commitment_info" field's value of the InvoiceLineItem entity.
+// If the InvoiceLineItem object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvoiceLineItemMutation) OldCommitmentInfo(ctx context.Context) (v *types.CommitmentInfo, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCommitmentInfo is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCommitmentInfo requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCommitmentInfo: %w", err)
+	}
+	return oldValue.CommitmentInfo, nil
+}
+
+// ClearCommitmentInfo clears the value of the "commitment_info" field.
+func (m *InvoiceLineItemMutation) ClearCommitmentInfo() {
+	m.commitment_info = nil
+	m.clearedFields[invoicelineitem.FieldCommitmentInfo] = struct{}{}
+}
+
+// CommitmentInfoCleared returns if the "commitment_info" field was cleared in this mutation.
+func (m *InvoiceLineItemMutation) CommitmentInfoCleared() bool {
+	_, ok := m.clearedFields[invoicelineitem.FieldCommitmentInfo]
+	return ok
+}
+
+// ResetCommitmentInfo resets all changes to the "commitment_info" field.
+func (m *InvoiceLineItemMutation) ResetCommitmentInfo() {
+	m.commitment_info = nil
+	delete(m.clearedFields, invoicelineitem.FieldCommitmentInfo)
+}
+
 // ClearInvoice clears the "invoice" edge to the Invoice entity.
 func (m *InvoiceLineItemMutation) ClearInvoice() {
 	m.clearedinvoice = true
@@ -29783,7 +29833,7 @@ func (m *InvoiceLineItemMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *InvoiceLineItemMutation) Fields() []string {
-	fields := make([]string, 0, 27)
+	fields := make([]string, 0, 28)
 	if m.tenant_id != nil {
 		fields = append(fields, invoicelineitem.FieldTenantID)
 	}
@@ -29865,6 +29915,9 @@ func (m *InvoiceLineItemMutation) Fields() []string {
 	if m.metadata != nil {
 		fields = append(fields, invoicelineitem.FieldMetadata)
 	}
+	if m.commitment_info != nil {
+		fields = append(fields, invoicelineitem.FieldCommitmentInfo)
+	}
 	return fields
 }
 
@@ -29927,6 +29980,8 @@ func (m *InvoiceLineItemMutation) Field(name string) (ent.Value, bool) {
 		return m.PeriodEnd()
 	case invoicelineitem.FieldMetadata:
 		return m.Metadata()
+	case invoicelineitem.FieldCommitmentInfo:
+		return m.CommitmentInfo()
 	}
 	return nil, false
 }
@@ -29990,6 +30045,8 @@ func (m *InvoiceLineItemMutation) OldField(ctx context.Context, name string) (en
 		return m.OldPeriodEnd(ctx)
 	case invoicelineitem.FieldMetadata:
 		return m.OldMetadata(ctx)
+	case invoicelineitem.FieldCommitmentInfo:
+		return m.OldCommitmentInfo(ctx)
 	}
 	return nil, fmt.Errorf("unknown InvoiceLineItem field %s", name)
 }
@@ -30188,6 +30245,13 @@ func (m *InvoiceLineItemMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetMetadata(v)
 		return nil
+	case invoicelineitem.FieldCommitmentInfo:
+		v, ok := value.(*types.CommitmentInfo)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCommitmentInfo(v)
+		return nil
 	}
 	return fmt.Errorf("unknown InvoiceLineItem field %s", name)
 }
@@ -30272,6 +30336,9 @@ func (m *InvoiceLineItemMutation) ClearedFields() []string {
 	if m.FieldCleared(invoicelineitem.FieldMetadata) {
 		fields = append(fields, invoicelineitem.FieldMetadata)
 	}
+	if m.FieldCleared(invoicelineitem.FieldCommitmentInfo) {
+		fields = append(fields, invoicelineitem.FieldCommitmentInfo)
+	}
 	return fields
 }
 
@@ -30339,6 +30406,9 @@ func (m *InvoiceLineItemMutation) ClearField(name string) error {
 		return nil
 	case invoicelineitem.FieldMetadata:
 		m.ClearMetadata()
+		return nil
+	case invoicelineitem.FieldCommitmentInfo:
+		m.ClearCommitmentInfo()
 		return nil
 	}
 	return fmt.Errorf("unknown InvoiceLineItem nullable field %s", name)
@@ -30428,6 +30498,9 @@ func (m *InvoiceLineItemMutation) ResetField(name string) error {
 		return nil
 	case invoicelineitem.FieldMetadata:
 		m.ResetMetadata()
+		return nil
+	case invoicelineitem.FieldCommitmentInfo:
+		m.ResetCommitmentInfo()
 		return nil
 	}
 	return fmt.Errorf("unknown InvoiceLineItem field %s", name)
