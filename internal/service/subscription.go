@@ -426,8 +426,8 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 				var planUUID string
 				if planErr == nil {
 					// Try new column first, fall back to metadata for backward compatibility
-					if plan.ChartMogulUUID != nil && *plan.ChartMogulUUID != "" {
-						planUUID = *plan.ChartMogulUUID
+					if plan.ChartMogulUUID != nil && (*plan.ChartMogulUUID)["default"] != "" {
+						planUUID = (*plan.ChartMogulUUID)["default"]
 					} else if plan.Metadata != nil {
 						if uuid, exists := plan.Metadata["chartmogul_plan_uuid"]; exists {
 							planUUID = uuid

@@ -2,6 +2,7 @@ package ent
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/flexprice/flexprice/ent"
@@ -71,7 +72,10 @@ func (r *planRepository) Create(ctx context.Context, p *domainPlan.Plan) error {
 
 	// Set ChartMogul UUID if provided
 	if p.ChartMogulUUID != nil {
-		createBuilder = createBuilder.SetNillableChartmogulUUID(p.ChartMogulUUID)
+		if b, err := json.Marshal(p.ChartMogulUUID); err == nil {
+			str := string(b)
+			createBuilder = createBuilder.SetNillableChartmogulUUID(&str)
+		}
 	}
 
 	plan, err := createBuilder.Save(ctx)
@@ -311,7 +315,10 @@ func (r *planRepository) Update(ctx context.Context, p *domainPlan.Plan) error {
 
 	// Set ChartMogul UUID if provided
 	if p.ChartMogulUUID != nil {
-		updateBuilder = updateBuilder.SetNillableChartmogulUUID(p.ChartMogulUUID)
+		if b, err := json.Marshal(p.ChartMogulUUID); err == nil {
+			str := string(b)
+			updateBuilder = updateBuilder.SetNillableChartmogulUUID(&str)
+		}
 	}
 
 	_, err := updateBuilder.Save(ctx)

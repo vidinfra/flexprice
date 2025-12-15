@@ -175,8 +175,8 @@ func (s *planService) CreatePlan(ctx context.Context, req dto.CreatePlanRequest)
 			if cmErr != nil {
 				s.Logger.Errorw("Failed to sync plan to ChartMogul", "error", cmErr, "plan_id", plan.ID)
 			} else if createdPlan != nil {
-				// Store ChartMogul UUID in the dedicated column
-				plan.ChartMogulUUID = &createdPlan.UUID
+				// Store ChartMogul UUID in the dedicated column as a map
+				plan.ChartMogulUUID = &map[string]string{"default": createdPlan.UUID}
 
 				// Update plan in database with ChartMogul UUID
 				if err := s.PlanRepo.Update(ctx, plan); err != nil {
@@ -636,15 +636,15 @@ func (s *planService) UpdatePlan(ctx context.Context, id string, req dto.UpdateP
 	dataSourceUUID := s.Config.ChartMogul.SourceID
 	if s.ChartMogul != nil && dataSourceUUID != "" {
 		// Get ChartMogul plan UUID from the dedicated column
-		if plan.ChartMogulUUID != nil && *plan.ChartMogulUUID != "" {
+		if plan.ChartMogulUUID != nil && (*plan.ChartMogulUUID)["default"] != "" {
 			cmPlan := &cm.Plan{
 				Name: plan.Name,
 			}
-			_, cmErr := s.ChartMogul.UpdatePlan(cmPlan, *plan.ChartMogulUUID)
+			_, cmErr := s.ChartMogul.UpdatePlan(cmPlan, (*plan.ChartMogulUUID)["default"])
 			if cmErr != nil {
-				s.Logger.Errorw("Failed to update plan in ChartMogul", "error", cmErr, "plan_id", plan.ID, "chartmogul_uuid", *plan.ChartMogulUUID)
+				s.Logger.Errorw("Failed to update plan in ChartMogul", "error", cmErr, "plan_id", plan.ID, "chartmogul_uuid", (*plan.ChartMogulUUID)["default"])
 			} else {
-				s.Logger.Infow("Updated plan in ChartMogul", "plan_id", plan.ID, "chartmogul_uuid", *plan.ChartMogulUUID)
+				s.Logger.Infow("Updated plan in ChartMogul", "plan_id", plan.ID, "chartmogul_uuid", (*plan.ChartMogulUUID)["default"])
 			}
 		} else {
 			s.Logger.Warnw("ChartMogul plan UUID not found, skipping sync", "plan_id", plan.ID)
@@ -697,12 +697,12 @@ func (s *planService) DeletePlan(ctx context.Context, id string) error {
 	// ChartMogul sync for plan deletion
 	if s.ChartMogul != nil {
 		// Get ChartMogul plan UUID from the dedicated column
-		if plan.ChartMogulUUID != nil && *plan.ChartMogulUUID != "" {
-			cmErr := s.ChartMogul.DeletePlan(*plan.ChartMogulUUID)
+		if plan.ChartMogulUUID != nil && (*plan.ChartMogulUUID)["default"] != "" {
+			cmErr := s.ChartMogul.DeletePlan((*plan.ChartMogulUUID)["default"])
 			if cmErr != nil {
-				s.Logger.Errorw("Failed to delete plan in ChartMogul", "error", cmErr, "plan_id", plan.ID, "chartmogul_uuid", *plan.ChartMogulUUID)
+				s.Logger.Errorw("Failed to delete plan in ChartMogul", "error", cmErr, "plan_id", plan.ID, "chartmogul_uuid", (*plan.ChartMogulUUID)["default"])
 			} else {
-				s.Logger.Infow("Deleted plan in ChartMogul", "plan_id", plan.ID, "chartmogul_uuid", *plan.ChartMogulUUID)
+				s.Logger.Infow("Deleted plan in ChartMogul", "plan_id", plan.ID, "chartmogul_uuid", (*plan.ChartMogulUUID)["default"])
 			}
 		} else {
 			s.Logger.Warnw("ChartMogul plan UUID not found, skipping sync", "plan_id", plan.ID)
