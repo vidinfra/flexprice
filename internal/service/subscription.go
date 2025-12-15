@@ -435,7 +435,6 @@ func (s *subscriptionService) chartMogulAnalyticsSyncSubscription(ctx context.Co
 	plan, planErr := s.PlanRepo.Get(ctx, sub.PlanID)
 	var planUUID string
 	if planErr == nil && plan != nil && plan.ChartMogulUUID != nil {
-		// Find the main plan line item
 		var planLineItem *subscription.SubscriptionLineItem
 		for _, li := range sub.LineItems {
 			if li.EntityType == types.SubscriptionLineItemEntityTypePlan {
@@ -447,8 +446,9 @@ func (s *subscriptionService) chartMogulAnalyticsSyncSubscription(ctx context.Co
 			// Fetch the price for this line item
 			priceObj, err := s.PriceRepo.Get(ctx, planLineItem.PriceID)
 			if err == nil && priceObj != nil {
-				intervalUnit := strings.ToLower(string(priceObj.BillingPeriod))
+				intervalUnit := s.ChartMogul.ChartMogulIntervalUnit(priceObj.BillingPeriod)
 				externalID := fmt.Sprintf("%s-%s-%s", plan.ID, priceObj.ID, intervalUnit)
+
 				if uuid, ok := (*plan.ChartMogulUUID)[externalID]; ok && uuid != "" {
 					planUUID = uuid
 				}

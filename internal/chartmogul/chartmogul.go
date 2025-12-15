@@ -2,10 +2,12 @@ package chartmogul
 
 import (
 	"fmt"
+	"strings"
 
 	cm "github.com/chartmogul/chartmogul-go/v4"
 	"github.com/flexprice/flexprice/internal/config"
 	"github.com/flexprice/flexprice/internal/logger"
+	"github.com/flexprice/flexprice/internal/types"
 )
 
 type ChartMogulService struct {
@@ -152,4 +154,15 @@ func (s *ChartMogulService) CreateInvoices(invoices []*cm.Invoice, customerUUID 
 		return nil, err
 	}
 	return createdInvoices, nil
+}
+
+func (s *ChartMogulService) ChartMogulIntervalUnit(bp types.BillingPeriod) string {
+	switch strings.ToLower(string(bp)) {
+	case "monthly", "month":
+		return "month"
+	case "annual", "yearly", "year":
+		return "year"
+	default:
+		return ""
+	}
 }

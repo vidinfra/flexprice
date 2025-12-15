@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	cm "github.com/chartmogul/chartmogul-go/v4"
 	"github.com/flexprice/flexprice/internal/api/dto"
@@ -180,7 +179,8 @@ func (s *planService) chartMogulAnalyticsSyncPlan(ctx context.Context, plan *pla
 
 	for _, priceResp := range pricesResponse.Items {
 		price := priceResp.Price
-		intervalUnit := strings.ToLower(string(price.BillingPeriod))
+
+		intervalUnit := s.ChartMogul.ChartMogulIntervalUnit(price.BillingPeriod)
 		intervalCount := 1
 
 		externalID := fmt.Sprintf("%s-%s-%s", plan.ID, price.ID, intervalUnit)
