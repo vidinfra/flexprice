@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
+	cm "github.com/chartmogul/chartmogul-go/v4"
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/addonassociation"
 	"github.com/flexprice/flexprice/internal/domain/customer"
@@ -399,6 +401,102 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 	}
 
 	s.publishInternalWebhookEvent(ctx, types.WebhookEventSubscriptionCreated, sub.ID)
+
+	// ChartMogul sync for subscription creation (create subscription via invoice import)
+	if s.ChartMogul != nil {
+		dataSourceUUID := s.Config.ChartMogul.SourceID
+		if dataSourceUUID != "" {
+			// Get customer to retrieve ChartMogul customer UUID
+			customer, err := s.CustomerRepo.Get(ctx, sub.CustomerID)
+			var customerUUID string
+			if err == nil {
+				// Try new column first, fall back to metadata for backward compatibility
+				if customer.ChartMogulUUID != nil && *customer.ChartMogulUUID != "" {
+					customerUUID = *customer.ChartMogulUUID
+				} else if customer.Metadata != nil {
+					if uuid, exists := customer.Metadata["chartmogul_customer_uuid"]; exists {
+						customerUUID = uuid
+					}
+				}
+			}
+
+			if customerUUID != "" {
+				// Get plan to retrieve ChartMogul plan UUID
+				plan, planErr := s.PlanRepo.Get(ctx, sub.PlanID)
+				var planUUID string
+				if planErr == nil {
+					// Try new column first, fall back to metadata for backward compatibility
+					if plan.ChartMogulUUID != nil && *plan.ChartMogulUUID != "" {
+						planUUID = *plan.ChartMogulUUID
+					} else if plan.Metadata != nil {
+						if uuid, exists := plan.Metadata["chartmogul_plan_uuid"]; exists {
+							planUUID = uuid
+						}
+					}
+				}
+
+				// Calculate service period end (one billing period after start)
+				servicePeriodEnd := sub.CurrentPeriodEnd
+				if servicePeriodEnd.IsZero() {
+					// Fallback: calculate one month after start if CurrentPeriodEnd is not set
+					servicePeriodEnd = sub.StartDate.AddDate(0, 1, 0)
+				}
+
+				// Calculate amount in cents from the invoice (if available) or use a placeholder
+				amountInCents := 0
+				if invoice != nil && invoice.AmountDue.GreaterThan(decimal.Zero) {
+					amountInCents = int(invoice.AmountDue.Mul(decimal.NewFromInt(100)).IntPart())
+				}
+
+				// Build ChartMogul invoice to create subscription
+				cmInvoice := &cm.Invoice{
+					ExternalID:         fmt.Sprintf("inv_%s", sub.ID), // Unique invoice ID
+					Date:               sub.StartDate.Format("2006-01-02 15:04:05"),
+					Currency:           strings.ToUpper(sub.Currency),
+					CustomerExternalID: sub.CustomerID,
+					DataSourceUUID:     dataSourceUUID,
+					LineItems: []*cm.LineItem{
+						{
+							Type:                   "subscription",
+							SubscriptionExternalID: sub.ID,   // This creates the subscription in ChartMogul
+							PlanUUID:               planUUID, // Links to the plan using ChartMogul UUID
+							ServicePeriodStart:     sub.StartDate.Format("2006-01-02 15:04:05"),
+							ServicePeriodEnd:       servicePeriodEnd.Format("2006-01-02 15:04:05"),
+							AmountInCents:          amountInCents,
+							Quantity:               1,
+						},
+					},
+					Transactions: []*cm.Transaction{
+						{
+							Date:   sub.StartDate.Format("2006-01-02 15:04:05"),
+							Type:   "payment",
+							Result: "successful",
+						},
+					},
+				}
+
+				// Create invoice in ChartMogul (which creates the subscription)
+				createdInvoices, cmErr := s.ChartMogul.CreateInvoices([]*cm.Invoice{cmInvoice}, customerUUID)
+				if cmErr != nil {
+					s.Logger.Errorw("Failed to sync subscription to ChartMogul via invoice", "error", cmErr, "subscription_id", sub.ID)
+				} else if createdInvoices != nil && len(createdInvoices.Invoices) > 0 {
+					createdInvoice := createdInvoices.Invoices[0]
+					// Store ChartMogul invoice UUID in the dedicated column
+					sub.ChartMogulInvoiceUUID = &createdInvoice.UUID
+
+					// Update subscription in database with ChartMogul invoice UUID
+					if err := s.SubRepo.Update(ctx, sub); err != nil {
+						s.Logger.Errorw("Failed to store ChartMogul invoice UUID in subscription", "error", err, "subscription_id", sub.ID, "chartmogul_invoice_uuid", createdInvoice.UUID)
+					} else {
+						s.Logger.Infow("Created subscription in ChartMogul via invoice import", "subscription_id", sub.ID, "chartmogul_invoice_uuid", createdInvoice.UUID)
+					}
+				}
+			} else {
+				s.Logger.Warnw("ChartMogul customer UUID not found, skipping subscription sync", "customer_id", sub.CustomerID)
+			}
+		}
+	}
+
 	return response, nil
 }
 
@@ -814,6 +912,37 @@ func (s *subscriptionService) CancelSubscription(
 
 	// Step 10: Publish events
 	s.publishCancellationEvents(ctx, subscription)
+
+	// ChartMogul sync for subscription cancellation
+	// Note: For invoice-based subscriptions, cancellation should be done via subscription_cancelled event
+	// to properly track churn without affecting MRR incorrectly.
+	if s.ChartMogul != nil {
+		dataSourceUUID := s.Config.ChartMogul.SourceID
+		if dataSourceUUID != "" && subscription.CancelledAt != nil {
+			// Create a subscription_cancelled event
+			cancellationDate := subscription.CancelledAt.Format("2006-01-02")
+			cmEvent := &cm.SubscriptionEvent{
+				DataSourceUUID:         dataSourceUUID,
+				CustomerExternalID:     subscription.CustomerID,
+				SubscriptionExternalID: subscription.ID,
+				EventType:              "subscription_cancelled",
+				EventDate:              cancellationDate,
+				EffectiveDate:          cancellationDate,
+				// Note: AmountInCents and PlanExternalID are omitted for cancellation events
+				// to correctly signal churn without altering MRR
+			}
+
+			createdEvent, cmErr := s.ChartMogul.CreateSubscriptionEvent(cmEvent)
+			if cmErr != nil {
+				s.Logger.Errorw("Failed to create subscription cancellation event in ChartMogul", "error", cmErr, "subscription_id", subscription.ID)
+			} else if createdEvent != nil {
+				s.Logger.Infow("Created subscription cancellation event in ChartMogul",
+					"subscription_id", subscription.ID,
+					"cancellation_date", cancellationDate,
+					"chartmogul_event_id", createdEvent.ID)
+			}
+		}
+	}
 
 	// Step 11: Build response
 	response := &dto.CancelSubscriptionResponse{
@@ -3494,6 +3623,34 @@ func (s *subscriptionService) addAddonToSubscription(
 		"line_items_count", len(lineItems),
 	)
 
+	if s.ChartMogul != nil {
+		dataSourceUUID := s.Config.ChartMogul.SourceID
+		if dataSourceUUID != "" {
+			updateDate := time.Now().Format("2006-01-02")
+			cmEvent := &cm.SubscriptionEvent{
+				DataSourceUUID:         dataSourceUUID,
+				CustomerExternalID:     sub.CustomerID,
+				SubscriptionExternalID: sub.ID,
+				EventType:              "subscription_updated",
+				EventDate:              updateDate,
+				EffectiveDate:          updateDate,
+			}
+
+			createdEvent, cmErr := s.ChartMogul.CreateSubscriptionEvent(cmEvent)
+			if cmErr != nil {
+				s.Logger.Errorw("Failed to create subscription update event in ChartMogul for addon addition",
+					"error", cmErr,
+					"subscription_id", sub.ID,
+					"addon_id", req.AddonID)
+			} else if createdEvent != nil {
+				s.Logger.Infow("Created subscription update event in ChartMogul for addon addition",
+					"subscription_id", sub.ID,
+					"addon_id", req.AddonID,
+					"chartmogul_event_id", createdEvent.ID)
+			}
+		}
+	}
+
 	return addonAssociation, nil
 }
 
@@ -3610,6 +3767,41 @@ func (s *subscriptionService) RemoveAddonFromSubscription(
 		"subscription_id", subscriptionID,
 		"addon_id", addonID,
 	)
+
+	// ChartMogul sync for subscription update (addon removed)
+	if s.ChartMogul != nil {
+		dataSourceUUID := s.Config.ChartMogul.SourceID
+		if dataSourceUUID != "" {
+			// Get subscription to retrieve customer ID
+			sub, err := s.SubRepo.Get(ctx, subscriptionID)
+			if err == nil {
+				// Create a subscription_updated event for addon removal
+				updateDate := time.Now().Format("2006-01-02")
+				cmEvent := &cm.SubscriptionEvent{
+					DataSourceUUID:         dataSourceUUID,
+					CustomerExternalID:     sub.CustomerID,
+					SubscriptionExternalID: sub.ID,
+					EventType:              "subscription_updated",
+					EventDate:              updateDate,
+					EffectiveDate:          updateDate,
+					// Note: AmountInCents and PlanExternalID are omitted as this is just an update event
+				}
+
+				createdEvent, cmErr := s.ChartMogul.CreateSubscriptionEvent(cmEvent)
+				if cmErr != nil {
+					s.Logger.Errorw("Failed to create subscription update event in ChartMogul for addon removal",
+						"error", cmErr,
+						"subscription_id", subscriptionID,
+						"addon_id", addonID)
+				} else if createdEvent != nil {
+					s.Logger.Infow("Created subscription update event in ChartMogul for addon removal",
+						"subscription_id", subscriptionID,
+						"addon_id", addonID,
+						"chartmogul_event_id", createdEvent.ID)
+				}
+			}
+		}
+	}
 
 	return nil
 }

@@ -521,6 +521,26 @@ func (iu *InvoiceUpdate) ClearIdempotencyKey() *InvoiceUpdate {
 	return iu
 }
 
+// SetChartmogulUUID sets the "chartmogul_uuid" field.
+func (iu *InvoiceUpdate) SetChartmogulUUID(s string) *InvoiceUpdate {
+	iu.mutation.SetChartmogulUUID(s)
+	return iu
+}
+
+// SetNillableChartmogulUUID sets the "chartmogul_uuid" field if the given value is not nil.
+func (iu *InvoiceUpdate) SetNillableChartmogulUUID(s *string) *InvoiceUpdate {
+	if s != nil {
+		iu.SetChartmogulUUID(*s)
+	}
+	return iu
+}
+
+// ClearChartmogulUUID clears the value of the "chartmogul_uuid" field.
+func (iu *InvoiceUpdate) ClearChartmogulUUID() *InvoiceUpdate {
+	iu.mutation.ClearChartmogulUUID()
+	return iu
+}
+
 // AddLineItemIDs adds the "line_items" edge to the InvoiceLineItem entity by IDs.
 func (iu *InvoiceUpdate) AddLineItemIDs(ids ...string) *InvoiceUpdate {
 	iu.mutation.AddLineItemIDs(ids...)
@@ -801,6 +821,12 @@ func (iu *InvoiceUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if iu.mutation.IdempotencyKeyCleared() {
 		_spec.ClearField(invoice.FieldIdempotencyKey, field.TypeString)
+	}
+	if value, ok := iu.mutation.ChartmogulUUID(); ok {
+		_spec.SetField(invoice.FieldChartmogulUUID, field.TypeString, value)
+	}
+	if iu.mutation.ChartmogulUUIDCleared() {
+		_spec.ClearField(invoice.FieldChartmogulUUID, field.TypeString)
 	}
 	if iu.mutation.LineItemsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -1402,6 +1428,26 @@ func (iuo *InvoiceUpdateOne) ClearIdempotencyKey() *InvoiceUpdateOne {
 	return iuo
 }
 
+// SetChartmogulUUID sets the "chartmogul_uuid" field.
+func (iuo *InvoiceUpdateOne) SetChartmogulUUID(s string) *InvoiceUpdateOne {
+	iuo.mutation.SetChartmogulUUID(s)
+	return iuo
+}
+
+// SetNillableChartmogulUUID sets the "chartmogul_uuid" field if the given value is not nil.
+func (iuo *InvoiceUpdateOne) SetNillableChartmogulUUID(s *string) *InvoiceUpdateOne {
+	if s != nil {
+		iuo.SetChartmogulUUID(*s)
+	}
+	return iuo
+}
+
+// ClearChartmogulUUID clears the value of the "chartmogul_uuid" field.
+func (iuo *InvoiceUpdateOne) ClearChartmogulUUID() *InvoiceUpdateOne {
+	iuo.mutation.ClearChartmogulUUID()
+	return iuo
+}
+
 // AddLineItemIDs adds the "line_items" edge to the InvoiceLineItem entity by IDs.
 func (iuo *InvoiceUpdateOne) AddLineItemIDs(ids ...string) *InvoiceUpdateOne {
 	iuo.mutation.AddLineItemIDs(ids...)
@@ -1712,6 +1758,12 @@ func (iuo *InvoiceUpdateOne) sqlSave(ctx context.Context) (_node *Invoice, err e
 	}
 	if iuo.mutation.IdempotencyKeyCleared() {
 		_spec.ClearField(invoice.FieldIdempotencyKey, field.TypeString)
+	}
+	if value, ok := iuo.mutation.ChartmogulUUID(); ok {
+		_spec.SetField(invoice.FieldChartmogulUUID, field.TypeString, value)
+	}
+	if iuo.mutation.ChartmogulUUIDCleared() {
+		_spec.ClearField(invoice.FieldChartmogulUUID, field.TypeString)
 	}
 	if iuo.mutation.LineItemsCleared() {
 		edge := &sqlgraph.EdgeSpec{

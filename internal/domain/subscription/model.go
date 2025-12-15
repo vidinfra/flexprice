@@ -107,6 +107,9 @@ type Subscription struct {
 	// GatewayPaymentMethodID is the gateway payment method ID for this subscription
 	GatewayPaymentMethodID *string `db:"gateway_payment_method_id" json:"gateway_payment_method_id,omitempty"`
 
+	// ChartMogulInvoiceUUID is the ChartMogul invoice UUID used to create this subscription
+	ChartMogulInvoiceUUID *string `db:"chartmogul_invoice_uuid" json:"chartmogul_invoice_uuid,omitempty"`
+
 	LineItems []*SubscriptionLineItem `json:"line_items,omitempty"`
 
 	Pauses []*SubscriptionPause `json:"pauses,omitempty"`
@@ -145,6 +148,12 @@ func GetSubscriptionFromEnt(sub *ent.Subscription) *Subscription {
 		couponAssociations = coupon_association.FromEntList(sub.Edges.CouponAssociations)
 	}
 
+	// Convert ChartMogul invoice UUID from string to *string
+	var chartMogulInvoiceUUID *string
+	if sub.ChartmogulInvoiceUUID != "" {
+		chartMogulInvoiceUUID = &sub.ChartmogulInvoiceUUID
+	}
+
 	return &Subscription{
 		ID:                     sub.ID,
 		LookupKey:              sub.LookupKey,
@@ -176,6 +185,7 @@ func GetSubscriptionFromEnt(sub *ent.Subscription) *Subscription {
 		PaymentBehavior:        string(sub.PaymentBehavior),
 		CollectionMethod:       string(sub.CollectionMethod),
 		GatewayPaymentMethodID: lo.ToPtr(sub.GatewayPaymentMethodID),
+		ChartMogulInvoiceUUID:  chartMogulInvoiceUUID,
 
 		LineItems:          lineItems,
 		CouponAssociations: couponAssociations,

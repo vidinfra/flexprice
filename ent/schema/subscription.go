@@ -152,6 +152,12 @@ func (Subscription) Fields() []ent.Field {
 			NotEmpty().
 			Immutable().
 			Default(string(types.ProrationBehaviorNone)),
+		field.String("chartmogul_invoice_uuid").
+			SchemaType(map[string]string{
+				"postgres": "varchar(255)",
+			}).
+			Optional().
+			Comment("ChartMogul invoice UUID used to create this subscription"),
 	}
 }
 

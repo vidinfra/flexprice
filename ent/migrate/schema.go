@@ -665,6 +665,7 @@ var (
 		{Name: "address_state", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(100)"}},
 		{Name: "address_postal_code", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(20)"}},
 		{Name: "address_country", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(2)"}},
+		{Name: "chartmogul_uuid", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
 	}
 	// CustomersTable holds the schema information for the "customers" table.
 	CustomersTable = &schema.Table{
@@ -921,6 +922,7 @@ var (
 		{Name: "invoice_number", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "billing_sequence", Type: field.TypeInt, Nullable: true, SchemaType: map[string]string{"postgres": "integer"}},
 		{Name: "idempotency_key", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(100)"}},
+		{Name: "chartmogul_uuid", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
 	}
 	// InvoicesTable holds the schema information for the "invoices" table.
 	InvoicesTable = &schema.Table{
@@ -1228,6 +1230,7 @@ var (
 		{Name: "name", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(255)"}},
 		{Name: "description", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "display_order", Type: field.TypeInt, Default: 0},
+		{Name: "chartmogul_uuid", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
 	}
 	// PlansTable holds the schema information for the "plans" table.
 	PlansTable = &schema.Table{
@@ -1479,6 +1482,7 @@ var (
 		{Name: "gateway_payment_method_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
 		{Name: "customer_timezone", Type: field.TypeString, Default: "UTC"},
 		{Name: "proration_behavior", Type: field.TypeString, Default: "none"},
+		{Name: "chartmogul_invoice_uuid", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(255)"}},
 	}
 	// SubscriptionsTable holds the schema information for the "subscriptions" table.
 	SubscriptionsTable = &schema.Table{

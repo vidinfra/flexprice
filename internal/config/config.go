@@ -37,6 +37,7 @@ type Configuration struct {
 	FeatureUsageTracking FeatureUsageTrackingConfig `mapstructure:"feature_usage_tracking" validate:"required"`
 	EnvAccess            EnvAccessConfig            `mapstructure:"env_access" json:"env_access" validate:"omitempty"`
 	FeatureFlag          FeatureFlagConfig          `mapstructure:"feature_flag" validate:"required"`
+	ChartMogul           ChartMogulConfig           `mapstructure:"chartmogul" validate:"omitempty"`
 }
 
 type CacheConfig struct {
@@ -185,6 +186,12 @@ type EnvAccessConfig struct {
 
 type FeatureFlagConfig struct {
 	EnableFeatureUsageForAnalytics bool `mapstructure:"enable_feature_usage_for_analytics" validate:"required"`
+}
+
+type ChartMogulConfig struct {
+	Enabled  bool   `mapstructure:"enabled" validate:"required"`
+	SourceID string `mapstructure:"source_id" validate:"required"`
+	APIKey   string `mapstructure:"api_key" validate:"required"`
 }
 
 func NewConfig() (*Configuration, error) {

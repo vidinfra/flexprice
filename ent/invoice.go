@@ -93,6 +93,8 @@ type Invoice struct {
 	BillingSequence *int `json:"billing_sequence,omitempty"`
 	// Key for ensuring idempotent invoice creation
 	IdempotencyKey *string `json:"idempotency_key,omitempty"`
+	// ChartmogulUUID holds the value of the "chartmogul_uuid" field.
+	ChartmogulUUID string `json:"chartmogul_uuid,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the InvoiceQuery when eager-loading is set.
 	Edges        InvoiceEdges `json:"edges"`
@@ -141,7 +143,7 @@ func (*Invoice) scanValues(columns []string) ([]any, error) {
 			values[i] = new(decimal.Decimal)
 		case invoice.FieldVersion, invoice.FieldBillingSequence:
 			values[i] = new(sql.NullInt64)
-		case invoice.FieldID, invoice.FieldTenantID, invoice.FieldStatus, invoice.FieldCreatedBy, invoice.FieldUpdatedBy, invoice.FieldEnvironmentID, invoice.FieldCustomerID, invoice.FieldSubscriptionID, invoice.FieldInvoiceType, invoice.FieldInvoiceStatus, invoice.FieldPaymentStatus, invoice.FieldCurrency, invoice.FieldDescription, invoice.FieldBillingPeriod, invoice.FieldInvoicePdfURL, invoice.FieldBillingReason, invoice.FieldInvoiceNumber, invoice.FieldIdempotencyKey:
+		case invoice.FieldID, invoice.FieldTenantID, invoice.FieldStatus, invoice.FieldCreatedBy, invoice.FieldUpdatedBy, invoice.FieldEnvironmentID, invoice.FieldCustomerID, invoice.FieldSubscriptionID, invoice.FieldInvoiceType, invoice.FieldInvoiceStatus, invoice.FieldPaymentStatus, invoice.FieldCurrency, invoice.FieldDescription, invoice.FieldBillingPeriod, invoice.FieldInvoicePdfURL, invoice.FieldBillingReason, invoice.FieldInvoiceNumber, invoice.FieldIdempotencyKey, invoice.FieldChartmogulUUID:
 			values[i] = new(sql.NullString)
 		case invoice.FieldCreatedAt, invoice.FieldUpdatedAt, invoice.FieldDueDate, invoice.FieldPaidAt, invoice.FieldVoidedAt, invoice.FieldFinalizedAt, invoice.FieldPeriodStart, invoice.FieldPeriodEnd:
 			values[i] = new(sql.NullTime)
@@ -404,6 +406,12 @@ func (i *Invoice) assignValues(columns []string, values []any) error {
 				i.IdempotencyKey = new(string)
 				*i.IdempotencyKey = value.String
 			}
+		case invoice.FieldChartmogulUUID:
+			if value, ok := values[j].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field chartmogul_uuid", values[j])
+			} else if value.Valid {
+				i.ChartmogulUUID = value.String
+			}
 		default:
 			i.selectValues.Set(columns[j], values[j])
 		}
@@ -588,6 +596,9 @@ func (i *Invoice) String() string {
 		builder.WriteString("idempotency_key=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	builder.WriteString("chartmogul_uuid=")
+	builder.WriteString(i.ChartmogulUUID)
 	builder.WriteByte(')')
 	return builder.String()
 }

@@ -17864,6 +17864,7 @@ type CustomerMutation struct {
 	address_state       *string
 	address_postal_code *string
 	address_country     *string
+	chartmogul_uuid     *string
 	clearedFields       map[string]struct{}
 	done                bool
 	oldValue            func(context.Context) (*Customer, error)
@@ -18729,6 +18730,55 @@ func (m *CustomerMutation) ResetAddressCountry() {
 	delete(m.clearedFields, customer.FieldAddressCountry)
 }
 
+// SetChartmogulUUID sets the "chartmogul_uuid" field.
+func (m *CustomerMutation) SetChartmogulUUID(s string) {
+	m.chartmogul_uuid = &s
+}
+
+// ChartmogulUUID returns the value of the "chartmogul_uuid" field in the mutation.
+func (m *CustomerMutation) ChartmogulUUID() (r string, exists bool) {
+	v := m.chartmogul_uuid
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChartmogulUUID returns the old "chartmogul_uuid" field's value of the Customer entity.
+// If the Customer object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CustomerMutation) OldChartmogulUUID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChartmogulUUID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChartmogulUUID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChartmogulUUID: %w", err)
+	}
+	return oldValue.ChartmogulUUID, nil
+}
+
+// ClearChartmogulUUID clears the value of the "chartmogul_uuid" field.
+func (m *CustomerMutation) ClearChartmogulUUID() {
+	m.chartmogul_uuid = nil
+	m.clearedFields[customer.FieldChartmogulUUID] = struct{}{}
+}
+
+// ChartmogulUUIDCleared returns if the "chartmogul_uuid" field was cleared in this mutation.
+func (m *CustomerMutation) ChartmogulUUIDCleared() bool {
+	_, ok := m.clearedFields[customer.FieldChartmogulUUID]
+	return ok
+}
+
+// ResetChartmogulUUID resets all changes to the "chartmogul_uuid" field.
+func (m *CustomerMutation) ResetChartmogulUUID() {
+	m.chartmogul_uuid = nil
+	delete(m.clearedFields, customer.FieldChartmogulUUID)
+}
+
 // Where appends a list predicates to the CustomerMutation builder.
 func (m *CustomerMutation) Where(ps ...predicate.Customer) {
 	m.predicates = append(m.predicates, ps...)
@@ -18763,7 +18813,7 @@ func (m *CustomerMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *CustomerMutation) Fields() []string {
-	fields := make([]string, 0, 17)
+	fields := make([]string, 0, 18)
 	if m.tenant_id != nil {
 		fields = append(fields, customer.FieldTenantID)
 	}
@@ -18815,6 +18865,9 @@ func (m *CustomerMutation) Fields() []string {
 	if m.address_country != nil {
 		fields = append(fields, customer.FieldAddressCountry)
 	}
+	if m.chartmogul_uuid != nil {
+		fields = append(fields, customer.FieldChartmogulUUID)
+	}
 	return fields
 }
 
@@ -18857,6 +18910,8 @@ func (m *CustomerMutation) Field(name string) (ent.Value, bool) {
 		return m.AddressPostalCode()
 	case customer.FieldAddressCountry:
 		return m.AddressCountry()
+	case customer.FieldChartmogulUUID:
+		return m.ChartmogulUUID()
 	}
 	return nil, false
 }
@@ -18900,6 +18955,8 @@ func (m *CustomerMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldAddressPostalCode(ctx)
 	case customer.FieldAddressCountry:
 		return m.OldAddressCountry(ctx)
+	case customer.FieldChartmogulUUID:
+		return m.OldChartmogulUUID(ctx)
 	}
 	return nil, fmt.Errorf("unknown Customer field %s", name)
 }
@@ -19028,6 +19085,13 @@ func (m *CustomerMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetAddressCountry(v)
 		return nil
+	case customer.FieldChartmogulUUID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChartmogulUUID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Customer field %s", name)
 }
@@ -19091,6 +19155,9 @@ func (m *CustomerMutation) ClearedFields() []string {
 	if m.FieldCleared(customer.FieldAddressCountry) {
 		fields = append(fields, customer.FieldAddressCountry)
 	}
+	if m.FieldCleared(customer.FieldChartmogulUUID) {
+		fields = append(fields, customer.FieldChartmogulUUID)
+	}
 	return fields
 }
 
@@ -19137,6 +19204,9 @@ func (m *CustomerMutation) ClearField(name string) error {
 		return nil
 	case customer.FieldAddressCountry:
 		m.ClearAddressCountry()
+		return nil
+	case customer.FieldChartmogulUUID:
+		m.ClearChartmogulUUID()
 		return nil
 	}
 	return fmt.Errorf("unknown Customer nullable field %s", name)
@@ -19196,6 +19266,9 @@ func (m *CustomerMutation) ResetField(name string) error {
 		return nil
 	case customer.FieldAddressCountry:
 		m.ResetAddressCountry()
+		return nil
+	case customer.FieldChartmogulUUID:
+		m.ResetChartmogulUUID()
 		return nil
 	}
 	return fmt.Errorf("unknown Customer field %s", name)
@@ -23714,6 +23787,7 @@ type InvoiceMutation struct {
 	billing_sequence           *int
 	addbilling_sequence        *int
 	idempotency_key            *string
+	chartmogul_uuid            *string
 	clearedFields              map[string]struct{}
 	line_items                 map[string]struct{}
 	removedline_items          map[string]struct{}
@@ -25515,6 +25589,55 @@ func (m *InvoiceMutation) ResetIdempotencyKey() {
 	delete(m.clearedFields, invoice.FieldIdempotencyKey)
 }
 
+// SetChartmogulUUID sets the "chartmogul_uuid" field.
+func (m *InvoiceMutation) SetChartmogulUUID(s string) {
+	m.chartmogul_uuid = &s
+}
+
+// ChartmogulUUID returns the value of the "chartmogul_uuid" field in the mutation.
+func (m *InvoiceMutation) ChartmogulUUID() (r string, exists bool) {
+	v := m.chartmogul_uuid
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChartmogulUUID returns the old "chartmogul_uuid" field's value of the Invoice entity.
+// If the Invoice object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *InvoiceMutation) OldChartmogulUUID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChartmogulUUID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChartmogulUUID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChartmogulUUID: %w", err)
+	}
+	return oldValue.ChartmogulUUID, nil
+}
+
+// ClearChartmogulUUID clears the value of the "chartmogul_uuid" field.
+func (m *InvoiceMutation) ClearChartmogulUUID() {
+	m.chartmogul_uuid = nil
+	m.clearedFields[invoice.FieldChartmogulUUID] = struct{}{}
+}
+
+// ChartmogulUUIDCleared returns if the "chartmogul_uuid" field was cleared in this mutation.
+func (m *InvoiceMutation) ChartmogulUUIDCleared() bool {
+	_, ok := m.clearedFields[invoice.FieldChartmogulUUID]
+	return ok
+}
+
+// ResetChartmogulUUID resets all changes to the "chartmogul_uuid" field.
+func (m *InvoiceMutation) ResetChartmogulUUID() {
+	m.chartmogul_uuid = nil
+	delete(m.clearedFields, invoice.FieldChartmogulUUID)
+}
+
 // AddLineItemIDs adds the "line_items" edge to the InvoiceLineItem entity by ids.
 func (m *InvoiceMutation) AddLineItemIDs(ids ...string) {
 	if m.line_items == nil {
@@ -25657,7 +25780,7 @@ func (m *InvoiceMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *InvoiceMutation) Fields() []string {
-	fields := make([]string, 0, 37)
+	fields := make([]string, 0, 38)
 	if m.tenant_id != nil {
 		fields = append(fields, invoice.FieldTenantID)
 	}
@@ -25769,6 +25892,9 @@ func (m *InvoiceMutation) Fields() []string {
 	if m.idempotency_key != nil {
 		fields = append(fields, invoice.FieldIdempotencyKey)
 	}
+	if m.chartmogul_uuid != nil {
+		fields = append(fields, invoice.FieldChartmogulUUID)
+	}
 	return fields
 }
 
@@ -25851,6 +25977,8 @@ func (m *InvoiceMutation) Field(name string) (ent.Value, bool) {
 		return m.BillingSequence()
 	case invoice.FieldIdempotencyKey:
 		return m.IdempotencyKey()
+	case invoice.FieldChartmogulUUID:
+		return m.ChartmogulUUID()
 	}
 	return nil, false
 }
@@ -25934,6 +26062,8 @@ func (m *InvoiceMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldBillingSequence(ctx)
 	case invoice.FieldIdempotencyKey:
 		return m.OldIdempotencyKey(ctx)
+	case invoice.FieldChartmogulUUID:
+		return m.OldChartmogulUUID(ctx)
 	}
 	return nil, fmt.Errorf("unknown Invoice field %s", name)
 }
@@ -26202,6 +26332,13 @@ func (m *InvoiceMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetIdempotencyKey(v)
 		return nil
+	case invoice.FieldChartmogulUUID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChartmogulUUID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Invoice field %s", name)
 }
@@ -26331,6 +26468,9 @@ func (m *InvoiceMutation) ClearedFields() []string {
 	if m.FieldCleared(invoice.FieldIdempotencyKey) {
 		fields = append(fields, invoice.FieldIdempotencyKey)
 	}
+	if m.FieldCleared(invoice.FieldChartmogulUUID) {
+		fields = append(fields, invoice.FieldChartmogulUUID)
+	}
 	return fields
 }
 
@@ -26416,6 +26556,9 @@ func (m *InvoiceMutation) ClearField(name string) error {
 		return nil
 	case invoice.FieldIdempotencyKey:
 		m.ClearIdempotencyKey()
+		return nil
+	case invoice.FieldChartmogulUUID:
+		m.ClearChartmogulUUID()
 		return nil
 	}
 	return fmt.Errorf("unknown Invoice nullable field %s", name)
@@ -26535,6 +26678,9 @@ func (m *InvoiceMutation) ResetField(name string) error {
 		return nil
 	case invoice.FieldIdempotencyKey:
 		m.ResetIdempotencyKey()
+		return nil
+	case invoice.FieldChartmogulUUID:
+		m.ResetChartmogulUUID()
 		return nil
 	}
 	return fmt.Errorf("unknown Invoice field %s", name)
@@ -33869,6 +34015,7 @@ type PlanMutation struct {
 	description          *string
 	display_order        *int
 	adddisplay_order     *int
+	chartmogul_uuid      *string
 	clearedFields        map[string]struct{}
 	credit_grants        map[string]struct{}
 	removedcredit_grants map[string]struct{}
@@ -34512,6 +34659,55 @@ func (m *PlanMutation) ResetDisplayOrder() {
 	m.adddisplay_order = nil
 }
 
+// SetChartmogulUUID sets the "chartmogul_uuid" field.
+func (m *PlanMutation) SetChartmogulUUID(s string) {
+	m.chartmogul_uuid = &s
+}
+
+// ChartmogulUUID returns the value of the "chartmogul_uuid" field in the mutation.
+func (m *PlanMutation) ChartmogulUUID() (r string, exists bool) {
+	v := m.chartmogul_uuid
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChartmogulUUID returns the old "chartmogul_uuid" field's value of the Plan entity.
+// If the Plan object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PlanMutation) OldChartmogulUUID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChartmogulUUID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChartmogulUUID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChartmogulUUID: %w", err)
+	}
+	return oldValue.ChartmogulUUID, nil
+}
+
+// ClearChartmogulUUID clears the value of the "chartmogul_uuid" field.
+func (m *PlanMutation) ClearChartmogulUUID() {
+	m.chartmogul_uuid = nil
+	m.clearedFields[plan.FieldChartmogulUUID] = struct{}{}
+}
+
+// ChartmogulUUIDCleared returns if the "chartmogul_uuid" field was cleared in this mutation.
+func (m *PlanMutation) ChartmogulUUIDCleared() bool {
+	_, ok := m.clearedFields[plan.FieldChartmogulUUID]
+	return ok
+}
+
+// ResetChartmogulUUID resets all changes to the "chartmogul_uuid" field.
+func (m *PlanMutation) ResetChartmogulUUID() {
+	m.chartmogul_uuid = nil
+	delete(m.clearedFields, plan.FieldChartmogulUUID)
+}
+
 // AddCreditGrantIDs adds the "credit_grants" edge to the CreditGrant entity by ids.
 func (m *PlanMutation) AddCreditGrantIDs(ids ...string) {
 	if m.credit_grants == nil {
@@ -34600,7 +34796,7 @@ func (m *PlanMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PlanMutation) Fields() []string {
-	fields := make([]string, 0, 12)
+	fields := make([]string, 0, 13)
 	if m.tenant_id != nil {
 		fields = append(fields, plan.FieldTenantID)
 	}
@@ -34637,6 +34833,9 @@ func (m *PlanMutation) Fields() []string {
 	if m.display_order != nil {
 		fields = append(fields, plan.FieldDisplayOrder)
 	}
+	if m.chartmogul_uuid != nil {
+		fields = append(fields, plan.FieldChartmogulUUID)
+	}
 	return fields
 }
 
@@ -34669,6 +34868,8 @@ func (m *PlanMutation) Field(name string) (ent.Value, bool) {
 		return m.Description()
 	case plan.FieldDisplayOrder:
 		return m.DisplayOrder()
+	case plan.FieldChartmogulUUID:
+		return m.ChartmogulUUID()
 	}
 	return nil, false
 }
@@ -34702,6 +34903,8 @@ func (m *PlanMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldDescription(ctx)
 	case plan.FieldDisplayOrder:
 		return m.OldDisplayOrder(ctx)
+	case plan.FieldChartmogulUUID:
+		return m.OldChartmogulUUID(ctx)
 	}
 	return nil, fmt.Errorf("unknown Plan field %s", name)
 }
@@ -34795,6 +34998,13 @@ func (m *PlanMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetDisplayOrder(v)
 		return nil
+	case plan.FieldChartmogulUUID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChartmogulUUID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Plan field %s", name)
 }
@@ -34858,6 +35068,9 @@ func (m *PlanMutation) ClearedFields() []string {
 	if m.FieldCleared(plan.FieldDescription) {
 		fields = append(fields, plan.FieldDescription)
 	}
+	if m.FieldCleared(plan.FieldChartmogulUUID) {
+		fields = append(fields, plan.FieldChartmogulUUID)
+	}
 	return fields
 }
 
@@ -34889,6 +35102,9 @@ func (m *PlanMutation) ClearField(name string) error {
 		return nil
 	case plan.FieldDescription:
 		m.ClearDescription()
+		return nil
+	case plan.FieldChartmogulUUID:
+		m.ClearChartmogulUUID()
 		return nil
 	}
 	return fmt.Errorf("unknown Plan nullable field %s", name)
@@ -34933,6 +35149,9 @@ func (m *PlanMutation) ResetField(name string) error {
 		return nil
 	case plan.FieldDisplayOrder:
 		m.ResetDisplayOrder()
+		return nil
+	case plan.FieldChartmogulUUID:
+		m.ResetChartmogulUUID()
 		return nil
 	}
 	return fmt.Errorf("unknown Plan field %s", name)
@@ -41484,6 +41703,7 @@ type SubscriptionMutation struct {
 	gateway_payment_method_id  *string
 	customer_timezone          *string
 	proration_behavior         *string
+	chartmogul_invoice_uuid    *string
 	clearedFields              map[string]struct{}
 	line_items                 map[string]struct{}
 	removedline_items          map[string]struct{}
@@ -43165,6 +43385,55 @@ func (m *SubscriptionMutation) ResetProrationBehavior() {
 	m.proration_behavior = nil
 }
 
+// SetChartmogulInvoiceUUID sets the "chartmogul_invoice_uuid" field.
+func (m *SubscriptionMutation) SetChartmogulInvoiceUUID(s string) {
+	m.chartmogul_invoice_uuid = &s
+}
+
+// ChartmogulInvoiceUUID returns the value of the "chartmogul_invoice_uuid" field in the mutation.
+func (m *SubscriptionMutation) ChartmogulInvoiceUUID() (r string, exists bool) {
+	v := m.chartmogul_invoice_uuid
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldChartmogulInvoiceUUID returns the old "chartmogul_invoice_uuid" field's value of the Subscription entity.
+// If the Subscription object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SubscriptionMutation) OldChartmogulInvoiceUUID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldChartmogulInvoiceUUID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldChartmogulInvoiceUUID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldChartmogulInvoiceUUID: %w", err)
+	}
+	return oldValue.ChartmogulInvoiceUUID, nil
+}
+
+// ClearChartmogulInvoiceUUID clears the value of the "chartmogul_invoice_uuid" field.
+func (m *SubscriptionMutation) ClearChartmogulInvoiceUUID() {
+	m.chartmogul_invoice_uuid = nil
+	m.clearedFields[subscription.FieldChartmogulInvoiceUUID] = struct{}{}
+}
+
+// ChartmogulInvoiceUUIDCleared returns if the "chartmogul_invoice_uuid" field was cleared in this mutation.
+func (m *SubscriptionMutation) ChartmogulInvoiceUUIDCleared() bool {
+	_, ok := m.clearedFields[subscription.FieldChartmogulInvoiceUUID]
+	return ok
+}
+
+// ResetChartmogulInvoiceUUID resets all changes to the "chartmogul_invoice_uuid" field.
+func (m *SubscriptionMutation) ResetChartmogulInvoiceUUID() {
+	m.chartmogul_invoice_uuid = nil
+	delete(m.clearedFields, subscription.FieldChartmogulInvoiceUUID)
+}
+
 // AddLineItemIDs adds the "line_items" edge to the SubscriptionLineItem entity by ids.
 func (m *SubscriptionMutation) AddLineItemIDs(ids ...string) {
 	if m.line_items == nil {
@@ -43508,7 +43777,7 @@ func (m *SubscriptionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SubscriptionMutation) Fields() []string {
-	fields := make([]string, 0, 37)
+	fields := make([]string, 0, 38)
 	if m.tenant_id != nil {
 		fields = append(fields, subscription.FieldTenantID)
 	}
@@ -43620,6 +43889,9 @@ func (m *SubscriptionMutation) Fields() []string {
 	if m.proration_behavior != nil {
 		fields = append(fields, subscription.FieldProrationBehavior)
 	}
+	if m.chartmogul_invoice_uuid != nil {
+		fields = append(fields, subscription.FieldChartmogulInvoiceUUID)
+	}
 	return fields
 }
 
@@ -43702,6 +43974,8 @@ func (m *SubscriptionMutation) Field(name string) (ent.Value, bool) {
 		return m.CustomerTimezone()
 	case subscription.FieldProrationBehavior:
 		return m.ProrationBehavior()
+	case subscription.FieldChartmogulInvoiceUUID:
+		return m.ChartmogulInvoiceUUID()
 	}
 	return nil, false
 }
@@ -43785,6 +44059,8 @@ func (m *SubscriptionMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldCustomerTimezone(ctx)
 	case subscription.FieldProrationBehavior:
 		return m.OldProrationBehavior(ctx)
+	case subscription.FieldChartmogulInvoiceUUID:
+		return m.OldChartmogulInvoiceUUID(ctx)
 	}
 	return nil, fmt.Errorf("unknown Subscription field %s", name)
 }
@@ -44053,6 +44329,13 @@ func (m *SubscriptionMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetProrationBehavior(v)
 		return nil
+	case subscription.FieldChartmogulInvoiceUUID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetChartmogulInvoiceUUID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Subscription field %s", name)
 }
@@ -44152,6 +44435,9 @@ func (m *SubscriptionMutation) ClearedFields() []string {
 	if m.FieldCleared(subscription.FieldGatewayPaymentMethodID) {
 		fields = append(fields, subscription.FieldGatewayPaymentMethodID)
 	}
+	if m.FieldCleared(subscription.FieldChartmogulInvoiceUUID) {
+		fields = append(fields, subscription.FieldChartmogulInvoiceUUID)
+	}
 	return fields
 }
 
@@ -44207,6 +44493,9 @@ func (m *SubscriptionMutation) ClearField(name string) error {
 		return nil
 	case subscription.FieldGatewayPaymentMethodID:
 		m.ClearGatewayPaymentMethodID()
+		return nil
+	case subscription.FieldChartmogulInvoiceUUID:
+		m.ClearChartmogulInvoiceUUID()
 		return nil
 	}
 	return fmt.Errorf("unknown Subscription nullable field %s", name)
@@ -44326,6 +44615,9 @@ func (m *SubscriptionMutation) ResetField(name string) error {
 		return nil
 	case subscription.FieldProrationBehavior:
 		m.ResetProrationBehavior()
+		return nil
+	case subscription.FieldChartmogulInvoiceUUID:
+		m.ResetChartmogulInvoiceUUID()
 		return nil
 	}
 	return fmt.Errorf("unknown Subscription field %s", name)

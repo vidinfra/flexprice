@@ -160,3 +160,8 @@ feature_usage_tracking:
 feature_flag:
   # This flag is used to enable/disable feature usage for analytics
   enable_feature_usage_for_analytics: true # TODO: cleanup by 15th October 2025
+
+chartmogul:
+  enabled: true
+  source_id: "ds_3372b7b2-d5c8-11f0-82ca-bf9af8af911f"
+  api_key: "c285b5f9c2ee30f4ceed559b103b3f68"

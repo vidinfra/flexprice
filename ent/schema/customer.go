@@ -79,6 +79,11 @@ func (Customer) Fields() []ent.Field {
 				"postgres": "varchar(2)",
 			}).
 			Optional(),
+		field.String("chartmogul_uuid").
+			SchemaType(map[string]string{
+				"postgres": "varchar(255)",
+			}).
+			Optional(),
 	}
 }
 

@@ -94,6 +94,8 @@ type Subscription struct {
 	CustomerTimezone string `json:"customer_timezone,omitempty"`
 	// ProrationBehavior holds the value of the "proration_behavior" field.
 	ProrationBehavior string `json:"proration_behavior,omitempty"`
+	// ChartMogul invoice UUID used to create this subscription
+	ChartmogulInvoiceUUID string `json:"chartmogul_invoice_uuid,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the SubscriptionQuery when eager-loading is set.
 	Edges        SubscriptionEdges `json:"edges"`
@@ -188,7 +190,7 @@ func (*Subscription) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case subscription.FieldBillingPeriodCount, subscription.FieldVersion:
 			values[i] = new(sql.NullInt64)
-		case subscription.FieldID, subscription.FieldTenantID, subscription.FieldStatus, subscription.FieldCreatedBy, subscription.FieldUpdatedBy, subscription.FieldEnvironmentID, subscription.FieldLookupKey, subscription.FieldCustomerID, subscription.FieldPlanID, subscription.FieldSubscriptionStatus, subscription.FieldCurrency, subscription.FieldBillingCadence, subscription.FieldBillingPeriod, subscription.FieldPauseStatus, subscription.FieldActivePauseID, subscription.FieldBillingCycle, subscription.FieldPaymentBehavior, subscription.FieldCollectionMethod, subscription.FieldGatewayPaymentMethodID, subscription.FieldCustomerTimezone, subscription.FieldProrationBehavior:
+		case subscription.FieldID, subscription.FieldTenantID, subscription.FieldStatus, subscription.FieldCreatedBy, subscription.FieldUpdatedBy, subscription.FieldEnvironmentID, subscription.FieldLookupKey, subscription.FieldCustomerID, subscription.FieldPlanID, subscription.FieldSubscriptionStatus, subscription.FieldCurrency, subscription.FieldBillingCadence, subscription.FieldBillingPeriod, subscription.FieldPauseStatus, subscription.FieldActivePauseID, subscription.FieldBillingCycle, subscription.FieldPaymentBehavior, subscription.FieldCollectionMethod, subscription.FieldGatewayPaymentMethodID, subscription.FieldCustomerTimezone, subscription.FieldProrationBehavior, subscription.FieldChartmogulInvoiceUUID:
 			values[i] = new(sql.NullString)
 		case subscription.FieldCreatedAt, subscription.FieldUpdatedAt, subscription.FieldBillingAnchor, subscription.FieldStartDate, subscription.FieldEndDate, subscription.FieldCurrentPeriodStart, subscription.FieldCurrentPeriodEnd, subscription.FieldCancelledAt, subscription.FieldCancelAt, subscription.FieldTrialStart, subscription.FieldTrialEnd:
 			values[i] = new(sql.NullTime)
@@ -445,6 +447,12 @@ func (s *Subscription) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				s.ProrationBehavior = value.String
 			}
+		case subscription.FieldChartmogulInvoiceUUID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field chartmogul_invoice_uuid", values[i])
+			} else if value.Valid {
+				s.ChartmogulInvoiceUUID = value.String
+			}
 		default:
 			s.selectValues.Set(columns[i], values[i])
 		}
@@ -637,6 +645,9 @@ func (s *Subscription) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("proration_behavior=")
 	builder.WriteString(s.ProrationBehavior)
+	builder.WriteString(", ")
+	builder.WriteString("chartmogul_invoice_uuid=")
+	builder.WriteString(s.ChartmogulInvoiceUUID)
 	builder.WriteByte(')')
 	return builder.String()
 }

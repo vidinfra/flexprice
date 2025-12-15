@@ -56,7 +56,7 @@ func (r *customerRepository) Create(ctx context.Context, c *domainCustomer.Custo
 		c.EnvironmentID = types.GetEnvironmentID(ctx)
 	}
 
-	customer, err := client.Customer.Create().
+	createBuilder := client.Customer.Create().
 		SetID(c.ID).
 		SetTenantID(c.TenantID).
 		SetExternalID(c.ExternalID).
@@ -74,8 +74,14 @@ func (r *customerRepository) Create(ctx context.Context, c *domainCustomer.Custo
 		SetUpdatedAt(c.UpdatedAt).
 		SetCreatedBy(c.CreatedBy).
 		SetUpdatedBy(c.UpdatedBy).
-		SetEnvironmentID(c.EnvironmentID).
-		Save(ctx)
+		SetEnvironmentID(c.EnvironmentID)
+
+	// Set ChartMogul UUID if provided
+	if c.ChartMogulUUID != nil {
+		createBuilder = createBuilder.SetNillableChartmogulUUID(c.ChartMogulUUID)
+	}
+
+	customer, err := createBuilder.Save(ctx)
 
 	if err != nil {
 		SetSpanError(span, err)
@@ -318,7 +324,7 @@ func (r *customerRepository) Update(ctx context.Context, c *domainCustomer.Custo
 	})
 	defer FinishSpan(span)
 
-	_, err := client.Customer.Update().
+	updateBuilder := client.Customer.Update().
 		Where(
 			customer.ID(c.ID),
 			customer.TenantID(c.TenantID),
@@ -335,8 +341,14 @@ func (r *customerRepository) Update(ctx context.Context, c *domainCustomer.Custo
 		SetAddressCountry(c.AddressCountry).
 		SetMetadata(c.Metadata).
 		SetUpdatedAt(time.Now().UTC()).
-		SetUpdatedBy(types.GetUserID(ctx)).
-		Save(ctx)
+		SetUpdatedBy(types.GetUserID(ctx))
+
+	// Set ChartMogul UUID if provided
+	if c.ChartMogulUUID != nil {
+		updateBuilder = updateBuilder.SetNillableChartmogulUUID(c.ChartMogulUUID)
+	}
+
+	_, err := updateBuilder.Save(ctx)
 
 	if err != nil {
 		SetSpanError(span, err)

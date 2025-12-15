@@ -180,6 +180,11 @@ func (r *subscriptionRepository) Update(ctx context.Context, sub *domainSub.Subs
 		SetUpdatedBy(types.GetUserID(ctx)).
 		AddVersion(1) // Increment version atomically
 
+	// Set ChartMogul invoice UUID if provided
+	if sub.ChartMogulInvoiceUUID != nil {
+		query.SetNillableChartmogulInvoiceUUID(sub.ChartMogulInvoiceUUID)
+	}
+
 	if sub.ActivePauseID != nil {
 		query.SetActivePauseID(*sub.ActivePauseID)
 	} else {

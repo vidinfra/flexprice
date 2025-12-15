@@ -41,6 +41,9 @@ type Customer struct {
 	// Metadata
 	Metadata map[string]string `db:"metadata" json:"metadata"`
 
+	// ChartMogulUUID is the ChartMogul customer UUID for analytics sync
+	ChartMogulUUID *string `db:"chartmogul_uuid" json:"chartmogul_uuid,omitempty"`
+
 	// EnvironmentID is the environment identifier for the customer
 	EnvironmentID string `db:"environment_id" json:"environment_id"`
 
@@ -52,6 +55,13 @@ func FromEnt(c *ent.Customer) *Customer {
 	if c == nil {
 		return nil
 	}
+
+	// Convert ChartMogul UUID from string to *string
+	var chartMogulUUID *string
+	if c.ChartmogulUUID != "" {
+		chartMogulUUID = &c.ChartmogulUUID
+	}
+
 	return &Customer{
 		ID:                c.ID,
 		ExternalID:        c.ExternalID,
@@ -63,6 +73,7 @@ func FromEnt(c *ent.Customer) *Customer {
 		AddressState:      c.AddressState,
 		AddressPostalCode: c.AddressPostalCode,
 		AddressCountry:    c.AddressCountry,
+		ChartMogulUUID:    chartMogulUUID,
 		Metadata:          c.Metadata,
 		EnvironmentID:     c.EnvironmentID,
 		BaseModel: types.BaseModel{

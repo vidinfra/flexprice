@@ -144,6 +144,11 @@ func AddressCountry(v string) predicate.Customer {
 	return predicate.Customer(sql.FieldEQ(FieldAddressCountry, v))
 }
 
+// ChartmogulUUID applies equality check predicate on the "chartmogul_uuid" field. It's identical to ChartmogulUUIDEQ.
+func ChartmogulUUID(v string) predicate.Customer {
+	return predicate.Customer(sql.FieldEQ(FieldChartmogulUUID, v))
+}
+
 // TenantIDEQ applies the EQ predicate on the "tenant_id" field.
 func TenantIDEQ(v string) predicate.Customer {
 	return predicate.Customer(sql.FieldEQ(FieldTenantID, v))
@@ -1242,6 +1247,81 @@ func AddressCountryEqualFold(v string) predicate.Customer {
 // AddressCountryContainsFold applies the ContainsFold predicate on the "address_country" field.
 func AddressCountryContainsFold(v string) predicate.Customer {
 	return predicate.Customer(sql.FieldContainsFold(FieldAddressCountry, v))
+}
+
+// ChartmogulUUIDEQ applies the EQ predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDEQ(v string) predicate.Customer {
+	return predicate.Customer(sql.FieldEQ(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDNEQ applies the NEQ predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDNEQ(v string) predicate.Customer {
+	return predicate.Customer(sql.FieldNEQ(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDIn applies the In predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDIn(vs ...string) predicate.Customer {
+	return predicate.Customer(sql.FieldIn(FieldChartmogulUUID, vs...))
+}
+
+// ChartmogulUUIDNotIn applies the NotIn predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDNotIn(vs ...string) predicate.Customer {
+	return predicate.Customer(sql.FieldNotIn(FieldChartmogulUUID, vs...))
+}
+
+// ChartmogulUUIDGT applies the GT predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDGT(v string) predicate.Customer {
+	return predicate.Customer(sql.FieldGT(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDGTE applies the GTE predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDGTE(v string) predicate.Customer {
+	return predicate.Customer(sql.FieldGTE(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDLT applies the LT predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDLT(v string) predicate.Customer {
+	return predicate.Customer(sql.FieldLT(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDLTE applies the LTE predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDLTE(v string) predicate.Customer {
+	return predicate.Customer(sql.FieldLTE(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDContains applies the Contains predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDContains(v string) predicate.Customer {
+	return predicate.Customer(sql.FieldContains(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDHasPrefix applies the HasPrefix predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDHasPrefix(v string) predicate.Customer {
+	return predicate.Customer(sql.FieldHasPrefix(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDHasSuffix applies the HasSuffix predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDHasSuffix(v string) predicate.Customer {
+	return predicate.Customer(sql.FieldHasSuffix(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDIsNil applies the IsNil predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDIsNil() predicate.Customer {
+	return predicate.Customer(sql.FieldIsNull(FieldChartmogulUUID))
+}
+
+// ChartmogulUUIDNotNil applies the NotNil predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDNotNil() predicate.Customer {
+	return predicate.Customer(sql.FieldNotNull(FieldChartmogulUUID))
+}
+
+// ChartmogulUUIDEqualFold applies the EqualFold predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDEqualFold(v string) predicate.Customer {
+	return predicate.Customer(sql.FieldEqualFold(FieldChartmogulUUID, v))
+}
+
+// ChartmogulUUIDContainsFold applies the ContainsFold predicate on the "chartmogul_uuid" field.
+func ChartmogulUUIDContainsFold(v string) predicate.Customer {
+	return predicate.Customer(sql.FieldContainsFold(FieldChartmogulUUID, v))
 }
 
 // And groups predicates with the AND operator between them.

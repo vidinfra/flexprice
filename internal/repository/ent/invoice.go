@@ -470,6 +470,11 @@ func (r *invoiceRepository) Update(ctx context.Context, inv *domainInvoice.Invoi
 		SetTotalDiscount(inv.TotalDiscount).
 		AddVersion(1) // Increment version atomically
 
+	// Set ChartMogul UUID if provided
+	if inv.ChartMogulUUID != nil {
+		query.SetNillableChartmogulUUID(inv.ChartMogulUUID)
+	}
+
 	// Execute update
 	n, err := query.Save(ctx)
 	if err != nil {

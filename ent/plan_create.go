@@ -165,6 +165,20 @@ func (pc *PlanCreate) SetNillableDisplayOrder(i *int) *PlanCreate {
 	return pc
 }
 
+// SetChartmogulUUID sets the "chartmogul_uuid" field.
+func (pc *PlanCreate) SetChartmogulUUID(s string) *PlanCreate {
+	pc.mutation.SetChartmogulUUID(s)
+	return pc
+}
+
+// SetNillableChartmogulUUID sets the "chartmogul_uuid" field if the given value is not nil.
+func (pc *PlanCreate) SetNillableChartmogulUUID(s *string) *PlanCreate {
+	if s != nil {
+		pc.SetChartmogulUUID(*s)
+	}
+	return pc
+}
+
 // SetID sets the "id" field.
 func (pc *PlanCreate) SetID(s string) *PlanCreate {
 	pc.mutation.SetID(s)
@@ -355,6 +369,10 @@ func (pc *PlanCreate) createSpec() (*Plan, *sqlgraph.CreateSpec) {
 	if value, ok := pc.mutation.DisplayOrder(); ok {
 		_spec.SetField(plan.FieldDisplayOrder, field.TypeInt, value)
 		_node.DisplayOrder = value
+	}
+	if value, ok := pc.mutation.ChartmogulUUID(); ok {
+		_spec.SetField(plan.FieldChartmogulUUID, field.TypeString, value)
+		_node.ChartmogulUUID = value
 	}
 	if nodes := pc.mutation.CreditGrantsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
