@@ -153,6 +153,11 @@ func (s *customerService) CreateCustomer(ctx context.Context, req dto.CreateCust
 	s.publishWebhookEvent(ctx, types.WebhookEventCustomerCreated, cust.ID)
 
 	// ChartMogul sync for customer creation
+	s.chartMogulAnalyticsSyncCreateCustomer(ctx, cust)
+	return &dto.CustomerResponse{Customer: cust}, nil
+}
+
+func (s *customerService) chartMogulAnalyticsSyncCreateCustomer(ctx context.Context, cust *customer.Customer) {
 	if s.ChartMogul != nil {
 		dataSourceUUID := s.Config.ChartMogul.SourceID
 		if dataSourceUUID != "" {
@@ -182,8 +187,6 @@ func (s *customerService) CreateCustomer(ctx context.Context, req dto.CreateCust
 			}
 		}
 	}
-
-	return &dto.CustomerResponse{Customer: cust}, nil
 }
 
 func (s *customerService) GetCustomer(ctx context.Context, id string) (*dto.CustomerResponse, error) {
@@ -398,6 +401,11 @@ func (s *customerService) UpdateCustomer(ctx context.Context, id string, req dto
 	s.publishWebhookEvent(ctx, types.WebhookEventCustomerUpdated, cust.ID)
 
 	// ChartMogul sync for customer update
+	s.chartMogulAnalyticsSyncUpdateCustomer(ctx, cust)
+	return &dto.CustomerResponse{Customer: cust}, nil
+}
+
+func (s *customerService) chartMogulAnalyticsSyncUpdateCustomer(ctx context.Context, cust *customer.Customer) {
 	if s.ChartMogul != nil && cust.ChartMogulUUID != nil && *cust.ChartMogulUUID != "" {
 		cmCustomer := &cm.Customer{
 			Name:    cust.Name,
@@ -416,8 +424,6 @@ func (s *customerService) UpdateCustomer(ctx context.Context, id string, req dto
 	} else if s.ChartMogul != nil {
 		s.Logger.Warnw("ChartMogul customer UUID not found, skipping sync", "customer_id", cust.ID)
 	}
-
-	return &dto.CustomerResponse{Customer: cust}, nil
 }
 
 func (s *customerService) DeleteCustomer(ctx context.Context, id string) error {
@@ -471,18 +477,22 @@ func (s *customerService) DeleteCustomer(ctx context.Context, id string) error {
 	s.publishWebhookEvent(ctx, types.WebhookEventCustomerDeleted, id)
 
 	// ChartMogul sync for customer deletion
-	if s.ChartMogul != nil && customer.ChartMogulUUID != nil && *customer.ChartMogulUUID != "" {
-		cmErr := s.ChartMogul.DeleteCustomer(*customer.ChartMogulUUID)
-		if cmErr != nil {
-			s.Logger.Errorw("Failed to delete customer in ChartMogul", "error", cmErr, "customer_id", id, "chartmogul_uuid", *customer.ChartMogulUUID)
-		} else {
-			s.Logger.Infow("Deleted customer in ChartMogul", "customer_id", id, "chartmogul_uuid", *customer.ChartMogulUUID)
-		}
-	} else if s.ChartMogul != nil {
-		s.Logger.Warnw("ChartMogul customer UUID not found, skipping sync", "customer_id", id)
-	}
+	s.chartMogulAnalyticsSyncDeleteCustomer(ctx, customer)
 
 	return nil
+}
+
+func (s *customerService) chartMogulAnalyticsSyncDeleteCustomer(ctx context.Context, cust *customer.Customer) {
+	if s.ChartMogul != nil && cust.ChartMogulUUID != nil && *cust.ChartMogulUUID != "" {
+		cmErr := s.ChartMogul.DeleteCustomer(*cust.ChartMogulUUID)
+		if cmErr != nil {
+			s.Logger.Errorw("Failed to delete customer in ChartMogul", "error", cmErr, "customer_id", cust.ID, "chartmogul_uuid", *cust.ChartMogulUUID)
+		} else {
+			s.Logger.Infow("Deleted customer in ChartMogul", "customer_id", cust.ID, "chartmogul_uuid", *cust.ChartMogulUUID)
+		}
+	} else if s.ChartMogul != nil {
+		s.Logger.Warnw("ChartMogul customer UUID not found, skipping sync", "customer_id", cust.ID)
+	}
 }
 
 func (s *customerService) GetCustomerByLookupKey(ctx context.Context, lookupKey string) (*dto.CustomerResponse, error) {
