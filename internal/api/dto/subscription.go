@@ -1006,12 +1006,12 @@ type SubscriptionLineItemRequest struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 
 	// Commitment fields
-	CommitmentAmount   *decimal.Decimal     `json:"commitment_amount,omitempty"`
-	CommitmentQuantity *decimal.Decimal     `json:"commitment_quantity,omitempty"`
-	CommitmentType     types.CommitmentType `json:"commitment_type,omitempty"`
-	OverageFactor      *decimal.Decimal     `json:"overage_factor,omitempty"`
-	EnableTrueUp       bool                 `json:"enable_true_up,omitempty"`
-	IsWindowCommitment bool                 `json:"is_window_commitment,omitempty"`
+	CommitmentAmount        *decimal.Decimal     `json:"commitment_amount,omitempty"`
+	CommitmentQuantity      *decimal.Decimal     `json:"commitment_quantity,omitempty"`
+	CommitmentType          types.CommitmentType `json:"commitment_type,omitempty"`
+	CommitmentOverageFactor *decimal.Decimal     `json:"commitment_overage_factor,omitempty"`
+	CommitmentTrueUpEnabled bool                 `json:"commitment_true_up_enabled,omitempty"`
+	CommitmentWindowed      bool                 `json:"commitment_windowed,omitempty"`
 }
 
 // SubscriptionLineItemResponse represents the response for a subscription line item
@@ -1327,11 +1327,11 @@ func (r *SubscriptionLineItemRequest) ToSubscriptionLineItem(ctx context.Context
 	if r.CommitmentType != "" {
 		lineItem.CommitmentType = r.CommitmentType
 	}
-	if r.OverageFactor != nil {
-		lineItem.OverageFactor = r.OverageFactor
+	if r.CommitmentOverageFactor != nil {
+		lineItem.CommitmentOverageFactor = r.CommitmentOverageFactor
 	}
-	lineItem.EnableTrueUp = r.EnableTrueUp
-	lineItem.IsWindowCommitment = r.IsWindowCommitment
+	lineItem.CommitmentTrueUpEnabled = r.CommitmentTrueUpEnabled
+	lineItem.CommitmentWindowed = r.CommitmentWindowed
 
 	return lineItem
 }

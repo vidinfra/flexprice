@@ -47367,9 +47367,9 @@ type SubscriptionLineItemMutation struct {
 	commitment_amount          *decimal.Decimal
 	commitment_quantity        *decimal.Decimal
 	commitment_type            *string
-	overage_factor             *decimal.Decimal
-	enable_true_up             *bool
-	is_window_commitment       *bool
+	commitment_overage_factor  *decimal.Decimal
+	commitment_true_up_enabled *bool
+	commitment_windowed        *bool
 	clearedFields              map[string]struct{}
 	subscription               *string
 	clearedsubscription        bool
@@ -48868,125 +48868,125 @@ func (m *SubscriptionLineItemMutation) ResetCommitmentType() {
 	delete(m.clearedFields, subscriptionlineitem.FieldCommitmentType)
 }
 
-// SetOverageFactor sets the "overage_factor" field.
-func (m *SubscriptionLineItemMutation) SetOverageFactor(d decimal.Decimal) {
-	m.overage_factor = &d
+// SetCommitmentOverageFactor sets the "commitment_overage_factor" field.
+func (m *SubscriptionLineItemMutation) SetCommitmentOverageFactor(d decimal.Decimal) {
+	m.commitment_overage_factor = &d
 }
 
-// OverageFactor returns the value of the "overage_factor" field in the mutation.
-func (m *SubscriptionLineItemMutation) OverageFactor() (r decimal.Decimal, exists bool) {
-	v := m.overage_factor
+// CommitmentOverageFactor returns the value of the "commitment_overage_factor" field in the mutation.
+func (m *SubscriptionLineItemMutation) CommitmentOverageFactor() (r decimal.Decimal, exists bool) {
+	v := m.commitment_overage_factor
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldOverageFactor returns the old "overage_factor" field's value of the SubscriptionLineItem entity.
+// OldCommitmentOverageFactor returns the old "commitment_overage_factor" field's value of the SubscriptionLineItem entity.
 // If the SubscriptionLineItem object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SubscriptionLineItemMutation) OldOverageFactor(ctx context.Context) (v *decimal.Decimal, err error) {
+func (m *SubscriptionLineItemMutation) OldCommitmentOverageFactor(ctx context.Context) (v *decimal.Decimal, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldOverageFactor is only allowed on UpdateOne operations")
+		return v, errors.New("OldCommitmentOverageFactor is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldOverageFactor requires an ID field in the mutation")
+		return v, errors.New("OldCommitmentOverageFactor requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldOverageFactor: %w", err)
+		return v, fmt.Errorf("querying old value for OldCommitmentOverageFactor: %w", err)
 	}
-	return oldValue.OverageFactor, nil
+	return oldValue.CommitmentOverageFactor, nil
 }
 
-// ClearOverageFactor clears the value of the "overage_factor" field.
-func (m *SubscriptionLineItemMutation) ClearOverageFactor() {
-	m.overage_factor = nil
-	m.clearedFields[subscriptionlineitem.FieldOverageFactor] = struct{}{}
+// ClearCommitmentOverageFactor clears the value of the "commitment_overage_factor" field.
+func (m *SubscriptionLineItemMutation) ClearCommitmentOverageFactor() {
+	m.commitment_overage_factor = nil
+	m.clearedFields[subscriptionlineitem.FieldCommitmentOverageFactor] = struct{}{}
 }
 
-// OverageFactorCleared returns if the "overage_factor" field was cleared in this mutation.
-func (m *SubscriptionLineItemMutation) OverageFactorCleared() bool {
-	_, ok := m.clearedFields[subscriptionlineitem.FieldOverageFactor]
+// CommitmentOverageFactorCleared returns if the "commitment_overage_factor" field was cleared in this mutation.
+func (m *SubscriptionLineItemMutation) CommitmentOverageFactorCleared() bool {
+	_, ok := m.clearedFields[subscriptionlineitem.FieldCommitmentOverageFactor]
 	return ok
 }
 
-// ResetOverageFactor resets all changes to the "overage_factor" field.
-func (m *SubscriptionLineItemMutation) ResetOverageFactor() {
-	m.overage_factor = nil
-	delete(m.clearedFields, subscriptionlineitem.FieldOverageFactor)
+// ResetCommitmentOverageFactor resets all changes to the "commitment_overage_factor" field.
+func (m *SubscriptionLineItemMutation) ResetCommitmentOverageFactor() {
+	m.commitment_overage_factor = nil
+	delete(m.clearedFields, subscriptionlineitem.FieldCommitmentOverageFactor)
 }
 
-// SetEnableTrueUp sets the "enable_true_up" field.
-func (m *SubscriptionLineItemMutation) SetEnableTrueUp(b bool) {
-	m.enable_true_up = &b
+// SetCommitmentTrueUpEnabled sets the "commitment_true_up_enabled" field.
+func (m *SubscriptionLineItemMutation) SetCommitmentTrueUpEnabled(b bool) {
+	m.commitment_true_up_enabled = &b
 }
 
-// EnableTrueUp returns the value of the "enable_true_up" field in the mutation.
-func (m *SubscriptionLineItemMutation) EnableTrueUp() (r bool, exists bool) {
-	v := m.enable_true_up
+// CommitmentTrueUpEnabled returns the value of the "commitment_true_up_enabled" field in the mutation.
+func (m *SubscriptionLineItemMutation) CommitmentTrueUpEnabled() (r bool, exists bool) {
+	v := m.commitment_true_up_enabled
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldEnableTrueUp returns the old "enable_true_up" field's value of the SubscriptionLineItem entity.
+// OldCommitmentTrueUpEnabled returns the old "commitment_true_up_enabled" field's value of the SubscriptionLineItem entity.
 // If the SubscriptionLineItem object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SubscriptionLineItemMutation) OldEnableTrueUp(ctx context.Context) (v bool, err error) {
+func (m *SubscriptionLineItemMutation) OldCommitmentTrueUpEnabled(ctx context.Context) (v bool, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldEnableTrueUp is only allowed on UpdateOne operations")
+		return v, errors.New("OldCommitmentTrueUpEnabled is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldEnableTrueUp requires an ID field in the mutation")
+		return v, errors.New("OldCommitmentTrueUpEnabled requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldEnableTrueUp: %w", err)
+		return v, fmt.Errorf("querying old value for OldCommitmentTrueUpEnabled: %w", err)
 	}
-	return oldValue.EnableTrueUp, nil
+	return oldValue.CommitmentTrueUpEnabled, nil
 }
 
-// ResetEnableTrueUp resets all changes to the "enable_true_up" field.
-func (m *SubscriptionLineItemMutation) ResetEnableTrueUp() {
-	m.enable_true_up = nil
+// ResetCommitmentTrueUpEnabled resets all changes to the "commitment_true_up_enabled" field.
+func (m *SubscriptionLineItemMutation) ResetCommitmentTrueUpEnabled() {
+	m.commitment_true_up_enabled = nil
 }
 
-// SetIsWindowCommitment sets the "is_window_commitment" field.
-func (m *SubscriptionLineItemMutation) SetIsWindowCommitment(b bool) {
-	m.is_window_commitment = &b
+// SetCommitmentWindowed sets the "commitment_windowed" field.
+func (m *SubscriptionLineItemMutation) SetCommitmentWindowed(b bool) {
+	m.commitment_windowed = &b
 }
 
-// IsWindowCommitment returns the value of the "is_window_commitment" field in the mutation.
-func (m *SubscriptionLineItemMutation) IsWindowCommitment() (r bool, exists bool) {
-	v := m.is_window_commitment
+// CommitmentWindowed returns the value of the "commitment_windowed" field in the mutation.
+func (m *SubscriptionLineItemMutation) CommitmentWindowed() (r bool, exists bool) {
+	v := m.commitment_windowed
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldIsWindowCommitment returns the old "is_window_commitment" field's value of the SubscriptionLineItem entity.
+// OldCommitmentWindowed returns the old "commitment_windowed" field's value of the SubscriptionLineItem entity.
 // If the SubscriptionLineItem object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SubscriptionLineItemMutation) OldIsWindowCommitment(ctx context.Context) (v bool, err error) {
+func (m *SubscriptionLineItemMutation) OldCommitmentWindowed(ctx context.Context) (v bool, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldIsWindowCommitment is only allowed on UpdateOne operations")
+		return v, errors.New("OldCommitmentWindowed is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldIsWindowCommitment requires an ID field in the mutation")
+		return v, errors.New("OldCommitmentWindowed requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldIsWindowCommitment: %w", err)
+		return v, fmt.Errorf("querying old value for OldCommitmentWindowed: %w", err)
 	}
-	return oldValue.IsWindowCommitment, nil
+	return oldValue.CommitmentWindowed, nil
 }
 
-// ResetIsWindowCommitment resets all changes to the "is_window_commitment" field.
-func (m *SubscriptionLineItemMutation) ResetIsWindowCommitment() {
-	m.is_window_commitment = nil
+// ResetCommitmentWindowed resets all changes to the "commitment_windowed" field.
+func (m *SubscriptionLineItemMutation) ResetCommitmentWindowed() {
+	m.commitment_windowed = nil
 }
 
 // ClearSubscription clears the "subscription" edge to the Subscription entity.
@@ -49198,14 +49198,14 @@ func (m *SubscriptionLineItemMutation) Fields() []string {
 	if m.commitment_type != nil {
 		fields = append(fields, subscriptionlineitem.FieldCommitmentType)
 	}
-	if m.overage_factor != nil {
-		fields = append(fields, subscriptionlineitem.FieldOverageFactor)
+	if m.commitment_overage_factor != nil {
+		fields = append(fields, subscriptionlineitem.FieldCommitmentOverageFactor)
 	}
-	if m.enable_true_up != nil {
-		fields = append(fields, subscriptionlineitem.FieldEnableTrueUp)
+	if m.commitment_true_up_enabled != nil {
+		fields = append(fields, subscriptionlineitem.FieldCommitmentTrueUpEnabled)
 	}
-	if m.is_window_commitment != nil {
-		fields = append(fields, subscriptionlineitem.FieldIsWindowCommitment)
+	if m.commitment_windowed != nil {
+		fields = append(fields, subscriptionlineitem.FieldCommitmentWindowed)
 	}
 	return fields
 }
@@ -49277,12 +49277,12 @@ func (m *SubscriptionLineItemMutation) Field(name string) (ent.Value, bool) {
 		return m.CommitmentQuantity()
 	case subscriptionlineitem.FieldCommitmentType:
 		return m.CommitmentType()
-	case subscriptionlineitem.FieldOverageFactor:
-		return m.OverageFactor()
-	case subscriptionlineitem.FieldEnableTrueUp:
-		return m.EnableTrueUp()
-	case subscriptionlineitem.FieldIsWindowCommitment:
-		return m.IsWindowCommitment()
+	case subscriptionlineitem.FieldCommitmentOverageFactor:
+		return m.CommitmentOverageFactor()
+	case subscriptionlineitem.FieldCommitmentTrueUpEnabled:
+		return m.CommitmentTrueUpEnabled()
+	case subscriptionlineitem.FieldCommitmentWindowed:
+		return m.CommitmentWindowed()
 	}
 	return nil, false
 }
@@ -49354,12 +49354,12 @@ func (m *SubscriptionLineItemMutation) OldField(ctx context.Context, name string
 		return m.OldCommitmentQuantity(ctx)
 	case subscriptionlineitem.FieldCommitmentType:
 		return m.OldCommitmentType(ctx)
-	case subscriptionlineitem.FieldOverageFactor:
-		return m.OldOverageFactor(ctx)
-	case subscriptionlineitem.FieldEnableTrueUp:
-		return m.OldEnableTrueUp(ctx)
-	case subscriptionlineitem.FieldIsWindowCommitment:
-		return m.OldIsWindowCommitment(ctx)
+	case subscriptionlineitem.FieldCommitmentOverageFactor:
+		return m.OldCommitmentOverageFactor(ctx)
+	case subscriptionlineitem.FieldCommitmentTrueUpEnabled:
+		return m.OldCommitmentTrueUpEnabled(ctx)
+	case subscriptionlineitem.FieldCommitmentWindowed:
+		return m.OldCommitmentWindowed(ctx)
 	}
 	return nil, fmt.Errorf("unknown SubscriptionLineItem field %s", name)
 }
@@ -49586,26 +49586,26 @@ func (m *SubscriptionLineItemMutation) SetField(name string, value ent.Value) er
 		}
 		m.SetCommitmentType(v)
 		return nil
-	case subscriptionlineitem.FieldOverageFactor:
+	case subscriptionlineitem.FieldCommitmentOverageFactor:
 		v, ok := value.(decimal.Decimal)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetOverageFactor(v)
+		m.SetCommitmentOverageFactor(v)
 		return nil
-	case subscriptionlineitem.FieldEnableTrueUp:
+	case subscriptionlineitem.FieldCommitmentTrueUpEnabled:
 		v, ok := value.(bool)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetEnableTrueUp(v)
+		m.SetCommitmentTrueUpEnabled(v)
 		return nil
-	case subscriptionlineitem.FieldIsWindowCommitment:
+	case subscriptionlineitem.FieldCommitmentWindowed:
 		v, ok := value.(bool)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetIsWindowCommitment(v)
+		m.SetCommitmentWindowed(v)
 		return nil
 	}
 	return fmt.Errorf("unknown SubscriptionLineItem field %s", name)
@@ -49709,8 +49709,8 @@ func (m *SubscriptionLineItemMutation) ClearedFields() []string {
 	if m.FieldCleared(subscriptionlineitem.FieldCommitmentType) {
 		fields = append(fields, subscriptionlineitem.FieldCommitmentType)
 	}
-	if m.FieldCleared(subscriptionlineitem.FieldOverageFactor) {
-		fields = append(fields, subscriptionlineitem.FieldOverageFactor)
+	if m.FieldCleared(subscriptionlineitem.FieldCommitmentOverageFactor) {
+		fields = append(fields, subscriptionlineitem.FieldCommitmentOverageFactor)
 	}
 	return fields
 }
@@ -49783,8 +49783,8 @@ func (m *SubscriptionLineItemMutation) ClearField(name string) error {
 	case subscriptionlineitem.FieldCommitmentType:
 		m.ClearCommitmentType()
 		return nil
-	case subscriptionlineitem.FieldOverageFactor:
-		m.ClearOverageFactor()
+	case subscriptionlineitem.FieldCommitmentOverageFactor:
+		m.ClearCommitmentOverageFactor()
 		return nil
 	}
 	return fmt.Errorf("unknown SubscriptionLineItem nullable field %s", name)
@@ -49887,14 +49887,14 @@ func (m *SubscriptionLineItemMutation) ResetField(name string) error {
 	case subscriptionlineitem.FieldCommitmentType:
 		m.ResetCommitmentType()
 		return nil
-	case subscriptionlineitem.FieldOverageFactor:
-		m.ResetOverageFactor()
+	case subscriptionlineitem.FieldCommitmentOverageFactor:
+		m.ResetCommitmentOverageFactor()
 		return nil
-	case subscriptionlineitem.FieldEnableTrueUp:
-		m.ResetEnableTrueUp()
+	case subscriptionlineitem.FieldCommitmentTrueUpEnabled:
+		m.ResetCommitmentTrueUpEnabled()
 		return nil
-	case subscriptionlineitem.FieldIsWindowCommitment:
-		m.ResetIsWindowCommitment()
+	case subscriptionlineitem.FieldCommitmentWindowed:
+		m.ResetCommitmentWindowed()
 		return nil
 	}
 	return fmt.Errorf("unknown SubscriptionLineItem field %s", name)

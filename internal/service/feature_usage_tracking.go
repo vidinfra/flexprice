@@ -1283,9 +1283,8 @@ func (s *featureUsageTrackingService) fetchSubscriptions(ctx context.Context, cu
 }
 
 // buildBucketFeatures builds a map of max bucket and sum bucket features from the request parameters
-func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, map[string]*events.SumBucketFeatureInfo, error) {
+func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, error) {
 	maxBucketFeatures := make(map[string]*events.MaxBucketFeatureInfo)
-	sumBucketFeatures := make(map[string]*events.SumBucketFeatureInfo)
 
 	// Check if FeatureIDs is empty and fetch all feature IDs from database if needed
 	var features []*feature.Feature
@@ -1306,7 +1305,7 @@ func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, p
 				"tenant_id", params.TenantID,
 				"environment_id", params.EnvironmentID,
 			)
-			return nil, nil, ierr.WithError(err).
+			return nil, ierr.WithError(err).
 				WithHint("Failed to fetch features for bucket analysis").
 				Mark(ierr.ErrDatabase)
 		}
@@ -1328,7 +1327,7 @@ func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, p
 		featureFilter.FeatureIDs = params.FeatureIDs
 		features, err = s.FeatureRepo.List(ctx, featureFilter)
 		if err != nil {
-			return nil, nil, ierr.WithError(err).
+			return nil, ierr.WithError(err).
 				WithHint("Failed to fetch features for bucket analysis").
 				Mark(ierr.ErrDatabase)
 		}
@@ -1353,7 +1352,7 @@ func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, p
 		meterFilter.MeterIDs = meterIDs
 		meters, err := s.MeterRepo.List(ctx, meterFilter)
 		if err != nil {
-			return nil, nil, ierr.WithError(err).
+			return nil, ierr.WithError(err).
 				WithHint("Failed to fetch meters for bucket analysis").
 				Mark(ierr.ErrDatabase)
 		}
@@ -1376,33 +1375,25 @@ func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, p
 							EventName:    m.EventName,
 							PropertyName: m.Aggregation.Field,
 						}
-					} else if m.IsBucketedSumMeter() {
-						sumBucketFeatures[f.ID] = &events.SumBucketFeatureInfo{
-							FeatureID:    f.ID,
-							MeterID:      meterID,
-							BucketSize:   types.WindowSize(m.Aggregation.BucketSize),
-							EventName:    m.EventName,
-							PropertyName: m.Aggregation.Field,
-						}
 					}
 				}
 			}
 		}
 	}
 
-	return maxBucketFeatures, sumBucketFeatures, nil
+	return maxBucketFeatures, nil
 }
 
 // fetchAnalytics fetches analytics data from repository
 func (s *featureUsageTrackingService) fetchAnalytics(ctx context.Context, params *events.UsageAnalyticsParams) ([]*events.DetailedUsageAnalytic, error) {
 	// Build bucket features map (this will handle fetching features if needed)
-	maxBucketFeatures, sumBucketFeatures, err := s.buildBucketFeatures(ctx, params)
+	maxBucketFeatures, err := s.buildBucketFeatures(ctx, params)
 	if err != nil {
 		return nil, err
 	}
 
 	// Fetch analytics with bucket features
-	analytics, err := s.featureUsageRepo.GetDetailedUsageAnalytics(ctx, params, maxBucketFeatures, sumBucketFeatures)
+	analytics, err := s.featureUsageRepo.GetDetailedUsageAnalytics(ctx, params, maxBucketFeatures)
 	if err != nil {
 		s.Logger.Errorw("failed to get detailed usage analytics",
 			"error", err,
@@ -1678,37 +1669,7 @@ func (s *featureUsageTrackingService) calculateBucketedCost(ctx context.Context,
 			lineItem := data.SubscriptionLineItems[item.SubLineItemID]
 
 			if lineItem != nil && lineItem.HasCommitment() {
-				// We need to use recursion or duplicate logic here since calculateBucketedCost is called inside calculateCosts
-				// Ideally, we should unify this with calculateCosts logic but for now let's apply commitment here
-				commitmentCalc := newCommitmentCalculator(s.Logger, priceService)
-
-				if lineItem.IsWindowCommitment {
-					adjustedAmount, commitmentMetadata, err := commitmentCalc.applyWindowCommitmentToLineItem(
-						ctx, lineItem, bucketedValues, price)
-					if err == nil {
-						cost = adjustedAmount
-						for k, v := range commitmentMetadata {
-							item.Properties[k] = v
-						}
-					} else {
-						s.Logger.Warnw("failed to apply window commitment", "error", err, "line_item_id", lineItem.ID)
-						cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
-					}
-				} else {
-					// Non-window commitment applies to total cost
-					rawCost := priceService.CalculateBucketedCost(ctx, price, bucketedValues)
-					adjustedAmount, commitmentMetadata, err := commitmentCalc.applyCommitmentToLineItem(
-						ctx, lineItem, rawCost, price)
-					if err == nil {
-						cost = adjustedAmount
-						for k, v := range commitmentMetadata {
-							item.Properties[k] = v
-						}
-					} else {
-						s.Logger.Warnw("failed to apply commitment", "error", err, "line_item_id", lineItem.ID)
-						cost = rawCost
-					}
-				}
+				cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, bucketedValues, decimal.Zero)
 			} else {
 				cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
 			}
@@ -1728,53 +1689,14 @@ func (s *featureUsageTrackingService) calculateBucketedCost(ctx context.Context,
 			bucketedValues := []decimal.Decimal{item.MaxUsage}
 
 			// Check for line item commitment
+			cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
 			if item.SubLineItemID != "" {
 				// Find the line item
-				var lineItem *subscription.SubscriptionLineItem
-				for _, sub := range data.Subscriptions {
-					if sub.ID == item.SubscriptionID {
-						for _, li := range sub.LineItems {
-							if li.ID == item.SubLineItemID {
-								lineItem = li
-								break
-							}
-						}
-						break
-					}
-				}
+				lineItem := data.SubscriptionLineItems[item.SubLineItemID]
 
 				if lineItem != nil && lineItem.HasCommitment() {
-					commitmentCalc := newCommitmentCalculator(s.Logger, priceService)
-
-					if lineItem.IsWindowCommitment {
-						adjustedAmount, commitmentMetadata, err := commitmentCalc.applyWindowCommitmentToLineItem(
-							ctx, lineItem, bucketedValues, price)
-						if err == nil {
-							cost = adjustedAmount
-							for k, v := range commitmentMetadata {
-								item.Properties[k] = v
-							}
-						} else {
-							cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
-						}
-					} else {
-						rawCost := priceService.CalculateBucketedCost(ctx, price, bucketedValues)
-						adjustedAmount, commitmentMetadata, err := commitmentCalc.applyCommitmentToLineItem(
-							ctx, lineItem, rawCost, price)
-						if err == nil {
-							cost = adjustedAmount
-							for k, v := range commitmentMetadata {
-								item.Properties[k] = v
-							}
-						} else {
-							cost = rawCost
-						}
-					}
-				} else {
-					cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+					cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, bucketedValues, cost)
 				}
-			} else {
-				cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
 			}
 		}
 	}
@@ -1802,32 +1724,7 @@ func (s *featureUsageTrackingService) calculateSumWithBucketCost(ctx context.Con
 			lineItem := data.SubscriptionLineItems[item.SubLineItemID]
 
 			if lineItem != nil && lineItem.HasCommitment() {
-				commitmentCalc := newCommitmentCalculator(s.Logger, priceService)
-
-				if lineItem.IsWindowCommitment {
-					adjustedAmount, commitmentMetadata, err := commitmentCalc.applyWindowCommitmentToLineItem(
-						ctx, lineItem, bucketedValues, price)
-					if err == nil {
-						cost = adjustedAmount
-						for k, v := range commitmentMetadata {
-							item.Properties[k] = v
-						}
-					} else {
-						cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
-					}
-				} else {
-					rawCost := priceService.CalculateBucketedCost(ctx, price, bucketedValues)
-					adjustedAmount, commitmentMetadata, err := commitmentCalc.applyCommitmentToLineItem(
-						ctx, lineItem, rawCost, price)
-					if err == nil {
-						cost = adjustedAmount
-						for k, v := range commitmentMetadata {
-							item.Properties[k] = v
-						}
-					} else {
-						cost = rawCost
-					}
-				}
+				cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, bucketedValues, decimal.Zero)
 			} else {
 				cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
 			}
@@ -1850,46 +1747,11 @@ func (s *featureUsageTrackingService) calculateSumWithBucketCost(ctx context.Con
 			// Check for line item commitment
 			if item.SubLineItemID != "" {
 				// Find the line item
-				var lineItem *subscription.SubscriptionLineItem
-				for _, sub := range data.Subscriptions {
-					if sub.ID == item.SubscriptionID {
-						for _, li := range sub.LineItems {
-							if li.ID == item.SubLineItemID {
-								lineItem = li
-								break
-							}
-						}
-						break
-					}
-				}
+
+				lineItem := data.SubscriptionLineItems[item.SubLineItemID]
 
 				if lineItem != nil && lineItem.HasCommitment() {
-					commitmentCalc := newCommitmentCalculator(s.Logger, priceService)
-
-					if lineItem.IsWindowCommitment {
-						adjustedAmount, commitmentMetadata, err := commitmentCalc.applyWindowCommitmentToLineItem(
-							ctx, lineItem, bucketedValues, price)
-						if err == nil {
-							cost = adjustedAmount
-							for k, v := range commitmentMetadata {
-								item.Properties[k] = v
-							}
-						} else {
-							cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
-						}
-					} else {
-						rawCost := priceService.CalculateBucketedCost(ctx, price, bucketedValues)
-						adjustedAmount, commitmentMetadata, err := commitmentCalc.applyCommitmentToLineItem(
-							ctx, lineItem, rawCost, price)
-						if err == nil {
-							cost = adjustedAmount
-							for k, v := range commitmentMetadata {
-								item.Properties[k] = v
-							}
-						} else {
-							cost = rawCost
-						}
-					}
+					cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, bucketedValues, decimal.Zero)
 				} else {
 					cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
 				}
@@ -1918,13 +1780,12 @@ func (s *featureUsageTrackingService) calculateRegularCost(ctx context.Context, 
 		lineItem := data.SubscriptionLineItems[item.SubLineItemID]
 
 		if lineItem != nil && lineItem.HasCommitment() {
-			commitmentCalc := newCommitmentCalculator(s.Logger, priceService)
 
 			// Regular meters don't support window commitment in this context (usually)
 			// effectively treats it as a single window if IsWindowCommitment is true but no buckets are defined
 			// But for regular cost, we are dealing with total usage.
 
-			if lineItem.IsWindowCommitment {
+			if lineItem.CommitmentWindowed {
 				// This shouldn't typically happen for regular meters unless we're aggregating time series points as windows
 				// z
 				// If we have points, we COULD treat them as windows, but that depends on business logic.
@@ -1940,35 +1801,15 @@ func (s *featureUsageTrackingService) calculateRegularCost(ctx context.Context, 
 						bucketedValues[i] = s.getCorrectUsageValueForPoint(point, meter.Aggregation.Type)
 					}
 
-					adjustedAmount, commitmentMetadata, err := commitmentCalc.applyWindowCommitmentToLineItem(
-						ctx, lineItem, bucketedValues, price)
-
-					if err == nil {
-						cost = adjustedAmount
-						for k, v := range commitmentMetadata {
-							item.Properties[k] = v
-						}
-					}
+					cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, bucketedValues, decimal.Zero)
 				} else {
 					// Fallback to standard commitment if no points (single window)
-					adjustedAmount, commitmentMetadata, err := commitmentCalc.applyCommitmentToLineItem(
-						ctx, lineItem, cost, price)
-					if err == nil {
-						cost = adjustedAmount
-						for k, v := range commitmentMetadata {
-							item.Properties[k] = v
-						}
-					}
+					// We pass empty bucketedValues to hint that it's not a bucketed calculation unless default cost is zero
+					cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, nil, cost)
 				}
 			} else {
-				adjustedAmount, commitmentMetadata, err := commitmentCalc.applyCommitmentToLineItem(
-					ctx, lineItem, cost, price)
-				if err == nil {
-					cost = adjustedAmount
-					for k, v := range commitmentMetadata {
-						item.Properties[k] = v
-					}
-				}
+				// Non-window commitment
+				cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, nil, cost)
 			}
 		}
 	}
@@ -2724,4 +2565,61 @@ func (s *featureUsageTrackingService) GetHuggingFaceBillingData(ctx context.Cont
 	return &dto.GetHuggingFaceBillingDataResponse{
 		Data: responseData,
 	}, nil
+}
+
+// applyLineItemCommitment applies commitment logic to the calculated cost
+func (s *featureUsageTrackingService) applyLineItemCommitment(
+	ctx context.Context,
+	priceService PriceService,
+	item *events.DetailedUsageAnalytic,
+	lineItem *subscription.SubscriptionLineItem,
+	price *price.Price,
+	bucketedValues []decimal.Decimal,
+	defaultCost decimal.Decimal,
+) decimal.Decimal {
+	commitmentCalc := newCommitmentCalculator(s.Logger, priceService)
+	var cost decimal.Decimal
+	var commitmentMetadata map[string]string
+	var err error
+
+	if lineItem.CommitmentWindowed {
+		cost, commitmentMetadata, err = commitmentCalc.applyWindowCommitmentToLineItem(
+			ctx, lineItem, bucketedValues, price)
+		if err == nil {
+			s.updateItemProperties(item, commitmentMetadata)
+			return cost
+		}
+		s.Logger.Warnw("failed to apply window commitment", "error", err, "line_item_id", lineItem.ID)
+		if defaultCost.IsZero() && len(bucketedValues) > 0 {
+			// If default cost wasn't provided, calculate it
+			return priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+		}
+		return defaultCost
+	}
+
+	// Non-window commitment
+	rawCost := defaultCost
+	if rawCost.IsZero() && len(bucketedValues) > 0 {
+		rawCost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+	}
+
+	cost, commitmentMetadata, err = commitmentCalc.applyCommitmentToLineItem(
+		ctx, lineItem, rawCost, price)
+
+	if err == nil {
+		s.updateItemProperties(item, commitmentMetadata)
+		return cost
+	}
+
+	s.Logger.Warnw("failed to apply commitment", "error", err, "line_item_id", lineItem.ID)
+	return rawCost
+}
+
+func (s *featureUsageTrackingService) updateItemProperties(item *events.DetailedUsageAnalytic, metadata map[string]string) {
+	if item.Properties == nil {
+		item.Properties = make(map[string]string)
+	}
+	for k, v := range metadata {
+		item.Properties[k] = v
+	}
 }

@@ -24,12 +24,12 @@ type CreateSubscriptionLineItemRequest struct {
 	SkipEntitlementCheck bool              `json:"-"` // This is used to skip entitlement check when creating a subscription line item
 
 	// Commitment fields
-	CommitmentAmount   *decimal.Decimal     `json:"commitment_amount,omitempty"`
-	CommitmentQuantity *decimal.Decimal     `json:"commitment_quantity,omitempty"`
-	CommitmentType     types.CommitmentType `json:"commitment_type,omitempty"`
-	OverageFactor      *decimal.Decimal     `json:"overage_factor,omitempty"`
-	EnableTrueUp       bool                 `json:"enable_true_up,omitempty"`
-	IsWindowCommitment bool                 `json:"is_window_commitment,omitempty"`
+	CommitmentAmount        *decimal.Decimal     `json:"commitment_amount,omitempty"`
+	CommitmentQuantity      *decimal.Decimal     `json:"commitment_quantity,omitempty"`
+	CommitmentType          types.CommitmentType `json:"commitment_type,omitempty"`
+	CommitmentOverageFactor *decimal.Decimal     `json:"commitment_overage_factor,omitempty"`
+	CommitmentTrueUpEnabled bool                 `json:"commitment_true_up_enabled,omitempty"`
+	CommitmentWindowed      bool                 `json:"commitment_windowed,omitempty"`
 }
 
 // DeleteSubscriptionLineItemRequest represents the request to delete a subscription line item
@@ -59,12 +59,12 @@ type UpdateSubscriptionLineItemRequest struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 
 	// Commitment fields
-	CommitmentAmount   *decimal.Decimal     `json:"commitment_amount,omitempty"`
-	CommitmentQuantity *decimal.Decimal     `json:"commitment_quantity,omitempty"`
-	CommitmentType     types.CommitmentType `json:"commitment_type,omitempty"`
-	OverageFactor      *decimal.Decimal     `json:"overage_factor,omitempty"`
-	EnableTrueUp       *bool                `json:"enable_true_up,omitempty"`
-	IsWindowCommitment *bool                `json:"is_window_commitment,omitempty"`
+	CommitmentAmount        *decimal.Decimal     `json:"commitment_amount,omitempty"`
+	CommitmentQuantity      *decimal.Decimal     `json:"commitment_quantity,omitempty"`
+	CommitmentType          types.CommitmentType `json:"commitment_type,omitempty"`
+	CommitmentOverageFactor *decimal.Decimal     `json:"commitment_overage_factor,omitempty"`
+	CommitmentTrueUpEnabled *bool                `json:"commitment_true_up_enabled,omitempty"`
+	CommitmentWindowed      *bool                `json:"commitment_windowed,omitempty"`
 }
 
 // LineItemParams contains all necessary parameters for creating a line item
@@ -189,17 +189,17 @@ func (r *CreateSubscriptionLineItemRequest) validateCommitmentFields() error {
 	}
 
 	// Rule 3: Overage factor is required and must be greater than 1.0
-	if r.OverageFactor == nil {
-		return ierr.NewError("overage_factor is required when commitment is set").
-			WithHint("Specify an overage_factor greater than 1.0").
+	if r.CommitmentOverageFactor == nil {
+		return ierr.NewError("commitment_overage_factor is required when commitment is set").
+			WithHint("Specify a commitment_overage_factor greater than 1.0").
 			Mark(ierr.ErrValidation)
 	}
 
-	if r.OverageFactor.LessThanOrEqual(decimal.NewFromInt(1)) {
-		return ierr.NewError("overage_factor must be greater than 1.0").
+	if r.CommitmentOverageFactor.LessThanOrEqual(decimal.NewFromInt(1)) {
+		return ierr.NewError("commitment_overage_factor must be greater than 1.0").
 			WithHint("Overage factor determines the multiplier for usage beyond commitment").
 			WithReportableDetails(map[string]interface{}{
-				"overage_factor": r.OverageFactor,
+				"commitment_overage_factor": r.CommitmentOverageFactor,
 			}).
 			Mark(ierr.ErrValidation)
 	}
@@ -311,11 +311,11 @@ func (r *CreateSubscriptionLineItemRequest) ToSubscriptionLineItem(ctx context.C
 	if r.CommitmentType != "" {
 		lineItem.CommitmentType = r.CommitmentType
 	}
-	if r.OverageFactor != nil {
-		lineItem.OverageFactor = r.OverageFactor
+	if r.CommitmentOverageFactor != nil {
+		lineItem.CommitmentOverageFactor = r.CommitmentOverageFactor
 	}
-	lineItem.EnableTrueUp = r.EnableTrueUp
-	lineItem.IsWindowCommitment = r.IsWindowCommitment
+	lineItem.CommitmentTrueUpEnabled = r.CommitmentTrueUpEnabled
+	lineItem.CommitmentWindowed = r.CommitmentWindowed
 
 	return lineItem
 }
@@ -430,17 +430,17 @@ func (r *UpdateSubscriptionLineItemRequest) validateCommitmentFields() error {
 	}
 
 	// Rule 3: Overage factor is required and must be greater than 1.0
-	if r.OverageFactor == nil {
-		return ierr.NewError("overage_factor is required when commitment is set").
-			WithHint("Specify an overage_factor greater than 1.0").
+	if r.CommitmentOverageFactor == nil {
+		return ierr.NewError("commitment_overage_factor is required when commitment is set").
+			WithHint("Specify a commitment_overage_factor greater than 1.0").
 			Mark(ierr.ErrValidation)
 	}
 
-	if r.OverageFactor.LessThanOrEqual(decimal.NewFromInt(1)) {
-		return ierr.NewError("overage_factor must be greater than 1.0").
+	if r.CommitmentOverageFactor.LessThanOrEqual(decimal.NewFromInt(1)) {
+		return ierr.NewError("commitment_overage_factor must be greater than 1.0").
 			WithHint("Overage factor determines the multiplier for usage beyond commitment").
 			WithReportableDetails(map[string]interface{}{
-				"overage_factor": r.OverageFactor,
+				"commitment_overage_factor": r.CommitmentOverageFactor,
 			}).
 			Mark(ierr.ErrValidation)
 	}
@@ -478,9 +478,9 @@ func (r *UpdateSubscriptionLineItemRequest) ShouldCreateNewLineItem() bool {
 		len(r.Tiers) > 0 ||
 		r.TransformQuantity != nil ||
 		hasCommitment ||
-		r.OverageFactor != nil ||
-		r.EnableTrueUp != nil ||
-		r.IsWindowCommitment != nil
+		r.CommitmentOverageFactor != nil ||
+		r.CommitmentTrueUpEnabled != nil ||
+		r.CommitmentWindowed != nil
 }
 
 // ToSubscriptionLineItem converts the update request to a domain subscription line item
@@ -536,22 +536,22 @@ func (r *UpdateSubscriptionLineItemRequest) ToSubscriptionLineItem(ctx context.C
 		newLineItem.CommitmentType = existingLineItem.CommitmentType
 	}
 
-	if r.OverageFactor != nil {
-		newLineItem.OverageFactor = r.OverageFactor
+	if r.CommitmentOverageFactor != nil {
+		newLineItem.CommitmentOverageFactor = r.CommitmentOverageFactor
 	} else {
-		newLineItem.OverageFactor = existingLineItem.OverageFactor
+		newLineItem.CommitmentOverageFactor = existingLineItem.CommitmentOverageFactor
 	}
 
-	if r.EnableTrueUp != nil {
-		newLineItem.EnableTrueUp = *r.EnableTrueUp
+	if r.CommitmentTrueUpEnabled != nil {
+		newLineItem.CommitmentTrueUpEnabled = *r.CommitmentTrueUpEnabled
 	} else {
-		newLineItem.EnableTrueUp = existingLineItem.EnableTrueUp
+		newLineItem.CommitmentTrueUpEnabled = existingLineItem.CommitmentTrueUpEnabled
 	}
 
-	if r.IsWindowCommitment != nil {
-		newLineItem.IsWindowCommitment = *r.IsWindowCommitment
+	if r.CommitmentWindowed != nil {
+		newLineItem.CommitmentWindowed = *r.CommitmentWindowed
 	} else {
-		newLineItem.IsWindowCommitment = existingLineItem.IsWindowCommitment
+		newLineItem.CommitmentWindowed = existingLineItem.CommitmentWindowed
 	}
 
 	return newLineItem

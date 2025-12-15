@@ -37,12 +37,12 @@ type SubscriptionLineItem struct {
 	EnvironmentID       string                               `db:"environment_id" json:"environment_id"`
 
 	// Commitment fields
-	CommitmentAmount   *decimal.Decimal     `db:"commitment_amount" json:"commitment_amount,omitempty"`
-	CommitmentQuantity *decimal.Decimal     `db:"commitment_quantity" json:"commitment_quantity,omitempty"`
-	CommitmentType     types.CommitmentType `db:"commitment_type" json:"commitment_type,omitempty"`
-	OverageFactor      *decimal.Decimal     `db:"overage_factor" json:"overage_factor,omitempty"`
-	EnableTrueUp       bool                 `db:"enable_true_up" json:"enable_true_up"`
-	IsWindowCommitment bool                 `db:"is_window_commitment" json:"is_window_commitment"`
+	CommitmentAmount        *decimal.Decimal     `db:"commitment_amount" json:"commitment_amount,omitempty"`
+	CommitmentQuantity      *decimal.Decimal     `db:"commitment_quantity" json:"commitment_quantity,omitempty"`
+	CommitmentType          types.CommitmentType `db:"commitment_type" json:"commitment_type,omitempty"`
+	CommitmentOverageFactor *decimal.Decimal     `db:"commitment_overage_factor" json:"commitment_overage_factor,omitempty"`
+	CommitmentTrueUpEnabled bool                 `db:"commitment_true_up_enabled" json:"commitment_true_up_enabled"`
+	CommitmentWindowed      bool                 `db:"commitment_windowed" json:"commitment_windowed"`
 
 	Price *price.Price `json:"price,omitempty"`
 
@@ -142,35 +142,35 @@ func SubscriptionLineItemFromEnt(e *ent.SubscriptionLineItem) *SubscriptionLineI
 	}
 
 	return &SubscriptionLineItem{
-		ID:                  e.ID,
-		SubscriptionID:      e.SubscriptionID,
-		CustomerID:          e.CustomerID,
-		EntityID:            lo.FromPtr(e.EntityID),
-		EntityType:          types.SubscriptionLineItemEntityType(e.EntityType),
-		PlanDisplayName:     lo.FromPtr(e.PlanDisplayName),
-		PriceID:             e.PriceID,
-		PriceType:           types.PriceType(priceType),
-		MeterID:             meterID,
-		MeterDisplayName:    meterDisplayName,
-		PriceUnitID:         priceUnitID,
-		PriceUnit:           priceUnit,
-		DisplayName:         displayName,
-		Quantity:            e.Quantity,
-		Currency:            e.Currency,
-		BillingPeriod:       types.BillingPeriod(e.BillingPeriod),
-		InvoiceCadence:      types.InvoiceCadence(e.InvoiceCadence),
-		TrialPeriod:         e.TrialPeriod,
-		StartDate:           startDate,
-		EndDate:             endDate,
-		SubscriptionPhaseID: subscriptionPhaseID,
-		Metadata:            e.Metadata,
-		EnvironmentID:       e.EnvironmentID,
-		CommitmentAmount:    e.CommitmentAmount,
-		CommitmentQuantity:  e.CommitmentQuantity,
-		CommitmentType:      commitmentType,
-		OverageFactor:       e.OverageFactor,
-		EnableTrueUp:        e.EnableTrueUp,
-		IsWindowCommitment:  e.IsWindowCommitment,
+		ID:                      e.ID,
+		SubscriptionID:          e.SubscriptionID,
+		CustomerID:              e.CustomerID,
+		EntityID:                lo.FromPtr(e.EntityID),
+		EntityType:              types.SubscriptionLineItemEntityType(e.EntityType),
+		PlanDisplayName:         lo.FromPtr(e.PlanDisplayName),
+		PriceID:                 e.PriceID,
+		PriceType:               types.PriceType(priceType),
+		MeterID:                 meterID,
+		MeterDisplayName:        meterDisplayName,
+		PriceUnitID:             priceUnitID,
+		PriceUnit:               priceUnit,
+		DisplayName:             displayName,
+		Quantity:                e.Quantity,
+		Currency:                e.Currency,
+		BillingPeriod:           types.BillingPeriod(e.BillingPeriod),
+		InvoiceCadence:          types.InvoiceCadence(e.InvoiceCadence),
+		TrialPeriod:             e.TrialPeriod,
+		StartDate:               startDate,
+		EndDate:                 endDate,
+		SubscriptionPhaseID:     subscriptionPhaseID,
+		Metadata:                e.Metadata,
+		EnvironmentID:           e.EnvironmentID,
+		CommitmentAmount:        e.CommitmentAmount,
+		CommitmentQuantity:      e.CommitmentQuantity,
+		CommitmentType:          commitmentType,
+		CommitmentOverageFactor: e.CommitmentOverageFactor,
+		CommitmentTrueUpEnabled: e.CommitmentTrueUpEnabled,
+		CommitmentWindowed:      e.CommitmentWindowed,
 		BaseModel: types.BaseModel{
 			TenantID:  e.TenantID,
 			Status:    types.Status(e.Status),

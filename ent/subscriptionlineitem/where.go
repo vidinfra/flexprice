@@ -216,19 +216,19 @@ func CommitmentType(v string) predicate.SubscriptionLineItem {
 	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentType, v))
 }
 
-// OverageFactor applies equality check predicate on the "overage_factor" field. It's identical to OverageFactorEQ.
-func OverageFactor(v decimal.Decimal) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldOverageFactor, v))
+// CommitmentOverageFactor applies equality check predicate on the "commitment_overage_factor" field. It's identical to CommitmentOverageFactorEQ.
+func CommitmentOverageFactor(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentOverageFactor, v))
 }
 
-// EnableTrueUp applies equality check predicate on the "enable_true_up" field. It's identical to EnableTrueUpEQ.
-func EnableTrueUp(v bool) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldEnableTrueUp, v))
+// CommitmentTrueUpEnabled applies equality check predicate on the "commitment_true_up_enabled" field. It's identical to CommitmentTrueUpEnabledEQ.
+func CommitmentTrueUpEnabled(v bool) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentTrueUpEnabled, v))
 }
 
-// IsWindowCommitment applies equality check predicate on the "is_window_commitment" field. It's identical to IsWindowCommitmentEQ.
-func IsWindowCommitment(v bool) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldIsWindowCommitment, v))
+// CommitmentWindowed applies equality check predicate on the "commitment_windowed" field. It's identical to CommitmentWindowedEQ.
+func CommitmentWindowed(v bool) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentWindowed, v))
 }
 
 // TenantIDEQ applies the EQ predicate on the "tenant_id" field.
@@ -2171,74 +2171,74 @@ func CommitmentTypeContainsFold(v string) predicate.SubscriptionLineItem {
 	return predicate.SubscriptionLineItem(sql.FieldContainsFold(FieldCommitmentType, v))
 }
 
-// OverageFactorEQ applies the EQ predicate on the "overage_factor" field.
-func OverageFactorEQ(v decimal.Decimal) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldOverageFactor, v))
+// CommitmentOverageFactorEQ applies the EQ predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorEQ(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentOverageFactor, v))
 }
 
-// OverageFactorNEQ applies the NEQ predicate on the "overage_factor" field.
-func OverageFactorNEQ(v decimal.Decimal) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldNEQ(FieldOverageFactor, v))
+// CommitmentOverageFactorNEQ applies the NEQ predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorNEQ(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNEQ(FieldCommitmentOverageFactor, v))
 }
 
-// OverageFactorIn applies the In predicate on the "overage_factor" field.
-func OverageFactorIn(vs ...decimal.Decimal) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldIn(FieldOverageFactor, vs...))
+// CommitmentOverageFactorIn applies the In predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorIn(vs ...decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldIn(FieldCommitmentOverageFactor, vs...))
 }
 
-// OverageFactorNotIn applies the NotIn predicate on the "overage_factor" field.
-func OverageFactorNotIn(vs ...decimal.Decimal) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldNotIn(FieldOverageFactor, vs...))
+// CommitmentOverageFactorNotIn applies the NotIn predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorNotIn(vs ...decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNotIn(FieldCommitmentOverageFactor, vs...))
 }
 
-// OverageFactorGT applies the GT predicate on the "overage_factor" field.
-func OverageFactorGT(v decimal.Decimal) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldGT(FieldOverageFactor, v))
+// CommitmentOverageFactorGT applies the GT predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorGT(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldGT(FieldCommitmentOverageFactor, v))
 }
 
-// OverageFactorGTE applies the GTE predicate on the "overage_factor" field.
-func OverageFactorGTE(v decimal.Decimal) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldGTE(FieldOverageFactor, v))
+// CommitmentOverageFactorGTE applies the GTE predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorGTE(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldGTE(FieldCommitmentOverageFactor, v))
 }
 
-// OverageFactorLT applies the LT predicate on the "overage_factor" field.
-func OverageFactorLT(v decimal.Decimal) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldLT(FieldOverageFactor, v))
+// CommitmentOverageFactorLT applies the LT predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorLT(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldLT(FieldCommitmentOverageFactor, v))
 }
 
-// OverageFactorLTE applies the LTE predicate on the "overage_factor" field.
-func OverageFactorLTE(v decimal.Decimal) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldLTE(FieldOverageFactor, v))
+// CommitmentOverageFactorLTE applies the LTE predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorLTE(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldLTE(FieldCommitmentOverageFactor, v))
 }
 
-// OverageFactorIsNil applies the IsNil predicate on the "overage_factor" field.
-func OverageFactorIsNil() predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldIsNull(FieldOverageFactor))
+// CommitmentOverageFactorIsNil applies the IsNil predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorIsNil() predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldIsNull(FieldCommitmentOverageFactor))
 }
 
-// OverageFactorNotNil applies the NotNil predicate on the "overage_factor" field.
-func OverageFactorNotNil() predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldNotNull(FieldOverageFactor))
+// CommitmentOverageFactorNotNil applies the NotNil predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorNotNil() predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNotNull(FieldCommitmentOverageFactor))
 }
 
-// EnableTrueUpEQ applies the EQ predicate on the "enable_true_up" field.
-func EnableTrueUpEQ(v bool) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldEnableTrueUp, v))
+// CommitmentTrueUpEnabledEQ applies the EQ predicate on the "commitment_true_up_enabled" field.
+func CommitmentTrueUpEnabledEQ(v bool) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentTrueUpEnabled, v))
 }
 
-// EnableTrueUpNEQ applies the NEQ predicate on the "enable_true_up" field.
-func EnableTrueUpNEQ(v bool) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldNEQ(FieldEnableTrueUp, v))
+// CommitmentTrueUpEnabledNEQ applies the NEQ predicate on the "commitment_true_up_enabled" field.
+func CommitmentTrueUpEnabledNEQ(v bool) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNEQ(FieldCommitmentTrueUpEnabled, v))
 }
 
-// IsWindowCommitmentEQ applies the EQ predicate on the "is_window_commitment" field.
-func IsWindowCommitmentEQ(v bool) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldIsWindowCommitment, v))
+// CommitmentWindowedEQ applies the EQ predicate on the "commitment_windowed" field.
+func CommitmentWindowedEQ(v bool) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentWindowed, v))
 }
 
-// IsWindowCommitmentNEQ applies the NEQ predicate on the "is_window_commitment" field.
-func IsWindowCommitmentNEQ(v bool) predicate.SubscriptionLineItem {
-	return predicate.SubscriptionLineItem(sql.FieldNEQ(FieldIsWindowCommitment, v))
+// CommitmentWindowedNEQ applies the NEQ predicate on the "commitment_windowed" field.
+func CommitmentWindowedNEQ(v bool) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNEQ(FieldCommitmentWindowed, v))
 }
 
 // HasSubscription applies the HasEdge predicate on the "subscription" edge.

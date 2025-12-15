@@ -1642,9 +1642,9 @@ var (
 		{Name: "commitment_amount", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(20,8)"}},
 		{Name: "commitment_quantity", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(20,8)"}},
 		{Name: "commitment_type", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(20)"}},
-		{Name: "overage_factor", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(10,4)"}},
-		{Name: "enable_true_up", Type: field.TypeBool, Default: false},
-		{Name: "is_window_commitment", Type: field.TypeBool, Default: false},
+		{Name: "commitment_overage_factor", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(10,4)"}},
+		{Name: "commitment_true_up_enabled", Type: field.TypeBool, Default: false},
+		{Name: "commitment_windowed", Type: field.TypeBool, Default: false},
 		{Name: "subscription_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 	}
 	// SubscriptionLineItemsTable holds the schema information for the "subscription_line_items" table.

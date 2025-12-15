@@ -516,7 +516,7 @@ func (s *billingService) CalculateUsageCharges(
 				commitmentCalc := newCommitmentCalculator(s.Logger, priceService)
 
 				// Check if this is window-based commitment
-				if item.IsWindowCommitment {
+				if item.CommitmentWindowed {
 					// For window commitment, we need bucketed values
 					// Get meter to access bucket configuration
 					meter, ok := meterMap[item.MeterID]

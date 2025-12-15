@@ -401,44 +401,44 @@ func (slic *SubscriptionLineItemCreate) SetNillableCommitmentType(s *string) *Su
 	return slic
 }
 
-// SetOverageFactor sets the "overage_factor" field.
-func (slic *SubscriptionLineItemCreate) SetOverageFactor(d decimal.Decimal) *SubscriptionLineItemCreate {
-	slic.mutation.SetOverageFactor(d)
+// SetCommitmentOverageFactor sets the "commitment_overage_factor" field.
+func (slic *SubscriptionLineItemCreate) SetCommitmentOverageFactor(d decimal.Decimal) *SubscriptionLineItemCreate {
+	slic.mutation.SetCommitmentOverageFactor(d)
 	return slic
 }
 
-// SetNillableOverageFactor sets the "overage_factor" field if the given value is not nil.
-func (slic *SubscriptionLineItemCreate) SetNillableOverageFactor(d *decimal.Decimal) *SubscriptionLineItemCreate {
+// SetNillableCommitmentOverageFactor sets the "commitment_overage_factor" field if the given value is not nil.
+func (slic *SubscriptionLineItemCreate) SetNillableCommitmentOverageFactor(d *decimal.Decimal) *SubscriptionLineItemCreate {
 	if d != nil {
-		slic.SetOverageFactor(*d)
+		slic.SetCommitmentOverageFactor(*d)
 	}
 	return slic
 }
 
-// SetEnableTrueUp sets the "enable_true_up" field.
-func (slic *SubscriptionLineItemCreate) SetEnableTrueUp(b bool) *SubscriptionLineItemCreate {
-	slic.mutation.SetEnableTrueUp(b)
+// SetCommitmentTrueUpEnabled sets the "commitment_true_up_enabled" field.
+func (slic *SubscriptionLineItemCreate) SetCommitmentTrueUpEnabled(b bool) *SubscriptionLineItemCreate {
+	slic.mutation.SetCommitmentTrueUpEnabled(b)
 	return slic
 }
 
-// SetNillableEnableTrueUp sets the "enable_true_up" field if the given value is not nil.
-func (slic *SubscriptionLineItemCreate) SetNillableEnableTrueUp(b *bool) *SubscriptionLineItemCreate {
+// SetNillableCommitmentTrueUpEnabled sets the "commitment_true_up_enabled" field if the given value is not nil.
+func (slic *SubscriptionLineItemCreate) SetNillableCommitmentTrueUpEnabled(b *bool) *SubscriptionLineItemCreate {
 	if b != nil {
-		slic.SetEnableTrueUp(*b)
+		slic.SetCommitmentTrueUpEnabled(*b)
 	}
 	return slic
 }
 
-// SetIsWindowCommitment sets the "is_window_commitment" field.
-func (slic *SubscriptionLineItemCreate) SetIsWindowCommitment(b bool) *SubscriptionLineItemCreate {
-	slic.mutation.SetIsWindowCommitment(b)
+// SetCommitmentWindowed sets the "commitment_windowed" field.
+func (slic *SubscriptionLineItemCreate) SetCommitmentWindowed(b bool) *SubscriptionLineItemCreate {
+	slic.mutation.SetCommitmentWindowed(b)
 	return slic
 }
 
-// SetNillableIsWindowCommitment sets the "is_window_commitment" field if the given value is not nil.
-func (slic *SubscriptionLineItemCreate) SetNillableIsWindowCommitment(b *bool) *SubscriptionLineItemCreate {
+// SetNillableCommitmentWindowed sets the "commitment_windowed" field if the given value is not nil.
+func (slic *SubscriptionLineItemCreate) SetNillableCommitmentWindowed(b *bool) *SubscriptionLineItemCreate {
 	if b != nil {
-		slic.SetIsWindowCommitment(*b)
+		slic.SetCommitmentWindowed(*b)
 	}
 	return slic
 }
@@ -532,13 +532,13 @@ func (slic *SubscriptionLineItemCreate) defaults() {
 		v := subscriptionlineitem.DefaultTrialPeriod
 		slic.mutation.SetTrialPeriod(v)
 	}
-	if _, ok := slic.mutation.EnableTrueUp(); !ok {
-		v := subscriptionlineitem.DefaultEnableTrueUp
-		slic.mutation.SetEnableTrueUp(v)
+	if _, ok := slic.mutation.CommitmentTrueUpEnabled(); !ok {
+		v := subscriptionlineitem.DefaultCommitmentTrueUpEnabled
+		slic.mutation.SetCommitmentTrueUpEnabled(v)
 	}
-	if _, ok := slic.mutation.IsWindowCommitment(); !ok {
-		v := subscriptionlineitem.DefaultIsWindowCommitment
-		slic.mutation.SetIsWindowCommitment(v)
+	if _, ok := slic.mutation.CommitmentWindowed(); !ok {
+		v := subscriptionlineitem.DefaultCommitmentWindowed
+		slic.mutation.SetCommitmentWindowed(v)
 	}
 }
 
@@ -610,11 +610,11 @@ func (slic *SubscriptionLineItemCreate) check() error {
 	if _, ok := slic.mutation.TrialPeriod(); !ok {
 		return &ValidationError{Name: "trial_period", err: errors.New(`ent: missing required field "SubscriptionLineItem.trial_period"`)}
 	}
-	if _, ok := slic.mutation.EnableTrueUp(); !ok {
-		return &ValidationError{Name: "enable_true_up", err: errors.New(`ent: missing required field "SubscriptionLineItem.enable_true_up"`)}
+	if _, ok := slic.mutation.CommitmentTrueUpEnabled(); !ok {
+		return &ValidationError{Name: "commitment_true_up_enabled", err: errors.New(`ent: missing required field "SubscriptionLineItem.commitment_true_up_enabled"`)}
 	}
-	if _, ok := slic.mutation.IsWindowCommitment(); !ok {
-		return &ValidationError{Name: "is_window_commitment", err: errors.New(`ent: missing required field "SubscriptionLineItem.is_window_commitment"`)}
+	if _, ok := slic.mutation.CommitmentWindowed(); !ok {
+		return &ValidationError{Name: "commitment_windowed", err: errors.New(`ent: missing required field "SubscriptionLineItem.commitment_windowed"`)}
 	}
 	if len(slic.mutation.SubscriptionIDs()) == 0 {
 		return &ValidationError{Name: "subscription", err: errors.New(`ent: missing required edge "SubscriptionLineItem.subscription"`)}
@@ -774,17 +774,17 @@ func (slic *SubscriptionLineItemCreate) createSpec() (*SubscriptionLineItem, *sq
 		_spec.SetField(subscriptionlineitem.FieldCommitmentType, field.TypeString, value)
 		_node.CommitmentType = &value
 	}
-	if value, ok := slic.mutation.OverageFactor(); ok {
-		_spec.SetField(subscriptionlineitem.FieldOverageFactor, field.TypeOther, value)
-		_node.OverageFactor = &value
+	if value, ok := slic.mutation.CommitmentOverageFactor(); ok {
+		_spec.SetField(subscriptionlineitem.FieldCommitmentOverageFactor, field.TypeOther, value)
+		_node.CommitmentOverageFactor = &value
 	}
-	if value, ok := slic.mutation.EnableTrueUp(); ok {
-		_spec.SetField(subscriptionlineitem.FieldEnableTrueUp, field.TypeBool, value)
-		_node.EnableTrueUp = value
+	if value, ok := slic.mutation.CommitmentTrueUpEnabled(); ok {
+		_spec.SetField(subscriptionlineitem.FieldCommitmentTrueUpEnabled, field.TypeBool, value)
+		_node.CommitmentTrueUpEnabled = value
 	}
-	if value, ok := slic.mutation.IsWindowCommitment(); ok {
-		_spec.SetField(subscriptionlineitem.FieldIsWindowCommitment, field.TypeBool, value)
-		_node.IsWindowCommitment = value
+	if value, ok := slic.mutation.CommitmentWindowed(); ok {
+		_spec.SetField(subscriptionlineitem.FieldCommitmentWindowed, field.TypeBool, value)
+		_node.CommitmentWindowed = value
 	}
 	if nodes := slic.mutation.SubscriptionIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

@@ -82,12 +82,12 @@ type SubscriptionLineItem struct {
 	CommitmentQuantity *decimal.Decimal `json:"commitment_quantity,omitempty"`
 	// CommitmentType holds the value of the "commitment_type" field.
 	CommitmentType *string `json:"commitment_type,omitempty"`
-	// OverageFactor holds the value of the "overage_factor" field.
-	OverageFactor *decimal.Decimal `json:"overage_factor,omitempty"`
-	// EnableTrueUp holds the value of the "enable_true_up" field.
-	EnableTrueUp bool `json:"enable_true_up,omitempty"`
-	// IsWindowCommitment holds the value of the "is_window_commitment" field.
-	IsWindowCommitment bool `json:"is_window_commitment,omitempty"`
+	// CommitmentOverageFactor holds the value of the "commitment_overage_factor" field.
+	CommitmentOverageFactor *decimal.Decimal `json:"commitment_overage_factor,omitempty"`
+	// CommitmentTrueUpEnabled holds the value of the "commitment_true_up_enabled" field.
+	CommitmentTrueUpEnabled bool `json:"commitment_true_up_enabled,omitempty"`
+	// CommitmentWindowed holds the value of the "commitment_windowed" field.
+	CommitmentWindowed bool `json:"commitment_windowed,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the SubscriptionLineItemQuery when eager-loading is set.
 	Edges        SubscriptionLineItemEdges `json:"edges"`
@@ -130,13 +130,13 @@ func (*SubscriptionLineItem) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case subscriptionlineitem.FieldCommitmentAmount, subscriptionlineitem.FieldCommitmentQuantity, subscriptionlineitem.FieldOverageFactor:
+		case subscriptionlineitem.FieldCommitmentAmount, subscriptionlineitem.FieldCommitmentQuantity, subscriptionlineitem.FieldCommitmentOverageFactor:
 			values[i] = &sql.NullScanner{S: new(decimal.Decimal)}
 		case subscriptionlineitem.FieldMetadata:
 			values[i] = new([]byte)
 		case subscriptionlineitem.FieldQuantity:
 			values[i] = new(decimal.Decimal)
-		case subscriptionlineitem.FieldEnableTrueUp, subscriptionlineitem.FieldIsWindowCommitment:
+		case subscriptionlineitem.FieldCommitmentTrueUpEnabled, subscriptionlineitem.FieldCommitmentWindowed:
 			values[i] = new(sql.NullBool)
 		case subscriptionlineitem.FieldTrialPeriod:
 			values[i] = new(sql.NullInt64)
@@ -367,24 +367,24 @@ func (sli *SubscriptionLineItem) assignValues(columns []string, values []any) er
 				sli.CommitmentType = new(string)
 				*sli.CommitmentType = value.String
 			}
-		case subscriptionlineitem.FieldOverageFactor:
+		case subscriptionlineitem.FieldCommitmentOverageFactor:
 			if value, ok := values[i].(*sql.NullScanner); !ok {
-				return fmt.Errorf("unexpected type %T for field overage_factor", values[i])
+				return fmt.Errorf("unexpected type %T for field commitment_overage_factor", values[i])
 			} else if value.Valid {
-				sli.OverageFactor = new(decimal.Decimal)
-				*sli.OverageFactor = *value.S.(*decimal.Decimal)
+				sli.CommitmentOverageFactor = new(decimal.Decimal)
+				*sli.CommitmentOverageFactor = *value.S.(*decimal.Decimal)
 			}
-		case subscriptionlineitem.FieldEnableTrueUp:
+		case subscriptionlineitem.FieldCommitmentTrueUpEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field enable_true_up", values[i])
+				return fmt.Errorf("unexpected type %T for field commitment_true_up_enabled", values[i])
 			} else if value.Valid {
-				sli.EnableTrueUp = value.Bool
+				sli.CommitmentTrueUpEnabled = value.Bool
 			}
-		case subscriptionlineitem.FieldIsWindowCommitment:
+		case subscriptionlineitem.FieldCommitmentWindowed:
 			if value, ok := values[i].(*sql.NullBool); !ok {
-				return fmt.Errorf("unexpected type %T for field is_window_commitment", values[i])
+				return fmt.Errorf("unexpected type %T for field commitment_windowed", values[i])
 			} else if value.Valid {
-				sli.IsWindowCommitment = value.Bool
+				sli.CommitmentWindowed = value.Bool
 			}
 		default:
 			sli.selectValues.Set(columns[i], values[i])
@@ -553,16 +553,16 @@ func (sli *SubscriptionLineItem) String() string {
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
-	if v := sli.OverageFactor; v != nil {
-		builder.WriteString("overage_factor=")
+	if v := sli.CommitmentOverageFactor; v != nil {
+		builder.WriteString("commitment_overage_factor=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
-	builder.WriteString("enable_true_up=")
-	builder.WriteString(fmt.Sprintf("%v", sli.EnableTrueUp))
+	builder.WriteString("commitment_true_up_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", sli.CommitmentTrueUpEnabled))
 	builder.WriteString(", ")
-	builder.WriteString("is_window_commitment=")
-	builder.WriteString(fmt.Sprintf("%v", sli.IsWindowCommitment))
+	builder.WriteString("commitment_windowed=")
+	builder.WriteString(fmt.Sprintf("%v", sli.CommitmentWindowed))
 	builder.WriteByte(')')
 	return builder.String()
 }

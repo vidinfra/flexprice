@@ -723,9 +723,9 @@ func (r *subscriptionRepository) CreateWithLineItems(ctx context.Context, sub *d
 				SetNillableCommitmentAmount(item.CommitmentAmount).
 				SetNillableCommitmentQuantity(item.CommitmentQuantity).
 				SetNillableCommitmentType(types.ToNillableString(string(item.CommitmentType))).
-				SetNillableOverageFactor(item.OverageFactor).
-				SetEnableTrueUp(item.EnableTrueUp).
-				SetIsWindowCommitment(item.IsWindowCommitment).
+				SetNillableCommitmentOverageFactor(item.CommitmentOverageFactor).
+				SetCommitmentTrueUpEnabled(item.CommitmentTrueUpEnabled).
+				SetCommitmentWindowed(item.CommitmentWindowed).
 				SetMetadata(item.Metadata).
 				SetTenantID(item.TenantID).
 				SetEnvironmentID(item.EnvironmentID).

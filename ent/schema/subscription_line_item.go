@@ -154,15 +154,15 @@ func (SubscriptionLineItem) Fields() []ent.Field {
 			}).
 			Optional().
 			Nillable(),
-		field.Other("overage_factor", decimal.Decimal{}).
+		field.Other("commitment_overage_factor", decimal.Decimal{}).
 			SchemaType(map[string]string{
 				"postgres": "numeric(10,4)",
 			}).
 			Optional().
 			Nillable(),
-		field.Bool("enable_true_up").
+		field.Bool("commitment_true_up_enabled").
 			Default(false),
-		field.Bool("is_window_commitment").
+		field.Bool("commitment_windowed").
 			Default(false),
 	}
 }

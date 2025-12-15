@@ -1719,14 +1719,14 @@ func init() {
 	subscriptionlineitemDescTrialPeriod := subscriptionlineitemFields[17].Descriptor()
 	// subscriptionlineitem.DefaultTrialPeriod holds the default value on creation for the trial_period field.
 	subscriptionlineitem.DefaultTrialPeriod = subscriptionlineitemDescTrialPeriod.Default.(int)
-	// subscriptionlineitemDescEnableTrueUp is the schema descriptor for enable_true_up field.
-	subscriptionlineitemDescEnableTrueUp := subscriptionlineitemFields[26].Descriptor()
-	// subscriptionlineitem.DefaultEnableTrueUp holds the default value on creation for the enable_true_up field.
-	subscriptionlineitem.DefaultEnableTrueUp = subscriptionlineitemDescEnableTrueUp.Default.(bool)
-	// subscriptionlineitemDescIsWindowCommitment is the schema descriptor for is_window_commitment field.
-	subscriptionlineitemDescIsWindowCommitment := subscriptionlineitemFields[27].Descriptor()
-	// subscriptionlineitem.DefaultIsWindowCommitment holds the default value on creation for the is_window_commitment field.
-	subscriptionlineitem.DefaultIsWindowCommitment = subscriptionlineitemDescIsWindowCommitment.Default.(bool)
+	// subscriptionlineitemDescCommitmentTrueUpEnabled is the schema descriptor for commitment_true_up_enabled field.
+	subscriptionlineitemDescCommitmentTrueUpEnabled := subscriptionlineitemFields[26].Descriptor()
+	// subscriptionlineitem.DefaultCommitmentTrueUpEnabled holds the default value on creation for the commitment_true_up_enabled field.
+	subscriptionlineitem.DefaultCommitmentTrueUpEnabled = subscriptionlineitemDescCommitmentTrueUpEnabled.Default.(bool)
+	// subscriptionlineitemDescCommitmentWindowed is the schema descriptor for commitment_windowed field.
+	subscriptionlineitemDescCommitmentWindowed := subscriptionlineitemFields[27].Descriptor()
+	// subscriptionlineitem.DefaultCommitmentWindowed holds the default value on creation for the commitment_windowed field.
+	subscriptionlineitem.DefaultCommitmentWindowed = subscriptionlineitemDescCommitmentWindowed.Default.(bool)
 	subscriptionpauseMixin := schema.SubscriptionPause{}.Mixin()
 	subscriptionpauseMixinFields0 := subscriptionpauseMixin[0].Fields()
 	_ = subscriptionpauseMixinFields0

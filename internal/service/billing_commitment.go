@@ -81,10 +81,10 @@ func (c *commitmentCalculator) applyCommitmentToLineItem(
 		metadata["commitment_quantity"] = lineItem.CommitmentQuantity.String()
 	}
 
-	overageFactor := lo.FromPtr(lineItem.OverageFactor)
+	overageFactor := lo.FromPtr(lineItem.CommitmentOverageFactor)
 	metadata["overage_factor"] = overageFactor.String()
-	metadata["enable_true_up"] = fmt.Sprintf("%v", lineItem.EnableTrueUp)
-	metadata["is_window_commitment"] = fmt.Sprintf("%v", lineItem.IsWindowCommitment)
+	metadata["enable_true_up"] = fmt.Sprintf("%v", lineItem.CommitmentTrueUpEnabled)
+	metadata["is_window_commitment"] = fmt.Sprintf("%v", lineItem.CommitmentWindowed)
 
 	// Calculate final charge based on commitment logic
 	var finalCharge decimal.Decimal
@@ -109,7 +109,7 @@ func (c *commitmentCalculator) applyCommitmentToLineItem(
 			"final_charge", finalCharge)
 	} else {
 		// Usage is less than commitment
-		if lineItem.EnableTrueUp {
+		if lineItem.CommitmentTrueUpEnabled {
 			// Charge full commitment (true-up)
 			finalCharge = commitmentAmount
 			metadata["commitment_utilized"] = usageCost.String()
@@ -165,7 +165,7 @@ func (c *commitmentCalculator) applyWindowCommitmentToLineItem(
 		metadata["commitment_quantity_per_window"] = lineItem.CommitmentQuantity.String()
 	}
 
-	overageFactor := lo.FromPtr(lineItem.OverageFactor)
+	overageFactor := lo.FromPtr(lineItem.CommitmentOverageFactor)
 	metadata["overage_factor"] = overageFactor.String()
 
 	totalCharge := decimal.Zero
@@ -202,7 +202,7 @@ func (c *commitmentCalculator) applyWindowCommitmentToLineItem(
 				"window_charge", windowCharge)
 		} else {
 			// Window usage is less than commitment
-			if lineItem.EnableTrueUp {
+			if lineItem.CommitmentTrueUpEnabled {
 				// Apply true-up for this window
 				windowCharge = commitmentAmountPerWindow
 				trueUp := commitmentAmountPerWindow.Sub(windowCost)
@@ -240,7 +240,7 @@ func (c *commitmentCalculator) applyWindowCommitmentToLineItem(
 	metadata["total_overage"] = totalOverage.String()
 	metadata["windows_with_overage"] = fmt.Sprintf("%d", windowsWithOverage)
 
-	if lineItem.EnableTrueUp {
+	if lineItem.CommitmentTrueUpEnabled {
 		metadata["total_true_up"] = totalTrueUp.String()
 		metadata["windows_with_true_up"] = fmt.Sprintf("%d", windowsWithTrueUp)
 	}

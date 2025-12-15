@@ -204,13 +204,13 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 					item.CommitmentType = commitmentConfig.CommitmentType
 				}
 				if commitmentConfig.OverageFactor != nil {
-					item.OverageFactor = commitmentConfig.OverageFactor
+					item.CommitmentOverageFactor = commitmentConfig.OverageFactor
 				}
 				if commitmentConfig.EnableTrueUp != nil {
-					item.EnableTrueUp = *commitmentConfig.EnableTrueUp
+					item.CommitmentTrueUpEnabled = *commitmentConfig.EnableTrueUp
 				}
 				if commitmentConfig.IsWindowCommitment != nil {
-					item.IsWindowCommitment = *commitmentConfig.IsWindowCommitment
+					item.CommitmentWindowed = *commitmentConfig.IsWindowCommitment
 				}
 			}
 		}

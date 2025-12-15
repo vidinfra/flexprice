@@ -419,50 +419,50 @@ func (sliu *SubscriptionLineItemUpdate) ClearCommitmentType() *SubscriptionLineI
 	return sliu
 }
 
-// SetOverageFactor sets the "overage_factor" field.
-func (sliu *SubscriptionLineItemUpdate) SetOverageFactor(d decimal.Decimal) *SubscriptionLineItemUpdate {
-	sliu.mutation.SetOverageFactor(d)
+// SetCommitmentOverageFactor sets the "commitment_overage_factor" field.
+func (sliu *SubscriptionLineItemUpdate) SetCommitmentOverageFactor(d decimal.Decimal) *SubscriptionLineItemUpdate {
+	sliu.mutation.SetCommitmentOverageFactor(d)
 	return sliu
 }
 
-// SetNillableOverageFactor sets the "overage_factor" field if the given value is not nil.
-func (sliu *SubscriptionLineItemUpdate) SetNillableOverageFactor(d *decimal.Decimal) *SubscriptionLineItemUpdate {
+// SetNillableCommitmentOverageFactor sets the "commitment_overage_factor" field if the given value is not nil.
+func (sliu *SubscriptionLineItemUpdate) SetNillableCommitmentOverageFactor(d *decimal.Decimal) *SubscriptionLineItemUpdate {
 	if d != nil {
-		sliu.SetOverageFactor(*d)
+		sliu.SetCommitmentOverageFactor(*d)
 	}
 	return sliu
 }
 
-// ClearOverageFactor clears the value of the "overage_factor" field.
-func (sliu *SubscriptionLineItemUpdate) ClearOverageFactor() *SubscriptionLineItemUpdate {
-	sliu.mutation.ClearOverageFactor()
+// ClearCommitmentOverageFactor clears the value of the "commitment_overage_factor" field.
+func (sliu *SubscriptionLineItemUpdate) ClearCommitmentOverageFactor() *SubscriptionLineItemUpdate {
+	sliu.mutation.ClearCommitmentOverageFactor()
 	return sliu
 }
 
-// SetEnableTrueUp sets the "enable_true_up" field.
-func (sliu *SubscriptionLineItemUpdate) SetEnableTrueUp(b bool) *SubscriptionLineItemUpdate {
-	sliu.mutation.SetEnableTrueUp(b)
+// SetCommitmentTrueUpEnabled sets the "commitment_true_up_enabled" field.
+func (sliu *SubscriptionLineItemUpdate) SetCommitmentTrueUpEnabled(b bool) *SubscriptionLineItemUpdate {
+	sliu.mutation.SetCommitmentTrueUpEnabled(b)
 	return sliu
 }
 
-// SetNillableEnableTrueUp sets the "enable_true_up" field if the given value is not nil.
-func (sliu *SubscriptionLineItemUpdate) SetNillableEnableTrueUp(b *bool) *SubscriptionLineItemUpdate {
+// SetNillableCommitmentTrueUpEnabled sets the "commitment_true_up_enabled" field if the given value is not nil.
+func (sliu *SubscriptionLineItemUpdate) SetNillableCommitmentTrueUpEnabled(b *bool) *SubscriptionLineItemUpdate {
 	if b != nil {
-		sliu.SetEnableTrueUp(*b)
+		sliu.SetCommitmentTrueUpEnabled(*b)
 	}
 	return sliu
 }
 
-// SetIsWindowCommitment sets the "is_window_commitment" field.
-func (sliu *SubscriptionLineItemUpdate) SetIsWindowCommitment(b bool) *SubscriptionLineItemUpdate {
-	sliu.mutation.SetIsWindowCommitment(b)
+// SetCommitmentWindowed sets the "commitment_windowed" field.
+func (sliu *SubscriptionLineItemUpdate) SetCommitmentWindowed(b bool) *SubscriptionLineItemUpdate {
+	sliu.mutation.SetCommitmentWindowed(b)
 	return sliu
 }
 
-// SetNillableIsWindowCommitment sets the "is_window_commitment" field if the given value is not nil.
-func (sliu *SubscriptionLineItemUpdate) SetNillableIsWindowCommitment(b *bool) *SubscriptionLineItemUpdate {
+// SetNillableCommitmentWindowed sets the "commitment_windowed" field if the given value is not nil.
+func (sliu *SubscriptionLineItemUpdate) SetNillableCommitmentWindowed(b *bool) *SubscriptionLineItemUpdate {
 	if b != nil {
-		sliu.SetIsWindowCommitment(*b)
+		sliu.SetCommitmentWindowed(*b)
 	}
 	return sliu
 }
@@ -705,17 +705,17 @@ func (sliu *SubscriptionLineItemUpdate) sqlSave(ctx context.Context) (n int, err
 	if sliu.mutation.CommitmentTypeCleared() {
 		_spec.ClearField(subscriptionlineitem.FieldCommitmentType, field.TypeString)
 	}
-	if value, ok := sliu.mutation.OverageFactor(); ok {
-		_spec.SetField(subscriptionlineitem.FieldOverageFactor, field.TypeOther, value)
+	if value, ok := sliu.mutation.CommitmentOverageFactor(); ok {
+		_spec.SetField(subscriptionlineitem.FieldCommitmentOverageFactor, field.TypeOther, value)
 	}
-	if sliu.mutation.OverageFactorCleared() {
-		_spec.ClearField(subscriptionlineitem.FieldOverageFactor, field.TypeOther)
+	if sliu.mutation.CommitmentOverageFactorCleared() {
+		_spec.ClearField(subscriptionlineitem.FieldCommitmentOverageFactor, field.TypeOther)
 	}
-	if value, ok := sliu.mutation.EnableTrueUp(); ok {
-		_spec.SetField(subscriptionlineitem.FieldEnableTrueUp, field.TypeBool, value)
+	if value, ok := sliu.mutation.CommitmentTrueUpEnabled(); ok {
+		_spec.SetField(subscriptionlineitem.FieldCommitmentTrueUpEnabled, field.TypeBool, value)
 	}
-	if value, ok := sliu.mutation.IsWindowCommitment(); ok {
-		_spec.SetField(subscriptionlineitem.FieldIsWindowCommitment, field.TypeBool, value)
+	if value, ok := sliu.mutation.CommitmentWindowed(); ok {
+		_spec.SetField(subscriptionlineitem.FieldCommitmentWindowed, field.TypeBool, value)
 	}
 	if sliu.mutation.CouponAssociationsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -1171,50 +1171,50 @@ func (sliuo *SubscriptionLineItemUpdateOne) ClearCommitmentType() *SubscriptionL
 	return sliuo
 }
 
-// SetOverageFactor sets the "overage_factor" field.
-func (sliuo *SubscriptionLineItemUpdateOne) SetOverageFactor(d decimal.Decimal) *SubscriptionLineItemUpdateOne {
-	sliuo.mutation.SetOverageFactor(d)
+// SetCommitmentOverageFactor sets the "commitment_overage_factor" field.
+func (sliuo *SubscriptionLineItemUpdateOne) SetCommitmentOverageFactor(d decimal.Decimal) *SubscriptionLineItemUpdateOne {
+	sliuo.mutation.SetCommitmentOverageFactor(d)
 	return sliuo
 }
 
-// SetNillableOverageFactor sets the "overage_factor" field if the given value is not nil.
-func (sliuo *SubscriptionLineItemUpdateOne) SetNillableOverageFactor(d *decimal.Decimal) *SubscriptionLineItemUpdateOne {
+// SetNillableCommitmentOverageFactor sets the "commitment_overage_factor" field if the given value is not nil.
+func (sliuo *SubscriptionLineItemUpdateOne) SetNillableCommitmentOverageFactor(d *decimal.Decimal) *SubscriptionLineItemUpdateOne {
 	if d != nil {
-		sliuo.SetOverageFactor(*d)
+		sliuo.SetCommitmentOverageFactor(*d)
 	}
 	return sliuo
 }
 
-// ClearOverageFactor clears the value of the "overage_factor" field.
-func (sliuo *SubscriptionLineItemUpdateOne) ClearOverageFactor() *SubscriptionLineItemUpdateOne {
-	sliuo.mutation.ClearOverageFactor()
+// ClearCommitmentOverageFactor clears the value of the "commitment_overage_factor" field.
+func (sliuo *SubscriptionLineItemUpdateOne) ClearCommitmentOverageFactor() *SubscriptionLineItemUpdateOne {
+	sliuo.mutation.ClearCommitmentOverageFactor()
 	return sliuo
 }
 
-// SetEnableTrueUp sets the "enable_true_up" field.
-func (sliuo *SubscriptionLineItemUpdateOne) SetEnableTrueUp(b bool) *SubscriptionLineItemUpdateOne {
-	sliuo.mutation.SetEnableTrueUp(b)
+// SetCommitmentTrueUpEnabled sets the "commitment_true_up_enabled" field.
+func (sliuo *SubscriptionLineItemUpdateOne) SetCommitmentTrueUpEnabled(b bool) *SubscriptionLineItemUpdateOne {
+	sliuo.mutation.SetCommitmentTrueUpEnabled(b)
 	return sliuo
 }
 
-// SetNillableEnableTrueUp sets the "enable_true_up" field if the given value is not nil.
-func (sliuo *SubscriptionLineItemUpdateOne) SetNillableEnableTrueUp(b *bool) *SubscriptionLineItemUpdateOne {
+// SetNillableCommitmentTrueUpEnabled sets the "commitment_true_up_enabled" field if the given value is not nil.
+func (sliuo *SubscriptionLineItemUpdateOne) SetNillableCommitmentTrueUpEnabled(b *bool) *SubscriptionLineItemUpdateOne {
 	if b != nil {
-		sliuo.SetEnableTrueUp(*b)
+		sliuo.SetCommitmentTrueUpEnabled(*b)
 	}
 	return sliuo
 }
 
-// SetIsWindowCommitment sets the "is_window_commitment" field.
-func (sliuo *SubscriptionLineItemUpdateOne) SetIsWindowCommitment(b bool) *SubscriptionLineItemUpdateOne {
-	sliuo.mutation.SetIsWindowCommitment(b)
+// SetCommitmentWindowed sets the "commitment_windowed" field.
+func (sliuo *SubscriptionLineItemUpdateOne) SetCommitmentWindowed(b bool) *SubscriptionLineItemUpdateOne {
+	sliuo.mutation.SetCommitmentWindowed(b)
 	return sliuo
 }
 
-// SetNillableIsWindowCommitment sets the "is_window_commitment" field if the given value is not nil.
-func (sliuo *SubscriptionLineItemUpdateOne) SetNillableIsWindowCommitment(b *bool) *SubscriptionLineItemUpdateOne {
+// SetNillableCommitmentWindowed sets the "commitment_windowed" field if the given value is not nil.
+func (sliuo *SubscriptionLineItemUpdateOne) SetNillableCommitmentWindowed(b *bool) *SubscriptionLineItemUpdateOne {
 	if b != nil {
-		sliuo.SetIsWindowCommitment(*b)
+		sliuo.SetCommitmentWindowed(*b)
 	}
 	return sliuo
 }
@@ -1487,17 +1487,17 @@ func (sliuo *SubscriptionLineItemUpdateOne) sqlSave(ctx context.Context) (_node 
 	if sliuo.mutation.CommitmentTypeCleared() {
 		_spec.ClearField(subscriptionlineitem.FieldCommitmentType, field.TypeString)
 	}
-	if value, ok := sliuo.mutation.OverageFactor(); ok {
-		_spec.SetField(subscriptionlineitem.FieldOverageFactor, field.TypeOther, value)
+	if value, ok := sliuo.mutation.CommitmentOverageFactor(); ok {
+		_spec.SetField(subscriptionlineitem.FieldCommitmentOverageFactor, field.TypeOther, value)
 	}
-	if sliuo.mutation.OverageFactorCleared() {
-		_spec.ClearField(subscriptionlineitem.FieldOverageFactor, field.TypeOther)
+	if sliuo.mutation.CommitmentOverageFactorCleared() {
+		_spec.ClearField(subscriptionlineitem.FieldCommitmentOverageFactor, field.TypeOther)
 	}
-	if value, ok := sliuo.mutation.EnableTrueUp(); ok {
-		_spec.SetField(subscriptionlineitem.FieldEnableTrueUp, field.TypeBool, value)
+	if value, ok := sliuo.mutation.CommitmentTrueUpEnabled(); ok {
+		_spec.SetField(subscriptionlineitem.FieldCommitmentTrueUpEnabled, field.TypeBool, value)
 	}
-	if value, ok := sliuo.mutation.IsWindowCommitment(); ok {
-		_spec.SetField(subscriptionlineitem.FieldIsWindowCommitment, field.TypeBool, value)
+	if value, ok := sliuo.mutation.CommitmentWindowed(); ok {
+		_spec.SetField(subscriptionlineitem.FieldCommitmentWindowed, field.TypeBool, value)
 	}
 	if sliuo.mutation.CouponAssociationsCleared() {
 		edge := &sqlgraph.EdgeSpec{
