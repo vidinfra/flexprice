@@ -156,12 +156,12 @@ func (s *planService) CreatePlan(ctx context.Context, req dto.CreatePlanRequest)
 
 	response := &dto.CreatePlanResponse{Plan: plan}
 
-	s.ChartMogulAnalyticsSyncPlan(ctx, plan, response)
+	s.chartMogulAnalyticsSyncPlan(ctx, plan, response)
 
 	return response, nil
 }
 
-func (s *planService) ChartMogulAnalyticsSyncPlan(ctx context.Context, plan *plan.Plan, response *dto.CreatePlanResponse) *dto.CreatePlanResponse {
+func (s *planService) chartMogulAnalyticsSyncPlan(ctx context.Context, plan *plan.Plan, response *dto.CreatePlanResponse) *dto.CreatePlanResponse {
 	if s.ChartMogul == nil {
 		return response
 	}
