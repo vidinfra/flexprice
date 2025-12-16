@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -42,6 +43,11 @@ func (s *CreditGrantServiceTestSuite) SetupTest() {
 	s.setupTestData()
 }
 
+// GetContext returns context with environment ID set for settings lookup
+func (s *CreditGrantServiceTestSuite) GetContext() context.Context {
+	return types.SetEnvironmentID(s.BaseServiceTestSuite.GetContext(), "env_test")
+}
+
 func (s *CreditGrantServiceTestSuite) TearDownTest() {
 	s.BaseServiceTestSuite.TearDownTest()
 }
@@ -75,9 +81,11 @@ func (s *CreditGrantServiceTestSuite) setupServices() {
 		CouponAssociationRepo:      s.GetStores().CouponAssociationRepo,
 		CouponApplicationRepo:      s.GetStores().CouponApplicationRepo,
 		SettingsRepo:               s.GetStores().SettingsRepo,
+		FeatureUsageRepo:           s.GetStores().FeatureUsageRepo,
 		EventPublisher:             s.GetPublisher(),
 		WebhookPublisher:           s.GetWebhookPublisher(),
 		AlertLogsRepo:              s.GetStores().AlertLogsRepo,
+		WalletBalanceAlertPubSub:   types.WalletBalanceAlertPubSub{PubSub: testutil.NewInMemoryPubSub()},
 	}
 
 	s.creditGrantService = NewCreditGrantService(serviceParams)
