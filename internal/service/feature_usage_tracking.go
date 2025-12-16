@@ -2246,7 +2246,6 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			FeatureName:     analytic.FeatureName,
 			EventName:       analytic.EventName,
 			Source:          analytic.Source,
-			Sources:         analytic.Sources,
 			Unit:            analytic.Unit,
 			UnitPlural:      analytic.UnitPlural,
 			AggregationType: analytic.AggregationType,
@@ -2258,6 +2257,12 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			CommitmentInfo:  analytic.CommitmentInfo,
 			Points:          make([]dto.UsageAnalyticPoint, 0, len(analytic.Points)),
 		}
+
+		// Only include Sources array when 'sources' is in expand param
+		if expandMap["source"] {
+			item.Sources = analytic.Sources
+		}
+
 		// Can expand plan and addon
 		if analytic.PriceID != "" {
 			if price, ok := data.PriceResponses[analytic.PriceID]; ok {
@@ -2289,19 +2294,22 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			}
 		}
 
-		// Set window size: use meter's bucket size if bucketed, otherwise use request window size
+		// Set window size: always use meter's bucket size if bucketed, otherwise use request window size
 		if analytic.MeterID != "" {
 			if meter, ok := data.Meters[analytic.MeterID]; ok {
 				if meter.HasBucketSize() {
-					// For bucketed meters, use the meter's bucket size
+					// For bucketed meters, always use the meter's bucket size
 					item.WindowSize = meter.Aggregation.BucketSize
-				} else if req.WindowSize != "" {
-					// For non-bucketed meters, use the request window size if provided
+				} else {
+					// For non-bucketed meters, use the request window size
 					item.WindowSize = req.WindowSize
 				}
+			} else {
+				// Meter not found in data, fall back to request window size
+				item.WindowSize = req.WindowSize
 			}
-		} else if req.WindowSize != "" {
-			// If no meter ID, still use request window size if provided
+		} else {
+			// No meter ID, use request window size
 			item.WindowSize = req.WindowSize
 		}
 
