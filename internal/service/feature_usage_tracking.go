@@ -1283,8 +1283,9 @@ func (s *featureUsageTrackingService) fetchSubscriptions(ctx context.Context, cu
 }
 
 // buildBucketFeatures builds a map of max bucket and sum bucket features from the request parameters
-func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, error) {
+func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, map[string]*events.SumBucketFeatureInfo, error) {
 	maxBucketFeatures := make(map[string]*events.MaxBucketFeatureInfo)
+	sumBucketFeatures := make(map[string]*events.SumBucketFeatureInfo)
 
 	// Check if FeatureIDs is empty and fetch all feature IDs from database if needed
 	var features []*feature.Feature
@@ -1305,7 +1306,7 @@ func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, p
 				"tenant_id", params.TenantID,
 				"environment_id", params.EnvironmentID,
 			)
-			return nil, ierr.WithError(err).
+			return nil, nil, ierr.WithError(err).
 				WithHint("Failed to fetch features for bucket analysis").
 				Mark(ierr.ErrDatabase)
 		}
@@ -1327,7 +1328,7 @@ func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, p
 		featureFilter.FeatureIDs = params.FeatureIDs
 		features, err = s.FeatureRepo.List(ctx, featureFilter)
 		if err != nil {
-			return nil, ierr.WithError(err).
+			return nil, nil, ierr.WithError(err).
 				WithHint("Failed to fetch features for bucket analysis").
 				Mark(ierr.ErrDatabase)
 		}
@@ -1352,7 +1353,7 @@ func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, p
 		meterFilter.MeterIDs = meterIDs
 		meters, err := s.MeterRepo.List(ctx, meterFilter)
 		if err != nil {
-			return nil, ierr.WithError(err).
+			return nil, nil, ierr.WithError(err).
 				WithHint("Failed to fetch meters for bucket analysis").
 				Mark(ierr.ErrDatabase)
 		}
@@ -1375,25 +1376,33 @@ func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, p
 							EventName:    m.EventName,
 							PropertyName: m.Aggregation.Field,
 						}
+					} else if m.IsBucketedSumMeter() {
+						sumBucketFeatures[f.ID] = &events.SumBucketFeatureInfo{
+							FeatureID:    f.ID,
+							MeterID:      meterID,
+							BucketSize:   types.WindowSize(m.Aggregation.BucketSize),
+							EventName:    m.EventName,
+							PropertyName: m.Aggregation.Field,
+						}
 					}
 				}
 			}
 		}
 	}
 
-	return maxBucketFeatures, nil
+	return maxBucketFeatures, sumBucketFeatures, nil
 }
 
 // fetchAnalytics fetches analytics data from repository
 func (s *featureUsageTrackingService) fetchAnalytics(ctx context.Context, params *events.UsageAnalyticsParams) ([]*events.DetailedUsageAnalytic, error) {
 	// Build bucket features map (this will handle fetching features if needed)
-	maxBucketFeatures, err := s.buildBucketFeatures(ctx, params)
+	maxBucketFeatures, sumBucketFeatures, err := s.buildBucketFeatures(ctx, params)
 	if err != nil {
 		return nil, err
 	}
 
 	// Fetch analytics with bucket features
-	analytics, err := s.featureUsageRepo.GetDetailedUsageAnalytics(ctx, params, maxBucketFeatures)
+	analytics, err := s.featureUsageRepo.GetDetailedUsageAnalytics(ctx, params, maxBucketFeatures, sumBucketFeatures)
 	if err != nil {
 		s.Logger.Errorw("failed to get detailed usage analytics",
 			"error", err,
