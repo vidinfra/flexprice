@@ -395,11 +395,12 @@ func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, 
 		}
 	}
 
-	// Use the maxBucketFeatures passed from the service layer
+	// Use the maxBucketFeatures and sumBucketFeatures passed from the service layer
 
-	// Now we'll handle the two types of features separately:
+	// Now we'll handle the types of features separately:
 	// 1. MAX with bucket features - use bucket-based aggregation for totals, window-based for points
-	// 2. Other features - use standard SUM aggregation
+	// 2. SUM with bucket features - use bucket-based aggregation for totals, window-based for points
+	// 3. Other features - use standard SUM aggregation
 
 	var allResults []*events.DetailedUsageAnalytic
 
@@ -413,7 +414,7 @@ func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, 
 		allResults = append(allResults, maxBucketResults...)
 	}
 
-	// Handle other features (non-MAX with bucket)
+	// Handle other features (non-MAX/SUM with bucket)
 	otherFeatureIDs := r.getOtherFeatureIDs(params.FeatureIDs, maxBucketFeatures)
 
 	// Only process other features if we have some to process
@@ -423,7 +424,7 @@ func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, 
 			// We have specific other features to process
 			otherParams.FeatureIDs = otherFeatureIDs
 		} else if len(params.FeatureIDs) == 0 {
-			// No specific features requested, but we need to exclude MAX bucket features
+			// No specific features requested, but we need to exclude MAX/SUM bucket features
 			// from the standard processing
 			// Set empty feature IDs to process all, but the standard analytics will handle
 			// the filtering internally
@@ -442,24 +443,25 @@ func (r *FeatureUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, 
 	return allResults, nil
 }
 
-// getOtherFeatureIDs returns feature IDs that are not MAX with bucket features
+// getOtherFeatureIDs returns feature IDs that are not MAX/SUM with bucket features
 func (r *FeatureUsageRepository) getOtherFeatureIDs(requestedFeatureIDs []string, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) []string {
 	// If no specific features requested, we need to handle all features
-	// We'll return empty slice to indicate "handle all features" in standard way
+	// We'll return empty slice to indicate "handle all features in standard way"
 	if len(requestedFeatureIDs) == 0 {
 		return []string{} // Empty slice means "handle all features in standard way"
 	}
 
 	otherFeatureIDs := make([]string, 0)
 	for _, featureID := range requestedFeatureIDs {
-		if _, isMaxBucket := maxBucketFeatures[featureID]; !isMaxBucket {
+		_, isMaxBucket := maxBucketFeatures[featureID]
+		if !isMaxBucket {
 			otherFeatureIDs = append(otherFeatureIDs, featureID)
 		}
 	}
 	return otherFeatureIDs
 }
 
-// getStandardAnalytics handles analytics for non-MAX with bucket features
+// getStandardAnalytics handles analytics for non-MAX/SUM with bucket features
 func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, params *events.UsageAnalyticsParams, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
 	// Initialize query parameters with the standard parameters that will be added later
 	// This ensures they're always in the right order

@@ -190,6 +190,31 @@ func (s *subscriptionService) CreateSubscription(ctx context.Context, req dto.Cr
 		if len(req.Phases) > 0 && req.Phases[0].StartDate.After(startDate) {
 			startDate = req.Phases[0].StartDate
 		}
+
+		// Apply commitment configuration if provided for this price
+		if req.LineItemCommitments != nil {
+			if commitmentConfig, exists := req.LineItemCommitments[item.PriceID]; exists && commitmentConfig != nil {
+				if commitmentConfig.CommitmentAmount != nil {
+					item.CommitmentAmount = commitmentConfig.CommitmentAmount
+				}
+				if commitmentConfig.CommitmentQuantity != nil {
+					item.CommitmentQuantity = commitmentConfig.CommitmentQuantity
+				}
+				if commitmentConfig.CommitmentType != "" {
+					item.CommitmentType = commitmentConfig.CommitmentType
+				}
+				if commitmentConfig.OverageFactor != nil {
+					item.CommitmentOverageFactor = commitmentConfig.OverageFactor
+				}
+				if commitmentConfig.EnableTrueUp != nil {
+					item.CommitmentTrueUpEnabled = *commitmentConfig.EnableTrueUp
+				}
+				if commitmentConfig.IsWindowCommitment != nil {
+					item.CommitmentWindowed = *commitmentConfig.IsWindowCommitment
+				}
+			}
+		}
+
 		if priceResponse.Price.StartDate != nil && priceResponse.Price.StartDate.After(startDate) {
 			startDate = lo.FromPtr(priceResponse.Price.StartDate)
 		}
@@ -1892,7 +1917,7 @@ func (s *subscriptionService) GetUsageBySubscription(ctx context.Context, req *d
 
 		// Get meter info
 		meterInfo := meterMap[meterID]
-		if priceObj.MeterID != "" && meterInfo != nil && meterInfo.ToMeter().IsBucketedMaxMeter() {
+		if priceObj.MeterID != "" && meterInfo != nil && (meterInfo.ToMeter().IsBucketedMaxMeter() || meterInfo.ToMeter().IsBucketedSumMeter()) {
 			// For bucketed max, use the array of values
 			bucketedValues := make([]decimal.Decimal, len(usage.Results))
 			for i, result := range usage.Results {

@@ -15,13 +15,21 @@ import (
 // CreateSubscriptionLineItemRequest represents the request to create a subscription line item
 type CreateSubscriptionLineItemRequest struct {
 	PriceID              string            `json:"price_id" validate:"required"`
-	Quantity             decimal.Decimal   `json:"quantity,omitempty" swaggertype:"string"`
+	Quantity             decimal.Decimal   `json:"quantity,omitempty"`
 	StartDate            *time.Time        `json:"start_date,omitempty"`
 	EndDate              *time.Time        `json:"end_date,omitempty"`
 	Metadata             map[string]string `json:"metadata,omitempty"`
 	DisplayName          string            `json:"display_name,omitempty"`
 	SubscriptionPhaseID  *string           `json:"subscription_phase_id,omitempty"`
 	SkipEntitlementCheck bool              `json:"-"` // This is used to skip entitlement check when creating a subscription line item
+
+	// Commitment fields
+	CommitmentAmount        *decimal.Decimal     `json:"commitment_amount,omitempty"`
+	CommitmentQuantity      *decimal.Decimal     `json:"commitment_quantity,omitempty"`
+	CommitmentType          types.CommitmentType `json:"commitment_type,omitempty"`
+	CommitmentOverageFactor *decimal.Decimal     `json:"commitment_overage_factor,omitempty"`
+	CommitmentTrueUpEnabled bool                 `json:"commitment_true_up_enabled,omitempty"`
+	CommitmentWindowed      bool                 `json:"commitment_windowed,omitempty"`
 }
 
 // DeleteSubscriptionLineItemRequest represents the request to delete a subscription line item
@@ -49,6 +57,14 @@ type UpdateSubscriptionLineItemRequest struct {
 
 	// Metadata for the new line item
 	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// Commitment fields
+	CommitmentAmount        *decimal.Decimal     `json:"commitment_amount,omitempty"`
+	CommitmentQuantity      *decimal.Decimal     `json:"commitment_quantity,omitempty"`
+	CommitmentType          types.CommitmentType `json:"commitment_type,omitempty"`
+	CommitmentOverageFactor *decimal.Decimal     `json:"commitment_overage_factor,omitempty"`
+	CommitmentTrueUpEnabled *bool                `json:"commitment_true_up_enabled,omitempty"`
+	CommitmentWindowed      *bool                `json:"commitment_windowed,omitempty"`
 }
 
 // LineItemParams contains all necessary parameters for creating a line item
@@ -58,6 +74,20 @@ type LineItemParams struct {
 	Plan         *PlanResponse  // Optional, for plan-based line items
 	Addon        *AddonResponse // Optional, for addon-based line items
 	EntityType   types.SubscriptionLineItemEntityType
+}
+
+// HasCommitment returns true if the request has commitment configured
+func (r *CreateSubscriptionLineItemRequest) HasCommitment() bool {
+	hasAmountCommitment := r.CommitmentAmount != nil && r.CommitmentAmount.GreaterThan(decimal.Zero)
+	hasQuantityCommitment := r.CommitmentQuantity != nil && r.CommitmentQuantity.GreaterThan(decimal.Zero)
+	return hasAmountCommitment || hasQuantityCommitment
+}
+
+// HasCommitment returns true if the request has commitment configured
+func (r *UpdateSubscriptionLineItemRequest) HasCommitment() bool {
+	hasAmountCommitment := r.CommitmentAmount != nil && r.CommitmentAmount.GreaterThan(decimal.Zero)
+	hasQuantityCommitment := r.CommitmentQuantity != nil && r.CommitmentQuantity.GreaterThan(decimal.Zero)
+	return hasAmountCommitment || hasQuantityCommitment
 }
 
 // Validate validates the create subscription line item request
@@ -85,7 +115,11 @@ func (r *CreateSubscriptionLineItemRequest) Validate(price *price.Price) error {
 			Mark(ierr.ErrValidation)
 	}
 
-	// Validate MinQuantity for fixed prices
+	// Validate commitment fields if provided
+	if err := r.validateCommitmentFields(); err != nil {
+		return err
+	}
+
 	if price != nil && price.Type == types.PRICE_TYPE_FIXED && price.MinQuantity != nil {
 		finalQuantity := r.Quantity
 		if finalQuantity.IsZero() {
@@ -100,6 +134,144 @@ func (r *CreateSubscriptionLineItemRequest) Validate(price *price.Price) error {
 					"min_quantity": price.MinQuantity.String(),
 				}).
 				Mark(ierr.ErrValidation)
+		}
+	}
+
+	return nil
+}
+
+// validateCommitmentFieldsCommon contains shared commitment validation logic for both Create and Update requests
+// isCreateRequest determines whether auto-setting of commitment type is allowed
+func validateCommitmentFieldsCommon(
+	commitmentAmount *decimal.Decimal,
+	commitmentQuantity *decimal.Decimal,
+	commitmentType types.CommitmentType,
+	commitmentOverageFactor *decimal.Decimal,
+	isCreateRequest bool,
+) error {
+	hasAmountCommitment := commitmentAmount != nil && commitmentAmount.GreaterThan(decimal.Zero)
+	hasQuantityCommitment := commitmentQuantity != nil && commitmentQuantity.GreaterThan(decimal.Zero)
+	hasCommitment := hasAmountCommitment || hasQuantityCommitment
+
+	if !hasCommitment {
+		// No commitment configured, nothing to validate
+		return nil
+	}
+
+	// Rule 1: Cannot set both commitment_amount and commitment_quantity
+	if hasAmountCommitment && hasQuantityCommitment {
+		return ierr.NewError("cannot set both commitment_amount and commitment_quantity").
+			WithHint("Specify either commitment_amount or commitment_quantity, not both").
+			WithReportableDetails(map[string]interface{}{
+				"commitment_amount":   commitmentAmount,
+				"commitment_quantity": commitmentQuantity,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Rule 2: Commitment type must be valid
+	if commitmentType != "" && !commitmentType.Validate() {
+		return ierr.NewError("invalid commitment_type").
+			WithHint("Commitment type must be either 'amount' or 'quantity'").
+			WithReportableDetails(map[string]interface{}{
+				"commitment_type": commitmentType,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Rule 3: For update requests, commitment type is required when commitment is set
+	// For create requests, it will be auto-set in normalization
+	if !isCreateRequest && hasCommitment && commitmentType == "" {
+		return ierr.NewError("commitment_type is required").
+			WithHint("Commitment type must be either 'amount' or 'quantity'").
+			WithReportableDetails(map[string]interface{}{
+				"commitment_type": commitmentType,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Rule 4: Validate commitment type matches the provided field (if type is specified)
+	if commitmentType != "" {
+		if hasAmountCommitment && commitmentType != types.COMMITMENT_TYPE_AMOUNT {
+			return ierr.NewError("commitment_type mismatch").
+				WithHint("When commitment_amount is set, commitment_type must be 'amount'").
+				WithReportableDetails(map[string]interface{}{
+					"commitment_type":   commitmentType,
+					"commitment_amount": commitmentAmount,
+				}).
+				Mark(ierr.ErrValidation)
+		}
+
+		if hasQuantityCommitment && commitmentType != types.COMMITMENT_TYPE_QUANTITY {
+			return ierr.NewError("commitment_type mismatch").
+				WithHint("When commitment_quantity is set, commitment_type must be 'quantity'").
+				WithReportableDetails(map[string]interface{}{
+					"commitment_type":     commitmentType,
+					"commitment_quantity": commitmentQuantity,
+				}).
+				Mark(ierr.ErrValidation)
+		}
+	}
+
+	// Rule 5: Overage factor is required and must be greater than 1.0
+	if commitmentOverageFactor == nil {
+		return ierr.NewError("commitment_overage_factor is required when commitment is set").
+			WithHint("Specify a commitment_overage_factor greater than 1.0").
+			Mark(ierr.ErrValidation)
+	}
+
+	if commitmentOverageFactor.LessThanOrEqual(decimal.NewFromFloat(1)) {
+		return ierr.NewError("commitment_overage_factor must be greater than 1.0").
+			WithHint("Overage factor determines the multiplier for usage beyond commitment").
+			WithReportableDetails(map[string]interface{}{
+				"commitment_overage_factor": commitmentOverageFactor,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Rule 6: Validate commitment values are positive
+	if hasAmountCommitment && commitmentAmount.IsNegative() {
+		return ierr.NewError("commitment_amount must be non-negative").
+			WithHint("Commitment amount cannot be negative").
+			WithReportableDetails(map[string]interface{}{
+				"commitment_amount": commitmentAmount,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	if hasQuantityCommitment && commitmentQuantity.IsNegative() {
+		return ierr.NewError("commitment_quantity must be non-negative").
+			WithHint("Commitment quantity cannot be negative").
+			WithReportableDetails(map[string]interface{}{
+				"commitment_quantity": commitmentQuantity,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	return nil
+}
+
+// validateCommitmentFields validates commitment-related fields for create request
+func (r *CreateSubscriptionLineItemRequest) validateCommitmentFields() error {
+	// Use shared validation logic
+	err := validateCommitmentFieldsCommon(
+		r.CommitmentAmount,
+		r.CommitmentQuantity,
+		r.CommitmentType,
+		r.CommitmentOverageFactor,
+		true, // isCreateRequest
+	)
+	if err != nil {
+		return err
+	}
+
+	// Auto-set commitment type if not provided (only for create requests)
+	if r.HasCommitment() && r.CommitmentType == "" {
+		hasAmountCommitment := r.CommitmentAmount != nil && r.CommitmentAmount.GreaterThan(decimal.Zero)
+		if hasAmountCommitment {
+			r.CommitmentType = types.COMMITMENT_TYPE_AMOUNT
+		} else {
+			r.CommitmentType = types.COMMITMENT_TYPE_QUANTITY
 		}
 	}
 
@@ -181,6 +353,22 @@ func (r *CreateSubscriptionLineItemRequest) ToSubscriptionLineItem(ctx context.C
 		lineItem.EndDate = r.EndDate.UTC()
 	}
 
+	// Set commitment fields if provided
+	if r.CommitmentAmount != nil {
+		lineItem.CommitmentAmount = r.CommitmentAmount
+	}
+	if r.CommitmentQuantity != nil {
+		lineItem.CommitmentQuantity = r.CommitmentQuantity
+	}
+	if r.CommitmentType != "" {
+		lineItem.CommitmentType = r.CommitmentType
+	}
+	if r.CommitmentOverageFactor != nil {
+		lineItem.CommitmentOverageFactor = r.CommitmentOverageFactor
+	}
+	lineItem.CommitmentTrueUpEnabled = r.CommitmentTrueUpEnabled
+	lineItem.CommitmentWindowed = r.CommitmentWindowed
+
 	return lineItem
 }
 
@@ -219,11 +407,28 @@ func (r *UpdateSubscriptionLineItemRequest) Validate() error {
 	// If EffectiveFrom is provided, at least one critical field must be present
 	if r.EffectiveFrom != nil && !r.ShouldCreateNewLineItem() {
 		return ierr.NewError("effective_from requires at least one critical field").
-			WithHint("When providing effective_from, you must also provide one of: amount, billing_model, tier_mode, tiers, or transform_quantity").
+			WithHint("When providing effective_from, you must also provide one of: amount, billing_model, tier_mode, tiers, transform_quantity, or commitment fields").
 			Mark(ierr.ErrValidation)
 	}
 
+	// Validate commitment fields if provided
+	if err := r.validateCommitmentFields(); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// validateCommitmentFields validates commitment-related fields for update request
+func (r *UpdateSubscriptionLineItemRequest) validateCommitmentFields() error {
+	// Use shared validation logic (update requests require explicit commitment type)
+	return validateCommitmentFieldsCommon(
+		r.CommitmentAmount,
+		r.CommitmentQuantity,
+		r.CommitmentType,
+		r.CommitmentOverageFactor,
+		false, // isCreateRequest
+	)
 }
 
 // ShouldCreateNewLineItem checks if the request contains any critical fields that require creating a new line item
@@ -232,7 +437,11 @@ func (r *UpdateSubscriptionLineItemRequest) ShouldCreateNewLineItem() bool {
 		r.BillingModel != "" ||
 		r.TierMode != "" ||
 		len(r.Tiers) > 0 ||
-		r.TransformQuantity != nil
+		r.TransformQuantity != nil ||
+		r.HasCommitment() ||
+		r.CommitmentOverageFactor != nil ||
+		r.CommitmentTrueUpEnabled != nil ||
+		r.CommitmentWindowed != nil
 }
 
 // ToSubscriptionLineItem converts the update request to a domain subscription line item
@@ -267,6 +476,43 @@ func (r *UpdateSubscriptionLineItemRequest) ToSubscriptionLineItem(ctx context.C
 		newLineItem.Metadata = r.Metadata
 	} else {
 		newLineItem.Metadata = existingLineItem.Metadata
+	}
+
+	// Set commitment fields - use provided values or keep existing
+	if r.CommitmentAmount != nil {
+		newLineItem.CommitmentAmount = r.CommitmentAmount
+	} else {
+		newLineItem.CommitmentAmount = existingLineItem.CommitmentAmount
+	}
+
+	if r.CommitmentQuantity != nil {
+		newLineItem.CommitmentQuantity = r.CommitmentQuantity
+	} else {
+		newLineItem.CommitmentQuantity = existingLineItem.CommitmentQuantity
+	}
+
+	if r.CommitmentType != "" {
+		newLineItem.CommitmentType = r.CommitmentType
+	} else {
+		newLineItem.CommitmentType = existingLineItem.CommitmentType
+	}
+
+	if r.CommitmentOverageFactor != nil {
+		newLineItem.CommitmentOverageFactor = r.CommitmentOverageFactor
+	} else {
+		newLineItem.CommitmentOverageFactor = existingLineItem.CommitmentOverageFactor
+	}
+
+	if r.CommitmentTrueUpEnabled != nil {
+		newLineItem.CommitmentTrueUpEnabled = *r.CommitmentTrueUpEnabled
+	} else {
+		newLineItem.CommitmentTrueUpEnabled = existingLineItem.CommitmentTrueUpEnabled
+	}
+
+	if r.CommitmentWindowed != nil {
+		newLineItem.CommitmentWindowed = *r.CommitmentWindowed
+	} else {
+		newLineItem.CommitmentWindowed = existingLineItem.CommitmentWindowed
 	}
 
 	return newLineItem

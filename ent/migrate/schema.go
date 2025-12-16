@@ -1055,6 +1055,7 @@ var (
 		{Name: "period_start", Type: field.TypeTime, Nullable: true},
 		{Name: "period_end", Type: field.TypeTime, Nullable: true},
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "commitment_info", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
 		{Name: "invoice_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 	}
 	// InvoiceLineItemsTable holds the schema information for the "invoice_line_items" table.
@@ -1065,7 +1066,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "invoice_line_items_invoices_line_items",
-				Columns:    []*schema.Column{InvoiceLineItemsColumns[27]},
+				Columns:    []*schema.Column{InvoiceLineItemsColumns[28]},
 				RefColumns: []*schema.Column{InvoicesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1074,7 +1075,7 @@ var (
 			{
 				Name:    "invoicelineitem_tenant_id_environment_id_invoice_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{InvoiceLineItemsColumns[1], InvoiceLineItemsColumns[7], InvoiceLineItemsColumns[27], InvoiceLineItemsColumns[2]},
+				Columns: []*schema.Column{InvoiceLineItemsColumns[1], InvoiceLineItemsColumns[7], InvoiceLineItemsColumns[28], InvoiceLineItemsColumns[2]},
 			},
 			{
 				Name:    "invoicelineitem_tenant_id_environment_id_customer_id_status",
@@ -1639,6 +1640,12 @@ var (
 		{Name: "end_date", Type: field.TypeTime, Nullable: true},
 		{Name: "subscription_phase_id", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "metadata", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "commitment_amount", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(20,8)"}},
+		{Name: "commitment_quantity", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(20,8)"}},
+		{Name: "commitment_type", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(20)"}},
+		{Name: "commitment_overage_factor", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"postgres": "numeric(10,4)"}},
+		{Name: "commitment_true_up_enabled", Type: field.TypeBool, Default: false},
+		{Name: "commitment_windowed", Type: field.TypeBool, Default: false},
 		{Name: "subscription_id", Type: field.TypeString, SchemaType: map[string]string{"postgres": "varchar(50)"}},
 	}
 	// SubscriptionLineItemsTable holds the schema information for the "subscription_line_items" table.
@@ -1649,7 +1656,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "subscription_line_items_subscriptions_line_items",
-				Columns:    []*schema.Column{SubscriptionLineItemsColumns[28]},
+				Columns:    []*schema.Column{SubscriptionLineItemsColumns[34]},
 				RefColumns: []*schema.Column{SubscriptionsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -1658,7 +1665,7 @@ var (
 			{
 				Name:    "subscriptionlineitem_tenant_id_environment_id_subscription_id_status",
 				Unique:  false,
-				Columns: []*schema.Column{SubscriptionLineItemsColumns[1], SubscriptionLineItemsColumns[7], SubscriptionLineItemsColumns[28], SubscriptionLineItemsColumns[2]},
+				Columns: []*schema.Column{SubscriptionLineItemsColumns[1], SubscriptionLineItemsColumns[7], SubscriptionLineItemsColumns[34], SubscriptionLineItemsColumns[2]},
 			},
 			{
 				Name:    "subscriptionlineitem_tenant_id_environment_id_customer_id_status",

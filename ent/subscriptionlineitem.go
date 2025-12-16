@@ -76,6 +76,18 @@ type SubscriptionLineItem struct {
 	SubscriptionPhaseID *string `json:"subscription_phase_id,omitempty"`
 	// Metadata holds the value of the "metadata" field.
 	Metadata map[string]string `json:"metadata,omitempty"`
+	// CommitmentAmount holds the value of the "commitment_amount" field.
+	CommitmentAmount *decimal.Decimal `json:"commitment_amount,omitempty"`
+	// CommitmentQuantity holds the value of the "commitment_quantity" field.
+	CommitmentQuantity *decimal.Decimal `json:"commitment_quantity,omitempty"`
+	// CommitmentType holds the value of the "commitment_type" field.
+	CommitmentType *string `json:"commitment_type,omitempty"`
+	// CommitmentOverageFactor holds the value of the "commitment_overage_factor" field.
+	CommitmentOverageFactor *decimal.Decimal `json:"commitment_overage_factor,omitempty"`
+	// CommitmentTrueUpEnabled holds the value of the "commitment_true_up_enabled" field.
+	CommitmentTrueUpEnabled bool `json:"commitment_true_up_enabled,omitempty"`
+	// CommitmentWindowed holds the value of the "commitment_windowed" field.
+	CommitmentWindowed bool `json:"commitment_windowed,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the SubscriptionLineItemQuery when eager-loading is set.
 	Edges        SubscriptionLineItemEdges `json:"edges"`
@@ -118,13 +130,17 @@ func (*SubscriptionLineItem) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case subscriptionlineitem.FieldCommitmentAmount, subscriptionlineitem.FieldCommitmentQuantity, subscriptionlineitem.FieldCommitmentOverageFactor:
+			values[i] = &sql.NullScanner{S: new(decimal.Decimal)}
 		case subscriptionlineitem.FieldMetadata:
 			values[i] = new([]byte)
 		case subscriptionlineitem.FieldQuantity:
 			values[i] = new(decimal.Decimal)
+		case subscriptionlineitem.FieldCommitmentTrueUpEnabled, subscriptionlineitem.FieldCommitmentWindowed:
+			values[i] = new(sql.NullBool)
 		case subscriptionlineitem.FieldTrialPeriod:
 			values[i] = new(sql.NullInt64)
-		case subscriptionlineitem.FieldID, subscriptionlineitem.FieldTenantID, subscriptionlineitem.FieldStatus, subscriptionlineitem.FieldCreatedBy, subscriptionlineitem.FieldUpdatedBy, subscriptionlineitem.FieldEnvironmentID, subscriptionlineitem.FieldSubscriptionID, subscriptionlineitem.FieldCustomerID, subscriptionlineitem.FieldEntityID, subscriptionlineitem.FieldEntityType, subscriptionlineitem.FieldPlanDisplayName, subscriptionlineitem.FieldPriceID, subscriptionlineitem.FieldPriceType, subscriptionlineitem.FieldMeterID, subscriptionlineitem.FieldMeterDisplayName, subscriptionlineitem.FieldPriceUnitID, subscriptionlineitem.FieldPriceUnit, subscriptionlineitem.FieldDisplayName, subscriptionlineitem.FieldCurrency, subscriptionlineitem.FieldBillingPeriod, subscriptionlineitem.FieldInvoiceCadence, subscriptionlineitem.FieldSubscriptionPhaseID:
+		case subscriptionlineitem.FieldID, subscriptionlineitem.FieldTenantID, subscriptionlineitem.FieldStatus, subscriptionlineitem.FieldCreatedBy, subscriptionlineitem.FieldUpdatedBy, subscriptionlineitem.FieldEnvironmentID, subscriptionlineitem.FieldSubscriptionID, subscriptionlineitem.FieldCustomerID, subscriptionlineitem.FieldEntityID, subscriptionlineitem.FieldEntityType, subscriptionlineitem.FieldPlanDisplayName, subscriptionlineitem.FieldPriceID, subscriptionlineitem.FieldPriceType, subscriptionlineitem.FieldMeterID, subscriptionlineitem.FieldMeterDisplayName, subscriptionlineitem.FieldPriceUnitID, subscriptionlineitem.FieldPriceUnit, subscriptionlineitem.FieldDisplayName, subscriptionlineitem.FieldCurrency, subscriptionlineitem.FieldBillingPeriod, subscriptionlineitem.FieldInvoiceCadence, subscriptionlineitem.FieldSubscriptionPhaseID, subscriptionlineitem.FieldCommitmentType:
 			values[i] = new(sql.NullString)
 		case subscriptionlineitem.FieldCreatedAt, subscriptionlineitem.FieldUpdatedAt, subscriptionlineitem.FieldStartDate, subscriptionlineitem.FieldEndDate:
 			values[i] = new(sql.NullTime)
@@ -330,6 +346,46 @@ func (sli *SubscriptionLineItem) assignValues(columns []string, values []any) er
 					return fmt.Errorf("unmarshal field metadata: %w", err)
 				}
 			}
+		case subscriptionlineitem.FieldCommitmentAmount:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field commitment_amount", values[i])
+			} else if value.Valid {
+				sli.CommitmentAmount = new(decimal.Decimal)
+				*sli.CommitmentAmount = *value.S.(*decimal.Decimal)
+			}
+		case subscriptionlineitem.FieldCommitmentQuantity:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field commitment_quantity", values[i])
+			} else if value.Valid {
+				sli.CommitmentQuantity = new(decimal.Decimal)
+				*sli.CommitmentQuantity = *value.S.(*decimal.Decimal)
+			}
+		case subscriptionlineitem.FieldCommitmentType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field commitment_type", values[i])
+			} else if value.Valid {
+				sli.CommitmentType = new(string)
+				*sli.CommitmentType = value.String
+			}
+		case subscriptionlineitem.FieldCommitmentOverageFactor:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field commitment_overage_factor", values[i])
+			} else if value.Valid {
+				sli.CommitmentOverageFactor = new(decimal.Decimal)
+				*sli.CommitmentOverageFactor = *value.S.(*decimal.Decimal)
+			}
+		case subscriptionlineitem.FieldCommitmentTrueUpEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field commitment_true_up_enabled", values[i])
+			} else if value.Valid {
+				sli.CommitmentTrueUpEnabled = value.Bool
+			}
+		case subscriptionlineitem.FieldCommitmentWindowed:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field commitment_windowed", values[i])
+			} else if value.Valid {
+				sli.CommitmentWindowed = value.Bool
+			}
 		default:
 			sli.selectValues.Set(columns[i], values[i])
 		}
@@ -481,6 +537,32 @@ func (sli *SubscriptionLineItem) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("metadata=")
 	builder.WriteString(fmt.Sprintf("%v", sli.Metadata))
+	builder.WriteString(", ")
+	if v := sli.CommitmentAmount; v != nil {
+		builder.WriteString("commitment_amount=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := sli.CommitmentQuantity; v != nil {
+		builder.WriteString("commitment_quantity=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := sli.CommitmentType; v != nil {
+		builder.WriteString("commitment_type=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := sli.CommitmentOverageFactor; v != nil {
+		builder.WriteString("commitment_overage_factor=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("commitment_true_up_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", sli.CommitmentTrueUpEnabled))
+	builder.WriteString(", ")
+	builder.WriteString("commitment_windowed=")
+	builder.WriteString(fmt.Sprintf("%v", sli.CommitmentWindowed))
 	builder.WriteByte(')')
 	return builder.String()
 }

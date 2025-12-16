@@ -13,6 +13,7 @@ import (
 	"github.com/flexprice/flexprice/ent/couponapplication"
 	"github.com/flexprice/flexprice/ent/invoice"
 	"github.com/flexprice/flexprice/ent/invoicelineitem"
+	"github.com/flexprice/flexprice/internal/types"
 	"github.com/shopspring/decimal"
 )
 
@@ -361,6 +362,12 @@ func (ilic *InvoiceLineItemCreate) SetMetadata(m map[string]string) *InvoiceLine
 	return ilic
 }
 
+// SetCommitmentInfo sets the "commitment_info" field.
+func (ilic *InvoiceLineItemCreate) SetCommitmentInfo(ti *types.CommitmentInfo) *InvoiceLineItemCreate {
+	ilic.mutation.SetCommitmentInfo(ti)
+	return ilic
+}
+
 // SetID sets the "id" field.
 func (ilic *InvoiceLineItemCreate) SetID(s string) *InvoiceLineItemCreate {
 	ilic.mutation.SetID(s)
@@ -638,6 +645,10 @@ func (ilic *InvoiceLineItemCreate) createSpec() (*InvoiceLineItem, *sqlgraph.Cre
 	if value, ok := ilic.mutation.Metadata(); ok {
 		_spec.SetField(invoicelineitem.FieldMetadata, field.TypeJSON, value)
 		_node.Metadata = value
+	}
+	if value, ok := ilic.mutation.CommitmentInfo(); ok {
+		_spec.SetField(invoicelineitem.FieldCommitmentInfo, field.TypeJSON, value)
+		_node.CommitmentInfo = value
 	}
 	if nodes := ilic.mutation.InvoiceIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

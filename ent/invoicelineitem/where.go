@@ -1891,6 +1891,16 @@ func MetadataNotNil() predicate.InvoiceLineItem {
 	return predicate.InvoiceLineItem(sql.FieldNotNull(FieldMetadata))
 }
 
+// CommitmentInfoIsNil applies the IsNil predicate on the "commitment_info" field.
+func CommitmentInfoIsNil() predicate.InvoiceLineItem {
+	return predicate.InvoiceLineItem(sql.FieldIsNull(FieldCommitmentInfo))
+}
+
+// CommitmentInfoNotNil applies the NotNil predicate on the "commitment_info" field.
+func CommitmentInfoNotNil() predicate.InvoiceLineItem {
+	return predicate.InvoiceLineItem(sql.FieldNotNull(FieldCommitmentInfo))
+}
+
 // HasInvoice applies the HasEdge predicate on the "invoice" edge.
 func HasInvoice() predicate.InvoiceLineItem {
 	return predicate.InvoiceLineItem(func(s *sql.Selector) {

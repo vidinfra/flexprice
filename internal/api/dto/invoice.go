@@ -487,6 +487,9 @@ type CreateInvoiceLineItemRequest struct {
 	// TODO: !REMOVE after migration
 	// plan_id is the optional unique identifier of the plan associated with this line item
 	PlanID *string `json:"plan_id,omitempty"`
+
+	// commitment_info contains details about any commitment applied to this line item
+	CommitmentInfo *types.CommitmentInfo `json:"commitment_info,omitempty"`
 }
 
 func (r *CreateInvoiceLineItemRequest) Validate(invoiceType types.InvoiceType) error {
@@ -554,6 +557,7 @@ func (r *CreateInvoiceLineItemRequest) ToInvoiceLineItem(ctx context.Context, in
 		Metadata:         r.Metadata,
 		EnvironmentID:    types.GetEnvironmentID(ctx),
 		BaseModel:        types.GetDefaultBaseModel(ctx),
+		CommitmentInfo:   r.CommitmentInfo,
 	}
 }
 
@@ -648,6 +652,9 @@ type InvoiceLineItemResponse struct {
 
 	// usage_breakdown contains flexible usage breakdown for this line item (supports any grouping)
 	UsageBreakdown []UsageBreakdownItem `json:"usage_breakdown,omitempty"`
+
+	// commitment_info contains details about any commitment applied to this line item
+	CommitmentInfo *types.CommitmentInfo `json:"commitment_info,omitempty"`
 }
 
 func NewInvoiceLineItemResponse(item *invoice.InvoiceLineItem) *InvoiceLineItemResponse {
@@ -683,6 +690,7 @@ func NewInvoiceLineItemResponse(item *invoice.InvoiceLineItem) *InvoiceLineItemR
 		UpdatedAt:        item.UpdatedAt,
 		CreatedBy:        item.CreatedBy,
 		UpdatedBy:        item.UpdatedBy,
+		CommitmentInfo:   item.CommitmentInfo,
 	}
 }
 
