@@ -323,6 +323,7 @@ type UsageAnalyticItem struct {
 	Points               []UsageAnalyticPoint               `json:"points,omitempty"`
 	AddOnID              string                             `json:"add_on_id,omitempty"`
 	PlanID               string                             `json:"plan_id,omitempty"`
+	WindowSize           types.WindowSize                   `json:"window_size,omitempty"` // Window size for bucketed meters (only set if meter is bucketed)
 }
 
 // UsageAnalyticPoint represents a point in the time series data
