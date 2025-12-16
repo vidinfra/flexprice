@@ -2260,6 +2260,22 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			}
 		}
 
+		// Set window size: use meter's bucket size if bucketed, otherwise use request window size
+		if analytic.MeterID != "" {
+			if meter, ok := data.Meters[analytic.MeterID]; ok {
+				if meter.HasBucketSize() {
+					// For bucketed meters, use the meter's bucket size
+					item.WindowSize = meter.Aggregation.BucketSize
+				} else if req.WindowSize != "" {
+					// For non-bucketed meters, use the request window size if provided
+					item.WindowSize = req.WindowSize
+				}
+			}
+		} else if req.WindowSize != "" {
+			// If no meter ID, still use request window size if provided
+			item.WindowSize = req.WindowSize
+		}
+
 		if expandMap["feature"] && analytic.FeatureID != "" {
 			if feature, ok := data.Features[analytic.FeatureID]; ok {
 				item.Feature = feature
@@ -2615,5 +2631,3 @@ func (s *featureUsageTrackingService) applyLineItemCommitment(
 	s.Logger.Warnw("failed to apply commitment", "error", err, "line_item_id", lineItem.ID)
 	return rawCost
 }
-
-// updateItemProperties is removed as it is no longer used for commitment info

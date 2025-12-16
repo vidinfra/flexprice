@@ -29,15 +29,14 @@ func (ct CommitmentType) String() string {
 
 // CommitmentInfo holds information about a commitment
 type CommitmentInfo struct {
-	Type             CommitmentType   `json:"type"`
-	Amount           decimal.Decimal  `json:"amount" swaggertype:"string"`
-	Quantity         decimal.Decimal  `json:"quantity,omitempty" swaggertype:"string"`
-	Utilized         decimal.Decimal  `json:"computed_utilized_amount" swaggertype:"string"`
-	Overage          decimal.Decimal  `json:"computed_overage_amount" swaggertype:"string"`
-	TrueUp           decimal.Decimal  `json:"computed_true_up_amount" swaggertype:"string"`
-	OverageFactor    *decimal.Decimal `json:"overage_factor,omitempty" swaggertype:"string"`
-	TrueUpEnabled    bool             `json:"true_up_enabled"`
-	IsWindowed       bool             `json:"is_windowed"`
-	WindowSize       *string          `json:"window_size,omitempty"`
-	UsageResetPeriod string           `json:"usage_reset_period,omitempty"`
+	Type          CommitmentType   `json:"type"`
+	Amount        decimal.Decimal  `json:"amount" swaggertype:"string"`
+	Quantity      decimal.Decimal  `json:"quantity,omitempty" swaggertype:"string"` // Only used for quantity-based commitments
+	OverageFactor *decimal.Decimal `json:"overage_factor,omitempty" swaggertype:"string"`
+	TrueUpEnabled bool             `json:"true_up_enabled"`
+	IsWindowed    bool             `json:"is_windowed"`
+	// total_cost = computed_commitment_utilized_amount + computed_overage_amount + computed_true_up_amount
+	ComputedTrueUpAmount             decimal.Decimal `json:"computed_true_up_amount" swaggertype:"string"`
+	ComputedOverageAmount            decimal.Decimal `json:"computed_overage_amount" swaggertype:"string"`
+	ComputedCommitmentUtilizedAmount decimal.Decimal `json:"computed_commitment_utilized_amount" swaggertype:"string"`
 }

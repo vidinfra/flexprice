@@ -89,9 +89,9 @@ func (c *commitmentCalculator) applyCommitmentToLineItem(
 		overageCharge := overage.Mul(overageFactor)
 		finalCharge = commitmentAmount.Add(overageCharge)
 
-		info.Utilized = commitmentAmount
-		info.Overage = overageCharge
-		info.TrueUp = decimal.Zero
+		info.ComputedCommitmentUtilizedAmount = commitmentAmount
+		info.ComputedOverageAmount = overageCharge
+		info.ComputedTrueUpAmount = decimal.Zero
 
 		c.logger.Debugw("usage exceeds commitment, applying overage",
 			"line_item_id", lineItem.ID,
@@ -105,22 +105,22 @@ func (c *commitmentCalculator) applyCommitmentToLineItem(
 		if lineItem.CommitmentTrueUpEnabled {
 			// Charge full commitment (true-up)
 			finalCharge = commitmentAmount
-			info.Utilized = usageCost
-			info.Overage = decimal.Zero
-			info.TrueUp = commitmentAmount.Sub(usageCost)
+			info.ComputedCommitmentUtilizedAmount = usageCost
+			info.ComputedOverageAmount = decimal.Zero
+			info.ComputedTrueUpAmount = commitmentAmount.Sub(usageCost)
 
 			c.logger.Debugw("usage below commitment, applying true-up",
 				"line_item_id", lineItem.ID,
 				"usage_cost", usageCost,
 				"commitment_amount", commitmentAmount,
-				"true_up", info.TrueUp,
+				"true_up", info.ComputedTrueUpAmount,
 				"final_charge", finalCharge)
 		} else {
 			// Charge only actual usage (no true-up)
 			finalCharge = usageCost
-			info.Utilized = usageCost
-			info.Overage = decimal.Zero
-			info.TrueUp = decimal.Zero
+			info.ComputedCommitmentUtilizedAmount = usageCost
+			info.ComputedOverageAmount = decimal.Zero
+			info.ComputedTrueUpAmount = decimal.Zero
 
 			c.logger.Debugw("usage below commitment, no true-up",
 				"line_item_id", lineItem.ID,
@@ -224,9 +224,9 @@ func (c *commitmentCalculator) applyWindowCommitmentToLineItem(
 		totalCharge = totalCharge.Add(windowCharge)
 	}
 
-	info.Utilized = totalCommitmentUtilized
-	info.Overage = totalOverage
-	info.TrueUp = totalTrueUp
+	info.ComputedCommitmentUtilizedAmount = totalCommitmentUtilized
+	info.ComputedOverageAmount = totalOverage
+	info.ComputedTrueUpAmount = totalTrueUp
 
 	c.logger.Infow("window commitment applied to line item",
 		"line_item_id", lineItem.ID,
