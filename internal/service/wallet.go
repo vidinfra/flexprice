@@ -702,6 +702,7 @@ func (s *walletService) handlePurchasedCreditInvoicedTransaction(ctx context.Con
 			CreditBalanceBefore: w.CreditBalance,
 			CreditBalanceAfter:  balanceAfter,
 			CreditsAvailable:    creditsAvailable,
+			Currency:            w.Currency,
 			ExpiryDate:          types.ParseYYYYMMDDToDate(req.ExpiryDate),
 			BaseModel:           types.GetDefaultBaseModel(ctx),
 		}
@@ -1468,6 +1469,7 @@ func (s *walletService) processWalletOperation(ctx context.Context, req *wallet.
 		Priority:            req.Priority,
 		CreditBalanceBefore: w.CreditBalance,
 		CreditBalanceAfter:  newCreditBalance,
+		Currency:            w.Currency,
 		EnvironmentID:       types.GetEnvironmentID(ctx),
 		IdempotencyKey:      req.IdempotencyKey,
 		BaseModel:           types.GetDefaultBaseModel(ctx),

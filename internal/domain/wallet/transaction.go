@@ -5,6 +5,7 @@ import (
 
 	"github.com/flexprice/flexprice/ent"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
@@ -27,8 +28,10 @@ type Transaction struct {
 	CreditsAvailable    decimal.Decimal             `db:"credits_available" json:"credits_available" swaggertype:"string"`
 	TransactionReason   types.TransactionReason     `db:"transaction_reason" json:"transaction_reason"`
 	Priority            *int                        `db:"priority" json:"priority"`
-	IdempotencyKey      string                      `db:"idempotency_key" json:"idempotency_key"`
-	EnvironmentID       string                      `db:"environment_id" json:"environment_id"`
+	Currency            string                      `db:"currency" json:"currency"`
+
+	IdempotencyKey string `db:"idempotency_key" json:"idempotency_key"`
+	EnvironmentID  string `db:"environment_id" json:"environment_id"`
 	types.BaseModel
 }
 
@@ -68,6 +71,7 @@ func (t *Transaction) ToEnt() *ent.WalletTransaction {
 		CreditsAvailable:    t.CreditsAvailable,
 		TransactionReason:   string(t.TransactionReason),
 		Priority:            t.Priority,
+		Currency:            lo.ToPtr(t.Currency),
 		EnvironmentID:       t.EnvironmentID,
 		TenantID:            t.TenantID,
 		Status:              string(t.Status),
@@ -100,6 +104,7 @@ func TransactionFromEnt(e *ent.WalletTransaction) *Transaction {
 		CreditsAvailable:    e.CreditsAvailable,
 		CreditBalanceBefore: e.CreditBalanceBefore,
 		CreditBalanceAfter:  e.CreditBalanceAfter,
+		Currency:            lo.FromPtrOr(e.Currency, ""),
 		TransactionReason:   types.TransactionReason(e.TransactionReason),
 		Priority:            e.Priority,
 		EnvironmentID:       e.EnvironmentID,

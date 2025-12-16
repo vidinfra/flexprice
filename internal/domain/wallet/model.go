@@ -30,7 +30,8 @@ type Wallet struct {
 	EnvironmentID       string                 `db:"environment_id" json:"environment_id"`
 	AlertEnabled        bool                   `db:"alert_enabled" json:"alert_enabled"`
 	AlertConfig         *types.AlertConfig     `db:"alert_config" json:"alert_config,omitempty"`
-	AlertState          string                 `db:"alert_state" json:"alert_state"`
+
+	AlertState string `db:"alert_state" json:"alert_state"`
 	types.BaseModel
 }
 
