@@ -387,6 +387,7 @@ func (r *walletRepository) CreateTransaction(ctx context.Context, tx *walletdoma
 		SetNillableExpiryDate(tx.ExpiryDate).
 		SetCreditBalanceBefore(tx.CreditBalanceBefore).
 		SetCreditBalanceAfter(tx.CreditBalanceAfter).
+		SetCurrency(tx.Currency).
 		SetCreatedAt(tx.CreatedAt).
 		SetCreatedBy(tx.CreatedBy).
 		SetUpdatedAt(tx.UpdatedAt).

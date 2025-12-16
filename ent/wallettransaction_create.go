@@ -251,6 +251,20 @@ func (wtc *WalletTransactionCreate) SetCreditsAvailable(d decimal.Decimal) *Wall
 	return wtc
 }
 
+// SetCurrency sets the "currency" field.
+func (wtc *WalletTransactionCreate) SetCurrency(s string) *WalletTransactionCreate {
+	wtc.mutation.SetCurrency(s)
+	return wtc
+}
+
+// SetNillableCurrency sets the "currency" field if the given value is not nil.
+func (wtc *WalletTransactionCreate) SetNillableCurrency(s *string) *WalletTransactionCreate {
+	if s != nil {
+		wtc.SetCurrency(*s)
+	}
+	return wtc
+}
+
 // SetIdempotencyKey sets the "idempotency_key" field.
 func (wtc *WalletTransactionCreate) SetIdempotencyKey(s string) *WalletTransactionCreate {
 	wtc.mutation.SetIdempotencyKey(s)
@@ -538,6 +552,10 @@ func (wtc *WalletTransactionCreate) createSpec() (*WalletTransaction, *sqlgraph.
 	if value, ok := wtc.mutation.CreditsAvailable(); ok {
 		_spec.SetField(wallettransaction.FieldCreditsAvailable, field.TypeOther, value)
 		_node.CreditsAvailable = value
+	}
+	if value, ok := wtc.mutation.Currency(); ok {
+		_spec.SetField(wallettransaction.FieldCurrency, field.TypeString, value)
+		_node.Currency = &value
 	}
 	if value, ok := wtc.mutation.IdempotencyKey(); ok {
 		_spec.SetField(wallettransaction.FieldIdempotencyKey, field.TypeString, value)

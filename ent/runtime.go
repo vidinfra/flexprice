@@ -2201,7 +2201,7 @@ func init() {
 	// wallettransaction.DefaultTransactionStatus holds the default value on creation for the transaction_status field.
 	wallettransaction.DefaultTransactionStatus = wallettransactionDescTransactionStatus.Default.(string)
 	// wallettransactionDescTransactionReason is the schema descriptor for transaction_reason field.
-	wallettransactionDescTransactionReason := wallettransactionFields[16].Descriptor()
+	wallettransactionDescTransactionReason := wallettransactionFields[17].Descriptor()
 	// wallettransaction.DefaultTransactionReason holds the default value on creation for the transaction_reason field.
 	wallettransaction.DefaultTransactionReason = wallettransactionDescTransactionReason.Default.(string)
 }

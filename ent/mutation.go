@@ -61612,6 +61612,7 @@ type WalletTransactionMutation struct {
 	transaction_status    *string
 	expiry_date           *time.Time
 	credits_available     *decimal.Decimal
+	currency              *string
 	idempotency_key       *string
 	transaction_reason    *string
 	priority              *int
@@ -62599,6 +62600,55 @@ func (m *WalletTransactionMutation) ResetCreditsAvailable() {
 	m.credits_available = nil
 }
 
+// SetCurrency sets the "currency" field.
+func (m *WalletTransactionMutation) SetCurrency(s string) {
+	m.currency = &s
+}
+
+// Currency returns the value of the "currency" field in the mutation.
+func (m *WalletTransactionMutation) Currency() (r string, exists bool) {
+	v := m.currency
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCurrency returns the old "currency" field's value of the WalletTransaction entity.
+// If the WalletTransaction object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *WalletTransactionMutation) OldCurrency(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCurrency is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCurrency requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCurrency: %w", err)
+	}
+	return oldValue.Currency, nil
+}
+
+// ClearCurrency clears the value of the "currency" field.
+func (m *WalletTransactionMutation) ClearCurrency() {
+	m.currency = nil
+	m.clearedFields[wallettransaction.FieldCurrency] = struct{}{}
+}
+
+// CurrencyCleared returns if the "currency" field was cleared in this mutation.
+func (m *WalletTransactionMutation) CurrencyCleared() bool {
+	_, ok := m.clearedFields[wallettransaction.FieldCurrency]
+	return ok
+}
+
+// ResetCurrency resets all changes to the "currency" field.
+func (m *WalletTransactionMutation) ResetCurrency() {
+	m.currency = nil
+	delete(m.clearedFields, wallettransaction.FieldCurrency)
+}
+
 // SetIdempotencyKey sets the "idempotency_key" field.
 func (m *WalletTransactionMutation) SetIdempotencyKey(s string) {
 	m.idempotency_key = &s
@@ -62788,7 +62838,7 @@ func (m *WalletTransactionMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *WalletTransactionMutation) Fields() []string {
-	fields := make([]string, 0, 24)
+	fields := make([]string, 0, 25)
 	if m.tenant_id != nil {
 		fields = append(fields, wallettransaction.FieldTenantID)
 	}
@@ -62852,6 +62902,9 @@ func (m *WalletTransactionMutation) Fields() []string {
 	if m.credits_available != nil {
 		fields = append(fields, wallettransaction.FieldCreditsAvailable)
 	}
+	if m.currency != nil {
+		fields = append(fields, wallettransaction.FieldCurrency)
+	}
 	if m.idempotency_key != nil {
 		fields = append(fields, wallettransaction.FieldIdempotencyKey)
 	}
@@ -62911,6 +62964,8 @@ func (m *WalletTransactionMutation) Field(name string) (ent.Value, bool) {
 		return m.ExpiryDate()
 	case wallettransaction.FieldCreditsAvailable:
 		return m.CreditsAvailable()
+	case wallettransaction.FieldCurrency:
+		return m.Currency()
 	case wallettransaction.FieldIdempotencyKey:
 		return m.IdempotencyKey()
 	case wallettransaction.FieldTransactionReason:
@@ -62968,6 +63023,8 @@ func (m *WalletTransactionMutation) OldField(ctx context.Context, name string) (
 		return m.OldExpiryDate(ctx)
 	case wallettransaction.FieldCreditsAvailable:
 		return m.OldCreditsAvailable(ctx)
+	case wallettransaction.FieldCurrency:
+		return m.OldCurrency(ctx)
 	case wallettransaction.FieldIdempotencyKey:
 		return m.OldIdempotencyKey(ctx)
 	case wallettransaction.FieldTransactionReason:
@@ -63130,6 +63187,13 @@ func (m *WalletTransactionMutation) SetField(name string, value ent.Value) error
 		}
 		m.SetCreditsAvailable(v)
 		return nil
+	case wallettransaction.FieldCurrency:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCurrency(v)
+		return nil
 	case wallettransaction.FieldIdempotencyKey:
 		v, ok := value.(string)
 		if !ok {
@@ -63223,6 +63287,9 @@ func (m *WalletTransactionMutation) ClearedFields() []string {
 	if m.FieldCleared(wallettransaction.FieldExpiryDate) {
 		fields = append(fields, wallettransaction.FieldExpiryDate)
 	}
+	if m.FieldCleared(wallettransaction.FieldCurrency) {
+		fields = append(fields, wallettransaction.FieldCurrency)
+	}
 	if m.FieldCleared(wallettransaction.FieldIdempotencyKey) {
 		fields = append(fields, wallettransaction.FieldIdempotencyKey)
 	}
@@ -63269,6 +63336,9 @@ func (m *WalletTransactionMutation) ClearField(name string) error {
 		return nil
 	case wallettransaction.FieldExpiryDate:
 		m.ClearExpiryDate()
+		return nil
+	case wallettransaction.FieldCurrency:
+		m.ClearCurrency()
 		return nil
 	case wallettransaction.FieldIdempotencyKey:
 		m.ClearIdempotencyKey()
@@ -63346,6 +63416,9 @@ func (m *WalletTransactionMutation) ResetField(name string) error {
 		return nil
 	case wallettransaction.FieldCreditsAvailable:
 		m.ResetCreditsAvailable()
+		return nil
+	case wallettransaction.FieldCurrency:
+		m.ResetCurrency()
 		return nil
 	case wallettransaction.FieldIdempotencyKey:
 		m.ResetIdempotencyKey()

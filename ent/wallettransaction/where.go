@@ -165,6 +165,11 @@ func CreditsAvailable(v decimal.Decimal) predicate.WalletTransaction {
 	return predicate.WalletTransaction(sql.FieldEQ(FieldCreditsAvailable, v))
 }
 
+// Currency applies equality check predicate on the "currency" field. It's identical to CurrencyEQ.
+func Currency(v string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldEQ(FieldCurrency, v))
+}
+
 // IdempotencyKey applies equality check predicate on the "idempotency_key" field. It's identical to IdempotencyKeyEQ.
 func IdempotencyKey(v string) predicate.WalletTransaction {
 	return predicate.WalletTransaction(sql.FieldEQ(FieldIdempotencyKey, v))
@@ -1368,6 +1373,81 @@ func CreditsAvailableLT(v decimal.Decimal) predicate.WalletTransaction {
 // CreditsAvailableLTE applies the LTE predicate on the "credits_available" field.
 func CreditsAvailableLTE(v decimal.Decimal) predicate.WalletTransaction {
 	return predicate.WalletTransaction(sql.FieldLTE(FieldCreditsAvailable, v))
+}
+
+// CurrencyEQ applies the EQ predicate on the "currency" field.
+func CurrencyEQ(v string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldEQ(FieldCurrency, v))
+}
+
+// CurrencyNEQ applies the NEQ predicate on the "currency" field.
+func CurrencyNEQ(v string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldNEQ(FieldCurrency, v))
+}
+
+// CurrencyIn applies the In predicate on the "currency" field.
+func CurrencyIn(vs ...string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldIn(FieldCurrency, vs...))
+}
+
+// CurrencyNotIn applies the NotIn predicate on the "currency" field.
+func CurrencyNotIn(vs ...string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldNotIn(FieldCurrency, vs...))
+}
+
+// CurrencyGT applies the GT predicate on the "currency" field.
+func CurrencyGT(v string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldGT(FieldCurrency, v))
+}
+
+// CurrencyGTE applies the GTE predicate on the "currency" field.
+func CurrencyGTE(v string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldGTE(FieldCurrency, v))
+}
+
+// CurrencyLT applies the LT predicate on the "currency" field.
+func CurrencyLT(v string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldLT(FieldCurrency, v))
+}
+
+// CurrencyLTE applies the LTE predicate on the "currency" field.
+func CurrencyLTE(v string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldLTE(FieldCurrency, v))
+}
+
+// CurrencyContains applies the Contains predicate on the "currency" field.
+func CurrencyContains(v string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldContains(FieldCurrency, v))
+}
+
+// CurrencyHasPrefix applies the HasPrefix predicate on the "currency" field.
+func CurrencyHasPrefix(v string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldHasPrefix(FieldCurrency, v))
+}
+
+// CurrencyHasSuffix applies the HasSuffix predicate on the "currency" field.
+func CurrencyHasSuffix(v string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldHasSuffix(FieldCurrency, v))
+}
+
+// CurrencyIsNil applies the IsNil predicate on the "currency" field.
+func CurrencyIsNil() predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldIsNull(FieldCurrency))
+}
+
+// CurrencyNotNil applies the NotNil predicate on the "currency" field.
+func CurrencyNotNil() predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldNotNull(FieldCurrency))
+}
+
+// CurrencyEqualFold applies the EqualFold predicate on the "currency" field.
+func CurrencyEqualFold(v string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldEqualFold(FieldCurrency, v))
+}
+
+// CurrencyContainsFold applies the ContainsFold predicate on the "currency" field.
+func CurrencyContainsFold(v string) predicate.WalletTransaction {
+	return predicate.WalletTransaction(sql.FieldContainsFold(FieldCurrency, v))
 }
 
 // IdempotencyKeyEQ applies the EQ predicate on the "idempotency_key" field.
