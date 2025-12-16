@@ -13,7 +13,6 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/idempotency"
 	"github.com/flexprice/flexprice/internal/types"
-	"github.com/flexprice/flexprice/internal/utils"
 	webhookDto "github.com/flexprice/flexprice/internal/webhook/dto"
 	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
@@ -776,31 +775,16 @@ func (s *walletService) logCreditBalanceAlert(ctx context.Context, w *wallet.Wal
 	if w.AlertConfig != nil && w.AlertConfig.Threshold != nil {
 		thresholdValue = w.AlertConfig.Threshold.Value
 	} else {
-		// Fall back to tenant-level settings (GetSettingByKey handles defaults automatically)
-		settingsService := NewSettingsService(s.ServiceParams)
-		thresholdSetting, err := settingsService.GetSettingByKey(ctx, types.SettingKeyWalletBalanceAlertConfig)
+		// Fall back to tenant-level settings (GetSetting handles defaults automatically)
+		settingsSvc := NewSettingsService(s.ServiceParams).(*settingsService)
+		walletAlertConfig, err := GetSetting[types.AlertConfig](settingsSvc, ctx, types.SettingKeyWalletBalanceAlertConfig)
 		if err != nil {
 			s.Logger.Errorw("failed to get wallet alert config from tenant settings",
 				"error", err,
 				"wallet_id", w.ID,
 			)
-			return err
 		}
-
-		// Convert setting value to AlertConfig (default setting is returned if not present)
-		walletAlertConfig, err := utils.ToStruct[types.AlertConfig](thresholdSetting.Value)
-		if err != nil {
-			s.Logger.Errorw("failed to parse wallet alert config from tenant settings",
-				"error", err,
-				"wallet_id", w.ID,
-			)
-			return err
-		}
-
-		// Extract threshold from setting (default setting has threshold 0 if not present)
-		if walletAlertConfig.Threshold != nil {
-			thresholdValue = walletAlertConfig.Threshold.Value
-		}
+		thresholdValue = walletAlertConfig.Threshold.Value
 	}
 
 	// Threshold is stored in credits, credit balance is in credits - direct comparison
@@ -2105,7 +2089,9 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 	}
 
 	alertLogsService := NewAlertLogsService(s.ServiceParams)
-	settingsService := NewSettingsService(s.ServiceParams)
+	settingsSvc := &settingsService{
+		ServiceParams: s.ServiceParams,
+	}
 
 	// Process each wallet
 	for _, w := range wallets {
@@ -2133,31 +2119,11 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 			// Use wallet-level threshold
 			threshold = w.AlertConfig.Threshold.Value
 		} else {
-			// Fall back to tenant-level settings (GetSettingByKey handles defaults automatically)
-			thresholdSetting, err := settingsService.GetSettingByKey(ctx, types.SettingKeyWalletBalanceAlertConfig)
+			// Fall back to tenant-level settings (GetSetting handles defaults automatically)
+			walletAlertConfig, err := GetSetting[types.AlertConfig](settingsSvc, ctx, types.SettingKeyWalletBalanceAlertConfig)
 			if err != nil {
 				s.Logger.Errorw("failed to get wallet alert config from tenant settings, skipping wallet",
 					"error", err,
-					"wallet_id", w.ID,
-					"event_id", req.ID,
-				)
-				continue
-			}
-
-			// Convert setting value to AlertConfig
-			walletAlertConfig, err := utils.ToStruct[types.AlertConfig](thresholdSetting.Value)
-			if err != nil {
-				s.Logger.Errorw("failed to parse wallet alert config from tenant settings, skipping wallet",
-					"error", err,
-					"wallet_id", w.ID,
-					"event_id", req.ID,
-				)
-				continue
-			}
-
-			// Validate threshold exists (default setting has threshold, but handle edge case)
-			if walletAlertConfig.Threshold == nil {
-				s.Logger.Warnw("tenant-level wallet alert config has no threshold, skipping wallet",
 					"wallet_id", w.ID,
 					"event_id", req.ID,
 				)
@@ -2186,7 +2152,7 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 
 		// For ongoing balance alert: threshold is in credits, so use RealTimeCreditBalance directly
 		// RealTimeCreditBalance is already calculated as: (currency balance - pending charges) / conversion_rate
-		ongoingBalance := balance.RealTimeCreditBalance
+		ongoingBalance := lo.FromPtr(balance.RealTimeCreditBalance)
 
 		s.Logger.Infow("wallet balance details for alert check",
 			"wallet_id", w.ID,
@@ -2201,13 +2167,13 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 		// Check feature alerts
 		for _, feature := range featuresWithAlerts {
 			// Determine alert status based on ongoing balance vs alert settings
-			alertStatus, err := feature.AlertSettings.AlertState(*ongoingBalance)
+			alertStatus, err := feature.AlertSettings.AlertState(ongoingBalance)
 			if err != nil {
 				s.Logger.Errorw("failed to determine alert status",
 					"feature_id", feature.ID,
 					"feature_name", feature.Name,
 					"wallet_id", w.ID,
-					"ongoing_balance", *ongoingBalance,
+					"ongoing_balance", ongoingBalance,
 					"error", err,
 				)
 				continue
@@ -2217,7 +2183,7 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 				"feature_id", feature.ID,
 				"feature_name", feature.Name,
 				"wallet_id", w.ID,
-				"ongoing_balance", *ongoingBalance,
+				"ongoing_balance", ongoingBalance,
 				"critical", feature.AlertSettings.Critical,
 				"warning", feature.AlertSettings.Warning,
 				"alert_enabled", feature.AlertSettings.AlertEnabled,
@@ -2241,7 +2207,7 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 				AlertStatus:      alertStatus,
 				AlertInfo: types.AlertInfo{
 					AlertSettings: feature.AlertSettings, // Include full alert settings
-					ValueAtTime:   *ongoingBalance,       // Ongoing balance at time of check
+					ValueAtTime:   ongoingBalance,        // Ongoing balance at time of check
 					Timestamp:     time.Now().UTC(),
 				},
 			})
@@ -2304,7 +2270,7 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 					},
 					AlertEnabled: lo.ToPtr(true),
 				},
-				ValueAtTime: *ongoingBalance,
+				ValueAtTime: ongoingBalance,
 				Timestamp:   time.Now().UTC(),
 			},
 		}
