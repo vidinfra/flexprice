@@ -1848,6 +1848,21 @@ func (s *featureUsageTrackingService) aggregateAnalyticsByGrouping(analytics []*
 			existing.EventCount += item.EventCount
 			existing.TotalCost = existing.TotalCost.Add(item.TotalCost)
 
+			// Merge sources using a set to avoid duplicates
+			if len(item.Sources) > 0 {
+				sourceSet := make(map[string]struct{})
+				for _, s := range existing.Sources {
+					sourceSet[s] = struct{}{}
+				}
+				for _, s := range item.Sources {
+					sourceSet[s] = struct{}{}
+				}
+				existing.Sources = make([]string, 0, len(sourceSet))
+				for s := range sourceSet {
+					existing.Sources = append(existing.Sources, s)
+				}
+			}
+
 			// For time series points, we need to merge them by timestamp
 			existing.Points = s.mergeTimeSeriesPoints(existing.Points, item.Points)
 		} else {
@@ -1861,6 +1876,7 @@ func (s *featureUsageTrackingService) aggregateAnalyticsByGrouping(analytics []*
 				FeatureName:      item.FeatureName,
 				EventName:        item.EventName,
 				Source:           item.Source,
+				Sources:          make([]string, len(item.Sources)),
 				Unit:             item.Unit,
 				UnitPlural:       item.UnitPlural,
 				AggregationType:  item.AggregationType,
@@ -1883,6 +1899,9 @@ func (s *featureUsageTrackingService) aggregateAnalyticsByGrouping(analytics []*
 
 			// Copy points
 			copy(aggregated.Points, item.Points)
+
+			// Copy sources
+			copy(aggregated.Sources, item.Sources)
 
 			// Set grouping-specific fields
 			s.setGroupingFields(aggregated, item, groupBy)
@@ -2218,6 +2237,7 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			FeatureName:     analytic.FeatureName,
 			EventName:       analytic.EventName,
 			Source:          analytic.Source,
+			Sources:         analytic.Sources,
 			Unit:            analytic.Unit,
 			UnitPlural:      analytic.UnitPlural,
 			AggregationType: analytic.AggregationType,

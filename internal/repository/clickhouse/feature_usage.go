@@ -483,6 +483,15 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 	groupByFieldMapping["meter_id"] = "meter_id"
 	groupByFieldMapping["sub_line_item_id"] = "sub_line_item_id"
 
+	// Check if source is in group_by
+	sourceInGroupBy := false
+	for _, groupBy := range params.GroupBy {
+		if groupBy == "source" {
+			sourceInGroupBy = true
+			break
+		}
+	}
+
 	// Add the requested grouping dimensions
 	for _, groupBy := range params.GroupBy {
 		switch {
@@ -518,6 +527,10 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 		"COUNT(DISTINCT unique_hash) AS count_unique_usage",
 		"COUNT(DISTINCT id) AS event_count", // Count distinct event IDs, not rows
 	)
+	// Add sources array when source is not in group_by
+	if !sourceInGroupBy {
+		selectColumns = append(selectColumns, "groupUniqArray(source) AS sources")
+	}
 
 	aggregateQuery := fmt.Sprintf(`
 		SELECT 
@@ -634,6 +647,9 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 		// which includes feature_id + all requested grouping dimensions
 		totalGroupByColumns := len(groupByColumns) // This matches the actual GROUP BY columns in the query
 		expectedColumns := totalGroupByColumns + 5 // +5 for sum_usage, max_usage, latest_usage, count_unique_usage, event_count
+		if !sourceInGroupBy {
+			expectedColumns++ // +1 for sources array
+		}
 		scanArgs := make([]interface{}, expectedColumns)
 
 		// Prepare scan targets: all group by columns
@@ -648,6 +664,11 @@ func (r *FeatureUsageRepository) getStandardAnalytics(ctx context.Context, param
 		scanArgs[totalGroupByColumns+2] = &analytics.LatestUsage
 		scanArgs[totalGroupByColumns+3] = &analytics.CountUniqueUsage
 		scanArgs[totalGroupByColumns+4] = &analytics.EventCount
+		// Add sources array scan target when source is not in group_by
+		if !sourceInGroupBy {
+			analytics.Sources = []string{}
+			scanArgs[totalGroupByColumns+5] = &analytics.Sources
+		}
 
 		if err := rows.Scan(scanArgs...); err != nil {
 			return nil, ierr.WithError(err).
@@ -761,18 +782,31 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 	// Build bucket window expression based on meter's bucket size
 	bucketWindowExpr := r.formatWindowSize(featureInfo.BucketSize, nil)
 
+	// Check if source is in group_by
+	sourceInGroupBy := false
+	for _, groupBy := range params.GroupBy {
+		if groupBy == "source" {
+			sourceInGroupBy = true
+			break
+		}
+	}
+
 	// Build group by columns based on request parameters
-	groupByColumns := []string{"bucket_start", "feature_id", "price_id", "meter_id", "sub_line_item_id"}
-	innerSelectColumns := []string{"feature_id", "price_id", "meter_id", "sub_line_item_id"} // For inner query (has access to properties column)
-	outerSelectColumns := []string{"feature_id", "price_id", "meter_id", "sub_line_item_id"} // For outer query (only has aliased columns)
+	// Always include source in inner query's GROUP BY to enable groupArrayDistinct in outer query
+	groupByColumns := []string{"bucket_start", "feature_id", "price_id", "meter_id", "sub_line_item_id", "source"}
+	innerSelectColumns := []string{"feature_id", "price_id", "meter_id", "sub_line_item_id", "source"} // For inner query (has access to properties column)
+	outerSelectColumns := []string{"feature_id", "price_id", "meter_id", "sub_line_item_id"}           // For outer query (only has aliased columns)
+
+	// Add source to outer select columns only if grouping by source
+	if sourceInGroupBy {
+		outerSelectColumns = append(outerSelectColumns, "source")
+	}
 
 	// Add grouping columns
 	for _, groupBy := range params.GroupBy {
 		switch groupBy {
 		case "source":
-			groupByColumns = append(groupByColumns, "source")
-			innerSelectColumns = append(innerSelectColumns, "source")
-			outerSelectColumns = append(outerSelectColumns, "source")
+			// Already handled above
 		case "feature_id":
 			// Already included
 		default:
@@ -856,6 +890,11 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 	innerQuery += fmt.Sprintf(" GROUP BY %s", strings.Join(groupByColumns, ", "))
 
 	// Build the complete query with CTE
+	// Add groupArrayDistinct(source) AS sources when source is not in group_by
+	sourcesColumn := ""
+	if !sourceInGroupBy {
+		sourcesColumn = ",\n\t\t\tgroupArrayDistinct(source) AS sources"
+	}
 	query := fmt.Sprintf(`
 		WITH bucket_maxes AS (
 			%s
@@ -866,9 +905,9 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 			max(bucket_max) as max_usage,
 			argMax(bucket_latest, bucket_start) as latest_usage,
 			sum(bucket_count_unique) as count_unique_usage,
-			sum(event_count) as event_count
+			sum(event_count) as event_count%s
 		FROM bucket_maxes
-	`, innerQuery, strings.Join(outerSelectColumns, ", "))
+	`, innerQuery, strings.Join(outerSelectColumns, ", "), sourcesColumn)
 
 	// Add GROUP BY clause
 	query += " GROUP BY " + strings.Join(outerSelectColumns, ", ")
@@ -897,8 +936,11 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 		}
 
 		// Build scan targets dynamically based on outerSelectColumns structure
-		// The query selects: outerSelectColumns + total_usage + max_usage + latest_usage + count_unique_usage + event_count
+		// The query selects: outerSelectColumns + total_usage + max_usage + latest_usage + count_unique_usage + event_count + (optional sources)
 		totalSelectColumns := len(outerSelectColumns) + 5 // +5 for total_usage, max_usage, latest_usage, count_unique_usage, event_count
+		if !sourceInGroupBy {
+			totalSelectColumns++ // +1 for sources array
+		}
 		scanTargets := make([]interface{}, totalSelectColumns)
 
 		// Create string targets for all select columns
@@ -913,6 +955,11 @@ func (r *FeatureUsageRepository) getMaxBucketTotals(ctx context.Context, params 
 		scanTargets[len(outerSelectColumns)+2] = &analytics.LatestUsage
 		scanTargets[len(outerSelectColumns)+3] = &analytics.CountUniqueUsage
 		scanTargets[len(outerSelectColumns)+4] = &analytics.EventCount
+		// Add sources array scan target when source is not in group_by
+		if !sourceInGroupBy {
+			analytics.Sources = []string{}
+			scanTargets[len(outerSelectColumns)+5] = &analytics.Sources
+		}
 
 		err := rows.Scan(scanTargets...)
 		if err != nil {

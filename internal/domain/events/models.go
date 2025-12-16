@@ -47,6 +47,7 @@ type DetailedUsageAnalytic struct {
 	FeatureName     string
 	EventName       string
 	Source          string
+	Sources         []string // List of distinct sources when source is not in group_by
 	MeterID         string
 	PriceID         string // Price ID used for this usage - allows tracking different prices per subscription
 	SubLineItemID   string // Subscription line item ID
