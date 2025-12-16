@@ -104,6 +104,15 @@ func (WalletTransaction) Fields() []ent.Field {
 			Annotations(
 				entsql.Default("0"),
 			),
+
+		// TODO: Add Immutable and NotEmpty constraints
+		field.String("currency").
+			SchemaType(map[string]string{
+				"postgres": "varchar(10)",
+			}).
+			Optional().
+			Nillable(),
+
 		field.String("idempotency_key").
 			Nillable().
 			Immutable().

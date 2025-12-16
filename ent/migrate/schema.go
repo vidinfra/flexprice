@@ -2082,6 +2082,7 @@ var (
 		{Name: "transaction_status", Type: field.TypeString, Default: "pending", SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "expiry_date", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamp"}},
 		{Name: "credits_available", Type: field.TypeOther, Default: "0", SchemaType: map[string]string{"postgres": "numeric(20,8)"}},
+		{Name: "currency", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "varchar(10)"}},
 		{Name: "idempotency_key", Type: field.TypeString, Nullable: true},
 		{Name: "transaction_reason", Type: field.TypeString, Default: "FREE_CREDIT_GRANT", SchemaType: map[string]string{"postgres": "varchar(50)"}},
 		{Name: "priority", Type: field.TypeInt, Nullable: true},
@@ -2123,7 +2124,7 @@ var (
 			{
 				Name:    "idx_tenant_environment_idempotency_key",
 				Unique:  true,
-				Columns: []*schema.Column{WalletTransactionsColumns[1], WalletTransactionsColumns[7], WalletTransactionsColumns[22]},
+				Columns: []*schema.Column{WalletTransactionsColumns[1], WalletTransactionsColumns[7], WalletTransactionsColumns[23]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "idempotency_key IS NOT NULL AND idempotency_key <> '' AND status='published'",
 				},

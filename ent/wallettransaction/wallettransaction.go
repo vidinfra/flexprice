@@ -55,6 +55,8 @@ const (
 	FieldExpiryDate = "expiry_date"
 	// FieldCreditsAvailable holds the string denoting the credits_available field in the database.
 	FieldCreditsAvailable = "credits_available"
+	// FieldCurrency holds the string denoting the currency field in the database.
+	FieldCurrency = "currency"
 	// FieldIdempotencyKey holds the string denoting the idempotency_key field in the database.
 	FieldIdempotencyKey = "idempotency_key"
 	// FieldTransactionReason holds the string denoting the transaction_reason field in the database.
@@ -89,6 +91,7 @@ var Columns = []string{
 	FieldTransactionStatus,
 	FieldExpiryDate,
 	FieldCreditsAvailable,
+	FieldCurrency,
 	FieldIdempotencyKey,
 	FieldTransactionReason,
 	FieldPriority,
@@ -235,6 +238,11 @@ func ByExpiryDate(opts ...sql.OrderTermOption) OrderOption {
 // ByCreditsAvailable orders the results by the credits_available field.
 func ByCreditsAvailable(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCreditsAvailable, opts...).ToFunc()
+}
+
+// ByCurrency orders the results by the currency field.
+func ByCurrency(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCurrency, opts...).ToFunc()
 }
 
 // ByIdempotencyKey orders the results by the idempotency_key field.
