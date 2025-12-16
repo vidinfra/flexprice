@@ -317,27 +317,8 @@ func ToWalletBalanceResponse(w *wallet.Wallet) *WalletBalanceResponse {
 
 // WalletTransactionResponse represents a wallet transaction in API responses
 type WalletTransactionResponse struct {
-	ID                  string                      `json:"id"`
-	WalletID            string                      `json:"wallet_id"`
-	CustomerID          string                      `json:"customer_id,omitempty"`
-	Type                string                      `json:"type"`
-	Amount              decimal.Decimal             `json:"amount" swaggertype:"string"`
-	CreditAmount        decimal.Decimal             `json:"credit_amount" swaggertype:"string"`
-	CreditBalanceBefore decimal.Decimal             `json:"credit_balance_before" swaggertype:"string"`
-	CreditBalanceAfter  decimal.Decimal             `json:"credit_balance_after" swaggertype:"string"`
-	TransactionStatus   types.TransactionStatus     `json:"transaction_status"`
-	ExpiryDate          *time.Time                  `json:"expiry_date,omitempty"`
-	Priority            *int                        `json:"priority,omitempty"`
-	CreditsAvailable    decimal.Decimal             `json:"credits_available,omitempty" swaggertype:"string"`
-	TransactionReason   types.TransactionReason     `json:"transaction_reason,omitempty"`
-	ReferenceType       types.WalletTxReferenceType `json:"reference_type,omitempty"`
-	ReferenceID         string                      `json:"reference_id,omitempty"`
-	Description         string                      `json:"description,omitempty"`
-	Metadata            types.Metadata              `json:"metadata,omitempty"`
-	CreatedBy           string                      `json:"created_by,omitempty"`
-	CreatedAt           time.Time                   `json:"created_at"`
-	UpdatedAt           time.Time                   `json:"updated_at"`
-	// Expanded fields (optional, populated when expand parameter is used)
+	*wallet.Transaction
+
 	Customer      *CustomerResponse `json:"customer,omitempty"`
 	CreatedByUser *UserResponse     `json:"created_by_user,omitempty"`
 	Wallet        *WalletResponse   `json:"wallet,omitempty"`
@@ -346,26 +327,13 @@ type WalletTransactionResponse struct {
 // FromWalletTransaction converts a wallet transaction to a WalletTransactionResponse
 func FromWalletTransaction(t *wallet.Transaction) *WalletTransactionResponse {
 	return &WalletTransactionResponse{
-		ID:                  t.ID,
-		WalletID:            t.WalletID,
-		CustomerID:          t.CustomerID,
-		Type:                string(t.Type),
-		Amount:              t.Amount,
-		CreditAmount:        t.CreditAmount,
-		CreditBalanceBefore: t.CreditBalanceBefore,
-		CreditBalanceAfter:  t.CreditBalanceAfter,
-		TransactionStatus:   t.TxStatus,
-		ExpiryDate:          t.ExpiryDate,
-		Priority:            t.Priority,
-		CreditsAvailable:    t.CreditsAvailable,
-		TransactionReason:   t.TransactionReason,
-		ReferenceType:       t.ReferenceType,
-		ReferenceID:         t.ReferenceID,
-		Description:         t.Description,
-		Metadata:            t.Metadata,
-		CreatedBy:           t.CreatedBy,
-		CreatedAt:           t.CreatedAt,
-		UpdatedAt:           t.UpdatedAt,
+		Transaction: t,
+	}
+}
+
+func (*WalletTransactionResponse) WithWallet(w *wallet.Wallet) *WalletTransactionResponse {
+	return &WalletTransactionResponse{
+		Wallet: FromWallet(w),
 	}
 }
 
