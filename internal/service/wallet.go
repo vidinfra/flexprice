@@ -13,6 +13,7 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/idempotency"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/flexprice/flexprice/internal/utils"
 	webhookDto "github.com/flexprice/flexprice/internal/webhook/dto"
 	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
@@ -771,15 +772,40 @@ func (s *walletService) logCreditBalanceAlert(ctx context.Context, w *wallet.Wal
 	var thresholdValue decimal.Decimal
 	var alertStatus types.AlertState
 
-	// Get wallet threshold or use default (0)
+	// Get wallet threshold or fall back to tenant-level settings
 	if w.AlertConfig != nil && w.AlertConfig.Threshold != nil {
 		thresholdValue = w.AlertConfig.Threshold.Value
 	} else {
-		thresholdValue = decimal.Zero
+		// Fall back to tenant-level settings (GetSettingByKey handles defaults automatically)
+		settingsService := NewSettingsService(s.ServiceParams)
+		thresholdSetting, err := settingsService.GetSettingByKey(ctx, types.SettingKeyWalletBalanceAlertConfig)
+		if err != nil {
+			s.Logger.Errorw("failed to get wallet alert config from tenant settings",
+				"error", err,
+				"wallet_id", w.ID,
+			)
+			return err
+		}
+
+		// Convert setting value to AlertConfig (default setting is returned if not present)
+		walletAlertConfig, err := utils.ToStruct[types.AlertConfig](thresholdSetting.Value)
+		if err != nil {
+			s.Logger.Errorw("failed to parse wallet alert config from tenant settings",
+				"error", err,
+				"wallet_id", w.ID,
+			)
+			return err
+		}
+
+		// Extract threshold from setting (default setting has threshold 0 if not present)
+		if walletAlertConfig.Threshold != nil {
+			thresholdValue = walletAlertConfig.Threshold.Value
+		}
 	}
 
-	// Determine alert status based on balance vs threshold
-	if newCreditBalance.LessThan(thresholdValue) {
+	// Threshold is stored in credits, credit balance is in credits - direct comparison
+	// Determine alert status based on balance vs threshold (<= threshold triggers alert)
+	if newCreditBalance.LessThanOrEqual(thresholdValue) {
 		alertStatus = types.AlertStateInAlarm
 	} else {
 		alertStatus = types.AlertStateOk
@@ -2079,25 +2105,71 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 	}
 
 	alertLogsService := NewAlertLogsService(s.ServiceParams)
+	settingsService := NewSettingsService(s.ServiceParams)
 
 	// Process each wallet
 	for _, w := range wallets {
+		s.Logger.Debugw("processing wallet for alert check",
+			"wallet_id", w.ID,
+			"customer_id", w.CustomerID,
+			"alert_enabled", w.AlertEnabled,
+			"has_wallet_alert_config", w.AlertConfig != nil,
+			"event_id", req.ID,
+		)
 
-		// Skip if alert config is not set
-		if w.AlertConfig == nil || w.AlertConfig.Threshold == nil {
-			// // assume default threshold
-			w.AlertConfig = &types.AlertConfig{
-				Threshold: &types.WalletAlertThreshold{
-					Type:  types.AlertThresholdTypeAmount,
-					Value: decimal.NewFromFloat(types.WalletBalanceAlertThreshold),
-				},
-			}
+		// Skip if alerts are disabled for this wallet
+		if !w.AlertEnabled {
+			s.Logger.Debugw("skipping wallet - alerts disabled",
+				"wallet_id", w.ID,
+				"alert_enabled", w.AlertEnabled,
+				"event_id", req.ID,
+			)
+			continue
 		}
 
-		// Get real-time balance
+		// Determine threshold: wallet-level config takes precedence over tenant-level settings
+		var threshold decimal.Decimal
+		if w.AlertConfig != nil && w.AlertConfig.Threshold != nil {
+			// Use wallet-level threshold
+			threshold = w.AlertConfig.Threshold.Value
+		} else {
+			// Fall back to tenant-level settings (GetSettingByKey handles defaults automatically)
+			thresholdSetting, err := settingsService.GetSettingByKey(ctx, types.SettingKeyWalletBalanceAlertConfig)
+			if err != nil {
+				s.Logger.Errorw("failed to get wallet alert config from tenant settings, skipping wallet",
+					"error", err,
+					"wallet_id", w.ID,
+					"event_id", req.ID,
+				)
+				continue
+			}
+
+			// Convert setting value to AlertConfig
+			walletAlertConfig, err := utils.ToStruct[types.AlertConfig](thresholdSetting.Value)
+			if err != nil {
+				s.Logger.Errorw("failed to parse wallet alert config from tenant settings, skipping wallet",
+					"error", err,
+					"wallet_id", w.ID,
+					"event_id", req.ID,
+				)
+				continue
+			}
+
+			// Validate threshold exists (default setting has threshold, but handle edge case)
+			if walletAlertConfig.Threshold == nil {
+				s.Logger.Warnw("tenant-level wallet alert config has no threshold, skipping wallet",
+					"wallet_id", w.ID,
+					"event_id", req.ID,
+				)
+				continue
+			}
+
+			threshold = walletAlertConfig.Threshold.Value
+		}
+
 		balance, err := s.GetWalletBalanceV2(ctx, w.ID)
 		if err != nil {
-			s.Logger.Errorw("failed to get wallet balance",
+			s.Logger.Errorw("failed to get wallet balance, skipping wallet",
 				"error", err,
 				"wallet_id", w.ID,
 				"event_id", req.ID,
@@ -2105,13 +2177,26 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 			continue
 		}
 
-		// Get threshold and balances
-		threshold := w.AlertConfig.Threshold.Value
-		currentBalance := w.Balance // Current balance is just the credits
-		ongoingBalance := balance.RealTimeBalance
-		if ongoingBalance == nil {
-			ongoingBalance = &currentBalance
-		}
+		// GetWalletBalanceV2 returns:
+		// - RealTimeBalance: currency balance minus pending charges (in currency)
+		// - RealTimeCreditBalance: credit balance converted from RealTimeBalance (in credits) - THIS IS THE ONGOING BALANCE
+		// - Wallet.CreditBalance: stored credit balance (in credits)
+		// - Wallet.Balance: stored currency balance (in currency)
+		// - CurrentPeriodUsage: pending charges in currency
+
+		// For ongoing balance alert: threshold is in credits, so use RealTimeCreditBalance directly
+		// RealTimeCreditBalance is already calculated as: (currency balance - pending charges) / conversion_rate
+		ongoingBalance := balance.RealTimeCreditBalance
+
+		s.Logger.Infow("wallet balance details for alert check",
+			"wallet_id", w.ID,
+			"real_time_balance", balance.RealTimeBalance,
+			"wallet_current_balance", balance.Wallet.Balance,
+			"threshold", threshold,
+			"pending_charges_currency", balance.CurrentPeriodUsage,
+			"conversion_rate", w.ConversionRate,
+			"event_id", req.ID,
+		)
 
 		// Check feature alerts
 		for _, feature := range featuresWithAlerts {
@@ -2122,7 +2207,7 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 					"feature_id", feature.ID,
 					"feature_name", feature.Name,
 					"wallet_id", w.ID,
-					"ongoing_balance", ongoingBalance,
+					"ongoing_balance", *ongoingBalance,
 					"error", err,
 				)
 				continue
@@ -2132,7 +2217,7 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 				"feature_id", feature.ID,
 				"feature_name", feature.Name,
 				"wallet_id", w.ID,
-				"ongoing_balance", ongoingBalance,
+				"ongoing_balance", *ongoingBalance,
 				"critical", feature.AlertSettings.Critical,
 				"warning", feature.AlertSettings.Warning,
 				"alert_enabled", feature.AlertSettings.AlertEnabled,
@@ -2176,73 +2261,123 @@ func (s *walletService) CheckWalletBalanceAlert(ctx context.Context, req *wallet
 				"alert_status", alertStatus,
 			)
 		}
-		// Check ongoing balance
-		isOngoingBalanceBelowThreshold := ongoingBalance.LessThanOrEqual(threshold)
+
+		// Ongoing balance alert check
+		// Check if ongoing balance is <= threshold (below or equal triggers alert)
+		isOngoingBalanceBelowOrEqualThreshold := ongoingBalance.LessThanOrEqual(threshold)
 
 		// Determine alert status based on balance check
 		var alertStatus types.AlertState
-		if isOngoingBalanceBelowThreshold {
+		if isOngoingBalanceBelowOrEqualThreshold {
 			alertStatus = types.AlertStateInAlarm
 		} else {
 			alertStatus = types.AlertStateOk
 		}
 
-		s.Logger.Infow("determined alert status",
+		s.Logger.Infow("ongoing balance alert check - determined status",
 			"wallet_id", w.ID,
+			"ongoing_balance", ongoingBalance,
+			"threshold", threshold,
+			"is_below_or_equal_threshold", isOngoingBalanceBelowOrEqualThreshold,
 			"alert_status", alertStatus,
-			"is_below_threshold", isOngoingBalanceBelowThreshold,
 			"event_id", req.ID,
 		)
 
-		// Use AlertLogsService to handle alert logging and webhook publishing
-		// For wallet alerts, we store the threshold info in AlertSettings format for consistency
 		// Get customer ID from wallet if available
 		var customerID *string
 		if w.CustomerID != "" {
 			customerID = lo.ToPtr(w.CustomerID)
 		}
 
-		err = alertLogsService.LogAlert(ctx, &LogAlertRequest{
+		// Prepare alert log request
+		logAlertReq := &LogAlertRequest{
 			EntityType:  types.AlertEntityTypeWallet,
 			EntityID:    w.ID,
-			CustomerID:  customerID, // Customer ID from wallet
+			CustomerID:  customerID,
 			AlertType:   types.AlertTypeLowOngoingBalance,
 			AlertStatus: alertStatus,
 			AlertInfo: types.AlertInfo{
 				AlertSettings: &types.AlertSettings{
 					Critical: &types.AlertThreshold{
-						Threshold: w.AlertConfig.Threshold.Value,
-						Condition: types.AlertConditionBelow, // Wallet alerts are "below" threshold
+						Threshold: threshold,
+						Condition: types.AlertConditionBelow,
 					},
 					AlertEnabled: lo.ToPtr(true),
 				},
 				ValueAtTime: *ongoingBalance,
 				Timestamp:   time.Now().UTC(),
 			},
-		})
+		}
+
+		// Log the alert (AlertLogsService handles state transitions and webhook publishing)
+		err = alertLogsService.LogAlert(ctx, logAlertReq)
 		if err != nil {
-			s.Logger.Errorw("failed to log alert",
+			s.Logger.Errorw("failed to log ongoing balance alert",
 				"error", err,
 				"wallet_id", w.ID,
+				"alert_type", types.AlertTypeLowOngoingBalance,
 				"alert_status", alertStatus,
+				"ongoing_balance", ongoingBalance,
+				"threshold", threshold,
 				"event_id", req.ID,
 			)
 			continue
 		}
 
+		s.Logger.Infow("successfully logged ongoing balance alert",
+			"wallet_id", w.ID,
+			"alert_status", alertStatus,
+			"ongoing_balance", ongoingBalance,
+			"threshold", threshold,
+			"event_id", req.ID,
+		)
+
 		// Update wallet alert state to match the logged status (if it changed)
-		if w.AlertState != string(alertStatus) {
+		// Need to refetch wallet to get current AlertState
+		currentWallet, err := s.WalletRepo.GetWalletByID(ctx, w.ID)
+		if err != nil {
+			s.Logger.Errorw("failed to get wallet for alert state update",
+				"error", err,
+				"wallet_id", w.ID,
+				"event_id", req.ID,
+			)
+			continue
+		}
+
+		if currentWallet.AlertState != string(alertStatus) {
+			s.Logger.Debugw("updating wallet alert state",
+				"wallet_id", w.ID,
+				"old_state", currentWallet.AlertState,
+				"new_state", alertStatus,
+				"event_id", req.ID,
+			)
+
 			if err := s.UpdateWalletAlertState(ctx, w.ID, alertStatus); err != nil {
 				s.Logger.Errorw("failed to update wallet alert state",
 					"error", err,
 					"wallet_id", w.ID,
+					"old_state", currentWallet.AlertState,
+					"new_state", alertStatus,
 					"event_id", req.ID,
 				)
 				continue
 			}
+
+			s.Logger.Infow("wallet alert state updated successfully",
+				"wallet_id", w.ID,
+				"old_state", currentWallet.AlertState,
+				"new_state", alertStatus,
+				"event_id", req.ID,
+			)
+		} else {
+			s.Logger.Debugw("wallet alert state unchanged, skipping update",
+				"wallet_id", w.ID,
+				"current_state", currentWallet.AlertState,
+				"event_id", req.ID,
+			)
 		}
 
-		s.Logger.Infow("wallet alert check completed",
+		s.Logger.Infow("wallet ongoing balance alert check completed",
 			"wallet_id", w.ID,
 			"alert_status", alertStatus,
 			"event_id", req.ID,
