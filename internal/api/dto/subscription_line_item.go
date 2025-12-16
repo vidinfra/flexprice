@@ -76,6 +76,20 @@ type LineItemParams struct {
 	EntityType   types.SubscriptionLineItemEntityType
 }
 
+// HasCommitment returns true if the request has commitment configured
+func (r *CreateSubscriptionLineItemRequest) HasCommitment() bool {
+	hasAmountCommitment := r.CommitmentAmount != nil && r.CommitmentAmount.GreaterThan(decimal.Zero)
+	hasQuantityCommitment := r.CommitmentQuantity != nil && r.CommitmentQuantity.GreaterThan(decimal.Zero)
+	return hasAmountCommitment || hasQuantityCommitment
+}
+
+// HasCommitment returns true if the request has commitment configured
+func (r *UpdateSubscriptionLineItemRequest) HasCommitment() bool {
+	hasAmountCommitment := r.CommitmentAmount != nil && r.CommitmentAmount.GreaterThan(decimal.Zero)
+	hasQuantityCommitment := r.CommitmentQuantity != nil && r.CommitmentQuantity.GreaterThan(decimal.Zero)
+	return hasAmountCommitment || hasQuantityCommitment
+}
+
 // Validate validates the create subscription line item request
 // price is optional and can be provided for MinQuantity validation
 func (r *CreateSubscriptionLineItemRequest) Validate(price *price.Price) error {
@@ -126,10 +140,17 @@ func (r *CreateSubscriptionLineItemRequest) Validate(price *price.Price) error {
 	return nil
 }
 
-// validateCommitmentFields validates commitment-related fields
-func (r *CreateSubscriptionLineItemRequest) validateCommitmentFields() error {
-	hasAmountCommitment := r.CommitmentAmount != nil && r.CommitmentAmount.GreaterThan(decimal.Zero)
-	hasQuantityCommitment := r.CommitmentQuantity != nil && r.CommitmentQuantity.GreaterThan(decimal.Zero)
+// validateCommitmentFieldsCommon contains shared commitment validation logic for both Create and Update requests
+// isCreateRequest determines whether auto-setting of commitment type is allowed
+func validateCommitmentFieldsCommon(
+	commitmentAmount *decimal.Decimal,
+	commitmentQuantity *decimal.Decimal,
+	commitmentType types.CommitmentType,
+	commitmentOverageFactor *decimal.Decimal,
+	isCreateRequest bool,
+) error {
+	hasAmountCommitment := commitmentAmount != nil && commitmentAmount.GreaterThan(decimal.Zero)
+	hasQuantityCommitment := commitmentQuantity != nil && commitmentQuantity.GreaterThan(decimal.Zero)
 	hasCommitment := hasAmountCommitment || hasQuantityCommitment
 
 	if !hasCommitment {
@@ -142,85 +163,116 @@ func (r *CreateSubscriptionLineItemRequest) validateCommitmentFields() error {
 		return ierr.NewError("cannot set both commitment_amount and commitment_quantity").
 			WithHint("Specify either commitment_amount or commitment_quantity, not both").
 			WithReportableDetails(map[string]interface{}{
-				"commitment_amount":   r.CommitmentAmount,
-				"commitment_quantity": r.CommitmentQuantity,
+				"commitment_amount":   commitmentAmount,
+				"commitment_quantity": commitmentQuantity,
 			}).
 			Mark(ierr.ErrValidation)
 	}
 
-	// Rule 2: Commitment type must be valid and match the provided field
-	if r.CommitmentType != "" && !r.CommitmentType.Validate() {
+	// Rule 2: Commitment type must be valid
+	if commitmentType != "" && !commitmentType.Validate() {
 		return ierr.NewError("invalid commitment_type").
 			WithHint("Commitment type must be either 'amount' or 'quantity'").
 			WithReportableDetails(map[string]interface{}{
-				"commitment_type": r.CommitmentType,
+				"commitment_type": commitmentType,
 			}).
 			Mark(ierr.ErrValidation)
 	}
 
-	// Auto-set commitment type if not provided
-	if r.CommitmentType == "" {
-		if hasAmountCommitment {
-			r.CommitmentType = types.COMMITMENT_TYPE_AMOUNT
-		} else if hasQuantityCommitment {
-			r.CommitmentType = types.COMMITMENT_TYPE_QUANTITY
-		}
-	} else {
-		// Validate commitment type matches the provided field
-		if hasAmountCommitment && r.CommitmentType != types.COMMITMENT_TYPE_AMOUNT {
+	// Rule 3: For update requests, commitment type is required when commitment is set
+	// For create requests, it will be auto-set in normalization
+	if !isCreateRequest && hasCommitment && commitmentType == "" {
+		return ierr.NewError("commitment_type is required").
+			WithHint("Commitment type must be either 'amount' or 'quantity'").
+			WithReportableDetails(map[string]interface{}{
+				"commitment_type": commitmentType,
+			}).
+			Mark(ierr.ErrValidation)
+	}
+
+	// Rule 4: Validate commitment type matches the provided field (if type is specified)
+	if commitmentType != "" {
+		if hasAmountCommitment && commitmentType != types.COMMITMENT_TYPE_AMOUNT {
 			return ierr.NewError("commitment_type mismatch").
 				WithHint("When commitment_amount is set, commitment_type must be 'amount'").
 				WithReportableDetails(map[string]interface{}{
-					"commitment_type":   r.CommitmentType,
-					"commitment_amount": r.CommitmentAmount,
+					"commitment_type":   commitmentType,
+					"commitment_amount": commitmentAmount,
 				}).
 				Mark(ierr.ErrValidation)
 		}
 
-		if hasQuantityCommitment && r.CommitmentType != types.COMMITMENT_TYPE_QUANTITY {
+		if hasQuantityCommitment && commitmentType != types.COMMITMENT_TYPE_QUANTITY {
 			return ierr.NewError("commitment_type mismatch").
 				WithHint("When commitment_quantity is set, commitment_type must be 'quantity'").
 				WithReportableDetails(map[string]interface{}{
-					"commitment_type":     r.CommitmentType,
-					"commitment_quantity": r.CommitmentQuantity,
+					"commitment_type":     commitmentType,
+					"commitment_quantity": commitmentQuantity,
 				}).
 				Mark(ierr.ErrValidation)
 		}
 	}
 
-	// Rule 3: Overage factor is required and must be greater than 1.0
-	if r.CommitmentOverageFactor == nil {
+	// Rule 5: Overage factor is required and must be greater than 1.0
+	if commitmentOverageFactor == nil {
 		return ierr.NewError("commitment_overage_factor is required when commitment is set").
 			WithHint("Specify a commitment_overage_factor greater than 1.0").
 			Mark(ierr.ErrValidation)
 	}
 
-	if r.CommitmentOverageFactor.LessThanOrEqual(decimal.NewFromInt(1)) {
+	if commitmentOverageFactor.LessThanOrEqual(decimal.NewFromFloat(1)) {
 		return ierr.NewError("commitment_overage_factor must be greater than 1.0").
 			WithHint("Overage factor determines the multiplier for usage beyond commitment").
 			WithReportableDetails(map[string]interface{}{
-				"commitment_overage_factor": r.CommitmentOverageFactor,
+				"commitment_overage_factor": commitmentOverageFactor,
 			}).
 			Mark(ierr.ErrValidation)
 	}
 
-	// Rule 4: Validate commitment values are positive
-	if hasAmountCommitment && r.CommitmentAmount.IsNegative() {
+	// Rule 6: Validate commitment values are positive
+	if hasAmountCommitment && commitmentAmount.IsNegative() {
 		return ierr.NewError("commitment_amount must be non-negative").
 			WithHint("Commitment amount cannot be negative").
 			WithReportableDetails(map[string]interface{}{
-				"commitment_amount": r.CommitmentAmount,
+				"commitment_amount": commitmentAmount,
 			}).
 			Mark(ierr.ErrValidation)
 	}
 
-	if hasQuantityCommitment && r.CommitmentQuantity.IsNegative() {
+	if hasQuantityCommitment && commitmentQuantity.IsNegative() {
 		return ierr.NewError("commitment_quantity must be non-negative").
 			WithHint("Commitment quantity cannot be negative").
 			WithReportableDetails(map[string]interface{}{
-				"commitment_quantity": r.CommitmentQuantity,
+				"commitment_quantity": commitmentQuantity,
 			}).
 			Mark(ierr.ErrValidation)
+	}
+
+	return nil
+}
+
+// validateCommitmentFields validates commitment-related fields for create request
+func (r *CreateSubscriptionLineItemRequest) validateCommitmentFields() error {
+	// Use shared validation logic
+	err := validateCommitmentFieldsCommon(
+		r.CommitmentAmount,
+		r.CommitmentQuantity,
+		r.CommitmentType,
+		r.CommitmentOverageFactor,
+		true, // isCreateRequest
+	)
+	if err != nil {
+		return err
+	}
+
+	// Auto-set commitment type if not provided (only for create requests)
+	if r.HasCommitment() && r.CommitmentType == "" {
+		hasAmountCommitment := r.CommitmentAmount != nil && r.CommitmentAmount.GreaterThan(decimal.Zero)
+		if hasAmountCommitment {
+			r.CommitmentType = types.COMMITMENT_TYPE_AMOUNT
+		} else {
+			r.CommitmentType = types.COMMITMENT_TYPE_QUANTITY
+		}
 	}
 
 	return nil
@@ -369,115 +421,24 @@ func (r *UpdateSubscriptionLineItemRequest) Validate() error {
 
 // validateCommitmentFields validates commitment-related fields for update request
 func (r *UpdateSubscriptionLineItemRequest) validateCommitmentFields() error {
-	hasAmountCommitment := r.CommitmentAmount != nil && r.CommitmentAmount.GreaterThan(decimal.Zero)
-	hasQuantityCommitment := r.CommitmentQuantity != nil && r.CommitmentQuantity.GreaterThan(decimal.Zero)
-	hasCommitment := hasAmountCommitment || hasQuantityCommitment
-
-	if !hasCommitment {
-		// No commitment configured, nothing to validate
-		return nil
-	}
-
-	// Rule 1: Cannot set both commitment_amount and commitment_quantity
-	if hasAmountCommitment && hasQuantityCommitment {
-		return ierr.NewError("cannot set both commitment_amount and commitment_quantity").
-			WithHint("Specify either commitment_amount or commitment_quantity, not both").
-			WithReportableDetails(map[string]interface{}{
-				"commitment_amount":   r.CommitmentAmount,
-				"commitment_quantity": r.CommitmentQuantity,
-			}).
-			Mark(ierr.ErrValidation)
-	}
-
-	// Rule 2: Commitment type must be valid and match the provided field
-	if r.CommitmentType != "" && !r.CommitmentType.Validate() {
-		return ierr.NewError("invalid commitment_type").
-			WithHint("Commitment type must be either 'amount' or 'quantity'").
-			WithReportableDetails(map[string]interface{}{
-				"commitment_type": r.CommitmentType,
-			}).
-			Mark(ierr.ErrValidation)
-	}
-
-	// Auto-set commitment type if not provided
-	if r.CommitmentType == "" {
-		if hasAmountCommitment {
-			r.CommitmentType = types.COMMITMENT_TYPE_AMOUNT
-		} else if hasQuantityCommitment {
-			r.CommitmentType = types.COMMITMENT_TYPE_QUANTITY
-		}
-	} else {
-		// Validate commitment type matches the provided field
-		if hasAmountCommitment && r.CommitmentType != types.COMMITMENT_TYPE_AMOUNT {
-			return ierr.NewError("commitment_type mismatch").
-				WithHint("When commitment_amount is set, commitment_type must be 'amount'").
-				WithReportableDetails(map[string]interface{}{
-					"commitment_type":   r.CommitmentType,
-					"commitment_amount": r.CommitmentAmount,
-				}).
-				Mark(ierr.ErrValidation)
-		}
-
-		if hasQuantityCommitment && r.CommitmentType != types.COMMITMENT_TYPE_QUANTITY {
-			return ierr.NewError("commitment_type mismatch").
-				WithHint("When commitment_quantity is set, commitment_type must be 'quantity'").
-				WithReportableDetails(map[string]interface{}{
-					"commitment_type":     r.CommitmentType,
-					"commitment_quantity": r.CommitmentQuantity,
-				}).
-				Mark(ierr.ErrValidation)
-		}
-	}
-
-	// Rule 3: Overage factor is required and must be greater than 1.0
-	if r.CommitmentOverageFactor == nil {
-		return ierr.NewError("commitment_overage_factor is required when commitment is set").
-			WithHint("Specify a commitment_overage_factor greater than 1.0").
-			Mark(ierr.ErrValidation)
-	}
-
-	if r.CommitmentOverageFactor.LessThanOrEqual(decimal.NewFromInt(1)) {
-		return ierr.NewError("commitment_overage_factor must be greater than 1.0").
-			WithHint("Overage factor determines the multiplier for usage beyond commitment").
-			WithReportableDetails(map[string]interface{}{
-				"commitment_overage_factor": r.CommitmentOverageFactor,
-			}).
-			Mark(ierr.ErrValidation)
-	}
-
-	// Rule 4: Validate commitment values are positive
-	if hasAmountCommitment && r.CommitmentAmount.IsNegative() {
-		return ierr.NewError("commitment_amount must be non-negative").
-			WithHint("Commitment amount cannot be negative").
-			WithReportableDetails(map[string]interface{}{
-				"commitment_amount": r.CommitmentAmount,
-			}).
-			Mark(ierr.ErrValidation)
-	}
-
-	if hasQuantityCommitment && r.CommitmentQuantity.IsNegative() {
-		return ierr.NewError("commitment_quantity must be non-negative").
-			WithHint("Commitment quantity cannot be negative").
-			WithReportableDetails(map[string]interface{}{
-				"commitment_quantity": r.CommitmentQuantity,
-			}).
-			Mark(ierr.ErrValidation)
-	}
-
-	return nil
+	// Use shared validation logic (update requests require explicit commitment type)
+	return validateCommitmentFieldsCommon(
+		r.CommitmentAmount,
+		r.CommitmentQuantity,
+		r.CommitmentType,
+		r.CommitmentOverageFactor,
+		false, // isCreateRequest
+	)
 }
 
 // ShouldCreateNewLineItem checks if the request contains any critical fields that require creating a new line item
 func (r *UpdateSubscriptionLineItemRequest) ShouldCreateNewLineItem() bool {
-	hasCommitment := (r.CommitmentAmount != nil && r.CommitmentAmount.GreaterThan(decimal.Zero)) ||
-		(r.CommitmentQuantity != nil && r.CommitmentQuantity.GreaterThan(decimal.Zero))
-
 	return (r.Amount != nil && !r.Amount.IsZero()) ||
 		r.BillingModel != "" ||
 		r.TierMode != "" ||
 		len(r.Tiers) > 0 ||
 		r.TransformQuantity != nil ||
-		hasCommitment ||
+		r.HasCommitment() ||
 		r.CommitmentOverageFactor != nil ||
 		r.CommitmentTrueUpEnabled != nil ||
 		r.CommitmentWindowed != nil
