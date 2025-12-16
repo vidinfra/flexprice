@@ -1794,7 +1794,6 @@ func (s *featureUsageTrackingService) calculateRegularCost(ctx context.Context, 
 				// However, if we want to support window commitment for regular meters (e.g. daily commitment),
 				// we would need to check item.Points and use them as buckets.
 				// Let's support it if points exist
-
 				if len(item.Points) > 0 {
 					bucketedValues := make([]decimal.Decimal, len(item.Points))
 					for i, point := range item.Points {
