@@ -744,6 +744,10 @@ func (r *UpdatePriceRequest) ToCreatePriceRequest(existingPrice *price.Price) Cr
 	createReq.ParentPriceID = existingPrice.GetRootPriceID()
 	createReq.DisplayName = existingPrice.DisplayName
 
+	if existingPrice.MinQuantity != nil {
+		createReq.MinQuantity = lo.ToPtr(existingPrice.MinQuantity.IntPart())
+	}
+
 	// GroupID is the id of the group to update the price in
 	if r.GroupID != "" {
 		createReq.GroupID = r.GroupID
