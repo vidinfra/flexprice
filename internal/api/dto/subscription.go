@@ -1114,7 +1114,7 @@ func (r *OverrideLineItemRequest) Validate(
 		// Quantity can only be set for fixed prices, not usage-based prices
 		if priceMap != nil {
 			if price, exists := priceMap[r.PriceID]; exists && price != nil {
-				if price.Type == types.PRICE_TYPE_USAGE {
+				if price.Type == types.PRICE_TYPE_USAGE && r.Quantity.GreaterThan(decimal.Zero) {
 					return ierr.NewError("quantity cannot be set for usage-based prices").
 						WithHint("Quantity overrides are only allowed for fixed prices. Usage-based prices track quantity automatically from meter events").
 						WithReportableDetails(map[string]interface{}{
