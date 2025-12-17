@@ -1102,6 +1102,11 @@ var (
 				Unique:  false,
 				Columns: []*schema.Column{InvoiceLineItemsColumns[24], InvoiceLineItemsColumns[25]},
 			},
+			{
+				Name:    "invoicelineitem_subscription_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{InvoiceLineItemsColumns[9], InvoiceLineItemsColumns[2]},
+			},
 		},
 	}
 	// InvoiceSequencesColumns holds the columns for the "invoice_sequences" table.
@@ -1691,6 +1696,11 @@ var (
 				Name:    "subscriptionlineitem_start_date_end_date",
 				Unique:  false,
 				Columns: []*schema.Column{SubscriptionLineItemsColumns[24], SubscriptionLineItemsColumns[25]},
+			},
+			{
+				Name:    "subscriptionlineitem_subscription_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{SubscriptionLineItemsColumns[34], SubscriptionLineItemsColumns[2]},
 			},
 		},
 	}
