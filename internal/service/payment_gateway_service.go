@@ -122,6 +122,46 @@ func (s *paymentGatewayService) CreatePaymentLink(ctx context.Context, req *dto.
 		return response, nil
 
 	//TODO: add SSLCommerz case when implemented
+	case types.PaymentGatewayTypeSSLCommerz:
+		SSLCommerzService := gatewayService.(*SSLCommerzService)
+
+		// Convert generic request to SSLCommerz-specific request
+		sslReq := &dto.CreateSSLPaymentLinkRequest{
+			InvoiceID:  req.InvoiceID,
+			CustomerID: req.CustomerID,
+			Amount:     req.Amount,
+			Currency:   req.Currency,
+			SuccessURL: req.SuccessURL,
+			CancelURL:  req.CancelURL,
+			Metadata:   req.Metadata,
+		}
+
+		// Get environment ID from context
+		environmentID := types.GetEnvironmentID(ctx)
+		if environmentID == "" {
+			return nil, ierr.NewError("environment not found in context").
+				WithHint("Request context must contain environment_id").
+				Mark(ierr.ErrValidation)
+		}
+		sslReq.EnvironmentID = environmentID
+
+		sslResp, err := SSLCommerzService.CreatePaymentLink(ctx, sslReq)
+		if err != nil {
+			return nil, err
+		}
+
+		// Convert SSLCommerz response to generic response
+		response := &dto.PaymentLinkResponse{
+			ID:         sslResp.ID,
+			PaymentURL: sslResp.PaymentURL,
+			Amount:     sslResp.Amount,
+			Currency:   sslResp.Currency,
+			Status:     sslResp.Status,
+			CreatedAt:  sslResp.CreatedAt,
+			Gateway:    string(types.PaymentGatewayTypeSSLCommerz),
+		}
+
+		return response, nil
 
 	default:
 		return nil, ierr.NewError("gateway not supported").
