@@ -9,18 +9,20 @@ import (
 type ConnectionMetadataType string
 
 const (
-	ConnectionMetadataTypeStripe  ConnectionMetadataType = "stripe"
-	ConnectionMetadataTypeGeneric ConnectionMetadataType = "generic"
+	ConnectionMetadataTypeStripe     ConnectionMetadataType = "stripe"
+	ConnectionMetadataTypeGeneric    ConnectionMetadataType = "generic"
+	ConnectionMetadataTypeSSLCommerz ConnectionMetadataType = "sslcommerz"
 )
 
 func (t ConnectionMetadataType) Validate() error {
 	allowedTypes := []ConnectionMetadataType{
 		ConnectionMetadataTypeStripe,
 		ConnectionMetadataTypeGeneric,
+		ConnectionMetadataTypeSSLCommerz,
 	}
 	if !lo.Contains(allowedTypes, t) {
 		return ierr.NewError("invalid connection metadata type").
-			WithHint("Connection metadata type must be one of: stripe, generic").
+			WithHint("Connection metadata type must be one of: stripe, generic, sslcommerz").
 			Mark(ierr.ErrValidation)
 	}
 	return nil
@@ -59,6 +61,25 @@ func (s *StripeConnectionMetadata) Validate() error {
 	return nil
 }
 
+type SSLCommerzConnectionMetadata struct {
+	StoreID       string `json:"store_id"`
+	StorePassword string `json:"store_password"`
+}
+
+func (s *SSLCommerzConnectionMetadata) Validate() error {
+	if s.StoreID == "" {
+		return ierr.NewError("store_id is required").
+			WithHint("SSLCommerz store ID is required").
+			Mark(ierr.ErrValidation)
+	}
+	if s.StorePassword == "" {
+		return ierr.NewError("store_password is required").
+			WithHint("SSLCommerz store password is required").
+			Mark(ierr.ErrValidation)
+	}
+	return nil
+}
+
 // GenericConnectionMetadata represents generic connection metadata
 type GenericConnectionMetadata struct {
 	Data map[string]interface{} `json:"data"`
@@ -76,9 +97,10 @@ func (g *GenericConnectionMetadata) Validate() error {
 
 // ConnectionMetadata represents structured connection metadata
 type ConnectionMetadata struct {
-	Stripe   *StripeConnectionMetadata  `json:"stripe,omitempty"`
-	Generic  *GenericConnectionMetadata `json:"generic,omitempty"`
-	Settings *ConnectionSettings        `json:"settings,omitempty"`
+	Stripe     *StripeConnectionMetadata     `json:"stripe,omitempty"`
+	Generic    *GenericConnectionMetadata    `json:"generic,omitempty"`
+	Settings   *ConnectionSettings           `json:"settings,omitempty"`
+	SSLCommerz *SSLCommerzConnectionMetadata `json:"sslcommerz,omitempty"`
 }
 
 // Validate validates the connection metadata based on provider type
@@ -91,6 +113,13 @@ func (c *ConnectionMetadata) Validate(providerType SecretProvider) error {
 				Mark(ierr.ErrValidation)
 		}
 		return c.Stripe.Validate()
+	case SecretProviderSSLCommerz:
+		if c.SSLCommerz == nil {
+			return ierr.NewError("sslcommerz metadata is required").
+				WithHint("SSLCommerz metadata is required for sslcommerz provider").
+				Mark(ierr.ErrValidation)
+		}
+		return c.SSLCommerz.Validate()
 	default:
 		// For other providers or unknown types, use generic format
 		if c.Generic == nil {

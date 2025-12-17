@@ -25,6 +25,11 @@ type StripeConnection struct {
 	AccountID      string `json:"account_id,omitempty"`
 }
 
+type SSLCommerzConnection struct {
+	StoreID       string `json:"store_id"`
+	StorePassword string `json:"store_password"`
+}
+
 // GetStripeConfig extracts Stripe configuration from connection metadata
 func (c *Connection) GetStripeConfig() (*StripeConnection, error) {
 	if c.ProviderType != types.SecretProviderStripe {
@@ -44,6 +49,27 @@ func (c *Connection) GetStripeConfig() (*StripeConnection, error) {
 		SecretKey:      c.EncryptedSecretData.Stripe.SecretKey,
 		WebhookSecret:  c.EncryptedSecretData.Stripe.WebhookSecret,
 		AccountID:      c.EncryptedSecretData.Stripe.AccountID,
+	}
+
+	return config, nil
+}
+
+func (c *Connection) GetSSLCommerzConfig() (*SSLCommerzConnection, error) {
+	if c.ProviderType != types.SecretProviderSSLCommerz {
+		return nil, ierr.NewError("connection is not an SSLCommerz connection").
+			WithHint("Connection provider type must be SSLCommerz").
+			Mark(ierr.ErrValidation)
+	}
+
+	if c.EncryptedSecretData.SSLCommerz == nil {
+		return nil, ierr.NewError("sslcommerz metadata is not configured").
+			WithHint("SSLCommerz metadata is required for SSLCommerz connections").
+			Mark(ierr.ErrValidation)
+	}
+
+	config := &SSLCommerzConnection{
+		StoreID:       c.EncryptedSecretData.SSLCommerz.StoreID,
+		StorePassword: c.EncryptedSecretData.SSLCommerz.StorePassword,
 	}
 
 	return config, nil
@@ -82,6 +108,17 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		}
 		return types.ConnectionMetadata{
 			Stripe: stripeMetadata,
+		}
+	case types.SecretProviderSSLCommerz:
+		sslcommerzMetadata := &types.SSLCommerzConnectionMetadata{}
+		if sid, ok := metadata["store_id"].(string); ok {
+			sslcommerzMetadata.StoreID = sid
+		}
+		if spw, ok := metadata["store_password"].(string); ok {
+			sslcommerzMetadata.StorePassword = spw
+		}
+		return types.ConnectionMetadata{
+			SSLCommerz: sslcommerzMetadata,
 		}
 	default:
 		// For other providers or unknown types, use generic format
