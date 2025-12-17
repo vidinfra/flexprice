@@ -363,6 +363,11 @@ func (wu *WalletUpdate) check() error {
 			return &ValidationError{Name: "config", err: fmt.Errorf(`ent: validator failed for field "Wallet.config": %w`, err)}
 		}
 	}
+	if v, ok := wu.mutation.AlertConfig(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "alert_config", err: fmt.Errorf(`ent: validator failed for field "Wallet.alert_config": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -832,6 +837,11 @@ func (wuo *WalletUpdateOne) check() error {
 	if v, ok := wuo.mutation.Config(); ok {
 		if err := v.Validate(); err != nil {
 			return &ValidationError{Name: "config", err: fmt.Errorf(`ent: validator failed for field "Wallet.config": %w`, err)}
+		}
+	}
+	if v, ok := wuo.mutation.AlertConfig(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "alert_config", err: fmt.Errorf(`ent: validator failed for field "Wallet.alert_config": %w`, err)}
 		}
 	}
 	return nil
