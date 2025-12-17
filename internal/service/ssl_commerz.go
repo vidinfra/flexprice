@@ -106,6 +106,17 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 		"customer_email", req.Customer.Email,
 	)
 
+	// Get SSLCommerz connection for this environment
+	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderSSLCommerz)
+	if err != nil {
+		return nil, ierr.NewError("failed to get SSL Commerz connection").
+			WithHint("Stripe connection not configured for this environment").
+			WithReportableDetails(map[string]interface{}{
+				"environment_id": req.EnvironmentID,
+			}).
+			Mark(ierr.ErrNotFound)
+	}
+
 	// Validate invoice and check payment eligibility
 	invoiceService := NewInvoiceService(s.ServiceParams)
 	invoiceResp, err := invoiceService.GetInvoice(ctx, req.InvoiceID)
@@ -165,6 +176,14 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 			Mark(ierr.ErrValidation)
 	}
 
+	// Initialize SSLCommerz configuration
+	sslCommerzConfig, err := s.GetDecryptedSSLCommerzConfig(conn)
+	if err != nil {
+		return nil, ierr.NewError("failed to get Stripe configuration").
+			WithHint("Invalid Stripe configuration").
+			Mark(ierr.ErrValidation)
+	}
+
 	successURL := req.SuccessURL
 	if successURL == "" {
 		successURL = "https://admin-dev.flexprice.io/customer-management/invoices?page=1"
@@ -175,37 +194,40 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 		cancelURL = "https://admin-dev.flexprice.io/customer-management/invoices?page=1"
 	}
 
-	req.StoreID = s.StoreID
-	req.StorePassword = s.StorePassword
-	req.IPNURL = s.IPNURL
+	req.StoreID = sslCommerzConfig.StoreID
+	req.StorePassword = sslCommerzConfig.StorePassword
+	req.IPNURL = "DUMMY" // This should be fetched from config
 	req.Payment.SuccessURL = successURL
 	req.Payment.FailURL = cancelURL
 	req.Payment.CancelURL = cancelURL
 
 	paymentURL := s.BaseURL + "/gwprocess/v4/api.php" //TODO: make it configurable later
 	var response dto.SSLCommerzCreatePaymentLinkResponse
+
+	form := dto.SSLCommerzFormData{
+		StoreID:         req.StoreID,
+		StorePassword:   req.StorePassword,
+		TotalAmount:     req.Payment.TotalAmount.String(),
+		Currency:        req.Payment.Currency,
+		TranID:          req.Payment.TranID,
+		SuccessURL:      req.Payment.SuccessURL,
+		FailURL:         req.Payment.FailURL,
+		CancelURL:       req.Payment.CancelURL,
+		CusName:         req.Customer.Name,
+		CusEmail:        req.Customer.Email,
+		CusAdd1:         req.Customer.Add1,
+		CusCity:         req.Customer.City,
+		CusPostcode:     req.Customer.Postcode,
+		CusCountry:      req.Customer.Country,
+		CusPhone:        req.Customer.Phone,
+		ShippingMethod:  req.ShippingMethod,
+		ProductName:     req.Product.Name,
+		ProductCategory: req.Product.Category,
+		ProductProfile:  req.Product.Profile,
+	}
+
 	resp, err := s.Client.R().
-		SetFormData(map[string]string{
-			"store_id":         req.StoreID,
-			"store_passwd":     req.StorePassword,
-			"total_amount":     req.Payment.TotalAmount.String(),
-			"currency":         req.Payment.Currency,
-			"tran_id":          req.Payment.TranID,
-			"success_url":      req.Payment.SuccessURL,
-			"fail_url":         req.Payment.FailURL,
-			"cancel_url":       req.Payment.CancelURL,
-			"cus_name":         req.Customer.Name,
-			"cus_email":        req.Customer.Email,
-			"cus_add1":         req.Customer.Add1,
-			"cus_city":         req.Customer.City,
-			"cus_postcode":     req.Customer.Postcode,
-			"cus_country":      req.Customer.Country,
-			"cus_phone":        req.Customer.Phone,
-			"shipping_method":  req.ShippingMethod,
-			"product_name":     req.Product.Name,
-			"product_category": req.Product.Category,
-			"product_profile":  req.Product.Profile,
-		}).
+		SetFormData(form.ToMap()).
 		SetResult(&response).
 		Post(paymentURL)
 

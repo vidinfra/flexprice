@@ -82,3 +82,49 @@ type SSLCommerzCreatePaymentLinkResponse struct {
 	StoreLogo          string          `json:"storeLogo"`
 	RedirectGatewayURL string          `json:"redirectGatewayURL"`
 }
+
+type SSLCommerzFormData struct {
+	StoreID         string
+	StorePassword   string
+	TotalAmount     string
+	Currency        string
+	TranID          string
+	SuccessURL      string
+	FailURL         string
+	CancelURL       string
+	CusName         string
+	CusEmail        string
+	CusAdd1         string
+	CusCity         string
+	CusPostcode     string
+	CusCountry      string
+	CusPhone        string
+	ShippingMethod  string
+	ProductName     string
+	ProductCategory string
+	ProductProfile  string
+}
+
+func (f *SSLCommerzFormData) ToMap() map[string]string {
+	return map[string]string{
+		"store_id":         f.StoreID,
+		"store_passwd":     f.StorePassword,
+		"total_amount":     f.TotalAmount,
+		"currency":         f.Currency,
+		"tran_id":          f.TranID,
+		"success_url":      f.SuccessURL,
+		"fail_url":         f.FailURL,
+		"cancel_url":       f.CancelURL,
+		"cus_name":         f.CusName,
+		"cus_email":        f.CusEmail,
+		"cus_add1":         f.CusAdd1,
+		"cus_city":         f.CusCity,
+		"cus_postcode":     f.CusPostcode,
+		"cus_country":      f.CusCountry,
+		"cus_phone":        f.CusPhone,
+		"shipping_method":  f.ShippingMethod,
+		"product_name":     f.ProductName,
+		"product_category": f.ProductCategory,
+		"product_profile":  f.ProductProfile,
+	}
+}
