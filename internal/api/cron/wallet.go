@@ -336,7 +336,7 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 					PaymentMethodType: types.PaymentMethodTypeCard,
 					DestinationType:   types.PaymentDestinationTypeInvoice,
 					ProcessPayment:    true,
-					PaymentGateway:    typeshift.Ptr(types.PaymentGatewayTypeStripe),
+					PaymentGateway:    typeshift.Ptr(types.PaymentGatewayTypeStripe), //TODO: needs to be dynamic based on wallet settings
 					Amount:            wallet.AutoTopupAmount,
 					Currency:          wallet.Currency,
 					DestinationID:     invoice.ID,

@@ -121,6 +121,8 @@ func (s *paymentGatewayService) CreatePaymentLink(ctx context.Context, req *dto.
 
 		return response, nil
 
+	//TODO: add SSLCommerz case when implemented
+
 	default:
 		return nil, ierr.NewError("gateway not supported").
 			WithHint(fmt.Sprintf("Gateway type '%s' is not supported for payment link creation", gatewayType)).

@@ -28,13 +28,14 @@ type SecretProvider string
 
 // Provider types
 const (
-	SecretProviderFlexPrice SecretProvider = "flexprice"
-	SecretProviderStripe    SecretProvider = "stripe"
-	SecretProviderRazorpay  SecretProvider = "razorpay"
+	SecretProviderFlexPrice  SecretProvider = "flexprice"
+	SecretProviderStripe     SecretProvider = "stripe"
+	SecretProviderRazorpay   SecretProvider = "razorpay"
+	SecretProviderSSLCommerz SecretProvider = "sslcommerz"
 )
 
 func (p SecretProvider) Validate() error {
-	allowedSecretProviders := []SecretProvider{SecretProviderFlexPrice, SecretProviderStripe, SecretProviderRazorpay}
+	allowedSecretProviders := []SecretProvider{SecretProviderFlexPrice, SecretProviderStripe, SecretProviderRazorpay, SecretProviderSSLCommerz}
 	if !lo.Contains(allowedSecretProviders, p) {
 		return ierr.NewError("invalid secret provider").
 			WithHint("Invalid secret provider").

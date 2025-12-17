@@ -39,8 +39,9 @@ func (f *PaymentGatewayFactory) GetGateway(ctx context.Context, gatewayType type
 			WithHint(fmt.Sprintf("Gateway type '%s' is not yet implemented", gatewayType)).
 			WithReportableDetails(map[string]interface{}{
 				"gateway_type": gatewayType,
-			}).
-			Mark(ierr.ErrValidation)
+			}).Mark(ierr.ErrValidation)
+	case types.PaymentGatewayTypeSSLCommerz:
+		return NewSSLCommerzService(f.services), nil
 	default:
 		return nil, ierr.NewError("unsupported gateway type").
 			WithHint(fmt.Sprintf("Gateway type '%s' is not supported", gatewayType)).
@@ -64,5 +65,6 @@ func (f *PaymentGatewayFactory) GetSupportedGateways() []types.PaymentGatewayTyp
 		types.PaymentGatewayTypeStripe,
 		types.PaymentGatewayTypeRazorpay,
 		types.PaymentGatewayTypeFinix,
+		types.PaymentGatewayTypeSSLCommerz,
 	}
 }
