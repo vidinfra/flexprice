@@ -168,8 +168,8 @@ func (Price) Fields() []ent.Field {
 				"postgres": "varchar(20)",
 			}).
 			Optional().
-			Nillable(),
-
+			Nillable().
+			GoType(types.BillingTier("")),
 		field.JSON("tiers", []*types.PriceTier{}).
 			Optional(),
 

@@ -36702,7 +36702,7 @@ type PriceMutation struct {
 	addtrial_period           *int
 	meter_id                  *string
 	filter_values             *map[string][]string
-	tier_mode                 *string
+	tier_mode                 *types.BillingTier
 	tiers                     *[]*types.PriceTier
 	appendtiers               []*types.PriceTier
 	price_unit_tiers          *[]*types.PriceTier
@@ -38009,12 +38009,12 @@ func (m *PriceMutation) ResetFilterValues() {
 }
 
 // SetTierMode sets the "tier_mode" field.
-func (m *PriceMutation) SetTierMode(s string) {
-	m.tier_mode = &s
+func (m *PriceMutation) SetTierMode(tt types.BillingTier) {
+	m.tier_mode = &tt
 }
 
 // TierMode returns the value of the "tier_mode" field in the mutation.
-func (m *PriceMutation) TierMode() (r string, exists bool) {
+func (m *PriceMutation) TierMode() (r types.BillingTier, exists bool) {
 	v := m.tier_mode
 	if v == nil {
 		return
@@ -38025,7 +38025,7 @@ func (m *PriceMutation) TierMode() (r string, exists bool) {
 // OldTierMode returns the old "tier_mode" field's value of the Price entity.
 // If the Price object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PriceMutation) OldTierMode(ctx context.Context) (v *string, err error) {
+func (m *PriceMutation) OldTierMode(ctx context.Context) (v *types.BillingTier, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldTierMode is only allowed on UpdateOne operations")
 	}
@@ -39208,7 +39208,7 @@ func (m *PriceMutation) SetField(name string, value ent.Value) error {
 		m.SetFilterValues(v)
 		return nil
 	case price.FieldTierMode:
-		v, ok := value.(string)
+		v, ok := value.(types.BillingTier)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}

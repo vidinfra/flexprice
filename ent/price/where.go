@@ -7,6 +7,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"github.com/flexprice/flexprice/ent/predicate"
+	"github.com/flexprice/flexprice/internal/types"
 	"github.com/shopspring/decimal"
 )
 
@@ -196,8 +197,9 @@ func MeterID(v string) predicate.Price {
 }
 
 // TierMode applies equality check predicate on the "tier_mode" field. It's identical to TierModeEQ.
-func TierMode(v string) predicate.Price {
-	return predicate.Price(sql.FieldEQ(FieldTierMode, v))
+func TierMode(v types.BillingTier) predicate.Price {
+	vc := string(v)
+	return predicate.Price(sql.FieldEQ(FieldTierMode, vc))
 }
 
 // LookupKey applies equality check predicate on the "lookup_key" field. It's identical to LookupKeyEQ.
@@ -1861,58 +1863,75 @@ func FilterValuesNotNil() predicate.Price {
 }
 
 // TierModeEQ applies the EQ predicate on the "tier_mode" field.
-func TierModeEQ(v string) predicate.Price {
-	return predicate.Price(sql.FieldEQ(FieldTierMode, v))
+func TierModeEQ(v types.BillingTier) predicate.Price {
+	vc := string(v)
+	return predicate.Price(sql.FieldEQ(FieldTierMode, vc))
 }
 
 // TierModeNEQ applies the NEQ predicate on the "tier_mode" field.
-func TierModeNEQ(v string) predicate.Price {
-	return predicate.Price(sql.FieldNEQ(FieldTierMode, v))
+func TierModeNEQ(v types.BillingTier) predicate.Price {
+	vc := string(v)
+	return predicate.Price(sql.FieldNEQ(FieldTierMode, vc))
 }
 
 // TierModeIn applies the In predicate on the "tier_mode" field.
-func TierModeIn(vs ...string) predicate.Price {
-	return predicate.Price(sql.FieldIn(FieldTierMode, vs...))
+func TierModeIn(vs ...types.BillingTier) predicate.Price {
+	v := make([]any, len(vs))
+	for i := range v {
+		v[i] = string(vs[i])
+	}
+	return predicate.Price(sql.FieldIn(FieldTierMode, v...))
 }
 
 // TierModeNotIn applies the NotIn predicate on the "tier_mode" field.
-func TierModeNotIn(vs ...string) predicate.Price {
-	return predicate.Price(sql.FieldNotIn(FieldTierMode, vs...))
+func TierModeNotIn(vs ...types.BillingTier) predicate.Price {
+	v := make([]any, len(vs))
+	for i := range v {
+		v[i] = string(vs[i])
+	}
+	return predicate.Price(sql.FieldNotIn(FieldTierMode, v...))
 }
 
 // TierModeGT applies the GT predicate on the "tier_mode" field.
-func TierModeGT(v string) predicate.Price {
-	return predicate.Price(sql.FieldGT(FieldTierMode, v))
+func TierModeGT(v types.BillingTier) predicate.Price {
+	vc := string(v)
+	return predicate.Price(sql.FieldGT(FieldTierMode, vc))
 }
 
 // TierModeGTE applies the GTE predicate on the "tier_mode" field.
-func TierModeGTE(v string) predicate.Price {
-	return predicate.Price(sql.FieldGTE(FieldTierMode, v))
+func TierModeGTE(v types.BillingTier) predicate.Price {
+	vc := string(v)
+	return predicate.Price(sql.FieldGTE(FieldTierMode, vc))
 }
 
 // TierModeLT applies the LT predicate on the "tier_mode" field.
-func TierModeLT(v string) predicate.Price {
-	return predicate.Price(sql.FieldLT(FieldTierMode, v))
+func TierModeLT(v types.BillingTier) predicate.Price {
+	vc := string(v)
+	return predicate.Price(sql.FieldLT(FieldTierMode, vc))
 }
 
 // TierModeLTE applies the LTE predicate on the "tier_mode" field.
-func TierModeLTE(v string) predicate.Price {
-	return predicate.Price(sql.FieldLTE(FieldTierMode, v))
+func TierModeLTE(v types.BillingTier) predicate.Price {
+	vc := string(v)
+	return predicate.Price(sql.FieldLTE(FieldTierMode, vc))
 }
 
 // TierModeContains applies the Contains predicate on the "tier_mode" field.
-func TierModeContains(v string) predicate.Price {
-	return predicate.Price(sql.FieldContains(FieldTierMode, v))
+func TierModeContains(v types.BillingTier) predicate.Price {
+	vc := string(v)
+	return predicate.Price(sql.FieldContains(FieldTierMode, vc))
 }
 
 // TierModeHasPrefix applies the HasPrefix predicate on the "tier_mode" field.
-func TierModeHasPrefix(v string) predicate.Price {
-	return predicate.Price(sql.FieldHasPrefix(FieldTierMode, v))
+func TierModeHasPrefix(v types.BillingTier) predicate.Price {
+	vc := string(v)
+	return predicate.Price(sql.FieldHasPrefix(FieldTierMode, vc))
 }
 
 // TierModeHasSuffix applies the HasSuffix predicate on the "tier_mode" field.
-func TierModeHasSuffix(v string) predicate.Price {
-	return predicate.Price(sql.FieldHasSuffix(FieldTierMode, v))
+func TierModeHasSuffix(v types.BillingTier) predicate.Price {
+	vc := string(v)
+	return predicate.Price(sql.FieldHasSuffix(FieldTierMode, vc))
 }
 
 // TierModeIsNil applies the IsNil predicate on the "tier_mode" field.
@@ -1926,13 +1945,15 @@ func TierModeNotNil() predicate.Price {
 }
 
 // TierModeEqualFold applies the EqualFold predicate on the "tier_mode" field.
-func TierModeEqualFold(v string) predicate.Price {
-	return predicate.Price(sql.FieldEqualFold(FieldTierMode, v))
+func TierModeEqualFold(v types.BillingTier) predicate.Price {
+	vc := string(v)
+	return predicate.Price(sql.FieldEqualFold(FieldTierMode, vc))
 }
 
 // TierModeContainsFold applies the ContainsFold predicate on the "tier_mode" field.
-func TierModeContainsFold(v string) predicate.Price {
-	return predicate.Price(sql.FieldContainsFold(FieldTierMode, v))
+func TierModeContainsFold(v types.BillingTier) predicate.Price {
+	vc := string(v)
+	return predicate.Price(sql.FieldContainsFold(FieldTierMode, vc))
 }
 
 // TiersIsNil applies the IsNil predicate on the "tiers" field.

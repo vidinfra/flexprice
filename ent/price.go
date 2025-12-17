@@ -75,7 +75,7 @@ type Price struct {
 	// FilterValues holds the value of the "filter_values" field.
 	FilterValues map[string][]string `json:"filter_values,omitempty"`
 	// TierMode holds the value of the "tier_mode" field.
-	TierMode *string `json:"tier_mode,omitempty"`
+	TierMode *types.BillingTier `json:"tier_mode,omitempty"`
 	// Tiers holds the value of the "tiers" field.
 	Tiers []*types.PriceTier `json:"tiers,omitempty"`
 	// PriceUnitTiers holds the value of the "price_unit_tiers" field.
@@ -314,8 +314,8 @@ func (pr *Price) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field tier_mode", values[i])
 			} else if value.Valid {
-				pr.TierMode = new(string)
-				*pr.TierMode = value.String
+				pr.TierMode = new(types.BillingTier)
+				*pr.TierMode = types.BillingTier(value.String)
 			}
 		case price.FieldTiers:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -532,7 +532,7 @@ func (pr *Price) String() string {
 	builder.WriteString(", ")
 	if v := pr.TierMode; v != nil {
 		builder.WriteString("tier_mode=")
-		builder.WriteString(*v)
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	builder.WriteString("tiers=")
