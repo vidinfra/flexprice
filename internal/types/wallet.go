@@ -228,8 +228,6 @@ func (f WalletTransactionFilter) Validate() error {
 		}
 	}
 
-	// TODO: Add validation for transaction reason if needed
-
 	return nil
 }
 
