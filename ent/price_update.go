@@ -357,15 +357,15 @@ func (pu *PriceUpdate) ClearFilterValues() *PriceUpdate {
 }
 
 // SetTierMode sets the "tier_mode" field.
-func (pu *PriceUpdate) SetTierMode(s string) *PriceUpdate {
-	pu.mutation.SetTierMode(s)
+func (pu *PriceUpdate) SetTierMode(tt types.BillingTier) *PriceUpdate {
+	pu.mutation.SetTierMode(tt)
 	return pu
 }
 
 // SetNillableTierMode sets the "tier_mode" field if the given value is not nil.
-func (pu *PriceUpdate) SetNillableTierMode(s *string) *PriceUpdate {
-	if s != nil {
-		pu.SetTierMode(*s)
+func (pu *PriceUpdate) SetNillableTierMode(tt *types.BillingTier) *PriceUpdate {
+	if tt != nil {
+		pu.SetTierMode(*tt)
 	}
 	return pu
 }
@@ -625,6 +625,11 @@ func (pu *PriceUpdate) check() error {
 	if v, ok := pu.mutation.BillingCadence(); ok {
 		if err := price.BillingCadenceValidator(v); err != nil {
 			return &ValidationError{Name: "billing_cadence", err: fmt.Errorf(`ent: validator failed for field "Price.billing_cadence": %w`, err)}
+		}
+	}
+	if v, ok := pu.mutation.TierMode(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "tier_mode", err: fmt.Errorf(`ent: validator failed for field "Price.tier_mode": %w`, err)}
 		}
 	}
 	return nil
@@ -1169,15 +1174,15 @@ func (puo *PriceUpdateOne) ClearFilterValues() *PriceUpdateOne {
 }
 
 // SetTierMode sets the "tier_mode" field.
-func (puo *PriceUpdateOne) SetTierMode(s string) *PriceUpdateOne {
-	puo.mutation.SetTierMode(s)
+func (puo *PriceUpdateOne) SetTierMode(tt types.BillingTier) *PriceUpdateOne {
+	puo.mutation.SetTierMode(tt)
 	return puo
 }
 
 // SetNillableTierMode sets the "tier_mode" field if the given value is not nil.
-func (puo *PriceUpdateOne) SetNillableTierMode(s *string) *PriceUpdateOne {
-	if s != nil {
-		puo.SetTierMode(*s)
+func (puo *PriceUpdateOne) SetNillableTierMode(tt *types.BillingTier) *PriceUpdateOne {
+	if tt != nil {
+		puo.SetTierMode(*tt)
 	}
 	return puo
 }
@@ -1450,6 +1455,11 @@ func (puo *PriceUpdateOne) check() error {
 	if v, ok := puo.mutation.BillingCadence(); ok {
 		if err := price.BillingCadenceValidator(v); err != nil {
 			return &ValidationError{Name: "billing_cadence", err: fmt.Errorf(`ent: validator failed for field "Price.billing_cadence": %w`, err)}
+		}
+	}
+	if v, ok := puo.mutation.TierMode(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "tier_mode", err: fmt.Errorf(`ent: validator failed for field "Price.tier_mode": %w`, err)}
 		}
 	}
 	return nil

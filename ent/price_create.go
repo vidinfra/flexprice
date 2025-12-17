@@ -329,15 +329,15 @@ func (pc *PriceCreate) SetFilterValues(m map[string][]string) *PriceCreate {
 }
 
 // SetTierMode sets the "tier_mode" field.
-func (pc *PriceCreate) SetTierMode(s string) *PriceCreate {
-	pc.mutation.SetTierMode(s)
+func (pc *PriceCreate) SetTierMode(tt types.BillingTier) *PriceCreate {
+	pc.mutation.SetTierMode(tt)
 	return pc
 }
 
 // SetNillableTierMode sets the "tier_mode" field if the given value is not nil.
-func (pc *PriceCreate) SetNillableTierMode(s *string) *PriceCreate {
-	if s != nil {
-		pc.SetTierMode(*s)
+func (pc *PriceCreate) SetNillableTierMode(tt *types.BillingTier) *PriceCreate {
+	if tt != nil {
+		pc.SetTierMode(*tt)
 	}
 	return pc
 }
@@ -661,6 +661,11 @@ func (pc *PriceCreate) check() error {
 	}
 	if _, ok := pc.mutation.TrialPeriod(); !ok {
 		return &ValidationError{Name: "trial_period", err: errors.New(`ent: missing required field "Price.trial_period"`)}
+	}
+	if v, ok := pc.mutation.TierMode(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "tier_mode", err: fmt.Errorf(`ent: validator failed for field "Price.tier_mode": %w`, err)}
+		}
 	}
 	return nil
 }

@@ -88,12 +88,12 @@ type Price struct {
 	// Note: This is only applicable for recurring prices (BILLING_CADENCE_RECURRING)
 	TrialPeriod int `db:"trial_period" json:"trial_period"`
 
-	TierMode types.BillingTier `db:"tier_mode" json:"tier_mode"`
+	TierMode types.BillingTier `db:"tier_mode" json:"tier_mode,omitempty"`
 
-	Tiers JSONBTiers `db:"tiers,jsonb" json:"tiers"`
+	Tiers JSONBTiers `db:"tiers,jsonb" json:"tiers,omitempty"`
 
 	// PriceUnitTiers are the tiers for the price unit
-	PriceUnitTiers JSONBTiers `db:"price_unit_tiers,jsonb" json:"price_unit_tiers"`
+	PriceUnitTiers JSONBTiers `db:"price_unit_tiers,jsonb" json:"price_unit_tiers,omitempty"`
 
 	// MeterID is the id of the meter for usage based pricing
 	MeterID string `db:"meter_id" json:"meter_id"`
@@ -394,7 +394,7 @@ func FromEnt(e *ent.Price) *Price {
 		BillingCadence:         types.BillingCadence(e.BillingCadence),
 		InvoiceCadence:         types.InvoiceCadence(e.InvoiceCadence),
 		TrialPeriod:            e.TrialPeriod,
-		TierMode:               types.BillingTier(lo.FromPtr(e.TierMode)),
+		TierMode:               lo.FromPtr(e.TierMode),
 		Tiers:                  tiers,
 		PriceUnitTiers:         priceUnitTiers,
 		MeterID:                lo.FromPtr(e.MeterID),
