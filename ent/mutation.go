@@ -36684,20 +36684,20 @@ type PriceMutation struct {
 	amount                    *decimal.Decimal
 	currency                  *string
 	display_amount            *string
-	price_unit_type           *string
+	price_unit_type           *types.PriceUnitType
 	price_unit_id             *string
 	price_unit                *string
 	price_unit_amount         *decimal.Decimal
 	display_price_unit_amount *string
 	conversion_rate           *decimal.Decimal
 	min_quantity              *decimal.Decimal
-	_type                     *string
-	billing_period            *string
+	_type                     *types.PriceType
+	billing_period            *types.BillingPeriod
 	billing_period_count      *int
 	addbilling_period_count   *int
-	billing_model             *string
-	billing_cadence           *string
-	invoice_cadence           *string
+	billing_model             *types.BillingModel
+	billing_cadence           *types.BillingCadence
+	invoice_cadence           *types.InvoiceCadence
 	trial_period              *int
 	addtrial_period           *int
 	meter_id                  *string
@@ -36711,7 +36711,7 @@ type PriceMutation struct {
 	lookup_key                *string
 	description               *string
 	metadata                  *map[string]string
-	entity_type               *string
+	entity_type               *types.PriceEntityType
 	entity_id                 *string
 	parent_price_id           *string
 	start_date                *time.Time
@@ -37276,12 +37276,12 @@ func (m *PriceMutation) ResetDisplayAmount() {
 }
 
 // SetPriceUnitType sets the "price_unit_type" field.
-func (m *PriceMutation) SetPriceUnitType(s string) {
-	m.price_unit_type = &s
+func (m *PriceMutation) SetPriceUnitType(tut types.PriceUnitType) {
+	m.price_unit_type = &tut
 }
 
 // PriceUnitType returns the value of the "price_unit_type" field in the mutation.
-func (m *PriceMutation) PriceUnitType() (r string, exists bool) {
+func (m *PriceMutation) PriceUnitType() (r types.PriceUnitType, exists bool) {
 	v := m.price_unit_type
 	if v == nil {
 		return
@@ -37292,7 +37292,7 @@ func (m *PriceMutation) PriceUnitType() (r string, exists bool) {
 // OldPriceUnitType returns the old "price_unit_type" field's value of the Price entity.
 // If the Price object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PriceMutation) OldPriceUnitType(ctx context.Context) (v string, err error) {
+func (m *PriceMutation) OldPriceUnitType(ctx context.Context) (v types.PriceUnitType, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldPriceUnitType is only allowed on UpdateOne operations")
 	}
@@ -37606,12 +37606,12 @@ func (m *PriceMutation) ResetMinQuantity() {
 }
 
 // SetType sets the "type" field.
-func (m *PriceMutation) SetType(s string) {
-	m._type = &s
+func (m *PriceMutation) SetType(tt types.PriceType) {
+	m._type = &tt
 }
 
 // GetType returns the value of the "type" field in the mutation.
-func (m *PriceMutation) GetType() (r string, exists bool) {
+func (m *PriceMutation) GetType() (r types.PriceType, exists bool) {
 	v := m._type
 	if v == nil {
 		return
@@ -37622,7 +37622,7 @@ func (m *PriceMutation) GetType() (r string, exists bool) {
 // OldType returns the old "type" field's value of the Price entity.
 // If the Price object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PriceMutation) OldType(ctx context.Context) (v string, err error) {
+func (m *PriceMutation) OldType(ctx context.Context) (v types.PriceType, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldType is only allowed on UpdateOne operations")
 	}
@@ -37642,12 +37642,12 @@ func (m *PriceMutation) ResetType() {
 }
 
 // SetBillingPeriod sets the "billing_period" field.
-func (m *PriceMutation) SetBillingPeriod(s string) {
-	m.billing_period = &s
+func (m *PriceMutation) SetBillingPeriod(tp types.BillingPeriod) {
+	m.billing_period = &tp
 }
 
 // BillingPeriod returns the value of the "billing_period" field in the mutation.
-func (m *PriceMutation) BillingPeriod() (r string, exists bool) {
+func (m *PriceMutation) BillingPeriod() (r types.BillingPeriod, exists bool) {
 	v := m.billing_period
 	if v == nil {
 		return
@@ -37658,7 +37658,7 @@ func (m *PriceMutation) BillingPeriod() (r string, exists bool) {
 // OldBillingPeriod returns the old "billing_period" field's value of the Price entity.
 // If the Price object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PriceMutation) OldBillingPeriod(ctx context.Context) (v string, err error) {
+func (m *PriceMutation) OldBillingPeriod(ctx context.Context) (v types.BillingPeriod, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldBillingPeriod is only allowed on UpdateOne operations")
 	}
@@ -37734,12 +37734,12 @@ func (m *PriceMutation) ResetBillingPeriodCount() {
 }
 
 // SetBillingModel sets the "billing_model" field.
-func (m *PriceMutation) SetBillingModel(s string) {
-	m.billing_model = &s
+func (m *PriceMutation) SetBillingModel(tm types.BillingModel) {
+	m.billing_model = &tm
 }
 
 // BillingModel returns the value of the "billing_model" field in the mutation.
-func (m *PriceMutation) BillingModel() (r string, exists bool) {
+func (m *PriceMutation) BillingModel() (r types.BillingModel, exists bool) {
 	v := m.billing_model
 	if v == nil {
 		return
@@ -37750,7 +37750,7 @@ func (m *PriceMutation) BillingModel() (r string, exists bool) {
 // OldBillingModel returns the old "billing_model" field's value of the Price entity.
 // If the Price object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PriceMutation) OldBillingModel(ctx context.Context) (v string, err error) {
+func (m *PriceMutation) OldBillingModel(ctx context.Context) (v types.BillingModel, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldBillingModel is only allowed on UpdateOne operations")
 	}
@@ -37770,12 +37770,12 @@ func (m *PriceMutation) ResetBillingModel() {
 }
 
 // SetBillingCadence sets the "billing_cadence" field.
-func (m *PriceMutation) SetBillingCadence(s string) {
-	m.billing_cadence = &s
+func (m *PriceMutation) SetBillingCadence(tc types.BillingCadence) {
+	m.billing_cadence = &tc
 }
 
 // BillingCadence returns the value of the "billing_cadence" field in the mutation.
-func (m *PriceMutation) BillingCadence() (r string, exists bool) {
+func (m *PriceMutation) BillingCadence() (r types.BillingCadence, exists bool) {
 	v := m.billing_cadence
 	if v == nil {
 		return
@@ -37786,7 +37786,7 @@ func (m *PriceMutation) BillingCadence() (r string, exists bool) {
 // OldBillingCadence returns the old "billing_cadence" field's value of the Price entity.
 // If the Price object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PriceMutation) OldBillingCadence(ctx context.Context) (v string, err error) {
+func (m *PriceMutation) OldBillingCadence(ctx context.Context) (v types.BillingCadence, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldBillingCadence is only allowed on UpdateOne operations")
 	}
@@ -37806,12 +37806,12 @@ func (m *PriceMutation) ResetBillingCadence() {
 }
 
 // SetInvoiceCadence sets the "invoice_cadence" field.
-func (m *PriceMutation) SetInvoiceCadence(s string) {
-	m.invoice_cadence = &s
+func (m *PriceMutation) SetInvoiceCadence(tc types.InvoiceCadence) {
+	m.invoice_cadence = &tc
 }
 
 // InvoiceCadence returns the value of the "invoice_cadence" field in the mutation.
-func (m *PriceMutation) InvoiceCadence() (r string, exists bool) {
+func (m *PriceMutation) InvoiceCadence() (r types.InvoiceCadence, exists bool) {
 	v := m.invoice_cadence
 	if v == nil {
 		return
@@ -37822,7 +37822,7 @@ func (m *PriceMutation) InvoiceCadence() (r string, exists bool) {
 // OldInvoiceCadence returns the old "invoice_cadence" field's value of the Price entity.
 // If the Price object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PriceMutation) OldInvoiceCadence(ctx context.Context) (v string, err error) {
+func (m *PriceMutation) OldInvoiceCadence(ctx context.Context) (v types.InvoiceCadence, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldInvoiceCadence is only allowed on UpdateOne operations")
 	}
@@ -38384,12 +38384,12 @@ func (m *PriceMutation) ResetMetadata() {
 }
 
 // SetEntityType sets the "entity_type" field.
-func (m *PriceMutation) SetEntityType(s string) {
-	m.entity_type = &s
+func (m *PriceMutation) SetEntityType(tet types.PriceEntityType) {
+	m.entity_type = &tet
 }
 
 // EntityType returns the value of the "entity_type" field in the mutation.
-func (m *PriceMutation) EntityType() (r string, exists bool) {
+func (m *PriceMutation) EntityType() (r types.PriceEntityType, exists bool) {
 	v := m.entity_type
 	if v == nil {
 		return
@@ -38400,7 +38400,7 @@ func (m *PriceMutation) EntityType() (r string, exists bool) {
 // OldEntityType returns the old "entity_type" field's value of the Price entity.
 // If the Price object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PriceMutation) OldEntityType(ctx context.Context) (v *string, err error) {
+func (m *PriceMutation) OldEntityType(ctx context.Context) (v *types.PriceEntityType, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldEntityType is only allowed on UpdateOne operations")
 	}
@@ -39096,7 +39096,7 @@ func (m *PriceMutation) SetField(name string, value ent.Value) error {
 		m.SetDisplayAmount(v)
 		return nil
 	case price.FieldPriceUnitType:
-		v, ok := value.(string)
+		v, ok := value.(types.PriceUnitType)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -39145,14 +39145,14 @@ func (m *PriceMutation) SetField(name string, value ent.Value) error {
 		m.SetMinQuantity(v)
 		return nil
 	case price.FieldType:
-		v, ok := value.(string)
+		v, ok := value.(types.PriceType)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetType(v)
 		return nil
 	case price.FieldBillingPeriod:
-		v, ok := value.(string)
+		v, ok := value.(types.BillingPeriod)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -39166,21 +39166,21 @@ func (m *PriceMutation) SetField(name string, value ent.Value) error {
 		m.SetBillingPeriodCount(v)
 		return nil
 	case price.FieldBillingModel:
-		v, ok := value.(string)
+		v, ok := value.(types.BillingModel)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBillingModel(v)
 		return nil
 	case price.FieldBillingCadence:
-		v, ok := value.(string)
+		v, ok := value.(types.BillingCadence)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetBillingCadence(v)
 		return nil
 	case price.FieldInvoiceCadence:
-		v, ok := value.(string)
+		v, ok := value.(types.InvoiceCadence)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
@@ -39257,7 +39257,7 @@ func (m *PriceMutation) SetField(name string, value ent.Value) error {
 		m.SetMetadata(v)
 		return nil
 	case price.FieldEntityType:
-		v, ok := value.(string)
+		v, ok := value.(types.PriceEntityType)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}

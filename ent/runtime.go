@@ -1306,7 +1306,7 @@ func init() {
 	// priceDescPriceUnitType is the schema descriptor for price_unit_type field.
 	priceDescPriceUnitType := priceFields[5].Descriptor()
 	// price.DefaultPriceUnitType holds the default value on creation for the price_unit_type field.
-	price.DefaultPriceUnitType = priceDescPriceUnitType.Default.(string)
+	price.DefaultPriceUnitType = types.PriceUnitType(priceDescPriceUnitType.Default.(string))
 	// price.PriceUnitTypeValidator is a validator for the "price_unit_type" field. It is called by the builders before save.
 	price.PriceUnitTypeValidator = priceDescPriceUnitType.Validators[0].(func(string) error)
 	// priceDescPriceUnitAmount is the schema descriptor for price_unit_amount field.
@@ -1344,7 +1344,7 @@ func init() {
 	// priceDescEntityType is the schema descriptor for entity_type field.
 	priceDescEntityType := priceFields[28].Descriptor()
 	// price.DefaultEntityType holds the default value on creation for the entity_type field.
-	price.DefaultEntityType = priceDescEntityType.Default.(string)
+	price.DefaultEntityType = types.PriceEntityType(priceDescEntityType.Default.(string))
 	// priceDescStartDate is the schema descriptor for start_date field.
 	priceDescStartDate := priceFields[31].Descriptor()
 	// price.DefaultStartDate holds the default value on creation for the start_date field.
