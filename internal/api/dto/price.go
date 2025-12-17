@@ -742,6 +742,7 @@ func (r *UpdatePriceRequest) ToCreatePriceRequest(existingPrice *price.Price) Cr
 	createReq.TrialPeriod = existingPrice.TrialPeriod
 	createReq.MeterID = existingPrice.MeterID
 	createReq.ParentPriceID = existingPrice.GetRootPriceID()
+	createReq.DisplayName = existingPrice.DisplayName
 
 	// GroupID is the id of the group to update the price in
 	if r.GroupID != "" {
