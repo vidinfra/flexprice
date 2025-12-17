@@ -69,6 +69,26 @@ func (wtu *WalletTransactionUpdate) ClearUpdatedBy() *WalletTransactionUpdate {
 	return wtu
 }
 
+// SetCustomerID sets the "customer_id" field.
+func (wtu *WalletTransactionUpdate) SetCustomerID(s string) *WalletTransactionUpdate {
+	wtu.mutation.SetCustomerID(s)
+	return wtu
+}
+
+// SetNillableCustomerID sets the "customer_id" field if the given value is not nil.
+func (wtu *WalletTransactionUpdate) SetNillableCustomerID(s *string) *WalletTransactionUpdate {
+	if s != nil {
+		wtu.SetCustomerID(*s)
+	}
+	return wtu
+}
+
+// ClearCustomerID clears the value of the "customer_id" field.
+func (wtu *WalletTransactionUpdate) ClearCustomerID() *WalletTransactionUpdate {
+	wtu.mutation.ClearCustomerID()
+	return wtu
+}
+
 // SetType sets the "type" field.
 func (wtu *WalletTransactionUpdate) SetType(s string) *WalletTransactionUpdate {
 	wtu.mutation.SetType(s)
@@ -239,6 +259,26 @@ func (wtu *WalletTransactionUpdate) SetNillableCreditsAvailable(d *decimal.Decim
 	return wtu
 }
 
+// SetCurrency sets the "currency" field.
+func (wtu *WalletTransactionUpdate) SetCurrency(s string) *WalletTransactionUpdate {
+	wtu.mutation.SetCurrency(s)
+	return wtu
+}
+
+// SetNillableCurrency sets the "currency" field if the given value is not nil.
+func (wtu *WalletTransactionUpdate) SetNillableCurrency(s *string) *WalletTransactionUpdate {
+	if s != nil {
+		wtu.SetCurrency(*s)
+	}
+	return wtu
+}
+
+// ClearCurrency clears the value of the "currency" field.
+func (wtu *WalletTransactionUpdate) ClearCurrency() *WalletTransactionUpdate {
+	wtu.mutation.ClearCurrency()
+	return wtu
+}
+
 // SetPriority sets the "priority" field.
 func (wtu *WalletTransactionUpdate) SetPriority(i int) *WalletTransactionUpdate {
 	wtu.mutation.ResetPriority()
@@ -347,6 +387,12 @@ func (wtu *WalletTransactionUpdate) sqlSave(ctx context.Context) (n int, err err
 	if wtu.mutation.EnvironmentIDCleared() {
 		_spec.ClearField(wallettransaction.FieldEnvironmentID, field.TypeString)
 	}
+	if value, ok := wtu.mutation.CustomerID(); ok {
+		_spec.SetField(wallettransaction.FieldCustomerID, field.TypeString, value)
+	}
+	if wtu.mutation.CustomerIDCleared() {
+		_spec.ClearField(wallettransaction.FieldCustomerID, field.TypeString)
+	}
 	if value, ok := wtu.mutation.GetType(); ok {
 		_spec.SetField(wallettransaction.FieldType, field.TypeString, value)
 	}
@@ -394,6 +440,12 @@ func (wtu *WalletTransactionUpdate) sqlSave(ctx context.Context) (n int, err err
 	}
 	if value, ok := wtu.mutation.CreditsAvailable(); ok {
 		_spec.SetField(wallettransaction.FieldCreditsAvailable, field.TypeOther, value)
+	}
+	if value, ok := wtu.mutation.Currency(); ok {
+		_spec.SetField(wallettransaction.FieldCurrency, field.TypeString, value)
+	}
+	if wtu.mutation.CurrencyCleared() {
+		_spec.ClearField(wallettransaction.FieldCurrency, field.TypeString)
 	}
 	if wtu.mutation.IdempotencyKeyCleared() {
 		_spec.ClearField(wallettransaction.FieldIdempotencyKey, field.TypeString)
@@ -464,6 +516,26 @@ func (wtuo *WalletTransactionUpdateOne) SetNillableUpdatedBy(s *string) *WalletT
 // ClearUpdatedBy clears the value of the "updated_by" field.
 func (wtuo *WalletTransactionUpdateOne) ClearUpdatedBy() *WalletTransactionUpdateOne {
 	wtuo.mutation.ClearUpdatedBy()
+	return wtuo
+}
+
+// SetCustomerID sets the "customer_id" field.
+func (wtuo *WalletTransactionUpdateOne) SetCustomerID(s string) *WalletTransactionUpdateOne {
+	wtuo.mutation.SetCustomerID(s)
+	return wtuo
+}
+
+// SetNillableCustomerID sets the "customer_id" field if the given value is not nil.
+func (wtuo *WalletTransactionUpdateOne) SetNillableCustomerID(s *string) *WalletTransactionUpdateOne {
+	if s != nil {
+		wtuo.SetCustomerID(*s)
+	}
+	return wtuo
+}
+
+// ClearCustomerID clears the value of the "customer_id" field.
+func (wtuo *WalletTransactionUpdateOne) ClearCustomerID() *WalletTransactionUpdateOne {
+	wtuo.mutation.ClearCustomerID()
 	return wtuo
 }
 
@@ -637,6 +709,26 @@ func (wtuo *WalletTransactionUpdateOne) SetNillableCreditsAvailable(d *decimal.D
 	return wtuo
 }
 
+// SetCurrency sets the "currency" field.
+func (wtuo *WalletTransactionUpdateOne) SetCurrency(s string) *WalletTransactionUpdateOne {
+	wtuo.mutation.SetCurrency(s)
+	return wtuo
+}
+
+// SetNillableCurrency sets the "currency" field if the given value is not nil.
+func (wtuo *WalletTransactionUpdateOne) SetNillableCurrency(s *string) *WalletTransactionUpdateOne {
+	if s != nil {
+		wtuo.SetCurrency(*s)
+	}
+	return wtuo
+}
+
+// ClearCurrency clears the value of the "currency" field.
+func (wtuo *WalletTransactionUpdateOne) ClearCurrency() *WalletTransactionUpdateOne {
+	wtuo.mutation.ClearCurrency()
+	return wtuo
+}
+
 // SetPriority sets the "priority" field.
 func (wtuo *WalletTransactionUpdateOne) SetPriority(i int) *WalletTransactionUpdateOne {
 	wtuo.mutation.ResetPriority()
@@ -775,6 +867,12 @@ func (wtuo *WalletTransactionUpdateOne) sqlSave(ctx context.Context) (_node *Wal
 	if wtuo.mutation.EnvironmentIDCleared() {
 		_spec.ClearField(wallettransaction.FieldEnvironmentID, field.TypeString)
 	}
+	if value, ok := wtuo.mutation.CustomerID(); ok {
+		_spec.SetField(wallettransaction.FieldCustomerID, field.TypeString, value)
+	}
+	if wtuo.mutation.CustomerIDCleared() {
+		_spec.ClearField(wallettransaction.FieldCustomerID, field.TypeString)
+	}
 	if value, ok := wtuo.mutation.GetType(); ok {
 		_spec.SetField(wallettransaction.FieldType, field.TypeString, value)
 	}
@@ -822,6 +920,12 @@ func (wtuo *WalletTransactionUpdateOne) sqlSave(ctx context.Context) (_node *Wal
 	}
 	if value, ok := wtuo.mutation.CreditsAvailable(); ok {
 		_spec.SetField(wallettransaction.FieldCreditsAvailable, field.TypeOther, value)
+	}
+	if value, ok := wtuo.mutation.Currency(); ok {
+		_spec.SetField(wallettransaction.FieldCurrency, field.TypeString, value)
+	}
+	if wtuo.mutation.CurrencyCleared() {
+		_spec.ClearField(wallettransaction.FieldCurrency, field.TypeString)
 	}
 	if wtuo.mutation.IdempotencyKeyCleared() {
 		_spec.ClearField(wallettransaction.FieldIdempotencyKey, field.TypeString)

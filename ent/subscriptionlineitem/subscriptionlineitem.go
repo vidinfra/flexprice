@@ -71,6 +71,18 @@ const (
 	FieldSubscriptionPhaseID = "subscription_phase_id"
 	// FieldMetadata holds the string denoting the metadata field in the database.
 	FieldMetadata = "metadata"
+	// FieldCommitmentAmount holds the string denoting the commitment_amount field in the database.
+	FieldCommitmentAmount = "commitment_amount"
+	// FieldCommitmentQuantity holds the string denoting the commitment_quantity field in the database.
+	FieldCommitmentQuantity = "commitment_quantity"
+	// FieldCommitmentType holds the string denoting the commitment_type field in the database.
+	FieldCommitmentType = "commitment_type"
+	// FieldCommitmentOverageFactor holds the string denoting the commitment_overage_factor field in the database.
+	FieldCommitmentOverageFactor = "commitment_overage_factor"
+	// FieldCommitmentTrueUpEnabled holds the string denoting the commitment_true_up_enabled field in the database.
+	FieldCommitmentTrueUpEnabled = "commitment_true_up_enabled"
+	// FieldCommitmentWindowed holds the string denoting the commitment_windowed field in the database.
+	FieldCommitmentWindowed = "commitment_windowed"
 	// EdgeSubscription holds the string denoting the subscription edge name in mutations.
 	EdgeSubscription = "subscription"
 	// EdgeCouponAssociations holds the string denoting the coupon_associations edge name in mutations.
@@ -124,6 +136,12 @@ var Columns = []string{
 	FieldEndDate,
 	FieldSubscriptionPhaseID,
 	FieldMetadata,
+	FieldCommitmentAmount,
+	FieldCommitmentQuantity,
+	FieldCommitmentType,
+	FieldCommitmentOverageFactor,
+	FieldCommitmentTrueUpEnabled,
+	FieldCommitmentWindowed,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -165,6 +183,10 @@ var (
 	BillingPeriodValidator func(string) error
 	// DefaultTrialPeriod holds the default value on creation for the "trial_period" field.
 	DefaultTrialPeriod int
+	// DefaultCommitmentTrueUpEnabled holds the default value on creation for the "commitment_true_up_enabled" field.
+	DefaultCommitmentTrueUpEnabled bool
+	// DefaultCommitmentWindowed holds the default value on creation for the "commitment_windowed" field.
+	DefaultCommitmentWindowed bool
 )
 
 // OrderOption defines the ordering options for the SubscriptionLineItem queries.
@@ -308,6 +330,36 @@ func ByEndDate(opts ...sql.OrderTermOption) OrderOption {
 // BySubscriptionPhaseID orders the results by the subscription_phase_id field.
 func BySubscriptionPhaseID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSubscriptionPhaseID, opts...).ToFunc()
+}
+
+// ByCommitmentAmount orders the results by the commitment_amount field.
+func ByCommitmentAmount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCommitmentAmount, opts...).ToFunc()
+}
+
+// ByCommitmentQuantity orders the results by the commitment_quantity field.
+func ByCommitmentQuantity(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCommitmentQuantity, opts...).ToFunc()
+}
+
+// ByCommitmentType orders the results by the commitment_type field.
+func ByCommitmentType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCommitmentType, opts...).ToFunc()
+}
+
+// ByCommitmentOverageFactor orders the results by the commitment_overage_factor field.
+func ByCommitmentOverageFactor(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCommitmentOverageFactor, opts...).ToFunc()
+}
+
+// ByCommitmentTrueUpEnabled orders the results by the commitment_true_up_enabled field.
+func ByCommitmentTrueUpEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCommitmentTrueUpEnabled, opts...).ToFunc()
+}
+
+// ByCommitmentWindowed orders the results by the commitment_windowed field.
+func ByCommitmentWindowed(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCommitmentWindowed, opts...).ToFunc()
 }
 
 // BySubscriptionField orders the results by subscription field.

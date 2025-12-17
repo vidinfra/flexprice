@@ -261,6 +261,7 @@ func (r *invoiceRepository) CreateWithLineItems(ctx context.Context, inv *domain
 					SetNillablePeriodEnd(item.PeriodEnd).
 					SetMetadata(item.Metadata).
 					SetEnvironmentID(item.EnvironmentID).
+					SetCommitmentInfo(item.CommitmentInfo).
 					SetStatus(string(item.Status)).
 					SetCreatedBy(item.CreatedBy).
 					SetUpdatedBy(item.UpdatedBy).
@@ -330,6 +331,7 @@ func (r *invoiceRepository) AddLineItems(ctx context.Context, invoiceID string, 
 				SetNillablePeriodStart(item.PeriodStart).
 				SetNillablePeriodEnd(item.PeriodEnd).
 				SetMetadata(item.Metadata).
+				SetCommitmentInfo(item.CommitmentInfo).
 				SetStatus(string(item.Status)).
 				SetCreatedBy(item.CreatedBy).
 				SetUpdatedBy(item.UpdatedBy).

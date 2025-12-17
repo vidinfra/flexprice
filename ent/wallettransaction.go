@@ -35,6 +35,8 @@ type WalletTransaction struct {
 	EnvironmentID string `json:"environment_id,omitempty"`
 	// WalletID holds the value of the "wallet_id" field.
 	WalletID string `json:"wallet_id,omitempty"`
+	// CustomerID holds the value of the "customer_id" field.
+	CustomerID string `json:"customer_id,omitempty"`
 	// Type holds the value of the "type" field.
 	Type string `json:"type,omitempty"`
 	// Amount holds the value of the "amount" field.
@@ -59,6 +61,8 @@ type WalletTransaction struct {
 	ExpiryDate *time.Time `json:"expiry_date,omitempty"`
 	// CreditsAvailable holds the value of the "credits_available" field.
 	CreditsAvailable decimal.Decimal `json:"credits_available,omitempty"`
+	// Currency holds the value of the "currency" field.
+	Currency *string `json:"currency,omitempty"`
 	// IdempotencyKey holds the value of the "idempotency_key" field.
 	IdempotencyKey *string `json:"idempotency_key,omitempty"`
 	// TransactionReason holds the value of the "transaction_reason" field.
@@ -79,7 +83,7 @@ func (*WalletTransaction) scanValues(columns []string) ([]any, error) {
 			values[i] = new(decimal.Decimal)
 		case wallettransaction.FieldPriority:
 			values[i] = new(sql.NullInt64)
-		case wallettransaction.FieldID, wallettransaction.FieldTenantID, wallettransaction.FieldStatus, wallettransaction.FieldCreatedBy, wallettransaction.FieldUpdatedBy, wallettransaction.FieldEnvironmentID, wallettransaction.FieldWalletID, wallettransaction.FieldType, wallettransaction.FieldReferenceType, wallettransaction.FieldReferenceID, wallettransaction.FieldDescription, wallettransaction.FieldTransactionStatus, wallettransaction.FieldIdempotencyKey, wallettransaction.FieldTransactionReason:
+		case wallettransaction.FieldID, wallettransaction.FieldTenantID, wallettransaction.FieldStatus, wallettransaction.FieldCreatedBy, wallettransaction.FieldUpdatedBy, wallettransaction.FieldEnvironmentID, wallettransaction.FieldWalletID, wallettransaction.FieldCustomerID, wallettransaction.FieldType, wallettransaction.FieldReferenceType, wallettransaction.FieldReferenceID, wallettransaction.FieldDescription, wallettransaction.FieldTransactionStatus, wallettransaction.FieldCurrency, wallettransaction.FieldIdempotencyKey, wallettransaction.FieldTransactionReason:
 			values[i] = new(sql.NullString)
 		case wallettransaction.FieldCreatedAt, wallettransaction.FieldUpdatedAt, wallettransaction.FieldExpiryDate:
 			values[i] = new(sql.NullTime)
@@ -151,6 +155,12 @@ func (wt *WalletTransaction) assignValues(columns []string, values []any) error 
 				return fmt.Errorf("unexpected type %T for field wallet_id", values[i])
 			} else if value.Valid {
 				wt.WalletID = value.String
+			}
+		case wallettransaction.FieldCustomerID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field customer_id", values[i])
+			} else if value.Valid {
+				wt.CustomerID = value.String
 			}
 		case wallettransaction.FieldType:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -226,6 +236,13 @@ func (wt *WalletTransaction) assignValues(columns []string, values []any) error 
 				return fmt.Errorf("unexpected type %T for field credits_available", values[i])
 			} else if value != nil {
 				wt.CreditsAvailable = *value
+			}
+		case wallettransaction.FieldCurrency:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field currency", values[i])
+			} else if value.Valid {
+				wt.Currency = new(string)
+				*wt.Currency = value.String
 			}
 		case wallettransaction.FieldIdempotencyKey:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -307,6 +324,9 @@ func (wt *WalletTransaction) String() string {
 	builder.WriteString("wallet_id=")
 	builder.WriteString(wt.WalletID)
 	builder.WriteString(", ")
+	builder.WriteString("customer_id=")
+	builder.WriteString(wt.CustomerID)
+	builder.WriteString(", ")
 	builder.WriteString("type=")
 	builder.WriteString(wt.Type)
 	builder.WriteString(", ")
@@ -344,6 +364,11 @@ func (wt *WalletTransaction) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("credits_available=")
 	builder.WriteString(fmt.Sprintf("%v", wt.CreditsAvailable))
+	builder.WriteString(", ")
+	if v := wt.Currency; v != nil {
+		builder.WriteString("currency=")
+		builder.WriteString(*v)
+	}
 	builder.WriteString(", ")
 	if v := wt.IdempotencyKey; v != nil {
 		builder.WriteString("idempotency_key=")

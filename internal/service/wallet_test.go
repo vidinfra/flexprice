@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"testing"
@@ -58,6 +59,11 @@ func (s *WalletServiceSuite) SetupTest() {
 	s.setupTestData()
 }
 
+// GetContext returns context with environment ID set for settings lookup
+func (s *WalletServiceSuite) GetContext() context.Context {
+	return types.SetEnvironmentID(s.BaseServiceTestSuite.GetContext(), "env_test")
+}
+
 // TearDownTest is called after each test
 func (s *WalletServiceSuite) TearDownTest() {
 	s.BaseServiceTestSuite.TearDownTest()
@@ -67,25 +73,28 @@ func (s *WalletServiceSuite) TearDownTest() {
 
 func (s *WalletServiceSuite) setupService() {
 	stores := s.GetStores()
+	pubsub := testutil.NewInMemoryPubSub()
 	s.service = NewWalletService(ServiceParams{
-		Logger:               s.GetLogger(),
-		Config:               s.GetConfig(),
-		DB:                   s.GetDB(),
-		WalletRepo:           stores.WalletRepo,
-		SubRepo:              stores.SubscriptionRepo,
-		PlanRepo:             stores.PlanRepo,
-		PriceRepo:            stores.PriceRepo,
-		EventRepo:            stores.EventRepo,
-		MeterRepo:            stores.MeterRepo,
-		CustomerRepo:         stores.CustomerRepo,
-		InvoiceRepo:          stores.InvoiceRepo,
-		EntitlementRepo:      stores.EntitlementRepo,
-		FeatureRepo:          stores.FeatureRepo,
-		AddonAssociationRepo: stores.AddonAssociationRepo,
-		SettingsRepo:         stores.SettingsRepo,
-		AlertLogsRepo:        s.GetStores().AlertLogsRepo,
-		EventPublisher:       s.GetPublisher(),
-		WebhookPublisher:     s.GetWebhookPublisher(),
+		Logger:                   s.GetLogger(),
+		Config:                   s.GetConfig(),
+		DB:                       s.GetDB(),
+		WalletRepo:               stores.WalletRepo,
+		SubRepo:                  stores.SubscriptionRepo,
+		PlanRepo:                 stores.PlanRepo,
+		PriceRepo:                stores.PriceRepo,
+		EventRepo:                stores.EventRepo,
+		MeterRepo:                stores.MeterRepo,
+		CustomerRepo:             stores.CustomerRepo,
+		InvoiceRepo:              stores.InvoiceRepo,
+		EntitlementRepo:          stores.EntitlementRepo,
+		FeatureRepo:              stores.FeatureRepo,
+		AddonAssociationRepo:     stores.AddonAssociationRepo,
+		SettingsRepo:             stores.SettingsRepo,
+		AlertLogsRepo:            s.GetStores().AlertLogsRepo,
+		FeatureUsageRepo:         stores.FeatureUsageRepo,
+		EventPublisher:           s.GetPublisher(),
+		WebhookPublisher:         s.GetWebhookPublisher(),
+		WalletBalanceAlertPubSub: types.WalletBalanceAlertPubSub{PubSub: pubsub},
 	})
 	s.subsService = NewSubscriptionService(ServiceParams{
 		Logger:                s.GetLogger(),

@@ -5,6 +5,7 @@ import (
 
 	"github.com/flexprice/flexprice/ent"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
 
@@ -12,22 +13,25 @@ import (
 type Transaction struct {
 	ID                  string                      `db:"id" json:"id"`
 	WalletID            string                      `db:"wallet_id" json:"wallet_id"`
+	CustomerID          string                      `db:"customer_id" json:"customer_id"`
 	Type                types.TransactionType       `db:"type" json:"type"`
-	Amount              decimal.Decimal             `db:"amount" json:"amount"`
-	CreditAmount        decimal.Decimal             `db:"credit_amount" json:"credit_amount"`
-	CreditBalanceBefore decimal.Decimal             `db:"credit_balance_before" json:"credit_balance_before"`
-	CreditBalanceAfter  decimal.Decimal             `db:"credit_balance_after" json:"credit_balance_after"`
+	Amount              decimal.Decimal             `db:"amount" json:"amount" swaggertype:"string"`
+	CreditAmount        decimal.Decimal             `db:"credit_amount" json:"credit_amount" swaggertype:"string"`
+	CreditBalanceBefore decimal.Decimal             `db:"credit_balance_before" json:"credit_balance_before" swaggertype:"string"`
+	CreditBalanceAfter  decimal.Decimal             `db:"credit_balance_after" json:"credit_balance_after" swaggertype:"string"`
 	TxStatus            types.TransactionStatus     `db:"transaction_status" json:"transaction_status"`
 	ReferenceType       types.WalletTxReferenceType `db:"reference_type" json:"reference_type"`
 	ReferenceID         string                      `db:"reference_id" json:"reference_id"`
 	Description         string                      `db:"description" json:"description"`
 	Metadata            types.Metadata              `db:"metadata" json:"metadata"`
 	ExpiryDate          *time.Time                  `db:"expiry_date" json:"expiry_date"`
-	CreditsAvailable    decimal.Decimal             `db:"credits_available" json:"credits_available"`
+	CreditsAvailable    decimal.Decimal             `db:"credits_available" json:"credits_available" swaggertype:"string"`
 	TransactionReason   types.TransactionReason     `db:"transaction_reason" json:"transaction_reason"`
 	Priority            *int                        `db:"priority" json:"priority"`
-	IdempotencyKey      string                      `db:"idempotency_key" json:"idempotency_key"`
-	EnvironmentID       string                      `db:"environment_id" json:"environment_id"`
+	Currency            string                      `db:"currency" json:"currency"`
+
+	IdempotencyKey string `db:"idempotency_key" json:"idempotency_key"`
+	EnvironmentID  string `db:"environment_id" json:"environment_id"`
 	types.BaseModel
 }
 
@@ -52,6 +56,7 @@ func (t *Transaction) ToEnt() *ent.WalletTransaction {
 	return &ent.WalletTransaction{
 		ID:                  t.ID,
 		WalletID:            t.WalletID,
+		CustomerID:          t.CustomerID,
 		Type:                string(t.Type),
 		Amount:              t.Amount,
 		CreditAmount:        t.CreditAmount,
@@ -66,6 +71,7 @@ func (t *Transaction) ToEnt() *ent.WalletTransaction {
 		CreditsAvailable:    t.CreditsAvailable,
 		TransactionReason:   string(t.TransactionReason),
 		Priority:            t.Priority,
+		Currency:            lo.ToPtr(t.Currency),
 		EnvironmentID:       t.EnvironmentID,
 		TenantID:            t.TenantID,
 		Status:              string(t.Status),
@@ -85,6 +91,7 @@ func TransactionFromEnt(e *ent.WalletTransaction) *Transaction {
 	return &Transaction{
 		ID:                  e.ID,
 		WalletID:            e.WalletID,
+		CustomerID:          e.CustomerID,
 		Type:                types.TransactionType(e.Type),
 		Amount:              e.Amount,
 		CreditAmount:        e.CreditAmount,
@@ -97,6 +104,7 @@ func TransactionFromEnt(e *ent.WalletTransaction) *Transaction {
 		CreditsAvailable:    e.CreditsAvailable,
 		CreditBalanceBefore: e.CreditBalanceBefore,
 		CreditBalanceAfter:  e.CreditBalanceAfter,
+		Currency:            lo.FromPtrOr(e.Currency, ""),
 		TransactionReason:   types.TransactionReason(e.TransactionReason),
 		Priority:            e.Priority,
 		EnvironmentID:       e.EnvironmentID,

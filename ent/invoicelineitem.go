@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/flexprice/flexprice/ent/invoice"
 	"github.com/flexprice/flexprice/ent/invoicelineitem"
+	"github.com/flexprice/flexprice/internal/types"
 	"github.com/shopspring/decimal"
 )
 
@@ -74,6 +75,8 @@ type InvoiceLineItem struct {
 	PeriodEnd *time.Time `json:"period_end,omitempty"`
 	// Metadata holds the value of the "metadata" field.
 	Metadata map[string]string `json:"metadata,omitempty"`
+	// CommitmentInfo holds the value of the "commitment_info" field.
+	CommitmentInfo *types.CommitmentInfo `json:"commitment_info,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the InvoiceLineItemQuery when eager-loading is set.
 	Edges        InvoiceLineItemEdges `json:"edges"`
@@ -118,7 +121,7 @@ func (*InvoiceLineItem) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case invoicelineitem.FieldPriceUnitAmount:
 			values[i] = &sql.NullScanner{S: new(decimal.Decimal)}
-		case invoicelineitem.FieldMetadata:
+		case invoicelineitem.FieldMetadata, invoicelineitem.FieldCommitmentInfo:
 			values[i] = new([]byte)
 		case invoicelineitem.FieldAmount, invoicelineitem.FieldQuantity:
 			values[i] = new(decimal.Decimal)
@@ -325,6 +328,14 @@ func (ili *InvoiceLineItem) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field metadata: %w", err)
 				}
 			}
+		case invoicelineitem.FieldCommitmentInfo:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field commitment_info", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &ili.CommitmentInfo); err != nil {
+					return fmt.Errorf("unmarshal field commitment_info: %w", err)
+				}
+			}
 		default:
 			ili.selectValues.Set(columns[i], values[i])
 		}
@@ -479,6 +490,9 @@ func (ili *InvoiceLineItem) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("metadata=")
 	builder.WriteString(fmt.Sprintf("%v", ili.Metadata))
+	builder.WriteString(", ")
+	builder.WriteString("commitment_info=")
+	builder.WriteString(fmt.Sprintf("%v", ili.CommitmentInfo))
 	builder.WriteByte(')')
 	return builder.String()
 }

@@ -201,6 +201,36 @@ func SubscriptionPhaseID(v string) predicate.SubscriptionLineItem {
 	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldSubscriptionPhaseID, v))
 }
 
+// CommitmentAmount applies equality check predicate on the "commitment_amount" field. It's identical to CommitmentAmountEQ.
+func CommitmentAmount(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentAmount, v))
+}
+
+// CommitmentQuantity applies equality check predicate on the "commitment_quantity" field. It's identical to CommitmentQuantityEQ.
+func CommitmentQuantity(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentQuantity, v))
+}
+
+// CommitmentType applies equality check predicate on the "commitment_type" field. It's identical to CommitmentTypeEQ.
+func CommitmentType(v string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentType, v))
+}
+
+// CommitmentOverageFactor applies equality check predicate on the "commitment_overage_factor" field. It's identical to CommitmentOverageFactorEQ.
+func CommitmentOverageFactor(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentOverageFactor, v))
+}
+
+// CommitmentTrueUpEnabled applies equality check predicate on the "commitment_true_up_enabled" field. It's identical to CommitmentTrueUpEnabledEQ.
+func CommitmentTrueUpEnabled(v bool) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentTrueUpEnabled, v))
+}
+
+// CommitmentWindowed applies equality check predicate on the "commitment_windowed" field. It's identical to CommitmentWindowedEQ.
+func CommitmentWindowed(v bool) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentWindowed, v))
+}
+
 // TenantIDEQ applies the EQ predicate on the "tenant_id" field.
 func TenantIDEQ(v string) predicate.SubscriptionLineItem {
 	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldTenantID, v))
@@ -1964,6 +1994,251 @@ func MetadataIsNil() predicate.SubscriptionLineItem {
 // MetadataNotNil applies the NotNil predicate on the "metadata" field.
 func MetadataNotNil() predicate.SubscriptionLineItem {
 	return predicate.SubscriptionLineItem(sql.FieldNotNull(FieldMetadata))
+}
+
+// CommitmentAmountEQ applies the EQ predicate on the "commitment_amount" field.
+func CommitmentAmountEQ(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentAmount, v))
+}
+
+// CommitmentAmountNEQ applies the NEQ predicate on the "commitment_amount" field.
+func CommitmentAmountNEQ(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNEQ(FieldCommitmentAmount, v))
+}
+
+// CommitmentAmountIn applies the In predicate on the "commitment_amount" field.
+func CommitmentAmountIn(vs ...decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldIn(FieldCommitmentAmount, vs...))
+}
+
+// CommitmentAmountNotIn applies the NotIn predicate on the "commitment_amount" field.
+func CommitmentAmountNotIn(vs ...decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNotIn(FieldCommitmentAmount, vs...))
+}
+
+// CommitmentAmountGT applies the GT predicate on the "commitment_amount" field.
+func CommitmentAmountGT(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldGT(FieldCommitmentAmount, v))
+}
+
+// CommitmentAmountGTE applies the GTE predicate on the "commitment_amount" field.
+func CommitmentAmountGTE(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldGTE(FieldCommitmentAmount, v))
+}
+
+// CommitmentAmountLT applies the LT predicate on the "commitment_amount" field.
+func CommitmentAmountLT(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldLT(FieldCommitmentAmount, v))
+}
+
+// CommitmentAmountLTE applies the LTE predicate on the "commitment_amount" field.
+func CommitmentAmountLTE(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldLTE(FieldCommitmentAmount, v))
+}
+
+// CommitmentAmountIsNil applies the IsNil predicate on the "commitment_amount" field.
+func CommitmentAmountIsNil() predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldIsNull(FieldCommitmentAmount))
+}
+
+// CommitmentAmountNotNil applies the NotNil predicate on the "commitment_amount" field.
+func CommitmentAmountNotNil() predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNotNull(FieldCommitmentAmount))
+}
+
+// CommitmentQuantityEQ applies the EQ predicate on the "commitment_quantity" field.
+func CommitmentQuantityEQ(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentQuantity, v))
+}
+
+// CommitmentQuantityNEQ applies the NEQ predicate on the "commitment_quantity" field.
+func CommitmentQuantityNEQ(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNEQ(FieldCommitmentQuantity, v))
+}
+
+// CommitmentQuantityIn applies the In predicate on the "commitment_quantity" field.
+func CommitmentQuantityIn(vs ...decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldIn(FieldCommitmentQuantity, vs...))
+}
+
+// CommitmentQuantityNotIn applies the NotIn predicate on the "commitment_quantity" field.
+func CommitmentQuantityNotIn(vs ...decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNotIn(FieldCommitmentQuantity, vs...))
+}
+
+// CommitmentQuantityGT applies the GT predicate on the "commitment_quantity" field.
+func CommitmentQuantityGT(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldGT(FieldCommitmentQuantity, v))
+}
+
+// CommitmentQuantityGTE applies the GTE predicate on the "commitment_quantity" field.
+func CommitmentQuantityGTE(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldGTE(FieldCommitmentQuantity, v))
+}
+
+// CommitmentQuantityLT applies the LT predicate on the "commitment_quantity" field.
+func CommitmentQuantityLT(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldLT(FieldCommitmentQuantity, v))
+}
+
+// CommitmentQuantityLTE applies the LTE predicate on the "commitment_quantity" field.
+func CommitmentQuantityLTE(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldLTE(FieldCommitmentQuantity, v))
+}
+
+// CommitmentQuantityIsNil applies the IsNil predicate on the "commitment_quantity" field.
+func CommitmentQuantityIsNil() predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldIsNull(FieldCommitmentQuantity))
+}
+
+// CommitmentQuantityNotNil applies the NotNil predicate on the "commitment_quantity" field.
+func CommitmentQuantityNotNil() predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNotNull(FieldCommitmentQuantity))
+}
+
+// CommitmentTypeEQ applies the EQ predicate on the "commitment_type" field.
+func CommitmentTypeEQ(v string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentType, v))
+}
+
+// CommitmentTypeNEQ applies the NEQ predicate on the "commitment_type" field.
+func CommitmentTypeNEQ(v string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNEQ(FieldCommitmentType, v))
+}
+
+// CommitmentTypeIn applies the In predicate on the "commitment_type" field.
+func CommitmentTypeIn(vs ...string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldIn(FieldCommitmentType, vs...))
+}
+
+// CommitmentTypeNotIn applies the NotIn predicate on the "commitment_type" field.
+func CommitmentTypeNotIn(vs ...string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNotIn(FieldCommitmentType, vs...))
+}
+
+// CommitmentTypeGT applies the GT predicate on the "commitment_type" field.
+func CommitmentTypeGT(v string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldGT(FieldCommitmentType, v))
+}
+
+// CommitmentTypeGTE applies the GTE predicate on the "commitment_type" field.
+func CommitmentTypeGTE(v string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldGTE(FieldCommitmentType, v))
+}
+
+// CommitmentTypeLT applies the LT predicate on the "commitment_type" field.
+func CommitmentTypeLT(v string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldLT(FieldCommitmentType, v))
+}
+
+// CommitmentTypeLTE applies the LTE predicate on the "commitment_type" field.
+func CommitmentTypeLTE(v string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldLTE(FieldCommitmentType, v))
+}
+
+// CommitmentTypeContains applies the Contains predicate on the "commitment_type" field.
+func CommitmentTypeContains(v string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldContains(FieldCommitmentType, v))
+}
+
+// CommitmentTypeHasPrefix applies the HasPrefix predicate on the "commitment_type" field.
+func CommitmentTypeHasPrefix(v string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldHasPrefix(FieldCommitmentType, v))
+}
+
+// CommitmentTypeHasSuffix applies the HasSuffix predicate on the "commitment_type" field.
+func CommitmentTypeHasSuffix(v string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldHasSuffix(FieldCommitmentType, v))
+}
+
+// CommitmentTypeIsNil applies the IsNil predicate on the "commitment_type" field.
+func CommitmentTypeIsNil() predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldIsNull(FieldCommitmentType))
+}
+
+// CommitmentTypeNotNil applies the NotNil predicate on the "commitment_type" field.
+func CommitmentTypeNotNil() predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNotNull(FieldCommitmentType))
+}
+
+// CommitmentTypeEqualFold applies the EqualFold predicate on the "commitment_type" field.
+func CommitmentTypeEqualFold(v string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEqualFold(FieldCommitmentType, v))
+}
+
+// CommitmentTypeContainsFold applies the ContainsFold predicate on the "commitment_type" field.
+func CommitmentTypeContainsFold(v string) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldContainsFold(FieldCommitmentType, v))
+}
+
+// CommitmentOverageFactorEQ applies the EQ predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorEQ(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentOverageFactor, v))
+}
+
+// CommitmentOverageFactorNEQ applies the NEQ predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorNEQ(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNEQ(FieldCommitmentOverageFactor, v))
+}
+
+// CommitmentOverageFactorIn applies the In predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorIn(vs ...decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldIn(FieldCommitmentOverageFactor, vs...))
+}
+
+// CommitmentOverageFactorNotIn applies the NotIn predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorNotIn(vs ...decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNotIn(FieldCommitmentOverageFactor, vs...))
+}
+
+// CommitmentOverageFactorGT applies the GT predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorGT(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldGT(FieldCommitmentOverageFactor, v))
+}
+
+// CommitmentOverageFactorGTE applies the GTE predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorGTE(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldGTE(FieldCommitmentOverageFactor, v))
+}
+
+// CommitmentOverageFactorLT applies the LT predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorLT(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldLT(FieldCommitmentOverageFactor, v))
+}
+
+// CommitmentOverageFactorLTE applies the LTE predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorLTE(v decimal.Decimal) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldLTE(FieldCommitmentOverageFactor, v))
+}
+
+// CommitmentOverageFactorIsNil applies the IsNil predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorIsNil() predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldIsNull(FieldCommitmentOverageFactor))
+}
+
+// CommitmentOverageFactorNotNil applies the NotNil predicate on the "commitment_overage_factor" field.
+func CommitmentOverageFactorNotNil() predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNotNull(FieldCommitmentOverageFactor))
+}
+
+// CommitmentTrueUpEnabledEQ applies the EQ predicate on the "commitment_true_up_enabled" field.
+func CommitmentTrueUpEnabledEQ(v bool) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentTrueUpEnabled, v))
+}
+
+// CommitmentTrueUpEnabledNEQ applies the NEQ predicate on the "commitment_true_up_enabled" field.
+func CommitmentTrueUpEnabledNEQ(v bool) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNEQ(FieldCommitmentTrueUpEnabled, v))
+}
+
+// CommitmentWindowedEQ applies the EQ predicate on the "commitment_windowed" field.
+func CommitmentWindowedEQ(v bool) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldEQ(FieldCommitmentWindowed, v))
+}
+
+// CommitmentWindowedNEQ applies the NEQ predicate on the "commitment_windowed" field.
+func CommitmentWindowedNEQ(v bool) predicate.SubscriptionLineItem {
+	return predicate.SubscriptionLineItem(sql.FieldNEQ(FieldCommitmentWindowed, v))
 }
 
 // HasSubscription applies the HasEdge predicate on the "subscription" edge.

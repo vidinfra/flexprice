@@ -45,7 +45,7 @@ type FeatureUsageTrackingService interface {
 	// Register message handler with the router
 	RegisterHandlerLazy(router *pubsubRouter.Router, cfg *config.Configuration)
 
-	// Get detailed usage analytics with filtering, grouping, and time-series data
+	// GetDetailedUsageAnalytics provides comprehensive usage analytics with filtering, grouping, and time-series data
 	GetDetailedUsageAnalytics(ctx context.Context, req *dto.GetUsageAnalyticsRequest) (*dto.GetUsageAnalyticsResponse, error)
 
 	// Get detailed usage analytics version 2 with filtering, grouping, and time-series data
@@ -1282,9 +1282,10 @@ func (s *featureUsageTrackingService) fetchSubscriptions(ctx context.Context, cu
 	return subscriptions, nil
 }
 
-// buildMaxBucketFeatures builds a map of max bucket features from the request parameters
-func (s *featureUsageTrackingService) buildMaxBucketFeatures(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, error) {
+// buildBucketFeatures builds a map of max bucket and sum bucket features from the request parameters
+func (s *featureUsageTrackingService) buildBucketFeatures(ctx context.Context, params *events.UsageAnalyticsParams) (map[string]*events.MaxBucketFeatureInfo, map[string]*events.SumBucketFeatureInfo, error) {
 	maxBucketFeatures := make(map[string]*events.MaxBucketFeatureInfo)
+	sumBucketFeatures := make(map[string]*events.SumBucketFeatureInfo)
 
 	// Check if FeatureIDs is empty and fetch all feature IDs from database if needed
 	var features []*feature.Feature
@@ -1305,8 +1306,8 @@ func (s *featureUsageTrackingService) buildMaxBucketFeatures(ctx context.Context
 				"tenant_id", params.TenantID,
 				"environment_id", params.EnvironmentID,
 			)
-			return nil, ierr.WithError(err).
-				WithHint("Failed to fetch features for max bucket analysis").
+			return nil, nil, ierr.WithError(err).
+				WithHint("Failed to fetch features for bucket analysis").
 				Mark(ierr.ErrDatabase)
 		}
 
@@ -1327,8 +1328,8 @@ func (s *featureUsageTrackingService) buildMaxBucketFeatures(ctx context.Context
 		featureFilter.FeatureIDs = params.FeatureIDs
 		features, err = s.FeatureRepo.List(ctx, featureFilter)
 		if err != nil {
-			return nil, ierr.WithError(err).
-				WithHint("Failed to fetch features for max bucket analysis").
+			return nil, nil, ierr.WithError(err).
+				WithHint("Failed to fetch features for bucket analysis").
 				Mark(ierr.ErrDatabase)
 		}
 	}
@@ -1352,8 +1353,8 @@ func (s *featureUsageTrackingService) buildMaxBucketFeatures(ctx context.Context
 		meterFilter.MeterIDs = meterIDs
 		meters, err := s.MeterRepo.List(ctx, meterFilter)
 		if err != nil {
-			return nil, ierr.WithError(err).
-				WithHint("Failed to fetch meters for max bucket analysis").
+			return nil, nil, ierr.WithError(err).
+				WithHint("Failed to fetch meters for bucket analysis").
 				Mark(ierr.ErrDatabase)
 		}
 
@@ -1363,35 +1364,45 @@ func (s *featureUsageTrackingService) buildMaxBucketFeatures(ctx context.Context
 			meterMap[m.ID] = m
 		}
 
-		// Check features for bucketed max meters
+		// Check features for bucketed max/sum meters
 		for _, f := range features {
 			if meterID := featureToMeterMap[f.ID]; meterID != "" {
-				if m, exists := meterMap[meterID]; exists && m.IsBucketedMaxMeter() {
-					maxBucketFeatures[f.ID] = &events.MaxBucketFeatureInfo{
-						FeatureID:    f.ID,
-						MeterID:      meterID,
-						BucketSize:   types.WindowSize(m.Aggregation.BucketSize),
-						EventName:    m.EventName,
-						PropertyName: m.Aggregation.Field,
+				if m, exists := meterMap[meterID]; exists {
+					if m.IsBucketedMaxMeter() {
+						maxBucketFeatures[f.ID] = &events.MaxBucketFeatureInfo{
+							FeatureID:    f.ID,
+							MeterID:      meterID,
+							BucketSize:   types.WindowSize(m.Aggregation.BucketSize),
+							EventName:    m.EventName,
+							PropertyName: m.Aggregation.Field,
+						}
+					} else if m.IsBucketedSumMeter() {
+						sumBucketFeatures[f.ID] = &events.SumBucketFeatureInfo{
+							FeatureID:    f.ID,
+							MeterID:      meterID,
+							BucketSize:   types.WindowSize(m.Aggregation.BucketSize),
+							EventName:    m.EventName,
+							PropertyName: m.Aggregation.Field,
+						}
 					}
 				}
 			}
 		}
 	}
 
-	return maxBucketFeatures, nil
+	return maxBucketFeatures, sumBucketFeatures, nil
 }
 
 // fetchAnalytics fetches analytics data from repository
 func (s *featureUsageTrackingService) fetchAnalytics(ctx context.Context, params *events.UsageAnalyticsParams) ([]*events.DetailedUsageAnalytic, error) {
-	// Build max bucket features map (this will handle fetching features if needed)
-	maxBucketFeatures, err := s.buildMaxBucketFeatures(ctx, params)
+	// Build bucket features map (this will handle fetching features if needed)
+	maxBucketFeatures, sumBucketFeatures, err := s.buildBucketFeatures(ctx, params)
 	if err != nil {
 		return nil, err
 	}
 
-	// Fetch analytics with max bucket features
-	analytics, err := s.featureUsageRepo.GetDetailedUsageAnalytics(ctx, params, maxBucketFeatures)
+	// Fetch analytics with bucket features
+	analytics, err := s.featureUsageRepo.GetDetailedUsageAnalytics(ctx, params, maxBucketFeatures, sumBucketFeatures)
 	if err != nil {
 		s.Logger.Errorw("failed to get detailed usage analytics",
 			"error", err,
@@ -1636,9 +1647,11 @@ func (s *featureUsageTrackingService) calculateCosts(ctx context.Context, data *
 				if price, hasPricing := data.Prices[item.PriceID]; hasPricing {
 					// Calculate cost based on meter type
 					if meter.IsBucketedMaxMeter() {
-						s.calculateBucketedCost(ctx, priceService, item, price)
+						s.calculateBucketedCost(ctx, priceService, item, price, data)
+					} else if meter.IsBucketedSumMeter() {
+						s.calculateSumWithBucketCost(ctx, priceService, item, price, meter, data)
 					} else {
-						s.calculateRegularCost(ctx, priceService, item, meter, price)
+						s.calculateRegularCost(ctx, priceService, item, meter, price, data)
 					}
 				}
 			}
@@ -1649,7 +1662,7 @@ func (s *featureUsageTrackingService) calculateCosts(ctx context.Context, data *
 }
 
 // calculateBucketedCost calculates cost for bucketed max meters
-func (s *featureUsageTrackingService) calculateBucketedCost(ctx context.Context, priceService PriceService, item *events.DetailedUsageAnalytic, price *price.Price) {
+func (s *featureUsageTrackingService) calculateBucketedCost(ctx context.Context, priceService PriceService, item *events.DetailedUsageAnalytic, price *price.Price, data *AnalyticsData) {
 	var cost decimal.Decimal
 
 	if len(item.Points) > 0 {
@@ -1658,9 +1671,23 @@ func (s *featureUsageTrackingService) calculateBucketedCost(ctx context.Context,
 		for i, point := range item.Points {
 			bucketedValues[i] = s.getCorrectUsageValueForPoint(point, types.AggregationMax)
 		}
-		cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
 
-		// Calculate cost for each point
+		// Check for line item commitment
+		if item.SubLineItemID != "" {
+			// Find the line item
+			lineItem := data.SubscriptionLineItems[item.SubLineItemID]
+
+			if lineItem != nil && lineItem.HasCommitment() {
+				cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, bucketedValues, decimal.Zero)
+			} else {
+				cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+			}
+		} else {
+			cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+		}
+
+		// Calculate cost for each point (standard calculation, points don't reflect commitment/overage breakdown easily)
+		// Note: Points cost sum might not equal TotalCost when commitment is involved
 		for i := range item.Points {
 			pointCost := priceService.CalculateCost(ctx, price, s.getCorrectUsageValueForPoint(item.Points[i], types.AggregationMax))
 			item.Points[i].Cost = pointCost
@@ -1669,7 +1696,77 @@ func (s *featureUsageTrackingService) calculateBucketedCost(ctx context.Context,
 		// Treat total usage as single bucket
 		if item.MaxUsage.IsPositive() {
 			bucketedValues := []decimal.Decimal{item.MaxUsage}
+
+			// Check for line item commitment
 			cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+			if item.SubLineItemID != "" {
+				// Find the line item
+				lineItem := data.SubscriptionLineItems[item.SubLineItemID]
+
+				if lineItem != nil && lineItem.HasCommitment() {
+					cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, bucketedValues, cost)
+				}
+			}
+		}
+	}
+
+	item.TotalCost = cost
+	item.Currency = price.Currency
+}
+
+// calculateSumWithBucketCost calculates cost for sum with bucket meters
+// Each bucket is priced independently, similar to bucketed max
+func (s *featureUsageTrackingService) calculateSumWithBucketCost(ctx context.Context, priceService PriceService, item *events.DetailedUsageAnalytic, price *price.Price, meter *meter.Meter, data *AnalyticsData) {
+	var cost decimal.Decimal
+
+	if len(item.Points) > 0 {
+		// Use points as buckets (each point represents a bucket's sum)
+		bucketedValues := make([]decimal.Decimal, len(item.Points))
+		for i, point := range item.Points {
+			bucketedValues[i] = s.getCorrectUsageValueForPoint(point, types.AggregationSum)
+		}
+
+		// Check for line item commitment
+		if item.SubLineItemID != "" {
+			// Find the line item
+
+			lineItem := data.SubscriptionLineItems[item.SubLineItemID]
+
+			if lineItem != nil && lineItem.HasCommitment() {
+				cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, bucketedValues, decimal.Zero)
+			} else {
+				cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+			}
+		} else {
+			cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+		}
+
+		// Calculate cost for each point (bucket)
+		for i := range item.Points {
+			pointUsage := s.getCorrectUsageValueForPoint(item.Points[i], types.AggregationSum)
+			pointCost := priceService.CalculateCost(ctx, price, pointUsage)
+			item.Points[i].Cost = pointCost
+		}
+	} else {
+		// Treat total usage as single bucket if no points available
+		totalUsage := s.getCorrectUsageValue(item, types.AggregationSum)
+		if totalUsage.IsPositive() {
+			bucketedValues := []decimal.Decimal{totalUsage}
+
+			// Check for line item commitment
+			if item.SubLineItemID != "" {
+				// Find the line item
+
+				lineItem := data.SubscriptionLineItems[item.SubLineItemID]
+
+				if lineItem != nil && lineItem.HasCommitment() {
+					cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, bucketedValues, decimal.Zero)
+				} else {
+					cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+				}
+			} else {
+				cost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+			}
 		}
 	}
 
@@ -1678,12 +1775,53 @@ func (s *featureUsageTrackingService) calculateBucketedCost(ctx context.Context,
 }
 
 // calculateRegularCost calculates cost for regular meters
-func (s *featureUsageTrackingService) calculateRegularCost(ctx context.Context, priceService PriceService, item *events.DetailedUsageAnalytic, meter *meter.Meter, price *price.Price) {
+func (s *featureUsageTrackingService) calculateRegularCost(ctx context.Context, priceService PriceService, item *events.DetailedUsageAnalytic, meter *meter.Meter, price *price.Price, data *AnalyticsData) {
 	// Set correct usage value
 	item.TotalUsage = s.getCorrectUsageValue(item, meter.Aggregation.Type)
 
 	// Calculate total cost
 	cost := priceService.CalculateCost(ctx, price, item.TotalUsage)
+
+	// Check for line item commitment
+	if item.SubLineItemID != "" {
+		// Find the line item
+
+		lineItem := data.SubscriptionLineItems[item.SubLineItemID]
+
+		if lineItem != nil && lineItem.HasCommitment() {
+
+			// Regular meters don't support window commitment in this context (usually)
+			// effectively treats it as a single window if IsWindowCommitment is true but no buckets are defined
+			// But for regular cost, we are dealing with total usage.
+
+			if lineItem.CommitmentWindowed {
+				// This shouldn't typically happen for regular meters unless we're aggregating time series points as windows
+				// z
+				// If we have points, we COULD treat them as windows, but that depends on business logic.
+				// For now, let's treat it as standard commitment application on the total amount
+
+				// However, if we want to support window commitment for regular meters (e.g. daily commitment),
+				// we would need to check item.Points and use them as buckets.
+				// Let's support it if points exist
+				if len(item.Points) > 0 {
+					bucketedValues := make([]decimal.Decimal, len(item.Points))
+					for i, point := range item.Points {
+						bucketedValues[i] = s.getCorrectUsageValueForPoint(point, meter.Aggregation.Type)
+					}
+
+					cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, bucketedValues, decimal.Zero)
+				} else {
+					// Fallback to standard commitment if no points (single window)
+					// We pass empty bucketedValues to hint that it's not a bucketed calculation unless default cost is zero
+					cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, nil, cost)
+				}
+			} else {
+				// Non-window commitment
+				cost = s.applyLineItemCommitment(ctx, priceService, item, lineItem, price, nil, cost)
+			}
+		}
+	}
+
 	item.TotalCost = cost
 	item.Currency = price.Currency
 
@@ -1719,6 +1857,21 @@ func (s *featureUsageTrackingService) aggregateAnalyticsByGrouping(analytics []*
 			existing.EventCount += item.EventCount
 			existing.TotalCost = existing.TotalCost.Add(item.TotalCost)
 
+			// Merge sources using a set to avoid duplicates
+			if len(item.Sources) > 0 {
+				sourceSet := make(map[string]struct{})
+				for _, s := range existing.Sources {
+					sourceSet[s] = struct{}{}
+				}
+				for _, s := range item.Sources {
+					sourceSet[s] = struct{}{}
+				}
+				existing.Sources = make([]string, 0, len(sourceSet))
+				for s := range sourceSet {
+					existing.Sources = append(existing.Sources, s)
+				}
+			}
+
 			// For time series points, we need to merge them by timestamp
 			existing.Points = s.mergeTimeSeriesPoints(existing.Points, item.Points)
 		} else {
@@ -1732,6 +1885,7 @@ func (s *featureUsageTrackingService) aggregateAnalyticsByGrouping(analytics []*
 				FeatureName:      item.FeatureName,
 				EventName:        item.EventName,
 				Source:           item.Source,
+				Sources:          make([]string, len(item.Sources)),
 				Unit:             item.Unit,
 				UnitPlural:       item.UnitPlural,
 				AggregationType:  item.AggregationType,
@@ -1743,6 +1897,7 @@ func (s *featureUsageTrackingService) aggregateAnalyticsByGrouping(analytics []*
 				TotalCost:        item.TotalCost,
 				Currency:         item.Currency,
 				Properties:       make(map[string]string),
+				CommitmentInfo:   item.CommitmentInfo,
 				Points:           make([]events.UsageAnalyticPoint, len(item.Points)),
 			}
 
@@ -1753,6 +1908,9 @@ func (s *featureUsageTrackingService) aggregateAnalyticsByGrouping(analytics []*
 
 			// Copy points
 			copy(aggregated.Points, item.Points)
+
+			// Copy sources
+			copy(aggregated.Sources, item.Sources)
 
 			// Set grouping-specific fields
 			s.setGroupingFields(aggregated, item, groupBy)
@@ -2096,8 +2254,15 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			Currency:        analytic.Currency,
 			EventCount:      analytic.EventCount,
 			Properties:      analytic.Properties,
+			CommitmentInfo:  analytic.CommitmentInfo,
 			Points:          make([]dto.UsageAnalyticPoint, 0, len(analytic.Points)),
 		}
+
+		// Only include Sources array when 'sources' is in expand param
+		if expandMap["source"] {
+			item.Sources = analytic.Sources
+		}
+
 		// Can expand plan and addon
 		if analytic.PriceID != "" {
 			if price, ok := data.PriceResponses[analytic.PriceID]; ok {
@@ -2127,6 +2292,25 @@ func (s *featureUsageTrackingService) ToGetUsageAnalyticsResponseDTO(ctx context
 			if meter, ok := data.Meters[analytic.MeterID]; ok {
 				item.Meter = meter
 			}
+		}
+
+		// Set window size: always use meter's bucket size if bucketed, otherwise use request window size
+		if analytic.MeterID != "" {
+			if meter, ok := data.Meters[analytic.MeterID]; ok {
+				if meter.HasBucketSize() {
+					// For bucketed meters, always use the meter's bucket size
+					item.WindowSize = meter.Aggregation.BucketSize
+				} else {
+					// For non-bucketed meters, use the request window size
+					item.WindowSize = req.WindowSize
+				}
+			} else {
+				// Meter not found in data, fall back to request window size
+				item.WindowSize = req.WindowSize
+			}
+		} else {
+			// No meter ID, use request window size
+			item.WindowSize = req.WindowSize
 		}
 
 		if expandMap["feature"] && analytic.FeatureID != "" {
@@ -2435,4 +2619,52 @@ func (s *featureUsageTrackingService) GetHuggingFaceBillingData(ctx context.Cont
 	return &dto.GetHuggingFaceBillingDataResponse{
 		Data: responseData,
 	}, nil
+}
+
+// applyLineItemCommitment applies commitment logic to the calculated cost
+func (s *featureUsageTrackingService) applyLineItemCommitment(
+	ctx context.Context,
+	priceService PriceService,
+	item *events.DetailedUsageAnalytic,
+	lineItem *subscription.SubscriptionLineItem,
+	price *price.Price,
+	bucketedValues []decimal.Decimal,
+	defaultCost decimal.Decimal,
+) decimal.Decimal {
+	commitmentCalc := newCommitmentCalculator(s.Logger, priceService)
+	var cost decimal.Decimal
+	var commitmentInfo *types.CommitmentInfo
+	var err error
+
+	if lineItem.CommitmentWindowed {
+		cost, commitmentInfo, err = commitmentCalc.applyWindowCommitmentToLineItem(
+			ctx, lineItem, bucketedValues, price)
+		if err == nil {
+			item.CommitmentInfo = commitmentInfo
+			return cost
+		}
+		s.Logger.Warnw("failed to apply window commitment", "error", err, "line_item_id", lineItem.ID)
+		if defaultCost.IsZero() && len(bucketedValues) > 0 {
+			// If default cost wasn't provided, calculate it
+			return priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+		}
+		return defaultCost
+	}
+
+	// Non-window commitment
+	rawCost := defaultCost
+	if rawCost.IsZero() && len(bucketedValues) > 0 {
+		rawCost = priceService.CalculateBucketedCost(ctx, price, bucketedValues)
+	}
+
+	cost, commitmentInfo, err = commitmentCalc.applyCommitmentToLineItem(
+		ctx, lineItem, rawCost, price)
+
+	if err == nil {
+		item.CommitmentInfo = commitmentInfo
+		return cost
+	}
+
+	s.Logger.Warnw("failed to apply commitment", "error", err, "line_item_id", lineItem.ID)
+	return rawCost
 }
