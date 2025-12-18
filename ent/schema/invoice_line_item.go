@@ -64,7 +64,8 @@ func (InvoiceLineItem) Fields() []ent.Field {
 			}).
 			Optional().
 			Nillable().
-			Immutable(),
+			Immutable().
+			GoType(types.InvoiceLineItemEntityType("")),
 		field.String("plan_display_name").
 			Optional().
 			Nillable().
@@ -82,7 +83,8 @@ func (InvoiceLineItem) Fields() []ent.Field {
 			}).
 			Optional().
 			Nillable().
-			Immutable(),
+			Immutable().
+			GoType(types.PriceType("")),
 		field.String("meter_id").
 			SchemaType(map[string]string{
 				"postgres": "varchar(50)",

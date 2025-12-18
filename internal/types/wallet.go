@@ -102,6 +102,9 @@ const (
 )
 
 func (t WalletTxReferenceType) Validate() error {
+	if t == "" {
+		return nil
+	}
 	allowedValues := []string{
 		string(WalletTxReferenceTypePayment),
 		string(WalletTxReferenceTypeExternal),
