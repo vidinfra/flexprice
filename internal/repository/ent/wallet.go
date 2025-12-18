@@ -74,7 +74,7 @@ func (r *walletRepository) CreateWallet(ctx context.Context, w *walletdomain.Wal
 		SetUpdatedAt(w.UpdatedAt).
 		SetEnvironmentID(w.EnvironmentID).
 		SetAlertEnabled(w.AlertEnabled).
-		SetAlertConfig(w.AlertConfig).
+		SetNillableAlertConfig(w.AlertConfig).
 		SetAlertState(types.AlertState(w.AlertState)).
 		Save(ctx)
 
@@ -896,7 +896,7 @@ func (r *walletRepository) UpdateWallet(ctx context.Context, id string, w *walle
 		update.SetConfig(w.Config)
 	}
 	if w.AlertConfig != nil {
-		update.SetAlertConfig(w.AlertConfig)
+		update.SetNillableAlertConfig(w.AlertConfig)
 	}
 	if w.AlertState != "" {
 		update.SetAlertState(types.AlertState(w.AlertState))
