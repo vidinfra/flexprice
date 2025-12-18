@@ -60,11 +60,11 @@ func (r *walletRepository) CreateWallet(ctx context.Context, w *walletdomain.Wal
 		SetMetadata(w.Metadata).
 		SetBalance(w.Balance).
 		SetCreditBalance(w.CreditBalance).
-		SetWalletStatus(string(w.WalletStatus)).
-		SetAutoTopupTrigger(string(w.AutoTopupTrigger)).
+		SetWalletStatus(w.WalletStatus).
+		SetAutoTopupTrigger(w.AutoTopupTrigger).
 		SetAutoTopupMinBalance(w.AutoTopupMinBalance).
 		SetAutoTopupAmount(w.AutoTopupAmount).
-		SetWalletType(string(w.WalletType)).
+		SetWalletType(w.WalletType).
 		SetConfig(w.Config).
 		SetConversionRate(w.ConversionRate).
 		SetStatus(string(w.Status)).
@@ -74,8 +74,8 @@ func (r *walletRepository) CreateWallet(ctx context.Context, w *walletdomain.Wal
 		SetUpdatedAt(w.UpdatedAt).
 		SetEnvironmentID(w.EnvironmentID).
 		SetAlertEnabled(w.AlertEnabled).
-		SetAlertConfig(w.AlertConfig).
-		SetAlertState(w.AlertState).
+		SetNillableAlertConfig(w.AlertConfig).
+		SetAlertState(types.AlertState(w.AlertState)).
 		Save(ctx)
 
 	if err != nil {
@@ -157,7 +157,7 @@ func (r *walletRepository) GetWalletsByCustomerID(ctx context.Context, customerI
 			wallet.CustomerID(customerID),
 			wallet.TenantID(types.GetTenantID(ctx)),
 			wallet.StatusEQ(string(types.StatusPublished)),
-			wallet.WalletStatusEQ(string(types.WalletStatusActive)),
+			wallet.WalletStatusEQ(types.WalletStatusActive),
 			wallet.EnvironmentID(types.GetEnvironmentID(ctx)),
 		).
 		All(ctx)
@@ -197,7 +197,7 @@ func (r *walletRepository) UpdateWalletStatus(ctx context.Context, id string, st
 			wallet.StatusEQ(string(types.StatusPublished)),
 			wallet.EnvironmentID(types.GetEnvironmentID(ctx)),
 		).
-		SetWalletStatus(string(status)).
+		SetWalletStatus(status).
 		SetUpdatedBy(types.GetUserID(ctx)).
 		SetUpdatedAt(time.Now().UTC()).
 		Save(ctx)
@@ -253,7 +253,7 @@ func (r *walletRepository) FindEligibleCredits(ctx context.Context, walletID str
 			Where(
 				wallettransaction.WalletID(walletID),
 				wallettransaction.EnvironmentID(types.GetEnvironmentID(ctx)),
-				wallettransaction.Type(string(types.TransactionTypeCredit)),
+				wallettransaction.Type(types.TransactionTypeCredit),
 				wallettransaction.CreditsAvailableGT(decimal.Zero),
 				wallettransaction.Or(
 					wallettransaction.ExpiryDateIsNil(),
@@ -373,16 +373,16 @@ func (r *walletRepository) CreateTransaction(ctx context.Context, tx *walletdoma
 		SetTenantID(tx.TenantID).
 		SetWalletID(tx.WalletID).
 		SetNillableCustomerID(&tx.CustomerID).
-		SetType(string(tx.Type)).
+		SetType(tx.Type).
 		SetAmount(tx.Amount).
 		SetCreditAmount(tx.CreditAmount).
-		SetReferenceType(string(tx.ReferenceType)).
+		SetReferenceType(tx.ReferenceType).
 		SetReferenceID(tx.ReferenceID).
 		SetDescription(tx.Description).
 		SetMetadata(tx.Metadata).
 		SetStatus(string(tx.Status)).
-		SetTransactionStatus(string(tx.TxStatus)).
-		SetTransactionReason(string(tx.TransactionReason)).
+		SetTransactionStatus(tx.TxStatus).
+		SetTransactionReason(tx.TransactionReason).
 		SetCreditsAvailable(tx.CreditsAvailable).
 		SetNillableExpiryDate(tx.ExpiryDate).
 		SetCreditBalanceBefore(tx.CreditBalanceBefore).
@@ -639,7 +639,7 @@ func (r *walletRepository) UpdateTransactionStatus(ctx context.Context, id strin
 			wallettransaction.StatusEQ(string(types.StatusPublished)),
 			wallettransaction.EnvironmentID(types.GetEnvironmentID(ctx)),
 		).
-		SetTransactionStatus(string(status)).
+		SetTransactionStatus(status).
 		SetUpdatedBy(types.GetUserID(ctx)).
 		SetUpdatedAt(time.Now().UTC()).
 		Save(ctx)
@@ -683,7 +683,7 @@ func (r *walletRepository) UpdateTransaction(ctx context.Context, tx *walletdoma
 			wallettransaction.StatusEQ(string(types.StatusPublished)),
 			wallettransaction.EnvironmentID(types.GetEnvironmentID(ctx)),
 		).
-		SetTransactionStatus(string(tx.TxStatus)).
+		SetTransactionStatus(tx.TxStatus).
 		SetCreditBalanceBefore(tx.CreditBalanceBefore).
 		SetCreditBalanceAfter(tx.CreditBalanceAfter).
 		SetCreditsAvailable(tx.CreditsAvailable).
@@ -780,16 +780,16 @@ func (o WalletTransactionQueryOptions) applyEntityQueryOptions(_ context.Context
 	}
 
 	if f.Type != nil {
-		query = query.Where(wallettransaction.Type(string(*f.Type)))
+		query = query.Where(wallettransaction.Type(*f.Type))
 	}
 
 	if f.TransactionStatus != nil {
-		query = query.Where(wallettransaction.TransactionStatus(string(*f.TransactionStatus)))
+		query = query.Where(wallettransaction.TransactionStatus(*f.TransactionStatus))
 	}
 
 	if f.ReferenceType != nil && f.ReferenceID != nil {
 		query = query.Where(
-			wallettransaction.ReferenceType(*f.ReferenceType),
+			wallettransaction.ReferenceType(types.WalletTxReferenceType(*f.ReferenceType)),
 			wallettransaction.ReferenceID(*f.ReferenceID),
 		)
 	}
@@ -817,7 +817,7 @@ func (o WalletTransactionQueryOptions) applyEntityQueryOptions(_ context.Context
 	}
 
 	if f.TransactionReason != nil {
-		query = query.Where(wallettransaction.TransactionReason(string(*f.TransactionReason)))
+		query = query.Where(wallettransaction.TransactionReason(types.TransactionReason(*f.TransactionReason)))
 	}
 
 	if f.Priority != nil {
@@ -881,12 +881,12 @@ func (r *walletRepository) UpdateWallet(ctx context.Context, id string, w *walle
 	if w.AutoTopupTrigger != "" {
 		if w.AutoTopupTrigger == types.AutoTopupTriggerDisabled {
 			// When disabling auto top-up, set all related fields to NULL
-			update.SetAutoTopupTrigger(string(types.AutoTopupTriggerDisabled))
+			update.SetAutoTopupTrigger(types.AutoTopupTriggerDisabled)
 			update.ClearAutoTopupMinBalance()
 			update.ClearAutoTopupAmount()
 		} else {
 			// When enabling auto top-up, set all required fields
-			update.SetAutoTopupTrigger(string(w.AutoTopupTrigger))
+			update.SetAutoTopupTrigger(w.AutoTopupTrigger)
 			update.SetAutoTopupMinBalance(w.AutoTopupMinBalance)
 			update.SetAutoTopupAmount(w.AutoTopupAmount)
 		}
@@ -896,10 +896,10 @@ func (r *walletRepository) UpdateWallet(ctx context.Context, id string, w *walle
 		update.SetConfig(w.Config)
 	}
 	if w.AlertConfig != nil {
-		update.SetAlertConfig(w.AlertConfig)
+		update.SetNillableAlertConfig(w.AlertConfig)
 	}
 	if w.AlertState != "" {
-		update.SetAlertState(w.AlertState)
+		update.SetAlertState(types.AlertState(w.AlertState))
 	}
 	update.SetAlertEnabled(w.AlertEnabled)
 	update.SetUpdatedAt(time.Now().UTC())
@@ -975,7 +975,7 @@ func (r *walletRepository) GetWalletsByFilter(ctx context.Context, filter *types
 
 	// Apply status filter
 	if filter.Status != nil {
-		query = query.Where(wallet.WalletStatusEQ(string(*filter.Status)))
+		query = query.Where(wallet.WalletStatusEQ(*filter.Status))
 	}
 
 	// Apply alert enabled filter

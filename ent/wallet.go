@@ -49,25 +49,25 @@ type Wallet struct {
 	// CreditBalance holds the value of the "credit_balance" field.
 	CreditBalance decimal.Decimal `json:"credit_balance,omitempty"`
 	// WalletStatus holds the value of the "wallet_status" field.
-	WalletStatus string `json:"wallet_status,omitempty"`
+	WalletStatus types.WalletStatus `json:"wallet_status,omitempty"`
 	// AutoTopupTrigger holds the value of the "auto_topup_trigger" field.
-	AutoTopupTrigger *string `json:"auto_topup_trigger,omitempty"`
+	AutoTopupTrigger *types.AutoTopupTrigger `json:"auto_topup_trigger,omitempty"`
 	// AutoTopupMinBalance holds the value of the "auto_topup_min_balance" field.
 	AutoTopupMinBalance *decimal.Decimal `json:"auto_topup_min_balance,omitempty"`
 	// AutoTopupAmount holds the value of the "auto_topup_amount" field.
 	AutoTopupAmount *decimal.Decimal `json:"auto_topup_amount,omitempty"`
 	// WalletType holds the value of the "wallet_type" field.
-	WalletType string `json:"wallet_type,omitempty"`
+	WalletType types.WalletType `json:"wallet_type,omitempty"`
 	// ConversionRate holds the value of the "conversion_rate" field.
 	ConversionRate decimal.Decimal `json:"conversion_rate,omitempty"`
 	// Config holds the value of the "config" field.
 	Config types.WalletConfig `json:"config,omitempty"`
 	// AlertConfig holds the value of the "alert_config" field.
-	AlertConfig *types.AlertConfig `json:"alert_config,omitempty"`
+	AlertConfig types.AlertConfig `json:"alert_config,omitempty"`
 	// AlertEnabled holds the value of the "alert_enabled" field.
 	AlertEnabled bool `json:"alert_enabled,omitempty"`
 	// AlertState holds the value of the "alert_state" field.
-	AlertState   string `json:"alert_state,omitempty"`
+	AlertState   types.AlertState `json:"alert_state,omitempty"`
 	selectValues sql.SelectValues
 }
 
@@ -199,14 +199,14 @@ func (w *Wallet) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field wallet_status", values[i])
 			} else if value.Valid {
-				w.WalletStatus = value.String
+				w.WalletStatus = types.WalletStatus(value.String)
 			}
 		case wallet.FieldAutoTopupTrigger:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field auto_topup_trigger", values[i])
 			} else if value.Valid {
-				w.AutoTopupTrigger = new(string)
-				*w.AutoTopupTrigger = value.String
+				w.AutoTopupTrigger = new(types.AutoTopupTrigger)
+				*w.AutoTopupTrigger = types.AutoTopupTrigger(value.String)
 			}
 		case wallet.FieldAutoTopupMinBalance:
 			if value, ok := values[i].(*sql.NullScanner); !ok {
@@ -226,7 +226,7 @@ func (w *Wallet) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field wallet_type", values[i])
 			} else if value.Valid {
-				w.WalletType = value.String
+				w.WalletType = types.WalletType(value.String)
 			}
 		case wallet.FieldConversionRate:
 			if value, ok := values[i].(*decimal.Decimal); !ok {
@@ -260,7 +260,7 @@ func (w *Wallet) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field alert_state", values[i])
 			} else if value.Valid {
-				w.AlertState = value.String
+				w.AlertState = types.AlertState(value.String)
 			}
 		default:
 			w.selectValues.Set(columns[i], values[i])
@@ -341,11 +341,11 @@ func (w *Wallet) String() string {
 	builder.WriteString(fmt.Sprintf("%v", w.CreditBalance))
 	builder.WriteString(", ")
 	builder.WriteString("wallet_status=")
-	builder.WriteString(w.WalletStatus)
+	builder.WriteString(fmt.Sprintf("%v", w.WalletStatus))
 	builder.WriteString(", ")
 	if v := w.AutoTopupTrigger; v != nil {
 		builder.WriteString("auto_topup_trigger=")
-		builder.WriteString(*v)
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
 	if v := w.AutoTopupMinBalance; v != nil {
@@ -359,7 +359,7 @@ func (w *Wallet) String() string {
 	}
 	builder.WriteString(", ")
 	builder.WriteString("wallet_type=")
-	builder.WriteString(w.WalletType)
+	builder.WriteString(fmt.Sprintf("%v", w.WalletType))
 	builder.WriteString(", ")
 	builder.WriteString("conversion_rate=")
 	builder.WriteString(fmt.Sprintf("%v", w.ConversionRate))
@@ -374,7 +374,7 @@ func (w *Wallet) String() string {
 	builder.WriteString(fmt.Sprintf("%v", w.AlertEnabled))
 	builder.WriteString(", ")
 	builder.WriteString("alert_state=")
-	builder.WriteString(w.AlertState)
+	builder.WriteString(fmt.Sprintf("%v", w.AlertState))
 	builder.WriteByte(')')
 	return builder.String()
 }

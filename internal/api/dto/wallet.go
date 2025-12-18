@@ -285,6 +285,10 @@ func FromWallet(w *wallet.Wallet) *WalletResponse {
 	if w == nil {
 		return nil
 	}
+	alertConfig := w.AlertConfig
+	if w.AlertConfig == nil || w.AlertConfig.Threshold == nil {
+		alertConfig = nil
+	}
 	return &WalletResponse{
 		ID:                  w.ID,
 		CustomerID:          w.CustomerID,
@@ -302,7 +306,7 @@ func FromWallet(w *wallet.Wallet) *WalletResponse {
 		Config:              w.Config,
 		ConversionRate:      w.ConversionRate,
 		AlertEnabled:        w.AlertEnabled,
-		AlertConfig:         w.AlertConfig,
+		AlertConfig:         alertConfig,
 		AlertState:          w.AlertState,
 		CreatedAt:           w.CreatedAt,
 		UpdatedAt:           w.UpdatedAt,

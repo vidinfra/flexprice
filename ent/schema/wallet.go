@@ -71,14 +71,16 @@ func (Wallet) Fields() []ent.Field {
 			SchemaType(map[string]string{
 				"postgres": "varchar(50)",
 			}).
-			Default(string(types.WalletStatusActive)),
+			Default(string(types.WalletStatusActive)).
+			GoType(types.WalletStatus("")),
 		field.String("auto_topup_trigger").
 			SchemaType(map[string]string{
 				"postgres": "varchar(50)",
 			}).
 			Optional().
 			Nillable().
-			Default(string(types.AutoTopupTriggerDisabled)),
+			Default(string(types.AutoTopupTriggerDisabled)).
+			GoType(types.AutoTopupTrigger("")),
 		field.Other("auto_topup_min_balance", decimal.Decimal{}).
 			SchemaType(map[string]string{
 				"postgres": "numeric(20,9)",
@@ -96,7 +98,8 @@ func (Wallet) Fields() []ent.Field {
 				"postgres": "varchar(50)",
 			}).
 			Immutable().
-			Default(string(types.WalletTypePrePaid)),
+			Default(string(types.WalletTypePrePaid)).
+			GoType(types.WalletType("")),
 		field.Other("conversion_rate", decimal.Decimal{}).
 			SchemaType(map[string]string{
 				"postgres": "numeric(10,5)",
@@ -107,12 +110,8 @@ func (Wallet) Fields() []ent.Field {
 			),
 		field.JSON("config", types.WalletConfig{}).
 			Optional(),
-		field.JSON("alert_config", &types.AlertConfig{}).
-			SchemaType(map[string]string{
-				"postgres": "jsonb",
-			}).
+		field.JSON("alert_config", types.AlertConfig{}).
 			Optional(),
-
 		field.Bool("alert_enabled").
 			Optional().
 			Default(true),
@@ -121,7 +120,8 @@ func (Wallet) Fields() []ent.Field {
 				"postgres": "varchar(50)",
 			}).
 			Optional().
-			Default(string(types.AlertStateOk)),
+			Default(string(types.AlertStateOk)).
+			GoType(types.AlertState("")),
 	}
 }
 

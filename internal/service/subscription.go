@@ -1519,6 +1519,11 @@ func (s *subscriptionService) ListSubscriptions(ctx context.Context, filter *typ
 		filter.QueryFilter = types.NewDefaultQueryFilter()
 	}
 
+	// Validate expand fields
+	if err := filter.GetExpand().Validate(types.SubscriptionExpandConfig); err != nil {
+		return nil, err
+	}
+
 	// Resolve external customer ID to internal customer ID if provided
 	if filter.ExternalCustomerID != "" {
 		s.Logger.Debugw("resolving external customer ID",
@@ -1632,10 +1637,6 @@ func (s *subscriptionService) ListSubscriptions(ctx context.Context, filter *typ
 		customerService := NewCustomerService(s.ServiceParams)
 		customerFilter := types.NewNoLimitCustomerFilter()
 		customerFilter.CustomerIDs = uniqueCustomerIDs
-		if filter != nil && filter.Expand != nil {
-			s.Logger.Debugw("passing expand filters to customer service", "expand", filter.Expand)
-			customerFilter.Expand = filter.Expand // pass on the filters to next layer
-		}
 
 		customerResponse, err := customerService.GetCustomers(ctx, customerFilter)
 		if err != nil {

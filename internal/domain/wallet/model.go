@@ -80,26 +80,31 @@ func FromEnt(e *ent.Wallet) *Wallet {
 		return nil
 	}
 
+	alertConfig := lo.ToPtr(e.AlertConfig)
+	if alertConfig == nil || alertConfig.Threshold == nil {
+		alertConfig = nil
+	}
+
 	return &Wallet{
 		ID:                  e.ID,
 		CustomerID:          e.CustomerID,
 		Currency:            e.Currency,
 		Balance:             e.Balance,
 		CreditBalance:       e.CreditBalance,
-		WalletStatus:        types.WalletStatus(e.WalletStatus),
+		WalletStatus:        e.WalletStatus,
 		Name:                e.Name,
 		Description:         e.Description,
 		Metadata:            e.Metadata,
-		AutoTopupTrigger:    types.AutoTopupTrigger(lo.FromPtr(e.AutoTopupTrigger)),
+		AutoTopupTrigger:    lo.FromPtr(e.AutoTopupTrigger),
 		AutoTopupMinBalance: lo.FromPtr(e.AutoTopupMinBalance),
 		AutoTopupAmount:     lo.FromPtr(e.AutoTopupAmount),
-		WalletType:          types.WalletType(e.WalletType),
+		WalletType:          e.WalletType,
 		Config:              e.Config,
 		ConversionRate:      e.ConversionRate,
 		EnvironmentID:       e.EnvironmentID,
 		AlertEnabled:        e.AlertEnabled,
-		AlertConfig:         e.AlertConfig,
-		AlertState:          e.AlertState,
+		AlertConfig:         alertConfig,
+		AlertState:          string(e.AlertState),
 		BaseModel: types.BaseModel{
 			TenantID:  e.TenantID,
 			Status:    types.Status(e.Status),
