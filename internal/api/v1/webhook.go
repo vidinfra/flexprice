@@ -1209,8 +1209,9 @@ func (h *WebhookHandler) handleCheckoutSessionAsyncPaymentFailed(c *gin.Context,
 		return
 	}
 
-	// Reconcile payment with invoice if payment succeeded
-	if paymentStatus == string(types.PaymentStatusSucceeded) {
+	// Reconcile payment with invoice if payment succeeded or if payment was already succeeded
+	// This handles both new payments and duplicate payments that should result in overpayment
+	if paymentStatus == string(types.PaymentStatusSucceeded) || payment.PaymentStatus == types.PaymentStatusSucceeded {
 		if err := h.stripeService.ReconcilePaymentWithInvoice(c.Request.Context(), payment.ID, payment.Amount); err != nil {
 			h.logger.Errorw("failed to reconcile payment with invoice",
 				"error", err,
@@ -1857,4 +1858,28 @@ func (h *WebhookHandler) handleSetupIntentSucceeded(c *gin.Context, event *strip
 
 		"message": "Setup intent processed and payment method set as default",
 	})
+}
+
+// HandleSSLCommerzIPN handles the SSLCOMMERZ IPN (Instant Payment Notification) webhook
+func (h *WebhookHandler) HandleSSLCommerzIPN(c *gin.Context) {
+	// TODO: Parse POST data, validate with SSLCOMMERZ Order Validation API, update payment status
+	c.JSON(http.StatusOK, gin.H{"message": "SSLCOMMERZ IPN received (implement logic)"})
+}
+
+// SSLCommerzSuccess handles the customer redirect after successful payment
+func (h *WebhookHandler) SSLCommerzSuccess(c *gin.Context) {
+	// TODO: Parse parameters, optionally validate, update order/payment, show success
+	c.JSON(http.StatusOK, gin.H{"message": "Payment successful (implement logic)"})
+}
+
+// SSLCommerzFail handles the customer redirect after failed payment
+func (h *WebhookHandler) SSLCommerzFail(c *gin.Context) {
+	// TODO: Parse parameters, update order/payment, show failure
+	c.JSON(http.StatusOK, gin.H{"message": "Payment failed (implement logic)"})
+}
+
+// SSLCommerzCancel handles the customer redirect after cancelled payment
+func (h *WebhookHandler) SSLCommerzCancel(c *gin.Context) {
+	// TODO: Parse parameters, update order/payment, show cancel message
+	c.JSON(http.StatusOK, gin.H{"message": "Payment cancelled (implement logic)"})
 }

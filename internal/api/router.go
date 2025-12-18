@@ -452,6 +452,10 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 			webhookGroup := v1Private.Group("/webhooks")
 			{
 				webhookGroup.GET("/dashboard", handlers.Webhook.GetDashboardURL)
+				// SSLCOMMERZ Callback URLs (Step 3)
+				webhookGroup.GET("/sslcommerz/success", handlers.Webhook.SSLCommerzSuccess)
+				webhookGroup.GET("/sslcommerz/fail", handlers.Webhook.SSLCommerzFail)
+				webhookGroup.GET("/sslcommerz/cancel", handlers.Webhook.SSLCommerzCancel)
 			}
 		}
 
@@ -460,6 +464,8 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 		{
 			// Stripe webhook endpoint: POST /v1/webhooks/stripe/{tenant_id}/{environment_id}
 			webhooks.POST("/stripe/:tenant_id/:environment_id", handlers.Webhook.HandleStripeWebhook)
+			// SSLCOMMERZ IPN Listener (Step 2)
+			webhooks.POST("/sslcommerz-ipn", handlers.Webhook.HandleSSLCommerzIPN)
 		}
 
 		// Cron routes
