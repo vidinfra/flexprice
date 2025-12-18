@@ -196,8 +196,9 @@ type ChartMogulConfig struct {
 }
 
 type SSLCommerzConfig struct {
-	BaseURL string `mapstructure:"base_url" validate:"required"`
-	IpnURL  string `mapstructure:"ipn_url" validate:"required"`
+	BaseURL          string `mapstructure:"base_url" validate:"required"`
+	IpnURL           string `mapstructure:"ipn_url" validate:"required"`
+	SSLValidationURL string `mapstructure:"ssl_validation_url" validate:"required"`
 }
 
 func NewConfig() (*Configuration, error) {

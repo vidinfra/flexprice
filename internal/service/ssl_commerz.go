@@ -212,6 +212,8 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 	form := dto.SSLCommerzFormData{
 		StoreID:         req.StoreID,
 		StorePassword:   req.StorePassword,
+		ValueA:          conn.TenantID,
+		ValueB:          conn.EnvironmentID,
 		TotalAmount:     req.Payment.TotalAmount.String(),
 		Currency:        req.Payment.Currency,
 		TranID:          req.InvoiceID,

@@ -169,3 +169,4 @@ chartmogul:
 sslcommerz:
   base_url: "https://sandbox.sslcommerz.com"
   ipn_url: "https://something.sslcommerz.com"
+  ssl_validation_url: "https://securepay.sslcommerz.com/validator/api/validationserverAPI.php"

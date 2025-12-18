@@ -86,6 +86,8 @@ type SSLCommerzCreatePaymentLinkResponse struct {
 type SSLCommerzFormData struct {
 	StoreID         string
 	StorePassword   string
+	ValueA          string
+	ValueB          string
 	TotalAmount     string
 	Currency        string
 	TranID          string
@@ -110,6 +112,8 @@ func (f *SSLCommerzFormData) ToMap() map[string]string {
 		"store_id":         f.StoreID,
 		"store_passwd":     f.StorePassword,
 		"total_amount":     f.TotalAmount,
+		"value_a":          f.ValueA,
+		"value_b":          f.ValueB,
 		"currency":         f.Currency,
 		"tran_id":          f.TranID,
 		"success_url":      f.SuccessURL,

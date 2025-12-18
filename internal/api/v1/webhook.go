@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
@@ -25,6 +27,7 @@ type WebhookHandler struct {
 	svixClient    *svix.Client
 	logger        *logger.Logger
 	stripeService *service.StripeService
+	sslService    *service.SSLCommerzService
 }
 
 // NewWebhookHandler creates a new webhook handler
@@ -33,12 +36,14 @@ func NewWebhookHandler(
 	svixClient *svix.Client,
 	logger *logger.Logger,
 	stripeService *service.StripeService,
+	sslService *service.SSLCommerzService,
 ) *WebhookHandler {
 	return &WebhookHandler{
 		config:        cfg,
 		svixClient:    svixClient,
 		logger:        logger,
 		stripeService: stripeService,
+		sslService:    sslService,
 	}
 }
 
@@ -1862,24 +1867,132 @@ func (h *WebhookHandler) handleSetupIntentSucceeded(c *gin.Context, event *strip
 
 // HandleSSLCommerzIPN handles the SSLCOMMERZ IPN (Instant Payment Notification) webhook
 func (h *WebhookHandler) HandleSSLCommerzIPN(c *gin.Context) {
-	// TODO: Parse POST data, validate with SSLCOMMERZ Order Validation API, update payment status
-	c.JSON(http.StatusOK, gin.H{"message": "SSLCOMMERZ IPN received (implement logic)"})
+	// Parse form data
+	if err := c.Request.ParseForm(); err != nil {
+		h.logger.Errorw("failed to parse IPN form data", "error", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid form data"})
+		return
+	}
+	form := c.Request.PostForm
+
+	tranID := form.Get("tran_id")
+	valID := form.Get("val_id")
+	status := form.Get("status")
+	riskLevel := form.Get("risk_level")
+	amount := form.Get("amount")
+	currency := form.Get("currency")
+	tenantID := form.Get("value_a")
+	environmentID := form.Get("value_b")
+
+	h.logger.Infow("Received SSLCOMMERZ IPN", "tran_id", tranID, "val_id", valID, "status", status, "risk_level", riskLevel, "amount", amount, "currency", currency)
+
+	// Validate with SSLCOMMERZ Order Validation API
+	if valID == "" {
+		h.logger.Errorw("missing val_id in IPN")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing val_id"})
+		return
+	}
+
+	ctx := types.SetTenantID(c.Request.Context(), tenantID)
+	ctx = types.SetEnvironmentID(ctx, environmentID)
+
+	conn, err := h.sslService.ConnectionRepo.GetByProvider(ctx, types.SecretProviderSSLCommerz)
+	if err != nil {
+		h.logger.Errorw("failed to get SSLCommerz connection for webhook verification",
+			"error", err,
+			"environment_id", environmentID,
+		)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "SSLCommerz connection not configured for this environment",
+		})
+		return
+	}
+
+	sslConfig, err := h.sslService.GetDecryptedSSLCommerzConfig(conn)
+	if err != nil {
+		h.logger.Errorw("failed to get SSLCommerz configuration",
+			"error", err,
+			"connection_id", conn.ID,
+		)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get SSLCommerz configuration"})
+		return
+	}
+
+	// Call SSLCOMMERZ Order Validation API
+	validationURL := h.config.SSLCommerz.SSLValidationURL
+	params := url.Values{}
+	params.Set("val_id", valID)
+	params.Set("store_id", sslConfig.StoreID)
+	params.Set("store_passwd", sslConfig.StorePassword)
+	params.Set("v", "1")
+
+	resp, err := http.Post(validationURL+"?"+params.Encode(), "application/x-www-form-urlencoded", strings.NewReader(""))
+	if err != nil {
+		h.logger.Errorw("failed to call SSLCOMMERZ validation API", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate payment"})
+		return
+	}
+	defer resp.Body.Close()
+
+	var validationResp map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&validationResp); err != nil {
+		h.logger.Errorw("failed to decode validation API response", "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid validation response"})
+		return
+	}
+
+	h.logger.Infow("SSLCOMMERZ validation response", "response", validationResp)
+
+	// Check validation status
+	if validationResp["status"] != "VALID" && validationResp["status"] != "VALIDATED" {
+		c.JSON(http.StatusOK, gin.H{"message": "Payment not valid", "status": validationResp["status"]})
+		return
+	}
+
+	// TODO: Update payment/order in your DB using tran_id, val_id, etc.
+	// Optionally, handle risk_level == 1 (hold transaction)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Payment validated and processed", "tran_id": tranID, "val_id": valID, "status": validationResp["status"]})
 }
 
 // SSLCommerzSuccess handles the customer redirect after successful payment
 func (h *WebhookHandler) SSLCommerzSuccess(c *gin.Context) {
-	// TODO: Parse parameters, optionally validate, update order/payment, show success
-	c.JSON(http.StatusOK, gin.H{"message": "Payment successful (implement logic)"})
+	tranID := c.Query("tran_id")
+	valID := c.Query("val_id")
+	status := c.Query("status")
+	amount := c.Query("amount")
+	currency := c.Query("currency")
+
+	h.logger.Infow("SSLCOMMERZ Success Callback", "tran_id", tranID, "val_id", valID, "status", status, "amount", amount, "currency", currency)
+
+	// Optionally, validate again with Order Validation API (same as IPN)
+	// TODO: Update payment/order in your DB
+
+	c.JSON(http.StatusOK, gin.H{"message": "Payment successful", "tran_id": tranID, "val_id": valID, "status": status})
 }
 
 // SSLCommerzFail handles the customer redirect after failed payment
 func (h *WebhookHandler) SSLCommerzFail(c *gin.Context) {
-	// TODO: Parse parameters, update order/payment, show failure
-	c.JSON(http.StatusOK, gin.H{"message": "Payment failed (implement logic)"})
+	tranID := c.Query("tran_id")
+	valID := c.Query("val_id")
+	status := c.Query("status")
+
+	h.logger.Infow("SSLCOMMERZ Fail Callback", "tran_id", tranID, "val_id", valID, "status", status)
+
+	// TODO: Update payment/order in your DB
+
+	c.JSON(http.StatusOK, gin.H{"message": "Payment failed", "tran_id": tranID, "val_id": valID, "status": status})
 }
 
 // SSLCommerzCancel handles the customer redirect after cancelled payment
 func (h *WebhookHandler) SSLCommerzCancel(c *gin.Context) {
-	// TODO: Parse parameters, update order/payment, show cancel message
-	c.JSON(http.StatusOK, gin.H{"message": "Payment cancelled (implement logic)"})
+	tranID := c.Query("tran_id")
+	valID := c.Query("val_id")
+	status := c.Query("status")
+
+	h.logger.Infow("SSLCOMMERZ Cancel Callback", "tran_id", tranID, "val_id", valID, "status", status)
+
+	// TODO: Update payment/order in your DB
+
+	c.JSON(http.StatusOK, gin.H{"message": "Payment cancelled", "tran_id": tranID, "val_id": valID, "status": status})
 }
