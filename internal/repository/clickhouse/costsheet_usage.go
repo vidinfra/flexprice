@@ -363,7 +363,7 @@ func (r *CostSheetUsageRepository) GetUsageByCostSheetID(ctx context.Context, co
 }
 
 // GetDetailedUsageAnalytics provides comprehensive usage analytics for costsheet with filtering, grouping, and time-series data
-func (r *CostSheetUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, costSheetID, externalCustomerID string, params *events.UsageAnalyticsParams, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
+func (r *CostSheetUsageRepository) GetDetailedUsageAnalytics(ctx context.Context, costSheetID, externalCustomerID string, params *events.UsageAnalyticsParams, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo, sumBucketFeatures map[string]*events.SumBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
 	span := StartRepositorySpan(ctx, "costsheet_usage", "get_detailed_usage_analytics", map[string]interface{}{
 		"costsheet_id":           costSheetID,
 		"external_customer_id":   externalCustomerID,
@@ -411,8 +411,18 @@ func (r *CostSheetUsageRepository) GetDetailedUsageAnalytics(ctx context.Context
 		allResults = append(allResults, maxBucketResults...)
 	}
 
-	// Handle other features (non-MAX with bucket)
-	otherFeatureIDs := r.getOtherFeatureIDs(params.FeatureIDs, maxBucketFeatures)
+	// Handle SUM with bucket features
+	if len(sumBucketFeatures) > 0 {
+		sumBucketResults, err := r.getSumBucketAnalytics(ctx, costSheetID, externalCustomerID, params, sumBucketFeatures)
+		if err != nil {
+			SetSpanError(span, err)
+			return nil, err
+		}
+		allResults = append(allResults, sumBucketResults...)
+	}
+
+	// Handle other features (non-MAX and non-SUM with bucket)
+	otherFeatureIDs := r.getOtherFeatureIDs(params.FeatureIDs, maxBucketFeatures, sumBucketFeatures)
 
 	// Only process other features if we have some to process
 	if len(otherFeatureIDs) > 0 || len(params.FeatureIDs) == 0 {
@@ -423,7 +433,7 @@ func (r *CostSheetUsageRepository) GetDetailedUsageAnalytics(ctx context.Context
 			otherParams.FeatureIDs = []string{}
 		}
 
-		otherResults, err := r.getStandardAnalytics(ctx, costSheetID, externalCustomerID, &otherParams, maxBucketFeatures)
+		otherResults, err := r.getStandardAnalytics(ctx, costSheetID, externalCustomerID, &otherParams, maxBucketFeatures, sumBucketFeatures)
 		if err != nil {
 			SetSpanError(span, err)
 			return nil, err
@@ -435,23 +445,25 @@ func (r *CostSheetUsageRepository) GetDetailedUsageAnalytics(ctx context.Context
 	return allResults, nil
 }
 
-// getOtherFeatureIDs returns feature IDs that are not MAX with bucket features
-func (r *CostSheetUsageRepository) getOtherFeatureIDs(requestedFeatureIDs []string, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) []string {
+// getOtherFeatureIDs returns feature IDs that are not MAX or SUM with bucket features
+func (r *CostSheetUsageRepository) getOtherFeatureIDs(requestedFeatureIDs []string, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo, sumBucketFeatures map[string]*events.SumBucketFeatureInfo) []string {
 	if len(requestedFeatureIDs) == 0 {
 		return []string{}
 	}
 
 	otherFeatureIDs := make([]string, 0)
 	for _, featureID := range requestedFeatureIDs {
-		if _, isMaxBucket := maxBucketFeatures[featureID]; !isMaxBucket {
+		_, isMaxBucket := maxBucketFeatures[featureID]
+		_, isSumBucket := sumBucketFeatures[featureID]
+		if !isMaxBucket && !isSumBucket {
 			otherFeatureIDs = append(otherFeatureIDs, featureID)
 		}
 	}
 	return otherFeatureIDs
 }
 
-// getStandardAnalytics handles analytics for non-MAX with bucket features
-func (r *CostSheetUsageRepository) getStandardAnalytics(ctx context.Context, costSheetID, externalCustomerID string, params *events.UsageAnalyticsParams, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
+// getStandardAnalytics handles analytics for non-MAX and non-SUM with bucket features
+func (r *CostSheetUsageRepository) getStandardAnalytics(ctx context.Context, costSheetID, externalCustomerID string, params *events.UsageAnalyticsParams, maxBucketFeatures map[string]*events.MaxBucketFeatureInfo, sumBucketFeatures map[string]*events.SumBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
 	queryParams := []interface{}{
 		params.TenantID,
 		params.EnvironmentID,
@@ -535,6 +547,20 @@ func (r *CostSheetUsageRepository) getStandardAnalytics(ctx context.Context, cos
 		for i := range maxBucketFeatureIDs {
 			placeholders[i] = "?"
 			filterParams = append(filterParams, maxBucketFeatureIDs[i])
+		}
+		aggregateQuery += " AND feature_id NOT IN (" + strings.Join(placeholders, ", ") + ")"
+	}
+
+	// Exclude SUM bucket features
+	if len(sumBucketFeatures) > 0 {
+		sumBucketFeatureIDs := make([]string, 0, len(sumBucketFeatures))
+		for featureID := range sumBucketFeatures {
+			sumBucketFeatureIDs = append(sumBucketFeatureIDs, featureID)
+		}
+		placeholders := make([]string, len(sumBucketFeatureIDs))
+		for i := range sumBucketFeatureIDs {
+			placeholders[i] = "?"
+			filterParams = append(filterParams, sumBucketFeatureIDs[i])
 		}
 		aggregateQuery += " AND feature_id NOT IN (" + strings.Join(placeholders, ", ") + ")"
 	}
@@ -658,6 +684,41 @@ func (r *CostSheetUsageRepository) getMaxBucketAnalytics(ctx context.Context, co
 		} else {
 			allResults = append(allResults, totals...)
 		}
+	}
+
+	return allResults, nil
+}
+
+// getSumBucketAnalytics handles analytics for SUM with bucket features
+func (r *CostSheetUsageRepository) getSumBucketAnalytics(ctx context.Context, costSheetID, externalCustomerID string, params *events.UsageAnalyticsParams, sumBucketFeatures map[string]*events.SumBucketFeatureInfo) ([]*events.DetailedUsageAnalytic, error) {
+	// For SUM with bucket features, we need to:
+	// 1. Calculate totals using bucket-based aggregation (meter's bucket size)
+	// 2. Calculate time series points using request window size
+
+	var allResults []*events.DetailedUsageAnalytic
+
+	// Process each SUM with bucket feature separately since they may have different bucket sizes
+	for featureID, featureInfo := range sumBucketFeatures {
+		// Create a copy of params for this specific feature
+		featureParams := *params
+		featureParams.FeatureIDs = []string{featureID}
+
+		// For now, return a simple implementation
+		// TODO: Implement getSumBucketTotals and getSumBucketPointsForGroup similar to MAX bucket
+		// This requires creating these methods following the same pattern as getMaxBucketTotals and getMaxBucketPointsForGroup
+
+		// Temporary: Use standard analytics for SUM bucket features
+		// This will be correct for totals but won't apply proper bucket logic
+		r.logger.Warnw("SUM bucket feature detected but full bucket logic not yet implemented, using standard aggregation",
+			"feature_id", featureID,
+			"bucket_size", featureInfo.BucketSize,
+		)
+
+		results, err := r.getStandardAnalytics(ctx, costSheetID, externalCustomerID, &featureParams, make(map[string]*events.MaxBucketFeatureInfo), make(map[string]*events.SumBucketFeatureInfo))
+		if err != nil {
+			return nil, err
+		}
+		allResults = append(allResults, results...)
 	}
 
 	return allResults, nil

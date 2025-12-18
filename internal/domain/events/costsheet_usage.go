@@ -17,5 +17,5 @@ type CostSheetUsageRepository interface {
 	GetUsageByCostSheetID(ctx context.Context, costSheetID, externalCustomerID string, startTime, endTime time.Time) (map[string]*UsageByCostSheetResult, error)
 
 	// GetDetailedUsageAnalytics provides comprehensive usage analytics with filtering, grouping, and time-series data
-	GetDetailedUsageAnalytics(ctx context.Context, costSheetID, externalCustomerID string, params *UsageAnalyticsParams, maxBucketFeatures map[string]*MaxBucketFeatureInfo) ([]*DetailedUsageAnalytic, error)
+	GetDetailedUsageAnalytics(ctx context.Context, costSheetID, externalCustomerID string, params *UsageAnalyticsParams, maxBucketFeatures map[string]*MaxBucketFeatureInfo, sumBucketFeatures map[string]*SumBucketFeatureInfo) ([]*DetailedUsageAnalytic, error)
 }

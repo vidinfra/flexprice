@@ -978,8 +978,8 @@ func (s *costsheetUsageTrackingService) GetCostSheetUsageAnalytics(ctx context.C
 }
 
 func (s *costsheetUsageTrackingService) fetchAnalytics(ctx context.Context, costsheet *dto.CostsheetResponse, req *dto.GetCostAnalyticsRequest, customer *customer.Customer) ([]*events.DetailedUsageAnalytic, error) {
-	// STEP1: Extract features and build max bucket features map
-	maxBucketFeatures, featureMap, meterMap, err := s.buildMaxBucketFeaturesFromCostsheet(ctx, costsheet)
+	// STEP1: Extract features and build max bucket and sum bucket features maps
+	maxBucketFeatures, sumBucketFeatures, featureMap, meterMap, err := s.buildBucketFeaturesFromCostsheet(ctx, costsheet)
 	if err != nil {
 		return nil, err
 	}
@@ -1001,7 +1001,7 @@ func (s *costsheetUsageTrackingService) fetchAnalytics(ctx context.Context, cost
 	}
 
 	// STEP3: Fetch analytics using repository method
-	analytics, err := s.costUsageRepo.GetDetailedUsageAnalytics(ctx, costsheet.ID, params.ExternalCustomerID, params, maxBucketFeatures)
+	analytics, err := s.costUsageRepo.GetDetailedUsageAnalytics(ctx, costsheet.ID, params.ExternalCustomerID, params, maxBucketFeatures, sumBucketFeatures)
 	if err != nil {
 		s.Logger.Errorw("failed to get detailed usage analytics from costsheet repo",
 			"error", err,
@@ -1020,13 +1020,14 @@ func (s *costsheetUsageTrackingService) fetchAnalytics(ctx context.Context, cost
 		"feature_count", len(featureMap),
 		"meter_count", len(meterMap),
 		"max_bucket_features_count", len(maxBucketFeatures),
+		"sum_bucket_features_count", len(sumBucketFeatures),
 	)
 
 	return analytics, nil
 }
 
-// buildMaxBucketFeaturesFromCostsheet extracts features from costsheet and builds max bucket features map
-func (s *costsheetUsageTrackingService) buildMaxBucketFeaturesFromCostsheet(ctx context.Context, costsheet *dto.CostsheetResponse) (map[string]*events.MaxBucketFeatureInfo, map[string]*feature.Feature, map[string]*meter.Meter, error) {
+// buildBucketFeaturesFromCostsheet extracts features from costsheet and builds max and sum bucket features maps
+func (s *costsheetUsageTrackingService) buildBucketFeaturesFromCostsheet(ctx context.Context, costsheet *dto.CostsheetResponse) (map[string]*events.MaxBucketFeatureInfo, map[string]*events.SumBucketFeatureInfo, map[string]*feature.Feature, map[string]*meter.Meter, error) {
 	// Collect meter IDs from prices
 	meterIDs := make([]string, 0)
 	meterIDSet := make(map[string]bool)
@@ -1045,7 +1046,7 @@ func (s *costsheetUsageTrackingService) buildMaxBucketFeaturesFromCostsheet(ctx 
 		s.Logger.Debugw("no usage-based prices with meters found in costsheet",
 			"costsheet_id", costsheet.ID,
 		)
-		return make(map[string]*events.MaxBucketFeatureInfo), make(map[string]*feature.Feature), make(map[string]*meter.Meter), nil
+		return make(map[string]*events.MaxBucketFeatureInfo), make(map[string]*events.SumBucketFeatureInfo), make(map[string]*feature.Feature), make(map[string]*meter.Meter), nil
 	}
 
 	// Fetch all meters in bulk
@@ -1058,7 +1059,7 @@ func (s *costsheetUsageTrackingService) buildMaxBucketFeaturesFromCostsheet(ctx 
 			"costsheet_id", costsheet.ID,
 			"meter_count", len(meterIDs),
 		)
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// Build meter map
@@ -1079,7 +1080,7 @@ func (s *costsheetUsageTrackingService) buildMaxBucketFeaturesFromCostsheet(ctx 
 				"costsheet_id", costsheet.ID,
 				"meter_count", len(meterMap),
 			)
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		for _, f := range features {
@@ -1087,23 +1088,34 @@ func (s *costsheetUsageTrackingService) buildMaxBucketFeaturesFromCostsheet(ctx 
 		}
 	}
 
-	// Build max bucket features map
+	// Build max bucket and sum bucket features maps
 	maxBucketFeatures := make(map[string]*events.MaxBucketFeatureInfo)
+	sumBucketFeatures := make(map[string]*events.SumBucketFeatureInfo)
 	for _, f := range featureMap {
 		if f.MeterID != "" {
-			if m, exists := meterMap[f.MeterID]; exists && m.IsBucketedMaxMeter() {
-				maxBucketFeatures[f.ID] = &events.MaxBucketFeatureInfo{
-					FeatureID:    f.ID,
-					MeterID:      f.MeterID,
-					BucketSize:   types.WindowSize(m.Aggregation.BucketSize),
-					EventName:    m.EventName,
-					PropertyName: m.Aggregation.Field,
+			if m, exists := meterMap[f.MeterID]; exists {
+				if m.IsBucketedMaxMeter() {
+					maxBucketFeatures[f.ID] = &events.MaxBucketFeatureInfo{
+						FeatureID:    f.ID,
+						MeterID:      f.MeterID,
+						BucketSize:   types.WindowSize(m.Aggregation.BucketSize),
+						EventName:    m.EventName,
+						PropertyName: m.Aggregation.Field,
+					}
+				} else if m.IsBucketedSumMeter() {
+					sumBucketFeatures[f.ID] = &events.SumBucketFeatureInfo{
+						FeatureID:    f.ID,
+						MeterID:      f.MeterID,
+						BucketSize:   types.WindowSize(m.Aggregation.BucketSize),
+						EventName:    m.EventName,
+						PropertyName: m.Aggregation.Field,
+					}
 				}
 			}
 		}
 	}
 
-	return maxBucketFeatures, featureMap, meterMap, nil
+	return maxBucketFeatures, sumBucketFeatures, featureMap, meterMap, nil
 }
 
 // enrichAnalyticsWithMetadata enriches analytics items with feature and meter metadata
@@ -1180,7 +1192,7 @@ func (s *costsheetUsageTrackingService) calculateCosts(ctx context.Context, cost
 		}
 
 		// Calculate cost based on meter type
-		if meter.IsBucketedMaxMeter() {
+		if meter.IsBucketedMaxMeter() || meter.IsBucketedSumMeter() {
 			s.calculateBucketedCost(ctx, priceService, item, price)
 		} else {
 			s.calculateRegularCost(ctx, priceService, item, meter, price)
