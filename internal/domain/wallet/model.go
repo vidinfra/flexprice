@@ -98,7 +98,7 @@ func FromEnt(e *ent.Wallet) *Wallet {
 		ConversionRate:      e.ConversionRate,
 		EnvironmentID:       e.EnvironmentID,
 		AlertEnabled:        e.AlertEnabled,
-		AlertConfig:         e.AlertConfig,
+		AlertConfig:         lo.ToPtr(e.AlertConfig),
 		AlertState:          string(e.AlertState),
 		BaseModel: types.BaseModel{
 			TenantID:  e.TenantID,
