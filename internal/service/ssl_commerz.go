@@ -200,13 +200,11 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 	}
 
 	req.StoreID = sslCommerzConfig.StoreID
-	req.StorePassword = "tb69426fab42fcf@ssl" // sslCommerzConfig.StorePassword
+	req.StorePassword = sslCommerzConfig.StorePassword
 	req.IPNURL = s.Config.SSLCommerz.IpnURL
 	req.Payment.SuccessURL = successURL
 	req.Payment.FailURL = cancelURL
 	req.Payment.CancelURL = cancelURL
-
-	pp.Println("Final SSL Commerz Request: ", sslCommerzConfig)
 
 	paymentURL := s.Config.SSLCommerz.BaseURL + "/gwprocess/v4/api.php"
 	var response dto.SSLCommerzCreatePaymentLinkResponse
@@ -237,8 +235,6 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 		SetFormData(form.ToMap()).
 		SetResult(&response).
 		Post(paymentURL)
-
-	pp.Println("SSL Commerz API Response: ", response)
 
 	if err != nil {
 		return nil, ierr.NewError("failed to create payment link").

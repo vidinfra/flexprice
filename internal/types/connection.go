@@ -63,7 +63,7 @@ func (s *StripeConnectionMetadata) Validate() error {
 
 type SSLCommerzConnectionMetadata struct {
 	StoreID       string `json:"store_id"`
-	StorePassword string `json:"store_password"`
+	StorePassword string `json:"store_passwd"`
 }
 
 func (s *SSLCommerzConnectionMetadata) Validate() error {
@@ -73,7 +73,7 @@ func (s *SSLCommerzConnectionMetadata) Validate() error {
 			Mark(ierr.ErrValidation)
 	}
 	if s.StorePassword == "" {
-		return ierr.NewError("store_password is required").
+		return ierr.NewError("store_passwd is required").
 			WithHint("SSLCommerz store password is required").
 			Mark(ierr.ErrValidation)
 	}
