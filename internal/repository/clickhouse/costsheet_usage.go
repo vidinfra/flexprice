@@ -289,15 +289,15 @@ func (r *CostSheetUsageRepository) GetUsageByCostSheetID(ctx context.Context, co
 			max(qty_total * sign)              AS max_total,
 			count(DISTINCT id)                 AS count_distinct_ids,
 			count(DISTINCT unique_hash)        AS count_unique_qty,
-			argMax(qty_total * sign, "timestamp") AS latest_qty
+			argMax(qty_total * sign, timestamp) AS latest_qty
 		FROM costsheet_usage
 		WHERE 
 			costsheet_id = ?
 			AND external_customer_id = ?
 			AND environment_id = ?
 			AND tenant_id = ?
-			AND "timestamp" >= ?
-			AND "timestamp" < ?
+			AND timestamp >= ?
+			AND timestamp < ?
 			AND sign != 0
 		GROUP BY feature_id, meter_id, price_id
 	`

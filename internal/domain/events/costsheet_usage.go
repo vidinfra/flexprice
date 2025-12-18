@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-// FeatureUsageRepository defines operations for feature usage tracking
+// CostSheetUsageRepository defines operations for cost sheet usage tracking
 type CostSheetUsageRepository interface {
-	// Bulk insert events into events_processed table
+	// Bulk insert events into costsheet_usage table
 	BulkInsertProcessedEvents(ctx context.Context, events []*CostUsage) error
 
-	// Get processed events with filtering options
+	// Get processed cost sheet usage with filtering options
 	GetProcessedEvents(ctx context.Context, params *GetCostUsageEventsParams) ([]*CostUsage, uint64, error)
 
 	// Get usage by cost sheet ID

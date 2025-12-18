@@ -27,11 +27,11 @@ func NewRevenueAnalyticsService(params ServiceParams, featureUsageTrackingServic
 	}
 }
 
-// getCostAnalytics retrieves cost analytics using the costsheet usage tracking service
-func (s *revenueAnalyticsService) getCostAnalytics(
+// GetDetailedCostAnalytics retrieves detailed cost analytics with derived metrics
+func (s *revenueAnalyticsService) GetDetailedCostAnalytics(
 	ctx context.Context,
 	req *dto.GetCostAnalyticsRequest,
-) (*dto.GetCostAnalyticsResponse, error) {
+) (*dto.GetDetailedCostAnalyticsResponse, error) {
 	// Validate request
 	if err := req.Validate(); err != nil {
 		return nil, ierr.WithError(err).
@@ -39,45 +39,29 @@ func (s *revenueAnalyticsService) getCostAnalytics(
 			Mark(ierr.ErrValidation)
 	}
 
-	// Call the costsheet usage tracking service to get analytics
-	// The service will fetch the active costsheet internally
-	return s.costsheetUsageTrackingService.GetCostSheetUsageAnalytics(ctx, req)
-}
-
-// GetDetailedCostAnalytics retrieves detailed cost analytics with derived metrics
-func (s *revenueAnalyticsService) GetDetailedCostAnalytics(
-	ctx context.Context,
-	req *dto.GetCostAnalyticsRequest,
-) (*dto.GetDetailedCostAnalyticsResponse, error) {
-	// 1. Fetch cost analytics (gracefully handle errors)
+	// 1. Fetch cost analytics using the costsheet usage tracking service
 	var costAnalytics *dto.GetCostAnalyticsResponse
-	costsheet, err := s.costsheetService.GetActiveCostsheetForTenant(ctx)
+	costAnalytics, err := s.costsheetUsageTrackingService.GetCostSheetUsageAnalytics(ctx, req)
 	if err != nil {
-		s.Logger.Warnw("failed to fetch active costsheet", "error", err)
+		s.Logger.Warnw("failed to fetch cost analytics", "error", err)
 		costAnalytics = nil
-	} else if len(costsheet.Prices) == 0 {
-		s.Logger.Warnw("no prices found for costsheet", "costsheet_id", costsheet.ID)
-		costAnalytics = nil
-	} else {
-		costAnalytics, err = s.getCostAnalytics(ctx, req)
-		if err != nil {
-			s.Logger.Warnw("failed to fetch cost analytics", "error", err)
-			costAnalytics = nil
-		}
 	}
 
-	// 2. Fetch revenue analytics
+	// 2. Fetch revenue analytics from feature usage tracking
 	var revenueAnalytics *dto.GetUsageAnalyticsResponse
-	revenueReq := s.buildRevenueRequest(req)
-	if revenueReq != nil {
-		revenueAnalytics, err = s.featureUsageTrackingService.GetDetailedUsageAnalyticsV2(ctx, revenueReq)
-		if err != nil {
-			s.Logger.Warnw("failed to fetch revenue analytics", "error", err)
-			revenueAnalytics = nil
-		}
+	revenueReq := &dto.GetUsageAnalyticsRequest{
+		ExternalCustomerID: req.ExternalCustomerID,
+		FeatureIDs:         req.FeatureIDs,
+		StartTime:          req.StartTime,
+		EndTime:            req.EndTime,
+	}
+	revenueAnalytics, err = s.featureUsageTrackingService.GetDetailedUsageAnalyticsV2(ctx, revenueReq)
+	if err != nil {
+		s.Logger.Warnw("failed to fetch revenue analytics", "error", err)
+		revenueAnalytics = nil
 	}
 
-	// 3. Build response - prioritize revenue if cost fails
+	// 3. Build response with derived metrics
 	response := &dto.GetDetailedCostAnalyticsResponse{
 		CostAnalytics: []dto.CostAnalyticItem{},
 		TotalCost:     decimal.Zero,
@@ -102,16 +86,18 @@ func (s *revenueAnalyticsService) GetDetailedCostAnalytics(
 		response.EndTime = costAnalytics.EndTime
 	}
 
-	// Calculate revenue
-	response.TotalRevenue = s.calculateTotalRevenue(revenueAnalytics)
-	if revenueAnalytics != nil && revenueAnalytics.Currency != "" {
-		// Use revenue currency if cost currency is default
-		if response.Currency == "USD" && costAnalytics == nil {
+	// Calculate total revenue from revenue analytics
+	if revenueAnalytics != nil {
+		for _, item := range revenueAnalytics.Items {
+			response.TotalRevenue = response.TotalRevenue.Add(item.TotalCost) // TotalCost in usage analytics represents revenue
+		}
+		if revenueAnalytics.Currency != "" && costAnalytics == nil {
+			// Use revenue currency if cost analytics is not available
 			response.Currency = revenueAnalytics.Currency
 		}
 	}
 
-	// Only calculate derived metrics if both cost and revenue are available
+	// Calculate derived metrics if both cost and revenue are available
 	if costAnalytics != nil && revenueAnalytics != nil {
 		response.Margin = response.TotalRevenue.Sub(response.TotalCost)
 
@@ -125,29 +111,6 @@ func (s *revenueAnalyticsService) GetDetailedCostAnalytics(
 		}
 	}
 
-	// Return response even if cost analytics failed, as long as we have revenue or at least attempted both
+	// Return response even if cost or revenue analytics failed
 	return response, nil
-}
-
-// buildRevenueRequest builds a revenue analytics request from combined request
-func (s *revenueAnalyticsService) buildRevenueRequest(req *dto.GetCostAnalyticsRequest) *dto.GetUsageAnalyticsRequest {
-	return &dto.GetUsageAnalyticsRequest{
-		ExternalCustomerID: req.ExternalCustomerID,
-		FeatureIDs:         req.FeatureIDs,
-		StartTime:          req.StartTime,
-		EndTime:            req.EndTime,
-	}
-}
-
-// calculateTotalRevenue calculates total revenue from usage analytics response
-func (s *revenueAnalyticsService) calculateTotalRevenue(revenueAnalytics *dto.GetUsageAnalyticsResponse) decimal.Decimal {
-	if revenueAnalytics == nil {
-		return decimal.Zero
-	}
-
-	totalRevenue := decimal.Zero
-	for _, item := range revenueAnalytics.Items {
-		totalRevenue = totalRevenue.Add(item.TotalCost) // TotalCost in usage analytics represents revenue
-	}
-	return totalRevenue
 }

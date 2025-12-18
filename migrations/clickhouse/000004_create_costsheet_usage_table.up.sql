@@ -36,7 +36,7 @@ ENGINE = ReplacingMergeTree(version)
 PARTITION BY toYYYYMM(timestamp)
 PRIMARY KEY (tenant_id, environment_id, customer_id)
 ORDER BY (
-    tenant_id, environment_id, customer_id, costsheet_id, feature_id, timestamp, id
+    tenant_id, environment_id, customer_id, costsheet_id, feature_id, price_id, meter_id, timestamp, id
 )
 SETTINGS index_granularity = 8192;
 

@@ -42,6 +42,9 @@ type CostSheetUsageTrackingService interface {
 
 	// Get Analytics
 	GetCostSheetUsageAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error)
+
+	// Reprocess cost sheet usage
+	ReprocessEvents(ctx context.Context, params *events.ReprocessEventsParams) error
 }
 
 type costsheetUsageTrackingService struct {
@@ -308,7 +311,7 @@ func (s *costsheetUsageTrackingService) prepareProcessedEvents(ctx context.Conte
 			"external_customer_id", event.ExternalCustomerID,
 			"error", err,
 		)
-		return results, nil
+		return results, err
 	}
 
 	// Set the customer ID in the event if it's not already set
@@ -868,8 +871,6 @@ func (s *costsheetUsageTrackingService) ReprocessEvents(ctx context.Context, par
 
 		// Publish each event to the cost sheet usage tracking topic
 		for _, event := range unprocessedEvents {
-			// hardcoded delay to avoid rate limiting
-			// TODO: remove this to make it configurable
 			if err := s.PublishEvent(ctx, event, true); err != nil {
 				s.Logger.Errorw("failed to publish event for reprocessing for cost sheet usage tracking",
 					"event_id", event.ID,
@@ -912,6 +913,12 @@ func (s *costsheetUsageTrackingService) ReprocessEvents(ctx context.Context, par
 }
 
 func (s *costsheetUsageTrackingService) GetCostSheetUsageAnalytics(ctx context.Context, req *dto.GetCostAnalyticsRequest) (*dto.GetCostAnalyticsResponse, error) {
+
+	// STEP0: Validate request
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+
 	// STEP1: Get active costsheet (with caching)
 	costSheet, err := s.getActiveCostsheetWithCache(ctx)
 	if err != nil {
@@ -924,11 +931,6 @@ func (s *costsheetUsageTrackingService) GetCostSheetUsageAnalytics(ctx context.C
 		return nil, ierr.NewError("no active costsheet found").
 			WithHint("Please activate a costsheet for this tenant").
 			Mark(ierr.ErrNotFound)
-	}
-
-	// STEP2: Validate request
-	if err := req.Validate(); err != nil {
-		return nil, err
 	}
 
 	// STEP3: Get customer if external_customer_id is provided
