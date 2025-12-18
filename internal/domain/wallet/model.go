@@ -80,6 +80,11 @@ func FromEnt(e *ent.Wallet) *Wallet {
 		return nil
 	}
 
+	alertConfig := lo.ToPtr(e.AlertConfig)
+	if alertConfig == nil || alertConfig.Threshold == nil {
+		alertConfig = nil
+	}
+
 	return &Wallet{
 		ID:                  e.ID,
 		CustomerID:          e.CustomerID,
@@ -98,7 +103,7 @@ func FromEnt(e *ent.Wallet) *Wallet {
 		ConversionRate:      e.ConversionRate,
 		EnvironmentID:       e.EnvironmentID,
 		AlertEnabled:        e.AlertEnabled,
-		AlertConfig:         lo.ToPtr(e.AlertConfig),
+		AlertConfig:         alertConfig,
 		AlertState:          string(e.AlertState),
 		BaseModel: types.BaseModel{
 			TenantID:  e.TenantID,

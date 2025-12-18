@@ -286,7 +286,7 @@ func FromWallet(w *wallet.Wallet) *WalletResponse {
 		return nil
 	}
 	alertConfig := w.AlertConfig
-	if w.AlertConfig != nil || w.AlertConfig.Threshold != nil {
+	if w.AlertConfig == nil || w.AlertConfig.Threshold == nil {
 		alertConfig = nil
 	}
 	return &WalletResponse{
