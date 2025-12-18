@@ -12,6 +12,7 @@ import (
 	"github.com/flexprice/flexprice/internal/idempotency"
 	"github.com/flexprice/flexprice/internal/types"
 	webhookDto "github.com/flexprice/flexprice/internal/webhook/dto"
+	"github.com/k0kubun/pp"
 	"github.com/samber/lo"
 )
 
@@ -118,6 +119,7 @@ func (s *paymentService) CreatePayment(ctx context.Context, req *dto.CreatePayme
 	}
 
 	s.publishWebhookEvent(ctx, types.WebhookEventPaymentCreated, p.ID)
+	pp.Println("Came this far. After Publish Webhook")
 
 	if req.ProcessPayment {
 		paymentProcessor := NewPaymentProcessorService(s.ServiceParams)

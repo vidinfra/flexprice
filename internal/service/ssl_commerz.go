@@ -9,6 +9,7 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/security"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/k0kubun/pp"
 	"resty.dev/v3"
 )
 
@@ -40,15 +41,19 @@ func (s *SSLCommerzService) decryptConnectionMetadata(encryptedSecretData types.
 
 	switch providerType {
 	case types.SecretProviderSSLCommerz:
+		pp.Println("Decrypting SSL Commerz connection metadata. Case SSLCommerz")
 		if encryptedSecretData.SSLCommerz != nil {
 			decryptedStoreID, err := s.encryptionService.Decrypt(encryptedSecretData.SSLCommerz.StoreID)
 			if err != nil {
 				return types.ConnectionMetadata{}, err
 			}
 			decryptedStorePassword, err := s.encryptionService.Decrypt(encryptedSecretData.SSLCommerz.StorePassword)
+			pp.Println("Decrypting SSL Commerz connection metadata. StorePassword decryption result: ", err)
 			if err != nil {
+				pp.Println("Failed to decrypt SSL Commerz StorePassword: ", err)
 				return types.ConnectionMetadata{}, err
 			}
+			pp.Println("Successfully decrypted SSL Commerz Config. ", decryptedStoreID, decryptedStorePassword)
 			decryptedData.SSLCommerz = &types.SSLCommerzConnectionMetadata{
 				StoreID:       decryptedStoreID,
 				StorePassword: decryptedStorePassword,
@@ -110,7 +115,7 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 	conn, err := s.ConnectionRepo.GetByProvider(ctx, types.SecretProviderSSLCommerz)
 	if err != nil {
 		return nil, ierr.NewError("failed to get SSL Commerz connection").
-			WithHint("Stripe connection not configured for this environment").
+			WithHint("SSL Commerz connection not configured for this environment").
 			WithReportableDetails(map[string]interface{}{
 				"environment_id": req.EnvironmentID,
 			}).
@@ -179,8 +184,8 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 	// Initialize SSLCommerz configuration
 	sslCommerzConfig, err := s.GetDecryptedSSLCommerzConfig(conn)
 	if err != nil {
-		return nil, ierr.NewError("failed to get Stripe configuration").
-			WithHint("Invalid Stripe configuration").
+		return nil, ierr.NewError("failed to get SSL Commerz configuration").
+			WithHint("Invalid SSL Commerz configuration").
 			Mark(ierr.ErrValidation)
 	}
 
@@ -195,13 +200,15 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 	}
 
 	req.StoreID = sslCommerzConfig.StoreID
-	req.StorePassword = sslCommerzConfig.StorePassword
-	req.IPNURL = "DUMMY" // This should be fetched from config
+	req.StorePassword = "tb69426fab42fcf@ssl" // sslCommerzConfig.StorePassword
+	req.IPNURL = s.Config.SSLCommerz.IpnURL
 	req.Payment.SuccessURL = successURL
 	req.Payment.FailURL = cancelURL
 	req.Payment.CancelURL = cancelURL
 
-	paymentURL := s.BaseURL + "/gwprocess/v4/api.php" //TODO: make it configurable later
+	pp.Println("Final SSL Commerz Request: ", sslCommerzConfig)
+
+	paymentURL := s.Config.SSLCommerz.BaseURL + "/gwprocess/v4/api.php"
 	var response dto.SSLCommerzCreatePaymentLinkResponse
 
 	form := dto.SSLCommerzFormData{
@@ -209,27 +216,29 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 		StorePassword:   req.StorePassword,
 		TotalAmount:     req.Payment.TotalAmount.String(),
 		Currency:        req.Payment.Currency,
-		TranID:          req.Payment.TranID,
+		TranID:          req.InvoiceID,
 		SuccessURL:      req.Payment.SuccessURL,
 		FailURL:         req.Payment.FailURL,
 		CancelURL:       req.Payment.CancelURL,
 		CusName:         req.Customer.Name,
-		CusEmail:        req.Customer.Email,
+		CusEmail:        req.CustomerID,
 		CusAdd1:         req.Customer.Add1,
 		CusCity:         req.Customer.City,
 		CusPostcode:     req.Customer.Postcode,
 		CusCountry:      req.Customer.Country,
-		CusPhone:        req.Customer.Phone,
-		ShippingMethod:  req.ShippingMethod,
-		ProductName:     req.Product.Name,
-		ProductCategory: req.Product.Category,
-		ProductProfile:  req.Product.Profile,
+		CusPhone:        req.CustomerID,
+		ShippingMethod:  "NO",
+		ProductName:     "Tenbyte Service Payment",
+		ProductCategory: "Service",
+		ProductProfile:  "General",
 	}
 
 	resp, err := s.Client.R().
 		SetFormData(form.ToMap()).
 		SetResult(&response).
 		Post(paymentURL)
+
+	pp.Println("SSL Commerz API Response: ", response)
 
 	if err != nil {
 		return nil, ierr.NewError("failed to create payment link").

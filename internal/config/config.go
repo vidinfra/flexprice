@@ -38,6 +38,7 @@ type Configuration struct {
 	EnvAccess            EnvAccessConfig            `mapstructure:"env_access" json:"env_access" validate:"omitempty"`
 	FeatureFlag          FeatureFlagConfig          `mapstructure:"feature_flag" validate:"required"`
 	ChartMogul           ChartMogulConfig           `mapstructure:"chartmogul" validate:"omitempty"`
+	SSLCommerz           SSLCommerzConfig           `mapstructure:"sslcommerz" validate:"omitempty"`
 }
 
 type CacheConfig struct {
@@ -192,6 +193,11 @@ type ChartMogulConfig struct {
 	Enabled  bool   `mapstructure:"enabled" validate:"required"`
 	SourceID string `mapstructure:"source_id" validate:"required"`
 	APIKey   string `mapstructure:"api_key" validate:"required"`
+}
+
+type SSLCommerzConfig struct {
+	BaseURL string `mapstructure:"base_url" validate:"required"`
+	IpnURL  string `mapstructure:"ipn_url" validate:"required"`
 }
 
 func NewConfig() (*Configuration, error) {

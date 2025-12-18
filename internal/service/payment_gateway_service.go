@@ -7,6 +7,7 @@ import (
 	"github.com/flexprice/flexprice/internal/api/dto"
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
+	"github.com/k0kubun/pp"
 )
 
 // PaymentGatewayService provides generic payment gateway operations
@@ -76,6 +77,7 @@ func (s *paymentGatewayService) CreatePaymentLink(ctx context.Context, req *dto.
 	}
 
 	// Convert to the appropriate request type and call the gateway service
+	pp.Println("Gateway type Now: ", gatewayType)
 	switch gatewayType {
 	case types.PaymentGatewayTypeStripe:
 		stripeService := gatewayService.(*StripeService)
@@ -153,7 +155,7 @@ func (s *paymentGatewayService) CreatePaymentLink(ctx context.Context, req *dto.
 		// Convert SSLCommerz response to generic response
 		response := &dto.PaymentLinkResponse{
 			ID:         sslResp.ID,
-			PaymentURL: sslResp.PaymentURL,
+			PaymentURL: sslResp.GatewayPageURL,
 			Amount:     sslResp.Amount,
 			Currency:   sslResp.Currency,
 			Status:     sslResp.Status,

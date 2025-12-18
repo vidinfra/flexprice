@@ -165,3 +165,7 @@ chartmogul:
   enabled: true
   source_id: "ds_3372b7b2-d5c8-11f0-82ca-bf9af8af911f"
   api_key: "c285b5f9c2ee30f4ceed559b103b3f68"
+
+sslcommerz:
+  base_url: "https://sandbox.sslcommerz.com"
+  ipn_url: "https://something.sslcommerz.com"

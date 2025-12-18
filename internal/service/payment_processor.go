@@ -13,6 +13,7 @@ import (
 	ierr "github.com/flexprice/flexprice/internal/errors"
 	"github.com/flexprice/flexprice/internal/types"
 	webhookDto "github.com/flexprice/flexprice/internal/webhook/dto"
+	"github.com/k0kubun/pp"
 	"github.com/samber/lo"
 	"github.com/shopspring/decimal"
 )
@@ -214,6 +215,7 @@ func (p *paymentProcessor) ProcessPayment(ctx context.Context, id string) (*paym
 }
 
 func (p *paymentProcessor) handlePaymentLinkCreation(ctx context.Context, paymentObj *payment.Payment) error {
+	pp.Println("Came here on handlePaymentLinkCreation?")
 	// Get the invoice to get customer information
 	invoice, err := p.InvoiceRepo.Get(ctx, paymentObj.DestinationID)
 	if err != nil {
