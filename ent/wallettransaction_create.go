@@ -117,6 +117,20 @@ func (wtc *WalletTransactionCreate) SetWalletID(s string) *WalletTransactionCrea
 	return wtc
 }
 
+// SetCustomerID sets the "customer_id" field.
+func (wtc *WalletTransactionCreate) SetCustomerID(s string) *WalletTransactionCreate {
+	wtc.mutation.SetCustomerID(s)
+	return wtc
+}
+
+// SetNillableCustomerID sets the "customer_id" field if the given value is not nil.
+func (wtc *WalletTransactionCreate) SetNillableCustomerID(s *string) *WalletTransactionCreate {
+	if s != nil {
+		wtc.SetCustomerID(*s)
+	}
+	return wtc
+}
+
 // SetType sets the "type" field.
 func (wtc *WalletTransactionCreate) SetType(s string) *WalletTransactionCreate {
 	wtc.mutation.SetType(s)
@@ -234,6 +248,20 @@ func (wtc *WalletTransactionCreate) SetNillableExpiryDate(t *time.Time) *WalletT
 // SetCreditsAvailable sets the "credits_available" field.
 func (wtc *WalletTransactionCreate) SetCreditsAvailable(d decimal.Decimal) *WalletTransactionCreate {
 	wtc.mutation.SetCreditsAvailable(d)
+	return wtc
+}
+
+// SetCurrency sets the "currency" field.
+func (wtc *WalletTransactionCreate) SetCurrency(s string) *WalletTransactionCreate {
+	wtc.mutation.SetCurrency(s)
+	return wtc
+}
+
+// SetNillableCurrency sets the "currency" field if the given value is not nil.
+func (wtc *WalletTransactionCreate) SetNillableCurrency(s *string) *WalletTransactionCreate {
+	if s != nil {
+		wtc.SetCurrency(*s)
+	}
 	return wtc
 }
 
@@ -473,6 +501,10 @@ func (wtc *WalletTransactionCreate) createSpec() (*WalletTransaction, *sqlgraph.
 		_spec.SetField(wallettransaction.FieldWalletID, field.TypeString, value)
 		_node.WalletID = value
 	}
+	if value, ok := wtc.mutation.CustomerID(); ok {
+		_spec.SetField(wallettransaction.FieldCustomerID, field.TypeString, value)
+		_node.CustomerID = value
+	}
 	if value, ok := wtc.mutation.GetType(); ok {
 		_spec.SetField(wallettransaction.FieldType, field.TypeString, value)
 		_node.Type = value
@@ -520,6 +552,10 @@ func (wtc *WalletTransactionCreate) createSpec() (*WalletTransaction, *sqlgraph.
 	if value, ok := wtc.mutation.CreditsAvailable(); ok {
 		_spec.SetField(wallettransaction.FieldCreditsAvailable, field.TypeOther, value)
 		_node.CreditsAvailable = value
+	}
+	if value, ok := wtc.mutation.Currency(); ok {
+		_spec.SetField(wallettransaction.FieldCurrency, field.TypeString, value)
+		_node.Currency = &value
 	}
 	if value, ok := wtc.mutation.IdempotencyKey(); ok {
 		_spec.SetField(wallettransaction.FieldIdempotencyKey, field.TypeString, value)

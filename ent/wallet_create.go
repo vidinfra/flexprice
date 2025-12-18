@@ -440,6 +440,11 @@ func (wc *WalletCreate) check() error {
 			return &ValidationError{Name: "config", err: fmt.Errorf(`ent: validator failed for field "Wallet.config": %w`, err)}
 		}
 	}
+	if v, ok := wc.mutation.AlertConfig(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "alert_config", err: fmt.Errorf(`ent: validator failed for field "Wallet.alert_config": %w`, err)}
+		}
+	}
 	return nil
 }
 

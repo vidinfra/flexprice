@@ -29,6 +29,8 @@ const (
 	FieldEnvironmentID = "environment_id"
 	// FieldWalletID holds the string denoting the wallet_id field in the database.
 	FieldWalletID = "wallet_id"
+	// FieldCustomerID holds the string denoting the customer_id field in the database.
+	FieldCustomerID = "customer_id"
 	// FieldType holds the string denoting the type field in the database.
 	FieldType = "type"
 	// FieldAmount holds the string denoting the amount field in the database.
@@ -53,6 +55,8 @@ const (
 	FieldExpiryDate = "expiry_date"
 	// FieldCreditsAvailable holds the string denoting the credits_available field in the database.
 	FieldCreditsAvailable = "credits_available"
+	// FieldCurrency holds the string denoting the currency field in the database.
+	FieldCurrency = "currency"
 	// FieldIdempotencyKey holds the string denoting the idempotency_key field in the database.
 	FieldIdempotencyKey = "idempotency_key"
 	// FieldTransactionReason holds the string denoting the transaction_reason field in the database.
@@ -74,6 +78,7 @@ var Columns = []string{
 	FieldUpdatedBy,
 	FieldEnvironmentID,
 	FieldWalletID,
+	FieldCustomerID,
 	FieldType,
 	FieldAmount,
 	FieldCreditAmount,
@@ -86,6 +91,7 @@ var Columns = []string{
 	FieldTransactionStatus,
 	FieldExpiryDate,
 	FieldCreditsAvailable,
+	FieldCurrency,
 	FieldIdempotencyKey,
 	FieldTransactionReason,
 	FieldPriority,
@@ -174,6 +180,11 @@ func ByWalletID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldWalletID, opts...).ToFunc()
 }
 
+// ByCustomerID orders the results by the customer_id field.
+func ByCustomerID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCustomerID, opts...).ToFunc()
+}
+
 // ByType orders the results by the type field.
 func ByType(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldType, opts...).ToFunc()
@@ -227,6 +238,11 @@ func ByExpiryDate(opts ...sql.OrderTermOption) OrderOption {
 // ByCreditsAvailable orders the results by the credits_available field.
 func ByCreditsAvailable(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCreditsAvailable, opts...).ToFunc()
+}
+
+// ByCurrency orders the results by the currency field.
+func ByCurrency(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCurrency, opts...).ToFunc()
 }
 
 // ByIdempotencyKey orders the results by the idempotency_key field.

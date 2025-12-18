@@ -50,7 +50,7 @@ func NewWalletBalanceAlertService(
 		cache:         cache.NewInMemoryCache(),
 	}
 
-	svc.pubSub = params.WalletBalanceAlertPubSub
+	svc.pubSub = params.WalletBalanceAlertPubSub.PubSub
 
 	params.Logger.Infow("wallet alert pubsub initialized successfully",
 		"consumer_group", params.Config.WalletBalanceAlert.ConsumerGroup,
