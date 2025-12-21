@@ -41,19 +41,15 @@ func (s *SSLCommerzService) decryptConnectionMetadata(encryptedSecretData types.
 
 	switch providerType {
 	case types.SecretProviderSSLCommerz:
-		pp.Println("Decrypting SSL Commerz connection metadata. Case SSLCommerz")
 		if encryptedSecretData.SSLCommerz != nil {
 			decryptedStoreID, err := s.encryptionService.Decrypt(encryptedSecretData.SSLCommerz.StoreID)
 			if err != nil {
 				return types.ConnectionMetadata{}, err
 			}
 			decryptedStorePassword, err := s.encryptionService.Decrypt(encryptedSecretData.SSLCommerz.StorePassword)
-			pp.Println("Decrypting SSL Commerz connection metadata. StorePassword decryption result: ", err)
 			if err != nil {
-				pp.Println("Failed to decrypt SSL Commerz StorePassword: ", err)
 				return types.ConnectionMetadata{}, err
 			}
-			pp.Println("Successfully decrypted SSL Commerz Config. ", decryptedStoreID, decryptedStorePassword)
 			decryptedData.SSLCommerz = &types.SSLCommerzConnectionMetadata{
 				StoreID:       decryptedStoreID,
 				StorePassword: decryptedStorePassword,
@@ -239,6 +235,7 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 		Post(paymentURL)
 
 	if err != nil {
+		pp.Println("SSL Commerz API request error: ", err)
 		return nil, ierr.NewError("failed to create payment link").
 			WithHint("SSL Commerz API request failed").
 			WithReportableDetails(map[string]interface{}{
@@ -256,6 +253,8 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 			}).
 			Mark(ierr.ErrInternal)
 	}
+
+	pp.Println("SSL Commerz Payment Link Response: ", response.GatewayPageURL)
 
 	return &response, nil
 }

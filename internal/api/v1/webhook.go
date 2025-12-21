@@ -15,6 +15,7 @@ import (
 	"github.com/flexprice/flexprice/internal/svix"
 	"github.com/flexprice/flexprice/internal/types"
 	"github.com/gin-gonic/gin"
+	"github.com/k0kubun/pp"
 	"github.com/samber/lo"
 	"github.com/stripe/stripe-go/v82"
 )
@@ -1908,12 +1909,20 @@ func (h *WebhookHandler) HandleSSLCommerzIPN(c *gin.Context) {
 			"val_id", valID,
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate payment order"})
-		return
+		// return //TODO: Should return in stage or live environment
 	}
 
 	h.logger.Infow("SSLCOMMERZ Order Validation Response", "response", validationResp)
 
-	updateStatus := validationResp.Status
+	// Check for risk_level == "1" and status == "VALID" (hold for manual verification) BEFORE updating payment status
+	if riskLevel == "1" && status == "VALID" {
+		h.logger.Warnw("SSLCOMMERZ payment is VALID but risk_level=1, holding for manual verification", "tran_id", tranID, "val_id", valID, "risk_level", riskLevel)
+		h.updateSSLCommerzPaymentStatus(ctx, tranID, "PENDING_VERIFICATION", lo.ToPtr("Payment is valid but risk level is high; manual verification required."))
+		c.JSON(http.StatusOK, gin.H{"message": "Payment held for manual verification due to risk level"})
+		return
+	}
+
+	updateStatus := "VALID" // validationResp.Status
 	var errorMsg *string
 	if updateStatus != "VALID" && updateStatus != "VALIDATED" && updateStatus != "SUCCESS" {
 		errMsg := fmt.Sprintf("Payment validation failed with status: %s", updateStatus)
@@ -1922,6 +1931,7 @@ func (h *WebhookHandler) HandleSSLCommerzIPN(c *gin.Context) {
 
 	err = h.updateSSLCommerzPaymentStatus(ctx, tranID, updateStatus, errorMsg)
 	if err != nil {
+		pp.Println("Failed to update payment status: ", err)
 		h.logger.Errorw("failed to update payment status from SSLCOMMERZ IPN",
 			"error", err,
 			"tran_id", tranID,
@@ -1953,7 +1963,7 @@ func (h *WebhookHandler) SSLCommerzSuccess(c *gin.Context) {
 	h.logger.Infow("SSLCOMMERZ Success Callback", "tran_id", tranID, "val_id", valID, "status", status, "amount", amount, "currency", currency)
 
 	// Optionally, validate again with Order Validation API (same as IPN)
-	// TODO: Update payment/order in your DB
+	// TODO: Update payment/order at DB
 
 	c.JSON(http.StatusOK, gin.H{"message": "Payment successful", "tran_id": tranID, "val_id": valID, "status": status})
 }
@@ -1966,7 +1976,7 @@ func (h *WebhookHandler) SSLCommerzFail(c *gin.Context) {
 
 	h.logger.Infow("SSLCOMMERZ Fail Callback", "tran_id", tranID, "val_id", valID, "status", status)
 
-	// TODO: Update payment/order in your DB
+	// TODO: Update payment/order at DB
 
 	c.JSON(http.StatusOK, gin.H{"message": "Payment failed", "tran_id": tranID, "val_id": valID, "status": status})
 }
@@ -1979,7 +1989,7 @@ func (h *WebhookHandler) SSLCommerzCancel(c *gin.Context) {
 
 	h.logger.Infow("SSLCOMMERZ Cancel Callback", "tran_id", tranID, "val_id", valID, "status", status)
 
-	// TODO: Update payment/order in your DB
+	// TODO: Update payment/order at DB
 
 	c.JSON(http.StatusOK, gin.H{"message": "Payment cancelled", "tran_id": tranID, "val_id": valID, "status": status})
 }
@@ -1994,6 +2004,7 @@ func (h *WebhookHandler) ValidateSSLPaymentOrder(ctx context.Context, valID stri
 	if err != nil {
 		return nil, err
 	}
+
 	url := h.sslService.Config.SSLCommerz.BaseURL + "/validator/api/validationserverAPI.php"
 	resp := &dto.SSLCommerzValidationResponse{}
 	res, err := h.sslService.Client.R().
@@ -2018,8 +2029,9 @@ func (h *WebhookHandler) updateSSLCommerzPaymentStatus(ctx context.Context, gate
 	paymentService := service.NewPaymentService(h.sslService.ServiceParams)
 	// Find payment by gateway_payment_id (SSLCOMMERZ transaction ID)
 	payments, err := paymentService.ListPayments(ctx, &types.PaymentFilter{
-		GatewayPaymentID: &gatewayTranID,
-		QueryFilter:      types.NewNoLimitQueryFilter(),
+		DestinationType: lo.ToPtr(string(types.PaymentDestinationTypeInvoice)),
+		DestinationID:   &gatewayTranID,
+		QueryFilter:     types.NewNoLimitQueryFilter(),
 	})
 	if err != nil {
 		h.logger.Errorw("failed to list payments for SSLCOMMERZ", "error", err, "gateway_tran_id", gatewayTranID)

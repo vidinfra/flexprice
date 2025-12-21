@@ -222,6 +222,7 @@ func main() {
 			service.NewSettingsService,
 			service.NewSubscriptionChangeService,
 			service.NewAlertLogsService,
+			service.NewSSLCommerzService,
 		),
 	)
 
@@ -291,6 +292,7 @@ func provideHandlers(
 	subscriptionChangeService service.SubscriptionChangeService,
 	featureUsageTrackingService service.FeatureUsageTrackingService,
 	alertLogsService service.AlertLogsService,
+	sslCommerzService *service.SSLCommerzService,
 ) api.Handlers {
 	return api.Handlers{
 		Events:                   v1.NewEventsHandler(eventService, eventPostProcessingService, featureUsageTrackingService, cfg, logger),
@@ -326,7 +328,7 @@ func provideHandlers(
 		EntityIntegrationMapping: v1.NewEntityIntegrationMappingHandler(entityIntegrationMappingService, logger),
 		Integration:              v1.NewIntegrationHandler(integrationService, logger),
 		PriceUnit:                v1.NewPriceUnitHandler(priceUnitService, logger),
-		Webhook:                  v1.NewWebhookHandler(cfg, svixClient, logger, stripeService),
+		Webhook:                  v1.NewWebhookHandler(cfg, svixClient, logger, stripeService, sslCommerzService),
 		Coupon:                   v1.NewCouponHandler(couponService, logger),
 		Addon:                    v1.NewAddonHandler(addonService, logger),
 		Settings:                 v1.NewSettingsHandler(settingsService, logger),

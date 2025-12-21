@@ -27,7 +27,7 @@ type StripeConnection struct {
 
 type SSLCommerzConnection struct {
 	StoreID       string `json:"store_id"`
-	StorePassword string `json:"store_password"`
+	StorePassword string `json:"store_passwd"`
 }
 
 // GetStripeConfig extracts Stripe configuration from connection metadata
@@ -114,7 +114,7 @@ func convertMapToConnectionMetadata(metadata map[string]interface{}, providerTyp
 		if sid, ok := metadata["store_id"].(string); ok {
 			sslcommerzMetadata.StoreID = sid
 		}
-		if spw, ok := metadata["store_password"].(string); ok {
+		if spw, ok := metadata["store_passwd"].(string); ok {
 			sslcommerzMetadata.StorePassword = spw
 		}
 		return types.ConnectionMetadata{
