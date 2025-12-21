@@ -1942,6 +1942,48 @@ func (h *WebhookHandler) HandleSSLCommerzIPN(c *gin.Context) {
 		return
 	}
 
+	// --- NEW LOGIC: Reconcile invoice and top up wallet if payment succeeded ---
+	if updateStatus == "VALID" || updateStatus == "VALIDATED" || updateStatus == "SUCCESS" {
+		paymentService := service.NewPaymentService(h.sslService.ServiceParams)
+		payments, err := paymentService.ListPayments(ctx, &types.PaymentFilter{
+			DestinationType: lo.ToPtr(string(types.PaymentDestinationTypeInvoice)),
+			DestinationID:   &tranID,
+			QueryFilter:     types.NewNoLimitQueryFilter(),
+		})
+		if err != nil || len(payments.Items) == 0 {
+			h.logger.Errorw("failed to fetch payment for reconciliation/topup after SSLCOMMERZ success", "error", err, "tran_id", tranID)
+		} else {
+			payment := payments.Items[0]
+
+			// Reconcile invoice
+			invoiceService := service.NewInvoiceService(h.sslService.ServiceParams)
+			err = invoiceService.ReconcilePaymentStatus(ctx, payment.DestinationID, types.PaymentStatusSucceeded, &payment.Amount)
+			if err != nil {
+				h.logger.Errorw("failed to reconcile invoice after SSLCOMMERZ payment success", "error", err, "payment_id", payment.ID, "invoice_id", payment.DestinationID)
+			}
+
+			// Top up wallet (if not already topped up)
+			walletService := service.NewWalletService(h.sslService.ServiceParams)
+			invoice, err := invoiceService.GetInvoice(ctx, payment.DestinationID)
+			if err != nil {
+				h.logger.Errorw("failed to get invoice for wallet top-up after SSLCOMMERZ payment", "error", err, "invoice_id", payment.DestinationID)
+			} else {
+				hasTopup, err := walletService.HasTopupForPayment(ctx, payment.ID)
+				if err != nil {
+					h.logger.Errorw("failed to check wallet top-up for payment after SSLCOMMERZ", "error", err, "payment_id", payment.ID)
+				} else if !hasTopup {
+					err = walletService.TopUpWalletForPayment(ctx, invoice.CustomerID, payment.ID, payment.Amount, payment.Currency)
+					if err != nil {
+						h.logger.Errorw("failed to top up wallet after SSLCOMMERZ payment", "error", err, "payment_id", payment.ID, "customer_id", invoice.CustomerID)
+					}
+				} else {
+					h.logger.Infow("wallet already topped up for payment after SSLCOMMERZ, skipping duplicate topup", "payment_id", payment.ID)
+				}
+			}
+		}
+	}
+	// --- END NEW LOGIC ---
+
 	h.logger.Infow("successfully updated payment status from SSLCOMMERZ IPN",
 		"tran_id", tranID,
 		"val_id", valID,
