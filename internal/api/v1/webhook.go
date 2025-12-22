@@ -1909,7 +1909,7 @@ func (h *WebhookHandler) HandleSSLCommerzIPN(c *gin.Context) {
 			"val_id", valID,
 		)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to validate payment order"})
-		// return //TODO: Should return in stage or live environment
+		return
 	}
 
 	h.logger.Infow("SSLCOMMERZ Order Validation Response", "response", validationResp)
