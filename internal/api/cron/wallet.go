@@ -388,37 +388,63 @@ func (h *WalletCronHandler) RenewExpiringSubscriptions(c *gin.Context) {
 					continue
 				}
 				planPrice := plan.Prices[0].Amount
-				invoice, err := h.invoiceService.CreateInvoice(c.Request.Context(), dto.CreateInvoiceRequest{
-					CustomerID: sub.CustomerID,
-					Currency:   sub.Currency,
-					LineItems: []dto.CreateInvoiceLineItemRequest{{
-						DisplayName: typeshift.Ptr("Subscription Renewal"),
-						Quantity:    decimal.NewFromInt(1),
-						Amount:      planPrice,
-					}},
-					InvoiceType: types.InvoiceTypeOneOff,
-					AmountDue:   planPrice,
-					Subtotal:    planPrice,
-					Total:       planPrice,
-					AmountPaid:  &decimal.Zero,
+
+				// Check wallet balance
+				wallets, err := h.walletService.GetWallets(c.Request.Context(), &types.WalletFilter{
+					Status: lo.ToPtr(types.WalletStatusActive),
 				})
-				if err != nil {
-					h.logger.Errorw("failed to create invoice for subscription renewal", "subscription_id", sub.ID, "error", err)
+				if err != nil || len(wallets.Items) == 0 {
+					h.logger.Errorw("failed to get wallet for customer", "customer_id", sub.CustomerID, "error", err)
 					continue
 				}
-				_, err = h.paymentService.CreatePayment(c.Request.Context(), &dto.CreatePaymentRequest{
-					PaymentMethodType: types.PaymentMethodTypeCard,
-					DestinationType:   types.PaymentDestinationTypeInvoice,
-					ProcessPayment:    true,
-					PaymentGateway:    typeshift.Ptr(types.PaymentGatewayTypeStripe),
-					Amount:            planPrice,
-					Currency:          sub.Currency,
-					DestinationID:     invoice.ID,
-				})
-				if err != nil {
-					h.logger.Errorw("failed to create payment for subscription renewal", "subscription_id", sub.ID, "error", err)
+				var wallet *dto.WalletResponse
+				for _, w := range wallets.Items {
+					if w.CustomerID == sub.CustomerID {
+						wallet = dto.FromWallet(w)
+						break
+					}
+				}
+				if wallet == nil {
+					h.logger.Errorw("no wallet found for customer", "customer_id", sub.CustomerID)
 					continue
 				}
+				balance := wallet.Balance
+
+				if balance.LessThan(planPrice) {
+					amountToTopUp := planPrice.Sub(balance)
+					invoice, err := h.invoiceService.CreateInvoice(c.Request.Context(), dto.CreateInvoiceRequest{
+						CustomerID: sub.CustomerID,
+						Currency:   sub.Currency,
+						LineItems: []dto.CreateInvoiceLineItemRequest{{
+							DisplayName: typeshift.Ptr("Wallet Top-up for Subscription Renewal"),
+							Quantity:    decimal.NewFromInt(1),
+							Amount:      amountToTopUp,
+						}},
+						InvoiceType: types.InvoiceTypeOneOff,
+						AmountDue:   amountToTopUp,
+						Subtotal:    amountToTopUp,
+						Total:       amountToTopUp,
+						AmountPaid:  &decimal.Zero,
+					})
+					if err != nil {
+						h.logger.Errorw("failed to create wallet top-up invoice", "subscription_id", sub.ID, "error", err)
+						continue
+					}
+					_, err = h.paymentService.CreatePayment(c.Request.Context(), &dto.CreatePaymentRequest{
+						PaymentMethodType: types.PaymentMethodTypeCard,
+						DestinationType:   types.PaymentDestinationTypeInvoice,
+						ProcessPayment:    true,
+						PaymentGateway:    typeshift.Ptr(types.PaymentGatewayTypeStripe),
+						Amount:            amountToTopUp,
+						Currency:          sub.Currency,
+						DestinationID:     invoice.ID,
+					})
+					if err != nil {
+						h.logger.Errorw("failed to create payment for wallet top-up", "subscription_id", sub.ID, "error", err)
+						continue
+					}
+				}
+				// After top-up, proceed to create subscription
 				newSubReq := dto.CreateSubscriptionRequest{
 					CustomerID:         sub.CustomerID,
 					PlanID:             sub.PlanID,
@@ -436,7 +462,26 @@ func (h *WalletCronHandler) RenewExpiringSubscriptions(c *gin.Context) {
 					continue
 				}
 				h.logger.Infow("subscription renewed successfully", "subscription_id", sub.ID, "customer_id", sub.CustomerID)
+				continue // skip the next block
 			}
+			// If balance is sufficient, just create the subscription
+			newSubReq := dto.CreateSubscriptionRequest{
+				CustomerID:         sub.CustomerID,
+				PlanID:             sub.PlanID,
+				Currency:           sub.Currency,
+				BillingCadence:     sub.BillingCadence,
+				BillingPeriod:      sub.BillingPeriod,
+				BillingPeriodCount: sub.BillingPeriodCount,
+				BillingCycle:       sub.BillingCycle,
+				Metadata:           sub.Metadata,
+				CommitmentAmount:   sub.CommitmentAmount,
+			}
+			_, err = h.subscriptionService.CreateSubscription(c.Request.Context(), newSubReq)
+			if err != nil {
+				h.logger.Errorw("failed to renew subscription", "subscription_id", sub.ID, "error", err)
+				continue
+			}
+			h.logger.Infow("subscription renewed successfully", "subscription_id", sub.ID, "customer_id", sub.CustomerID)
 		}
 	}
 	h.logger.Infow("completed subscription renewal cron job")
