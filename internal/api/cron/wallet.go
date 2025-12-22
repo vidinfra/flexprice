@@ -16,13 +16,15 @@ import (
 )
 
 type WalletCronHandler struct {
-	logger             *logger.Logger
-	walletService      service.WalletService
-	tenantService      service.TenantService
-	environmentService service.EnvironmentService
-	alertLogsService   service.AlertLogsService
-	paymentService     service.PaymentService
-	invoiceService     service.InvoiceService
+	logger              *logger.Logger
+	walletService       service.WalletService
+	tenantService       service.TenantService
+	environmentService  service.EnvironmentService
+	alertLogsService    service.AlertLogsService
+	paymentService      service.PaymentService
+	invoiceService      service.InvoiceService
+	planService         service.PlanService
+	subscriptionService service.SubscriptionService
 }
 
 func NewWalletCronHandler(logger *logger.Logger,
@@ -32,15 +34,19 @@ func NewWalletCronHandler(logger *logger.Logger,
 	alertLogsService service.AlertLogsService,
 	paymentService service.PaymentService,
 	invoiceService service.InvoiceService,
+	planService service.PlanService,
+	subscriptionService service.SubscriptionService,
 ) *WalletCronHandler {
 	return &WalletCronHandler{
-		logger:             logger,
-		walletService:      walletService,
-		tenantService:      tenantService,
-		environmentService: environmentService,
-		alertLogsService:   alertLogsService,
-		paymentService:     paymentService,
-		invoiceService:     invoiceService,
+		logger:              logger,
+		walletService:       walletService,
+		tenantService:       tenantService,
+		environmentService:  environmentService,
+		alertLogsService:    alertLogsService,
+		paymentService:      paymentService,
+		invoiceService:      invoiceService,
+		planService:         planService,
+		subscriptionService: subscriptionService,
 	}
 }
 
@@ -351,5 +357,88 @@ func (h *WalletCronHandler) CheckAlerts(c *gin.Context) {
 		}
 	}
 	h.logger.Infow("completed wallet balance alert check cron job")
+	c.JSON(http.StatusOK, gin.H{"status": "completed"})
+}
+
+// RenewExpiringSubscriptions finds subscriptions expiring today, invoices, pays, and renews them
+func (h *WalletCronHandler) RenewExpiringSubscriptions(c *gin.Context) {
+	h.logger.Infow("starting subscription renewal cron job", "time", time.Now().UTC().Format(time.RFC3339))
+
+	renewalSubs, err := h.subscriptionService.ListSubscriptions(c.Request.Context(), nil) // TODO: Replace with correct filter for expiring today
+	if err != nil {
+		h.logger.Errorw("failed to list subscriptions for renewal", "error", err)
+		c.Error(err)
+		return
+	}
+	if renewalSubs != nil && len(renewalSubs.Items) > 0 {
+		for _, sub := range renewalSubs.Items {
+			if sub.Subscription == nil {
+				continue
+			}
+			currentPeriodEnd := sub.Subscription.CurrentPeriodEnd
+			if currentPeriodEnd.UTC().Year() == time.Now().UTC().Year() &&
+				currentPeriodEnd.UTC().YearDay() == time.Now().UTC().YearDay() {
+				plan, err := h.planService.GetPlan(c.Request.Context(), sub.PlanID)
+				if err != nil {
+					h.logger.Errorw("failed to fetch plan for renewal", "plan_id", sub.PlanID, "error", err)
+					continue
+				}
+				if len(plan.Prices) == 0 {
+					h.logger.Errorw("no prices found for plan", "plan_id", sub.PlanID)
+					continue
+				}
+				planPrice := plan.Prices[0].Amount
+				invoice, err := h.invoiceService.CreateInvoice(c.Request.Context(), dto.CreateInvoiceRequest{
+					CustomerID: sub.CustomerID,
+					Currency:   sub.Currency,
+					LineItems: []dto.CreateInvoiceLineItemRequest{{
+						DisplayName: typeshift.Ptr("Subscription Renewal"),
+						Quantity:    decimal.NewFromInt(1),
+						Amount:      planPrice,
+					}},
+					InvoiceType: types.InvoiceTypeOneOff,
+					AmountDue:   planPrice,
+					Subtotal:    planPrice,
+					Total:       planPrice,
+					AmountPaid:  &decimal.Zero,
+				})
+				if err != nil {
+					h.logger.Errorw("failed to create invoice for subscription renewal", "subscription_id", sub.ID, "error", err)
+					continue
+				}
+				_, err = h.paymentService.CreatePayment(c.Request.Context(), &dto.CreatePaymentRequest{
+					PaymentMethodType: types.PaymentMethodTypeCard,
+					DestinationType:   types.PaymentDestinationTypeInvoice,
+					ProcessPayment:    true,
+					PaymentGateway:    typeshift.Ptr(types.PaymentGatewayTypeStripe),
+					Amount:            planPrice,
+					Currency:          sub.Currency,
+					DestinationID:     invoice.ID,
+				})
+				if err != nil {
+					h.logger.Errorw("failed to create payment for subscription renewal", "subscription_id", sub.ID, "error", err)
+					continue
+				}
+				newSubReq := dto.CreateSubscriptionRequest{
+					CustomerID:         sub.CustomerID,
+					PlanID:             sub.PlanID,
+					Currency:           sub.Currency,
+					BillingCadence:     sub.BillingCadence,
+					BillingPeriod:      sub.BillingPeriod,
+					BillingPeriodCount: sub.BillingPeriodCount,
+					BillingCycle:       sub.BillingCycle,
+					Metadata:           sub.Metadata,
+					CommitmentAmount:   sub.CommitmentAmount,
+				}
+				_, err = h.subscriptionService.CreateSubscription(c.Request.Context(), newSubReq)
+				if err != nil {
+					h.logger.Errorw("failed to renew subscription", "subscription_id", sub.ID, "error", err)
+					continue
+				}
+				h.logger.Infow("subscription renewed successfully", "subscription_id", sub.ID, "customer_id", sub.CustomerID)
+			}
+		}
+	}
+	h.logger.Infow("completed subscription renewal cron job")
 	c.JSON(http.StatusOK, gin.H{"status": "completed"})
 }

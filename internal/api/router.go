@@ -484,6 +484,9 @@ func NewRouter(handlers Handlers, cfg *config.Configuration, logger *logger.Logg
 		{
 			walletGroup.POST("/expire-credits", handlers.CronWallet.ExpireCredits)
 			walletGroup.POST("/check-alerts", handlers.CronWallet.CheckAlerts)
+
+			// New: Subscription renewal cron job (daily)
+			walletGroup.POST("/renew-expiring-subscriptions", handlers.CronWallet.RenewExpiringSubscriptions)
 		}
 
 		// Credit grant related cron jobs
