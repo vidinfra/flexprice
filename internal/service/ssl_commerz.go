@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/flexprice/flexprice/internal/api/dto"
 	"github.com/flexprice/flexprice/internal/domain/connection"
@@ -101,7 +102,7 @@ func (s *SSLCommerzService) GetDecryptedSSLCommerzConfig(conn *connection.Connec
 func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.CreateSSLPaymentLinkRequest) (*dto.SSLCommerzCreatePaymentLinkResponse, error) {
 	s.Logger.Infow("Creating SSL Commerz payment link",
 		"invoice_id", req.InvoiceID,
-		"amount", req.TotalAmount.String(),
+		"amount", req.Amount.String(),
 		"currency", req.Currency,
 		"customer_name", req.Customer.Name,
 		"customer_email", req.Customer.Email,
@@ -210,8 +211,8 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 		StorePassword:   req.StorePassword,
 		ValueA:          conn.TenantID,
 		ValueB:          conn.EnvironmentID,
-		TotalAmount:     req.Payment.TotalAmount.String(),
-		Currency:        req.Payment.Currency,
+		TotalAmount:     req.Amount.String(),
+		Currency:        strings.ToUpper(req.Currency),
 		TranID:          req.InvoiceID,
 		SuccessURL:      req.Payment.SuccessURL,
 		FailURL:         req.Payment.FailURL,
@@ -229,10 +230,14 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 		ProductProfile:  "General",
 	}
 
+	pp.Println("SSL Commerz Form Data: ", form.ToMap())
+
 	resp, err := s.Client.R().
 		SetFormData(form.ToMap()).
 		SetResult(&response).
 		Post(paymentURL)
+
+	pp.Println("SSL Commerz API Response: ", response)
 
 	if err != nil {
 		pp.Println("SSL Commerz API request error: ", err)
