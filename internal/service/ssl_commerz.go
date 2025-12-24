@@ -254,7 +254,15 @@ func (s *SSLCommerzService) CreatePaymentLink(ctx context.Context, req *dto.Crea
 			Mark(ierr.ErrInternal)
 	}
 
-	pp.Println("SSL Commerz Payment Link Response: ", response.GatewayPageURL)
+	if response.GatewayPageURL == "" {
+		return nil, ierr.NewError("failed to create payment link").
+			WithHint("SSL Commerz API did not return a payment URL").
+			WithReportableDetails(map[string]interface{}{
+				"invoice_id": req.InvoiceID,
+				"response":   response,
+			}).
+			Mark(ierr.ErrInternal)
+	}
 
 	return &response, nil
 }
